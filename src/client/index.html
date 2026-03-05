@@ -223,6 +223,39 @@
 						<button class="btn btn-primary" @click="addVfo">+ Add VFO</button>
 					</div>
 				</div>
+
+				<!-- Bookmarks panel -->
+				<div class="panel">
+					<div class="panel-header bookmark-panel-header">
+						<span>Bookmarks</span>
+						<div style="display:flex;gap:4px">
+							<button class="btn bookmark-save-btn bm-type-freq" @click="openSaveBookmark('individual')" title="Save active VFO frequency as an individual bookmark">+ Freq</button>
+							<button class="btn bookmark-save-btn bm-type-group" @click="openSaveBookmark('group')" title="Save center frequency and all VFOs as a group bookmark">+ Group</button>
+						</div>
+					</div>
+					<div class="panel-body" style="padding: 4px 0; min-height: 36px;">
+						<div v-if="bookmarks.length === 0" class="bookmark-empty">No bookmarks saved.</div>
+						<div v-for="(bm, i) in bookmarks" :key="bm.id" class="bookmark-item">
+							<div class="bookmark-info">
+								<span class="bookmark-name" :title="bm.name">{{ bm.name }}</span>
+								<div style="display:flex;align-items:center;gap:5px;margin-top:2px">
+									<span class="bm-badge" :class="(bm.type || 'group') === 'individual' ? 'bm-badge-freq' : 'bm-badge-group'">{{ (bm.type || 'group') === 'individual' ? 'FREQ' : 'GROUP' }}</span>
+									<span class="bookmark-meta" v-if="(bm.type || 'group') === 'individual'">{{ bm.freq }} MHz &bull; {{ (bm.mode || '').toUpperCase() }}</span>
+									<span class="bookmark-meta" v-else>{{ bm.centerFreq }} MHz &bull; {{ (bm.vfos || []).length }} VFO{{ (bm.vfos || []).length !== 1 ? 's' : '' }}</span>
+								</div>
+							</div>
+							<div class="bookmark-actions">
+								<button class="bookmark-btn bookmark-jump" @click="jumpToBookmark(i)" title="Jump to this bookmark">
+									<svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+								</button>
+								<button class="bookmark-btn bookmark-edit" @click="openEditBookmark(i)" title="Edit bookmark">
+									<svg viewBox="0 0 24 24" width="12" height="12"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm17.71-10.21a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+								</button>
+								<button class="bookmark-btn bookmark-delete" @click="deleteBookmark(i)" title="Delete bookmark">&times;</button>
+							</div>
+						</div>
+					</div>
+				</div>
 			</div>
 
 			<!-- Canvas Area -->
@@ -274,11 +307,17 @@
 				</div>
 				<div class="transcript-controls">
 					<select v-model="whisper.model" :disabled="whisper.active" class="transcript-select" title="Whisper model">
-						<option value="onnx-community/whisper-tiny.en">Tiny.en (~40 MB)</option>
-						<option value="onnx-community/whisper-base.en">Base.en (~75 MB)</option>
-						<option value="onnx-community/whisper-small.en">Small.en (~250 MB)</option>
-						<option value="onnx-community/whisper-tiny">Tiny multilingual</option>
-						<option value="onnx-community/whisper-base">Base multilingual</option>
+						<optgroup label="English-only (faster)">
+							<option value="onnx-community/whisper-tiny.en">Tiny.en (~40 MB)</option>
+							<option value="onnx-community/whisper-base.en">Base.en (~75 MB)</option>
+							<option value="onnx-community/whisper-small.en">Small.en (~250 MB)</option>
+							<option value="onnx-community/whisper-medium.en">Medium.en (~500 MB)</option>
+						</optgroup>
+						<optgroup label="Multilingual">
+							<option value="onnx-community/whisper-tiny">Tiny multilingual (~40 MB)</option>
+							<option value="onnx-community/whisper-base">Base multilingual (~75 MB)</option>
+							<option value="onnx-community/whisper-large-v3-turbo">Large-v3-turbo (~800 MB) ★ Best</option>
+						</optgroup>
 					</select>
 					<select v-model.number="whisper.chunkSeconds" :disabled="whisper.active" class="transcript-select" title="Chunk length (seconds)">
 						<option :value="3">3 s</option>
@@ -302,6 +341,149 @@
 					<span class="transcript-freq">{{ entry.freq }}</span>
 					<span class="transcript-duration" v-if="entry.duration">({{ entry.duration }})</span>
 					<span class="transcript-text">{{ entry.text }}</span>
+				</div>
+			</div>
+		</div>
+
+		<!-- Bookmark save dialog -->
+		<div v-if="bookmarkModal.show" class="bookmark-overlay" @click.self="bookmarkModal.show = false">
+			<div class="bookmark-dialog">
+				<div class="bookmark-dialog-title">
+					Save
+					<span class="bm-badge" :class="bookmarkModal.type === 'individual' ? 'bm-badge-freq' : 'bm-badge-group'">{{ bookmarkModal.type === 'individual' ? 'FREQ' : 'GROUP' }}</span>
+					Bookmark
+				</div>
+				<div class="bookmark-dialog-body">
+					<input type="text" v-model="bookmarkModal.name" placeholder="Bookmark name"
+						@keyup.enter="confirmBookmark" @keyup.esc="bookmarkModal.show = false"
+						ref="bookmarkNameInput" class="bookmark-dialog-input">
+					<!-- Individual preview -->
+					<template v-if="bookmarkModal.type === 'individual'">
+						<div class="bookmark-dialog-info">
+							Freq: <b>{{ (vfos[activeVfoIndex] || vfos[0]).freq }} MHz</b> &bull;
+							Mode: <b>{{ ((vfos[activeVfoIndex] || vfos[0]).mode || '').toUpperCase() }}</b>
+						</div>
+					</template>
+					<!-- Group preview -->
+					<template v-else>
+						<div class="bookmark-dialog-info">
+							Center: <b>{{ radio.centerFreq }} MHz</b> &bull;
+							{{ vfos.length }} VFO{{ vfos.length !== 1 ? 's' : '' }} &bull;
+							{{ (radio.sampleRate / 1e6).toFixed(0) }} MSPS
+						</div>
+						<div class="bookmark-vfo-preview">
+							<div v-for="(v, vi) in vfos" :key="vi" class="bookmark-vfo-chip" :style="{ borderColor: vfoColor(vi) }">
+								<span class="bookmark-vfo-dot" :style="{ background: vfoColor(vi) }"></span>
+								{{ v.freq.toFixed(3) }} MHz &nbsp;<span style="opacity:0.6">{{ v.mode.toUpperCase() }}</span>
+							</div>
+						</div>
+					</template>
+				</div>
+				<div class="bookmark-dialog-footer">
+					<button class="btn" @click="bookmarkModal.show = false">Cancel</button>
+					<button class="btn btn-primary" @click="confirmBookmark" :disabled="!bookmarkModal.name.trim()">Save</button>
+				</div>
+			</div>
+		</div>
+
+		<!-- Bookmark edit dialog -->
+		<div v-if="bookmarkEdit.show" class="bookmark-overlay" @click.self="bookmarkEdit.show = false">
+			<div class="bookmark-dialog bookmark-edit-dialog">
+				<div class="bookmark-dialog-title">
+					Edit
+					<span class="bm-badge" :class="bookmarkEdit.type === 'individual' ? 'bm-badge-freq' : 'bm-badge-group'">{{ bookmarkEdit.type === 'individual' ? 'FREQ' : 'GROUP' }}</span>
+					Bookmark
+				</div>
+				<div class="bookmark-dialog-body">
+					<div class="bm-edit-row">
+						<label class="bm-edit-label">Name</label>
+						<input type="text" v-model="bookmarkEdit.name" class="bookmark-dialog-input" @keyup.esc="bookmarkEdit.show = false" placeholder="Bookmark name">
+					</div>
+
+					<!-- Individual fields -->
+					<template v-if="bookmarkEdit.type === 'individual'">
+						<div class="bm-edit-row">
+							<label class="bm-edit-label">Frequency</label>
+							<div class="input-group">
+								<input type="number" v-model.number="bookmarkEdit.freq" step="0.001" class="bm-edit-input">
+								<span>MHz</span>
+							</div>
+						</div>
+						<div class="bm-edit-row">
+							<label class="bm-edit-label">Mode</label>
+							<div class="mode-grid bm-mode-grid">
+								<label class="mode-radio" v-for="m in ['nfm','am','usb','lsb','wfm','dsb','cw','raw']" :key="m">
+									<input type="radio" :value="m" v-model="bookmarkEdit.mode" name="bm-edit-mode">
+									<span class="mode-btn">{{ m.toUpperCase() }}</span>
+								</label>
+							</div>
+						</div>
+						<div class="bm-edit-row">
+							<label class="bm-edit-label">Bandwidth</label>
+							<input type="number" v-model.number="bookmarkEdit.bandwidth" step="1000" class="bm-edit-input">
+						</div>
+						<div class="bm-edit-row" v-if="bookmarkEdit.mode === 'wfm' || bookmarkEdit.mode === 'nfm'">
+							<label class="bm-edit-label">De-emphasis</label>
+							<select v-model="bookmarkEdit.deEmphasis" class="bm-edit-select">
+								<option value="none">None</option>
+								<option value="22us">22us</option>
+								<option value="50us">50us</option>
+								<option value="75us">75us</option>
+							</select>
+						</div>
+						<div class="bm-edit-row">
+							<label class="bm-edit-label">Squelch</label>
+							<label class="custom-checkbox" style="margin-right:8px">
+								<input type="checkbox" v-model="bookmarkEdit.squelchEnabled"><span class="checkmark"></span>
+							</label>
+							<input type="number" v-model.number="bookmarkEdit.squelchLevel" step="0.1" min="-100" max="0" :disabled="!bookmarkEdit.squelchEnabled" class="bm-edit-input" style="width:70px">
+							<span style="opacity:0.5;font-size:11px;margin-left:4px">dB</span>
+						</div>
+						<div class="bm-edit-row">
+							<label class="bm-edit-label">Volume</label>
+							<input type="range" v-model.number="bookmarkEdit.volume" min="0" max="100" step="1" style="flex:1">
+							<span style="width:32px;text-align:right;font-size:12px">{{ bookmarkEdit.volume }}%</span>
+						</div>
+					</template>
+
+					<!-- Group fields -->
+					<template v-else>
+						<div class="bm-edit-row">
+							<label class="bm-edit-label">Center Freq</label>
+							<div class="input-group">
+								<input type="number" v-model.number="bookmarkEdit.centerFreq" step="0.1" class="bm-edit-input">
+								<span>MHz</span>
+							</div>
+						</div>
+						<div class="bm-edit-row">
+							<label class="bm-edit-label">Sample Rate</label>
+							<select v-model.number="bookmarkEdit.sampleRate" class="bm-edit-select">
+								<option value="2000000">2 MSPS</option>
+								<option value="4000000">4 MSPS</option>
+								<option value="8000000">8 MSPS</option>
+								<option value="10000000">10 MSPS</option>
+								<option value="16000000">16 MSPS</option>
+								<option value="20000000">20 MSPS</option>
+							</select>
+						</div>
+						<div class="bm-edit-section-label">VFOs in group</div>
+						<div class="bm-vfo-list">
+							<div v-for="(v, vi) in bookmarkEdit.vfos" :key="vi" class="bm-vfo-edit-row">
+								<span class="bookmark-vfo-dot" :style="{ background: vfoColor(vi) }"></span>
+								<input type="number" v-model.number="v.freq" step="0.001" class="bm-edit-input" style="width:90px" placeholder="MHz">
+								<span style="opacity:0.5;font-size:11px">MHz</span>
+								<select v-model="v.mode" class="bm-edit-select" style="width:60px">
+									<option v-for="m in ['nfm','am','usb','lsb','wfm','dsb','cw','raw']" :key="m" :value="m">{{ m.toUpperCase() }}</option>
+								</select>
+								<button class="bookmark-btn bookmark-delete" style="flex-shrink:0" @click="bookmarkEdit.vfos.splice(vi,1)" :disabled="bookmarkEdit.vfos.length <= 1" title="Remove VFO">&times;</button>
+							</div>
+						</div>
+						<button class="btn" style="margin-top:6px;font-size:11px;padding:2px 8px" @click="addVfoToEditGroup">+ Add VFO</button>
+					</template>
+				</div>
+				<div class="bookmark-dialog-footer">
+					<button class="btn" @click="bookmarkEdit.show = false">Cancel</button>
+					<button class="btn btn-primary" @click="confirmEditBookmark" :disabled="!bookmarkEdit.name.trim()">Save Changes</button>
 				</div>
 			</div>
 		</div>

@@ -73,8 +73,10 @@ async function transcribe(audio, id, audioDuration) {
 	try {
 		const opts = {
 			chunk_length_s: 30,
-			stride_length_s: 5,
+			stride_length_s: 6,      // ~20% overlap improves cross-chunk accuracy
 			return_timestamps: false,
+			num_beams: 2,            // beam search: better accuracy at modest cost
+			no_repeat_ngram_size: 3, // reduce repetition hallucinations
 		};
 		if (isMultilingual) {
 			opts.language = 'en';

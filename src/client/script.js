@@ -88,7 +88,35 @@ createApp({
 				recordStart: null,     // Date when current recording started
 				recordDuration: 0,     // seconds of current recording buffer
 				pendingChunks: 0,      // number of chunks sent but not yet returned
-			}
+			},
+			bookmarks: [],         // [{ id, type, name, ...type-specific fields }]
+			bookmarkModal: { show: false, type: 'individual', name: '' },
+			bookmarkEdit: {
+				show: false,
+				index: -1,
+				type: 'individual',
+				name: '',
+				// individual fields
+				freq: 100.0,
+				mode: 'nfm',
+				bandwidth: 12500,
+				snapInterval: 2500,
+				deEmphasis: 'none',
+				squelchEnabled: false,
+				squelchLevel: -100,
+				noiseReduction: false,
+				stereo: false,
+				lowPass: true,
+				highPass: false,
+				rds: false,
+				rdsRegion: 'eu',
+				volume: 50,
+				// group fields
+				centerFreq: 100.0,
+				sampleRate: 8000000,
+				vfos: [],
+				activeVfoIndex: 0,
+			},
 		};
 	},
 	computed: {
@@ -738,6 +766,197 @@ createApp({
 				[full.buffer]   // transfer
 			);
 		},
+		// ─── Bookmarks ───────────────────────────────────────────────────────────
+		openSaveBookmark(type) {
+			const count = this.bookmarks.filter(b => (b.type || 'group') === type).length + 1;
+			this.bookmarkModal.type = type;
+			this.bookmarkModal.name = type === 'individual'
+				? `Frequency ${count}`
+				: `Group ${count}`;
+			this.bookmarkModal.show = true;
+			this.$nextTick(() => {
+				if (this.$refs.bookmarkNameInput) {
+					this.$refs.bookmarkNameInput.focus();
+					this.$refs.bookmarkNameInput.select();
+				}
+			});
+		},
+		confirmBookmark() {
+			const { type, name } = this.bookmarkModal;
+			if (!name.trim()) return;
+			let bm;
+			if (type === 'individual') {
+				const vfo = this.vfos[this.activeVfoIndex] || this.vfos[0];
+				bm = {
+					id: Date.now() + '-' + Math.random().toString(36).slice(2),
+					type: 'individual',
+					name: name.trim(),
+					freq: vfo.freq,
+					mode: vfo.mode,
+					bandwidth: vfo.bandwidth,
+					snapInterval: vfo.snapInterval,
+					deEmphasis: vfo.deEmphasis,
+					squelchEnabled: vfo.squelchEnabled,
+					squelchLevel: vfo.squelchLevel,
+					noiseReduction: vfo.noiseReduction,
+					stereo: vfo.stereo,
+					lowPass: vfo.lowPass,
+					highPass: vfo.highPass,
+					rds: vfo.rds,
+					rdsRegion: vfo.rdsRegion,
+					volume: vfo.volume,
+				};
+			} else {
+				bm = {
+					id: Date.now() + '-' + Math.random().toString(36).slice(2),
+					type: 'group',
+					name: name.trim(),
+					centerFreq: this.radio.centerFreq,
+					sampleRate: this.radio.sampleRate,
+					vfos: JSON.parse(JSON.stringify(this.vfos)).map(v => ({ ...v, enabled: false, focused: false })),
+					activeVfoIndex: this.activeVfoIndex,
+				};
+			}
+			this.bookmarks.push(bm);
+			this.bookmarkModal.show = false;
+			this.saveBookmarks();
+			this.showMsg(`"${bm.name}" saved.`);
+		},
+		jumpToBookmark(index) {
+			const bm = this.bookmarks[index];
+			if (!bm) return;
+			if ((bm.type || 'group') === 'individual') {
+				// If the target frequency is outside the current visible span, re-center
+				// to the nearest integer MHz. Otherwise leave the center alone.
+				if (bm.freq < this.minFreq || bm.freq > this.maxFreq) {
+					this.radio.centerFreq = Math.round(bm.freq);
+				}
+				// Apply to the active VFO
+				const idx = this.activeVfoIndex;
+				const vfo = this.vfos[idx];
+				Object.assign(vfo, {
+					freq: bm.freq,
+					mode: bm.mode,
+					bandwidth: bm.bandwidth,
+					snapInterval: bm.snapInterval,
+					deEmphasis: bm.deEmphasis ?? 'none',
+					squelchEnabled: bm.squelchEnabled ?? false,
+					squelchLevel: bm.squelchLevel ?? -100,
+					noiseReduction: bm.noiseReduction ?? false,
+					stereo: bm.stereo ?? false,
+					lowPass: bm.lowPass ?? true,
+					highPass: bm.highPass ?? false,
+					rds: bm.rds ?? false,
+					rdsRegion: bm.rdsRegion ?? 'eu',
+					volume: bm.volume ?? 50,
+					displayFreq: this.formatFreq(bm.freq),
+					focused: false,
+					enabled: false,
+				});
+				this.showMsg(`Tuned to "${bm.name}" — ${bm.freq} MHz`);
+			} else {
+				this.radio.centerFreq = bm.centerFreq;
+				if (bm.sampleRate) this.radio.sampleRate = bm.sampleRate;
+				this.vfos = bm.vfos.map(v => ({
+					...makeDefaultVfo(),
+					...v,
+					enabled: false,
+					focused: false,
+					displayFreq: this.formatFreq(v.freq || bm.centerFreq),
+				}));
+				this.activeVfoIndex = Math.min(bm.activeVfoIndex || 0, this.vfos.length - 1);
+				this.showMsg(`Loaded "${bm.name}" — ${bm.vfos.length} VFO${bm.vfos.length !== 1 ? 's' : ''} loaded.`);
+			}
+		},
+		openEditBookmark(index) {
+			const bm = this.bookmarks[index];
+			if (!bm) return;
+			const type = bm.type || 'group';
+			const e = this.bookmarkEdit;
+			e.index = index;
+			e.type = type;
+			e.name = bm.name;
+			if (type === 'individual') {
+				e.freq = bm.freq;
+				e.mode = bm.mode;
+				e.bandwidth = bm.bandwidth;
+				e.snapInterval = bm.snapInterval;
+				e.deEmphasis = bm.deEmphasis ?? 'none';
+				e.squelchEnabled = bm.squelchEnabled ?? false;
+				e.squelchLevel = bm.squelchLevel ?? -100;
+				e.noiseReduction = bm.noiseReduction ?? false;
+				e.stereo = bm.stereo ?? false;
+				e.lowPass = bm.lowPass ?? true;
+				e.highPass = bm.highPass ?? false;
+				e.rds = bm.rds ?? false;
+				e.rdsRegion = bm.rdsRegion ?? 'eu';
+				e.volume = bm.volume ?? 50;
+			} else {
+				e.centerFreq = bm.centerFreq;
+				e.sampleRate = bm.sampleRate || 8000000;
+				e.vfos = JSON.parse(JSON.stringify(bm.vfos || []));
+				e.activeVfoIndex = bm.activeVfoIndex || 0;
+			}
+			e.show = true;
+		},
+		confirmEditBookmark() {
+			const e = this.bookmarkEdit;
+			if (!e.name.trim()) return;
+			const bm = { ...this.bookmarks[e.index] };
+			bm.name = e.name.trim();
+			if (e.type === 'individual') {
+				bm.freq = parseFloat(e.freq) || bm.freq;
+				bm.mode = e.mode;
+				bm.bandwidth = e.bandwidth;
+				bm.snapInterval = e.snapInterval;
+				bm.deEmphasis = e.deEmphasis;
+				bm.squelchEnabled = e.squelchEnabled;
+				bm.squelchLevel = e.squelchLevel;
+				bm.noiseReduction = e.noiseReduction;
+				bm.stereo = e.stereo;
+				bm.lowPass = e.lowPass;
+				bm.highPass = e.highPass;
+				bm.rds = e.rds;
+				bm.rdsRegion = e.rdsRegion;
+				bm.volume = e.volume;
+			} else {
+				bm.centerFreq = parseFloat(e.centerFreq) || bm.centerFreq;
+				bm.sampleRate = e.sampleRate;
+				bm.vfos = e.vfos.map(v => ({ ...v, enabled: false, focused: false }));
+				bm.activeVfoIndex = e.activeVfoIndex;
+			}
+			this.bookmarks.splice(e.index, 1, bm);
+			e.show = false;
+			this.saveBookmarks();
+			this.showMsg(`"${bm.name}" updated.`);
+		},
+		addVfoToEditGroup() {
+			this.bookmarkEdit.vfos.push({
+				...makeDefaultVfo(this.bookmarkEdit.centerFreq),
+				enabled: false,
+				focused: false,
+			});
+		},
+		deleteBookmark(index) {
+			const name = this.bookmarks[index]?.name;
+			this.bookmarks.splice(index, 1);
+			this.saveBookmarks();
+			if (name) this.showMsg(`"${name}" deleted.`);
+		},
+		saveBookmarks() {
+			localStorage.setItem('sdr-web-bookmarks', JSON.stringify(this.bookmarks));
+		},
+		loadBookmarks() {
+			try {
+				const json = localStorage.getItem('sdr-web-bookmarks');
+				if (json) {
+					const bms = JSON.parse(json);
+					// Migrate old bookmarks without a type field
+					if (Array.isArray(bms)) this.bookmarks = bms.map(b => ({ type: 'group', ...b }));
+				}
+			} catch (e) {}
+		},
+		// ─────────────────────────────────────────────────────────────────────────
 		clearTranscript() {
 			this.whisper.log = [];
 		},
@@ -781,6 +1000,7 @@ createApp({
 	},
 	created: async function () {
 		this.loadSetting();
+		this.loadBookmarks();
 		this.backend = await new Backend();
 		await this.backend.init();
 
