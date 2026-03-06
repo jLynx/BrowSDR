@@ -248,7 +248,8 @@ body {
 }
 
 .sidebar {
-	width: 260px;
+	width: 300px;
+	min-width: 300px;
 	background-color: var(--bg-panel);
 	border-right: 1px solid var(--border);
 	display: flex;
@@ -802,40 +803,49 @@ canvas {
 
 /* ────── Bookmarks ────── */
 .bookmark-panel-header {
-	display: flex;
-	flex-direction: column;
-	align-items: stretch;
-	gap: 6px;
-	padding-bottom: 6px;
+	/* inherits standard panel-header styles only */
 }
 
-.bookmark-header-actions {
-	display: flex;
-	align-items: center;
+.bookmark-toolbar {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
 	gap: 5px;
+	padding: 8px 10px;
+	background: #222;
+	border-bottom: 1px solid var(--border);
 }
 
-.bookmark-io-divider {
-	width: 1px;
-	height: 16px;
-	background: rgba(255,255,255,0.12);
-	margin: 0 2px;
+.bookmark-toolbar-row {
+	display: contents;
 }
 
 .bookmark-save-btn {
-	font-size: 11px;
-	padding: 2px 8px;
-}
-.bm-io-btn {
-	padding: 2px 7px;
-	opacity: 0.65;
+	font-size: 12px;
+	padding: 5px 8px;
+	flex: none;
 	display: flex;
 	align-items: center;
+	justify-content: center;
 	gap: 4px;
-	font-size: 11px;
+	border-radius: 4px;
+}
+
+.bm-io-btn {
+	background: #2a2a2a;
+	border-color: #444;
+	color: #bbb;
+	font-size: 12px;
+	padding: 5px 8px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 5px;
+	border-radius: 4px;
+	transition: background 0.15s, color 0.15s;
 }
 .bm-io-btn:hover {
-	opacity: 1;
+	background: #3a3a3a;
+	color: #fff;
 }
 
 /* Type-colored save buttons */

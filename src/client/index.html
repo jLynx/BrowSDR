@@ -240,23 +240,21 @@
 				<!-- Bookmarks panel -->
 				<div class="panel">
 					<div class="panel-header bookmark-panel-header panel-header-collapsible" @click="togglePanel('bookmarks')">
-						<span style="display:flex;align-items:center;gap:5px;">Bookmarks
-							<svg class="panel-chevron" :class="{ 'panel-chevron-collapsed': collapsedPanels['bookmarks'] }" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
-						</span>
-						<div class="bookmark-header-actions" @click.stop>
-							<button class="btn bookmark-save-btn bm-type-freq" @click="openSaveBookmark('individual')" title="Save active VFO frequency as an individual bookmark">+ Freq</button>
-							<button class="btn bookmark-save-btn bm-type-group" @click="openSaveBookmark('group')" title="Save center frequency and all VFOs as a group bookmark">+ Group</button>
-							<div class="bookmark-io-divider"></div>
-							<button class="btn bookmark-save-btn bm-io-btn" @click="exportBookmarks" title="Export bookmarks as JSON">
-								<svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M19 9h-4V3H9v6H5l7 7 7-7zm-14 9v2h14v-2H5z"/></svg>
-								<span>Export</span>
-							</button>
-							<button class="btn bookmark-save-btn bm-io-btn" @click="$refs.bookmarkImportInput.click()" title="Import bookmarks from JSON">
-								<svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M5 15v4h14v-4h2v6H3v-6h2zm8-10.17L16.17 8l1.41-1.41L12 1 6.42 6.59 7.83 8 11 4.83V15h2V4.83z"/></svg>
-								<span>Import</span>
-							</button>
-							<input ref="bookmarkImportInput" type="file" accept=".json,application/json" style="display:none" @change="importBookmarks">
-						</div>
+						<span>Bookmarks</span>
+						<svg class="panel-chevron" :class="{ 'panel-chevron-collapsed': collapsedPanels['bookmarks'] }" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+					</div>
+					<div class="bookmark-toolbar" v-show="!collapsedPanels['bookmarks']">
+						<button class="btn bookmark-save-btn bm-type-freq" @click="openSaveBookmark('individual')" title="Save active VFO frequency as an individual bookmark">+ Freq</button>
+						<button class="btn bookmark-save-btn bm-type-group" @click="openSaveBookmark('group')" title="Save center frequency and all VFOs as a group bookmark">+ Group</button>
+						<button class="btn bm-io-btn" @click="exportBookmarks" title="Export bookmarks as JSON">
+							<svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M19 9h-4V3H9v6H5l7 7 7-7zm-14 9v2h14v-2H5z"/></svg>
+							Export
+						</button>
+						<button class="btn bm-io-btn" @click="$refs.bookmarkImportInput.click()" title="Import bookmarks from JSON">
+							<svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M5 15v4h14v-4h2v6H3v-6h2zm8-10.17L16.17 8l1.41-1.41L12 1 6.42 6.59 7.83 8 11 4.83V15h2V4.83z"/></svg>
+							Import
+						</button>
+						<input ref="bookmarkImportInput" type="file" accept=".json,application/json" style="display:none" @change="importBookmarks">
 					</div>
 					<div class="panel-body" style="padding: 4px 0; min-height: 36px;" v-show="!collapsedPanels['bookmarks']">
 						<div v-if="bookmarks.length === 0" class="bookmark-empty">No bookmarks saved.</div>
