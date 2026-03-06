@@ -122,6 +122,18 @@ createApp({
 		};
 	},
 	computed: {
+		// Bookmarks split into individual/group sections, each sorted by frequency
+		bookmarkGroups() {
+			const individual = this.bookmarks
+				.map((bm, i) => ({ bm, i }))
+				.filter(({ bm }) => (bm.type || 'group') === 'individual')
+				.sort((a, b) => a.bm.freq - b.bm.freq);
+			const group = this.bookmarks
+				.map((bm, i) => ({ bm, i }))
+				.filter(({ bm }) => (bm.type || 'group') === 'group')
+				.sort((a, b) => a.bm.centerFreq - b.bm.centerFreq);
+			return { individual, group };
+		},
 		// Calculate the min/max display bandwidth based on sampleRate AND zoom state
 		minFreq() {
 			const baseMin = this.radio.centerFreq - (this.radio.sampleRate / 2) / 1e6;
@@ -969,6 +981,15 @@ createApp({
 			if (name) this.showMsg(`"${name}" deleted.`);
 		},
 		saveBookmarks() {
+			// Sort in-place: individual freq bookmarks (by freq) first, then groups (by centerFreq)
+			this.bookmarks.sort((a, b) => {
+				const aIsIndividual = (a.type || 'group') === 'individual';
+				const bIsIndividual = (b.type || 'group') === 'individual';
+				if (aIsIndividual !== bIsIndividual) return aIsIndividual ? -1 : 1;
+				const aFreq = aIsIndividual ? a.freq : a.centerFreq;
+				const bFreq = bIsIndividual ? b.freq : b.centerFreq;
+				return aFreq - bFreq;
+			});
 			localStorage.setItem('sdr-web-bookmarks', JSON.stringify(this.bookmarks));
 		},
 		exportBookmarks() {

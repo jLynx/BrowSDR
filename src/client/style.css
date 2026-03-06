@@ -893,6 +893,23 @@ canvas {
 	padding: 8px 12px;
 }
 
+.bookmark-group-header {
+	font-size: 10px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.07em;
+	padding: 5px 10px 3px;
+	border-bottom: 1px solid var(--border);
+}
+.bm-group-header-freq {
+	color: var(--accent);
+	background: rgba(58, 134, 255, 0.07);
+}
+.bm-group-header-group {
+	color: #38b05e;
+	background: rgba(56, 176, 94, 0.07);
+}
+
 .bookmark-item {
 	display: flex;
 	align-items: center;
