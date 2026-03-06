@@ -80,8 +80,12 @@ createApp({
 				active: false,
 				status: 'idle',        // idle | loading | ready | error
 				loadProgress: 0,
-				model: 'onnx-community/whisper-tiny.en',
-				chunkSeconds: 5,
+				loadPhase: 'downloading', // downloading | initializing
+				loadFile: '',          // short name of the file currently downloading
+				loadFilesDone: 0,      // how many files have finished downloading
+				loadFilesTotal: 0,     // total files seen so far
+				model: 'onnx-community/whisper-small',
+				chunkSeconds: 10,
 				log: [],               // { time, freq, text, duration }
 				statusMsg: '',
 				recording: false,      // true while accumulating audio
@@ -640,6 +644,10 @@ createApp({
 			// Load model
 			this.whisper.status = 'loading';
 			this.whisper.loadProgress = 0;
+			this.whisper.loadPhase = 'downloading';
+			this.whisper.loadFile = '';
+			this.whisper.loadFilesDone = 0;
+			this.whisper.loadFilesTotal = 0;
 			this._whisperWorker.postMessage({ type: 'load', model: this.whisper.model });
 
 			// Per-VFO whisper accumulation buffers (keyed by vfoIndex)
@@ -664,6 +672,10 @@ createApp({
 					break;
 				case 'loading':
 					this.whisper.loadProgress = msg.progress;
+					this.whisper.loadPhase = msg.phase || 'downloading';
+					this.whisper.loadFile = msg.file || '';
+					this.whisper.loadFilesDone = msg.filesDone ?? this.whisper.loadFilesDone;
+					this.whisper.loadFilesTotal = msg.filesTotal ?? this.whisper.loadFilesTotal;
 					break;
 				case 'ready':
 					this.whisper.status = 'ready';
@@ -676,8 +688,6 @@ createApp({
 					if (this.whisper.pendingChunks === 0) {
 						this.whisper.transcribing = false;
 					}
-					// Ignore blank / noise-only results
-					if (!text || /^\s*$/.test(text) || /^\(.*\)$/.test(text) || /^\[.*\]$/.test(text)) break;
 					// Use metadata captured when the audio recording started, not at result time
 					const meta = (this._whisperChunkMeta || {})[msg.id] || {};
 					delete (this._whisperChunkMeta || {})[msg.id];
@@ -686,7 +696,8 @@ createApp({
 						: new Date().toLocaleTimeString();
 					const freq = meta.freq || '';
 					const duration = msg.audioDuration ? msg.audioDuration.toFixed(1) + 's' : '';
-					this.whisper.log.push({ time, freq, text, duration });
+					const transcribeTime = msg.transcribeTime ? msg.transcribeTime + 's' : '';
+					this.whisper.log.push({ time, freq, text, duration, transcribeTime });
 					// Auto-scroll
 					this.$nextTick(() => {
 						const el = this.$refs.transcriptBody;
@@ -698,6 +709,16 @@ createApp({
 					this.whisper.status = 'error';
 					this.whisper.statusMsg = msg.message;
 					this.showMsg('Whisper: ' + msg.message);
+					// An error also consumes a pending slot
+					this.whisper.pendingChunks = Math.max(0, this.whisper.pendingChunks - 1);
+					if (this.whisper.pendingChunks === 0) this.whisper.transcribing = false;
+					break;
+				case 'discarded':
+					// Worker silently dropped this chunk (hallucination/silence).
+					// Still need to decrement so the "Transcribing…" badge clears.
+					this.whisper.pendingChunks = Math.max(0, this.whisper.pendingChunks - 1);
+					if (this.whisper.pendingChunks === 0) this.whisper.transcribing = false;
+					delete (this._whisperChunkMeta || {})[msg.id];
 					break;
 			}
 		},
@@ -705,11 +726,16 @@ createApp({
 		_feedWhisperVfo(vfoIndex, freqMhz, samples48k) {
 			if (!this.whisper.active || this.whisper.status !== 'ready') return;
 
-			// Down-sample 48 kHz → 16 kHz (simple 3:1 decimation)
+			// Down-sample 48 kHz → 16 kHz with 3-tap box-filter anti-aliasing.
+			// Averaging consecutive triplets acts as a low-pass (~5 kHz cutoff),
+			// removing aliasing while preserving voice (300 Hz – 3 kHz).
 			const ratio = 3;
 			const outLen = Math.floor(samples48k.length / ratio);
 			const down = new Float32Array(outLen);
-			for (let i = 0; i < outLen; i++) down[i] = samples48k[i * ratio];
+			for (let i = 0; i < outLen; i++) {
+				const j = i * ratio;
+				down[i] = (samples48k[j] + (samples48k[j + 1] || 0) + (samples48k[j + 2] || 0)) / 3;
+			}
 
 			// Lazily init per-VFO state
 			if (!this._whisperVfoStates) this._whisperVfoStates = {};
@@ -790,10 +816,17 @@ createApp({
 			this.whisper.recording = Object.values(this._whisperVfoStates).some(s => s.recording);
 			if (!this.whisper.recording) this.whisper.recordDuration = 0;
 
-			// Final RMS guard
+			// Final RMS guard — discard silence.  Then normalise to ~0.08 RMS so
+			// Whisper handles weak HAM signals as confidently as strong ones.
+			// Gain is capped at 20× to avoid flooding the model with pure noise.
 			let sumSq = 0;
 			for (let i = 0; i < full.length; i++) sumSq += full[i] * full[i];
-			if (Math.sqrt(sumSq / full.length) < 0.003) return;
+			const rmsOut = Math.sqrt(sumSq / full.length);
+			if (rmsOut < 0.003) return;
+			if (rmsOut < 0.08) {
+				const gain = Math.min(0.08 / rmsOut, 20.0);
+				for (let i = 0; i < full.length; i++) full[i] = Math.max(-1, Math.min(1, full[i] * gain));
+			}
 
 			this.whisper.transcribing = true;
 			this.whisper.pendingChunks++;

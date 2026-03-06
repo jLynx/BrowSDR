@@ -349,7 +349,13 @@
 					</span>
 					<span class="transcript-badge" v-else-if="whisper.status === 'ready' && whisper.active">Listening</span>
 					<span class="transcript-badge" v-else-if="whisper.status === 'ready'">Ready</span>
-					<span class="transcript-badge loading" v-else-if="whisper.status === 'loading'">Loading {{ whisper.loadProgress }}%</span>
+					<span class="transcript-badge loading" v-else-if="whisper.status === 'loading'">
+						<template v-if="whisper.loadPhase === 'initializing'">Initializing…</template>
+						<template v-else>
+							Downloading {{ whisper.loadProgress }}%
+							<span v-if="whisper.loadFile" class="transcript-load-file">· {{ whisper.loadFile }}<span v-if="whisper.loadFilesTotal > 1"> ({{ whisper.loadFilesDone + 1 }}/{{ whisper.loadFilesTotal }})</span></span>
+						</template>
+					</span>
 					<span class="transcript-badge error" v-else-if="whisper.status === 'error'">Error</span>
 					<span class="transcript-badge" v-else>Idle</span>
 				</div>
@@ -358,13 +364,14 @@
 						<optgroup label="English-only (faster)">
 							<option value="onnx-community/whisper-tiny.en">Tiny.en (~40 MB)</option>
 							<option value="onnx-community/whisper-base.en">Base.en (~75 MB)</option>
-							<option value="onnx-community/whisper-small.en">Small.en (~250 MB)</option>
+							<option value="onnx-community/whisper-small.en">Small.en (~250 MB) ★ Recommended</option>
 							<option value="onnx-community/whisper-medium.en">Medium.en (~500 MB)</option>
 						</optgroup>
-						<optgroup label="Multilingual">
+						<optgroup label="Multilingual (better for non-US accents)">
 							<option value="onnx-community/whisper-tiny">Tiny multilingual (~40 MB)</option>
 							<option value="onnx-community/whisper-base">Base multilingual (~75 MB)</option>
-							<option value="onnx-community/whisper-large-v3-turbo">Large-v3-turbo (~800 MB) ★ Best</option>
+							<option value="onnx-community/whisper-small">Small multilingual (~250 MB) ★ Best for NZ/AU</option>
+							<option value="onnx-community/whisper-large-v3-turbo">Large-v3-turbo (~800 MB) ★ Highest quality</option>
 						</optgroup>
 					</select>
 					<select v-model.number="whisper.chunkSeconds" :disabled="whisper.active" class="transcript-select" title="Chunk length (seconds)">
@@ -388,6 +395,7 @@
 					<span class="transcript-time">{{ entry.time }}</span>
 					<span class="transcript-freq">{{ entry.freq }}</span>
 					<span class="transcript-duration" v-if="entry.duration">({{ entry.duration }})</span>
+					<span class="transcript-duration" v-if="entry.transcribeTime" title="Transcription inference time">⏱ {{ entry.transcribeTime }}</span>
 					<span class="transcript-text">{{ entry.text }}</span>
 				</div>
 			</div>
