@@ -966,6 +966,41 @@ createApp({
 		saveBookmarks() {
 			localStorage.setItem('sdr-web-bookmarks', JSON.stringify(this.bookmarks));
 		},
+		exportBookmarks() {
+			const json = JSON.stringify(this.bookmarks, null, 2);
+			const blob = new Blob([json], { type: 'application/json' });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `sdr-bookmarks-${new Date().toISOString().slice(0, 10)}.json`;
+			a.click();
+			URL.revokeObjectURL(url);
+		},
+		importBookmarks(event) {
+			const file = event.target.files[0];
+			if (!file) return;
+			const reader = new FileReader();
+			reader.onload = (e) => {
+				try {
+					const imported = JSON.parse(e.target.result);
+					if (!Array.isArray(imported)) throw new Error('Not an array');
+					// Merge: skip any bookmark whose id already exists
+					const existingIds = new Set(this.bookmarks.map(b => b.id));
+					const newOnes = imported
+						.filter(b => b && typeof b === 'object')
+						.map(b => ({ type: 'group', ...b }))
+						.filter(b => !existingIds.has(b.id));
+					this.bookmarks.push(...newOnes);
+					this.saveBookmarks();
+					this.showMsg(`Imported ${newOnes.length} bookmark${newOnes.length !== 1 ? 's' : ''}.`);
+				} catch (err) {
+					this.showMsg('Import failed: invalid JSON file.');
+				}
+			};
+			reader.readAsText(file);
+			// Reset so the same file can be re-imported if needed
+			event.target.value = '';
+		},
 		loadBookmarks() {
 			try {
 				const json = localStorage.getItem('sdr-web-bookmarks');
