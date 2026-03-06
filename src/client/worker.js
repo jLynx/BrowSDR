@@ -92,7 +92,7 @@ class Worker {
 		return { boardId, versionString, apiVersion, partId, serialNo };
 	}
 
-	async startRxStream(opts, spectrumCallback, audioCallback) {
+	async startRxStream(opts, spectrumCallback, audioCallback, whisperCallback = null) {
 		const { hackrf } = this;
 		const { centerFreq, sampleRate, fftSize, lnaGain, vgaGain, ampEnabled } = opts;
 
@@ -436,6 +436,35 @@ class Worker {
 		let audioBatchBuf = new Float32Array(4800); // 100ms capacity
 		let audioBatchPos = 0;
 
+		// ── Per-VFO Whisper Batching ──────────────────────────────────
+		// Each VFO gets its own batch buffer so Whisper receives isolated
+		// (pre-mix, pre-volume) audio for accurate per-VFO transcription.
+		const WHISPER_BATCH_THRESHOLD = 2400;
+		const whisperBatchBufs = [];   // Float32Array per VFO
+		const whisperBatchPos = [];    // write position per VFO
+		const ensureWhisperBuf = (v) => {
+			if (!whisperBatchBufs[v]) {
+				whisperBatchBufs[v] = new Float32Array(4800);
+				whisperBatchPos[v] = 0;
+			}
+		};
+		const pushWhisper = (v, freq, samples) => {
+			if (!whisperCallback) return;
+			ensureWhisperBuf(v);
+			let srcOff = 0;
+			while (srcOff < samples.length) {
+				const space = whisperBatchBufs[v].length - whisperBatchPos[v];
+				const toCopy = Math.min(space, samples.length - srcOff);
+				whisperBatchBufs[v].set(samples.subarray(srcOff, srcOff + toCopy), whisperBatchPos[v]);
+				whisperBatchPos[v] += toCopy;
+				srcOff += toCopy;
+				if (whisperBatchPos[v] >= WHISPER_BATCH_THRESHOLD) {
+					whisperCallback(v, freq, whisperBatchBufs[v].slice(0, whisperBatchPos[v]));
+					whisperBatchPos[v] = 0;
+				}
+			}
+		};
+
 		const flushAudio = () => {
 			if (audioBatchPos > 0) {
 				perf.msgsSent++;
@@ -698,7 +727,11 @@ class Worker {
 					if (!this.ddcs[v] || !this.vfoStates[v] || !this.ddcOutputs[v]) continue;
 					this.vfoStates[v].chunkCount++;
 					const out = processVfoAudio(signed, this.ddcs[v], this.vfoParams[v], this.vfoStates[v], this.ddcOutputs[v]);
-					if (out) vfoOutputs.push({ audio: out, volume: this.vfoParams[v].volume || 50 });
+				if (out) {
+					vfoOutputs.push({ audio: out, volume: this.vfoParams[v].volume || 50 });
+					// Send isolated pre-mix, pre-volume audio to Whisper per VFO
+					pushWhisper(v, this.vfoParams[v].freq, out);
+				}
 				}
 
 				if (vfoOutputs.length === 1) {

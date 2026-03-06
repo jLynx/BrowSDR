@@ -345,7 +345,7 @@
 						● REC {{ whisper.recordDuration.toFixed(1) }}s
 					</span>
 					<span class="transcript-badge transcribing" v-else-if="whisper.transcribing">
-						Transcribing…
+						Transcribing{{ whisper.pendingChunks > 1 ? ` (${whisper.pendingChunks} queued)` : '…' }}
 					</span>
 					<span class="transcript-badge" v-else-if="whisper.status === 'ready' && whisper.active">Listening</span>
 					<span class="transcript-badge" v-else-if="whisper.status === 'ready'">Ready</span>

@@ -289,7 +289,8 @@ createApp({
 			try {
 				await this.backend.startRxStream(opts,
 					Comlink.proxy((spectrumData) => this.drawSpectrum(spectrumData)),
-					Comlink.proxy((audioSamples) => this.playAudio(audioSamples))
+					Comlink.proxy((audioSamples) => this.playAudio(audioSamples)),
+					Comlink.proxy((vfoIndex, freq, samples) => this._feedWhisperVfo(vfoIndex, freq, samples))
 				);
 			} catch (e) {
 				console.error('Error starting RX stream:', e);
@@ -497,11 +498,6 @@ createApp({
 
 			if (!floats.length) return;
 
-			// Feed audio to Whisper transcription pipeline
-			if (this.whisper.active) {
-				this._feedWhisper(floats);
-			}
-
 			// Accumulate into ring buffer, schedule when we have enough
 			// This batches tiny chunks (~786 samples) into larger buffers
 			// to prevent scheduling gaps on the main thread
@@ -646,11 +642,10 @@ createApp({
 			this.whisper.loadProgress = 0;
 			this._whisperWorker.postMessage({ type: 'load', model: this.whisper.model });
 
-			// Prepare audio accumulation buffer (16 kHz mono)
-			this._whisperBuf = [];
-			this._whisperBufLen = 0;
+			// Per-VFO whisper accumulation buffers (keyed by vfoIndex)
+			this._whisperVfoStates = {};
 			this._whisperChunkId = 0;
-			this._whisperSilenceRun = 0;
+			this._whisperChunkMeta = {}; // id → { startTime, freq }
 			this.whisper.active = true;
 		},
 		stopWhisper() {
@@ -659,8 +654,7 @@ createApp({
 			this.whisper.transcribing = false;
 			this.whisper.pendingChunks = 0;
 			this.whisper.recordDuration = 0;
-			this._whisperBuf = [];
-			this._whisperBufLen = 0;
+			this._whisperVfoStates = {};
 		},
 		_onWhisperMessage(e) {
 			const msg = e.data;
@@ -684,10 +678,13 @@ createApp({
 					}
 					// Ignore blank / noise-only results
 					if (!text || /^\s*$/.test(text) || /^\(.*\)$/.test(text) || /^\[.*\]$/.test(text)) break;
-					const now = new Date();
-					const time = now.toLocaleTimeString();
-					const vfo = this.vfos[this.activeVfoIndex];
-					const freq = vfo ? this.formatFreq(vfo.freq) + ' MHz' : '';
+					// Use metadata captured when the audio recording started, not at result time
+					const meta = (this._whisperChunkMeta || {})[msg.id] || {};
+					delete (this._whisperChunkMeta || {})[msg.id];
+					const time = meta.startTime
+						? meta.startTime.toLocaleTimeString()
+						: new Date().toLocaleTimeString();
+					const freq = meta.freq || '';
 					const duration = msg.audioDuration ? msg.audioDuration.toFixed(1) + 's' : '';
 					this.whisper.log.push({ time, freq, text, duration });
 					// Auto-scroll
@@ -704,23 +701,31 @@ createApp({
 					break;
 			}
 		},
-		/** Feed demodulated audio (48 kHz) into the Whisper accumulation buffer. */
-		_feedWhisper(samples48k) {
+		/** Feed isolated per-VFO audio (48 kHz) from the worker into the per-VFO Whisper buffer. */
+		_feedWhisperVfo(vfoIndex, freqMhz, samples48k) {
 			if (!this.whisper.active || this.whisper.status !== 'ready') return;
 
 			// Down-sample 48 kHz → 16 kHz (simple 3:1 decimation)
 			const ratio = 3;
 			const outLen = Math.floor(samples48k.length / ratio);
 			const down = new Float32Array(outLen);
-			for (let i = 0; i < outLen; i++) {
-				down[i] = samples48k[i * ratio];
-			}
+			for (let i = 0; i < outLen; i++) down[i] = samples48k[i * ratio];
 
-			// Check if the active VFO has squelch enabled
-			const vfo = this.vfos[this.activeVfoIndex];
+			// Lazily init per-VFO state
+			if (!this._whisperVfoStates) this._whisperVfoStates = {};
+			if (!this._whisperVfoStates[vfoIndex]) {
+				this._whisperVfoStates[vfoIndex] = {
+					buf: [], bufLen: 0, silenceRun: 0,
+					recording: false, recordStart: null, recordStartFreq: '',
+				};
+			}
+			const vs = this._whisperVfoStates[vfoIndex];
+
+			// Check if this VFO has squelch enabled
+			const vfo = this.vfos[vfoIndex];
 			const squelchMode = vfo && vfo.squelchEnabled;
 
-			// Compute RMS of this incoming chunk
+			// RMS energy check
 			let sumSq = 0;
 			for (let i = 0; i < down.length; i++) sumSq += down[i] * down[i];
 			const rms = Math.sqrt(sumSq / down.length);
@@ -729,85 +734,79 @@ createApp({
 			if (squelchMode) {
 				// ── Squelch-aware mode: accumulate entire transmission ──
 				if (!isSilent) {
-					// Audio is active — accumulate
-					if (!this.whisper.recording) {
-						this.whisper.recording = true;
-						this.whisper.recordStart = new Date();
+					if (!vs.recording) {
+						vs.recording = true;
+						vs.recordStart = new Date();
+						vs.recordStartFreq = this.formatFreq(freqMhz) + ' MHz';
 					}
-					this._whisperBuf.push(down);
-					this._whisperBufLen += down.length;
-					this._whisperSilenceRun = 0;
-					this.whisper.recordDuration = this._whisperBufLen / 16000;
-
-					// Safety cap: if transmission exceeds 120s at 16 kHz, flush now
-					const MAX_CAP = 16000 * 120;
-					if (this._whisperBufLen >= MAX_CAP) {
-						this._flushWhisperBuf();
-					}
+					vs.buf.push(down);
+					vs.bufLen += down.length;
+					vs.silenceRun = 0;
+					// Safety cap: flush at 120 s
+					if (vs.bufLen >= 16000 * 120) this._flushWhisperVfoBuf(vfoIndex);
 				} else {
-					// Silence detected
-					if (this._whisperBufLen > 0) {
-						// Count consecutive silent chunks; flush after ~0.5 s of silence
-						// (acts as a debounce so brief squelch dips don't split words)
-						this._whisperSilenceRun = (this._whisperSilenceRun || 0) + down.length;
-						const SILENCE_FLUSH = 16000 * 0.5; // 0.5 s
-						if (this._whisperSilenceRun >= SILENCE_FLUSH) {
-							this._flushWhisperBuf();
-						}
+					if (vs.bufLen > 0) {
+						vs.silenceRun += down.length;
+						if (vs.silenceRun >= 16000 * 0.5) this._flushWhisperVfoBuf(vfoIndex);
 					}
-					// else: no buffered audio — nothing to do
 				}
 			} else {
-				// ── Fixed-interval mode (no squelch): use chunkSeconds selector ──
-				if (isSilent) return; // still skip pure silence
-
-				if (!this.whisper.recording) {
-					this.whisper.recording = true;
-					this.whisper.recordStart = new Date();
+				// ── Fixed-interval mode ──
+				if (isSilent) return;
+				if (!vs.recording) {
+					vs.recording = true;
+					vs.recordStart = new Date();
+					vs.recordStartFreq = this.formatFreq(freqMhz) + ' MHz';
 				}
-				this._whisperBuf.push(down);
-				this._whisperBufLen += down.length;
-				this.whisper.recordDuration = this._whisperBufLen / 16000;
+				vs.buf.push(down);
+				vs.bufLen += down.length;
+				if (vs.bufLen >= 16000 * this.whisper.chunkSeconds) this._flushWhisperVfoBuf(vfoIndex);
+			}
 
-				const TARGET = 16000 * this.whisper.chunkSeconds;
-				if (this._whisperBufLen >= TARGET) {
-					this._flushWhisperBuf();
-				}
+			// Update aggregate recording UI state (true if any VFO is recording)
+			const anyRecording = Object.values(this._whisperVfoStates).some(s => s.recording);
+			this.whisper.recording = anyRecording;
+			if (anyRecording) {
+				const maxDur = Math.max(...Object.values(this._whisperVfoStates).map(s => s.bufLen / 16000));
+				this.whisper.recordDuration = maxDur;
 			}
 		},
-		/** Concatenate the accumulation buffer and send it to the Whisper worker. */
-		_flushWhisperBuf() {
-			if (this._whisperBufLen === 0) return;
+		/** Flush one VFO's accumulation buffer to the Whisper worker. */
+		_flushWhisperVfoBuf(vfoIndex) {
+			const vs = this._whisperVfoStates && this._whisperVfoStates[vfoIndex];
+			if (!vs || vs.bufLen === 0) return;
 
-			const audioDuration = this._whisperBufLen / 16000;
-
-			const full = new Float32Array(this._whisperBufLen);
+			const audioDuration = vs.bufLen / 16000;
+			const full = new Float32Array(vs.bufLen);
 			let offset = 0;
-			for (const chunk of this._whisperBuf) {
-				full.set(chunk, offset);
-				offset += chunk.length;
-			}
-			this._whisperBuf = [];
-			this._whisperBufLen = 0;
-			this._whisperSilenceRun = 0;
+			for (const chunk of vs.buf) { full.set(chunk, offset); offset += chunk.length; }
 
-			// Update state: no longer recording, now transcribing
-			this.whisper.recording = false;
-			this.whisper.recordDuration = 0;
+			vs.buf = [];
+			vs.bufLen = 0;
+			vs.silenceRun = 0;
+			vs.recording = false;
 
-			// Final RMS check on the entire buffer
+			// Update aggregate UI state
+			this.whisper.recording = Object.values(this._whisperVfoStates).some(s => s.recording);
+			if (!this.whisper.recording) this.whisper.recordDuration = 0;
+
+			// Final RMS guard
 			let sumSq = 0;
 			for (let i = 0; i < full.length; i++) sumSq += full[i] * full[i];
-			const rms = Math.sqrt(sumSq / full.length);
-			if (rms < 0.003) return; // discard if overall energy is negligible
+			if (Math.sqrt(sumSq / full.length) < 0.003) return;
 
 			this.whisper.transcribing = true;
 			this.whisper.pendingChunks++;
 
 			const id = this._whisperChunkId++;
+			if (!this._whisperChunkMeta) this._whisperChunkMeta = {};
+			this._whisperChunkMeta[id] = {
+				startTime: vs.recordStart || new Date(),
+				freq: vs.recordStartFreq,
+			};
 			this._whisperWorker.postMessage(
 				{ type: 'transcribe', audio: full, id, audioDuration },
-				[full.buffer]   // transfer
+				[full.buffer]
 			);
 		},
 		// ─── Bookmarks ───────────────────────────────────────────────────────────
