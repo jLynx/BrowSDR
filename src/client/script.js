@@ -118,6 +118,7 @@ createApp({
 				vfos: [],
 				activeVfoIndex: 0,
 			},
+			collapsedPanels: {},  // keyed by panel id, true = collapsed
 		};
 	},
 	computed: {
@@ -134,6 +135,9 @@ createApp({
 		}
 	},
 	methods: {
+		togglePanel(key) {
+			this.collapsedPanels[key] = !this.collapsedPanels[key];
+		},
 		formatFreq(mhz) {
 			if (!mhz) return "000.000000";
 			let s = mhz.toFixed(6);
@@ -560,7 +564,7 @@ createApp({
 			}
 		},
 		saveSetting() {
-			const json = JSON.stringify({ radio: this.radio, gains: this.gains, vfos: this.vfos, activeVfoIndex: this.activeVfoIndex, view: this.view, display: this.display });
+			const json = JSON.stringify({ radio: this.radio, gains: this.gains, vfos: this.vfos, activeVfoIndex: this.activeVfoIndex, view: this.view, display: this.display, collapsedPanels: this.collapsedPanels });
 			localStorage.setItem('sdr-web-setting', json);
 		},
 		loadSetting() {
@@ -572,7 +576,7 @@ createApp({
 					if (setting.gains) Object.assign(this.gains, setting.gains);
 					// Handle new format (vfos array) or legacy format (audio/audio2)
 					if (setting.vfos && Array.isArray(setting.vfos)) {
-						this.vfos = setting.vfos.map(v => ({ ...makeDefaultVfo(), ...v, enabled: false }));
+						this.vfos = setting.vfos.map(v => ({ ...makeDefaultVfo(), ...v }));
 					} else {
 						if (setting.audio) {
 							Object.assign(this.vfos[0], setting.audio, { enabled: false, displayFreq: this.formatFreq(setting.audio.freq || 100.0), focused: false });
@@ -586,6 +590,7 @@ createApp({
 					else if (setting.activeVfo) this.activeVfoIndex = setting.activeVfo - 1;
 					if (setting.view) Object.assign(this.view, setting.view);
 					if (setting.display) Object.assign(this.display, setting.display);
+					if (setting.collapsedPanels && typeof setting.collapsedPanels === 'object') Object.assign(this.collapsedPanels, setting.collapsedPanels);
 				}
 			} catch (e) { }
 		},
@@ -1101,6 +1106,10 @@ createApp({
 
 		this.$watch('view', () => {
 			this.applyZoomToEngine();
+			this.saveSetting();
+		}, { deep: true });
+
+		this.$watch('collapsedPanels', () => {
 			this.saveSetting();
 		}, { deep: true });
 	},

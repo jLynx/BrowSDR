@@ -56,8 +56,11 @@
 			<!-- Sidebar -->
 			<div class="sidebar">
 				<div class="panel">
-					<div class="panel-header">Source</div>
-					<div class="panel-body">
+					<div class="panel-header panel-header-collapsible" @click="togglePanel('source')">
+						<span>Source</span>
+						<svg class="panel-chevron" :class="{ 'panel-chevron-collapsed': collapsedPanels['source'] }" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+					</div>
+					<div class="panel-body" v-show="!collapsedPanels['source']">
 						<div class="form-row">
 							<button class="btn btn-primary" v-if="!connected" @click="connect">Connect Device</button>
 							<button class="btn" v-else @click="disconnect">Disconnect</button>
@@ -69,8 +72,11 @@
 				</div>
 
 				<div class="panel" :class="{ disabled: !connected }">
-					<div class="panel-header">Radio</div>
-					<div class="panel-body">
+					<div class="panel-header panel-header-collapsible" @click="togglePanel('radio')">
+						<span>Radio</span>
+						<svg class="panel-chevron" :class="{ 'panel-chevron-collapsed': collapsedPanels['radio'] }" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+					</div>
+					<div class="panel-body" v-show="!collapsedPanels['radio']">
 						<div class="form-row">
 							<label>Center</label>
 							<div class="input-group">
@@ -112,12 +118,13 @@
 				</div>
 
 				<div class="panel" v-for="(vfo, i) in vfos" :key="'vfo-panel-' + i" :class="{ disabled: !connected }">
-					<div class="panel-header" style="display: flex; justify-content: space-between; align-items: center;">
+					<div class="panel-header panel-header-collapsible" style="display: flex; justify-content: space-between; align-items: center;" @click="togglePanel('vfo-' + i)">
 						<div style="display: flex; align-items: center; gap: 6px;">
 							<span class="vfo-dot" :style="{ background: vfoColor(i) }"></span>
 							VFO {{ i + 1 }}
+							<svg class="panel-chevron" :class="{ 'panel-chevron-collapsed': collapsedPanels['vfo-' + i] }" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
 						</div>
-						<div style="display: flex; align-items: center; gap: 4px;">
+						<div style="display: flex; align-items: center; gap: 4px;" @click.stop>
 							<button v-if="vfos.length > 1" class="vfo-remove-btn" @click="removeVfo(i)" title="Remove VFO">&times;</button>
 							<label class="custom-checkbox header-checkbox">
 								<input type="checkbox" v-model="vfo.enabled" @change="toggleVfoCheckbox(i)" :disabled="!running">
@@ -125,7 +132,7 @@
 							</label>
 						</div>
 					</div>
-					<div class="panel-body panel-condensed">
+					<div class="panel-body panel-condensed" v-show="!collapsedPanels['vfo-' + i]">
 						<div class="mode-grid">
 							<label class="mode-radio" v-for="m in ['nfm','am','usb','lsb','wfm','dsb','cw','raw']" :key="m">
 								<input type="radio" :value="m" v-model="vfo.mode" :name="'mode-' + i" @change="applyModeDefaults(i)">
@@ -232,9 +239,11 @@
 
 				<!-- Bookmarks panel -->
 				<div class="panel">
-					<div class="panel-header bookmark-panel-header">
-						<span>Bookmarks</span>
-						<div class="bookmark-header-actions">
+					<div class="panel-header bookmark-panel-header panel-header-collapsible" @click="togglePanel('bookmarks')">
+						<span style="display:flex;align-items:center;gap:5px;">Bookmarks
+							<svg class="panel-chevron" :class="{ 'panel-chevron-collapsed': collapsedPanels['bookmarks'] }" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+						</span>
+						<div class="bookmark-header-actions" @click.stop>
 							<button class="btn bookmark-save-btn bm-type-freq" @click="openSaveBookmark('individual')" title="Save active VFO frequency as an individual bookmark">+ Freq</button>
 							<button class="btn bookmark-save-btn bm-type-group" @click="openSaveBookmark('group')" title="Save center frequency and all VFOs as a group bookmark">+ Group</button>
 							<div class="bookmark-io-divider"></div>
@@ -249,7 +258,7 @@
 							<input ref="bookmarkImportInput" type="file" accept=".json,application/json" style="display:none" @change="importBookmarks">
 						</div>
 					</div>
-					<div class="panel-body" style="padding: 4px 0; min-height: 36px;">
+					<div class="panel-body" style="padding: 4px 0; min-height: 36px;" v-show="!collapsedPanels['bookmarks']">
 						<div v-if="bookmarks.length === 0" class="bookmark-empty">No bookmarks saved.</div>
 						<div v-for="(bm, i) in bookmarks" :key="bm.id" class="bookmark-item">
 							<div class="bookmark-info">

@@ -274,6 +274,28 @@ body {
 	border-bottom: 1px solid var(--border);
 }
 
+.panel-header-collapsible {
+	cursor: pointer;
+	user-select: none;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.panel-header-collapsible:hover {
+	color: #ccc;
+}
+
+.panel-chevron {
+	opacity: 0.6;
+	transition: transform 0.2s ease;
+	flex-shrink: 0;
+}
+
+.panel-chevron-collapsed {
+	transform: rotate(-90deg);
+}
+
 .panel-body {
 	padding: 12px;
 	display: flex;
@@ -782,6 +804,7 @@ canvas {
 .bookmark-panel-header {
 	display: flex;
 	flex-direction: column;
+	align-items: stretch;
 	gap: 6px;
 	padding-bottom: 6px;
 }
