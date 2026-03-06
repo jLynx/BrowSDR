@@ -33,10 +33,7 @@ function copyDirSync(src, dest) {
 	}
 }
 
-// --- Clean dist/ ---
-if (fs.existsSync(DIST)) {
-	fs.rmSync(DIST, { recursive: true, force: true });
-}
+// --- Ensure dist/ exists (no clean — wrangler holds a lock on it during dev) ---
 fs.mkdirSync(DIST, { recursive: true });
 
 // --- Copy src/client/ → dist/ ---
