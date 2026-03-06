@@ -341,9 +341,23 @@ createApp({
 			this.waterfallEngine.setRange(this.display.minDB, this.display.maxDB);
 
 			const rect = this.$refs.fftContainer.getBoundingClientRect();
-			fft.width = rect.width; // Draw spectrum based on physical pixels, not full FFT
-			fft.height = rect.height;
+			const dpr = window.devicePixelRatio || 1;
+			fft.width = rect.width * dpr; // Draw spectrum based on physical pixels, not full FFT
+			fft.height = rect.height * dpr;
+			fft.style.width = rect.width + 'px';
+			fft.style.height = rect.height + 'px';
 			this.fftCtx = fft.getContext('2d');
+			this.fftCtx.scale(dpr, dpr);
+			console.log('[initCanvas]', {
+				devicePixelRatio: dpr,
+				cssWidth: rect.width,
+				cssHeight: rect.height,
+				canvasBufferWidth: fft.width,
+				canvasBufferHeight: fft.height,
+				fftSize,
+				renderSize,
+				useWebGL,
+			});
 		},
 		drawSpectrum(data) {
 			if (!this.running || !this.fftCtx) return;
@@ -368,8 +382,24 @@ createApp({
 			this.waterfallEngine.renderLine(wfData);
 
 			const ctx = this.fftCtx;
-			const w = ctx.canvas.width;
-			const h = ctx.canvas.height;
+			const dpr = window.devicePixelRatio || 1;
+			const w = ctx.canvas.width / dpr;
+			const h = ctx.canvas.height / dpr;
+
+			if (!this._spectrumDebugLogged) {
+				this._spectrumDebugLogged = true;
+				console.log('[drawSpectrum first frame]', {
+					devicePixelRatio: dpr,
+					canvasBufferWidth: ctx.canvas.width,
+					canvasBufferHeight: ctx.canvas.height,
+					cssWidth: w,
+					cssHeight: h,
+					dataPoints: data.length,
+					renderSize: this.renderSize,
+					canvasStyleWidth: ctx.canvas.style.width,
+					canvasStyleHeight: ctx.canvas.style.height,
+				});
+			}
 
 			ctx.fillStyle = "rgba(0, 0, 0, 1)";
 			ctx.fillRect(0, 0, w, h);
