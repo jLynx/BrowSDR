@@ -447,8 +447,9 @@ createApp({
 			// Draw VFO highlights
 			for (let vi = 0; vi < this.vfos.length; vi++) {
 				const vfo = this.vfos[vi];
-				if (vfo.freq === null || !vfo.enabled) continue;
+				if (vfo.freq === null) continue;
 
+				const muted = !vfo.enabled;
 				const color = VFO_COLORS[vi % VFO_COLORS.length];
 				const bandwidthHz = vfo.bandwidth;
 				const currentSpanHz = this.radio.sampleRate / this.view.zoomScale;
@@ -459,22 +460,29 @@ createApp({
 				const zoomedPixelOffset = basePixel - (this.view.zoomOffset * w);
 				const centerPixel = zoomedPixelOffset * this.view.zoomScale;
 
+				ctx.save();
+				if (muted) ctx.globalAlpha = 0.35;
+
 				// Tint block
 				ctx.fillStyle = this.vfoTint(vi);
 				ctx.fillRect(centerPixel - pixelWidth / 2, 0, Math.max(pixelWidth, 2), h);
 
-				// Center line
+				// Center line — dashed when muted to reinforce the mute state
 				ctx.strokeStyle = color;
 				ctx.lineWidth = 1;
+				if (muted) ctx.setLineDash([4, 3]);
 				ctx.beginPath();
 				ctx.moveTo(centerPixel, 0);
 				ctx.lineTo(centerPixel, h);
 				ctx.stroke();
+				ctx.setLineDash([]);
 
 				// Label
 				ctx.fillStyle = color;
 				ctx.font = "10px Inter, sans-serif";
-				ctx.fillText(`VFO ${vi + 1}`, centerPixel + 4, 12 + vi * 12);
+				ctx.fillText(muted ? `VFO ${vi + 1} (mute)` : `VFO ${vi + 1}`, centerPixel + 4, 12 + vi * 12);
+
+				ctx.restore();
 			}
 		},
 		async toggleVfoCheckbox(index) {

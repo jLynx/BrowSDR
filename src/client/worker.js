@@ -854,7 +854,9 @@ class Worker {
 		// ── Audio Processing — helper processes a single VFO ──────────
 		// Returns Float32Array of audio samples, or null if none produced
 		const processVfoAudio = (signed, ddc, params, vfoState, ddcOut) => {
-			if (!params.enabled) return null;
+			// Mute = silence the speakers, not stop DSP. Still run the pipeline
+			// when POCSAG decoding is active so messages aren't lost while muted.
+			if (!params.enabled && !params.pocsag) return null;
 
 			// Shift freq: The tuned freq relative to the center freq
 			const shiftHz = (params.freq - centerFreq) * 1e6;
@@ -1092,10 +1094,14 @@ class Worker {
 					this.vfoStates[v].chunkCount++;
 					const out = processVfoAudio(signed, this.ddcs[v], this.vfoParams[v], this.vfoStates[v], this.ddcOutputs[v]);
 				if (out) {
-					vfoOutputs.push({ audio: out, volume: this.vfoParams[v].volume || 50 });
-					// Send isolated pre-mix, pre-volume audio to Whisper per VFO
-					pushWhisper(v, this.vfoParams[v].freq, out);
-					// POCSAG decoding (NFM only — requires clean FM demodulated audio)
+					// Only route to audio output when the VFO is unmuted
+					if (this.vfoParams[v].enabled) {
+						vfoOutputs.push({ audio: out, volume: this.vfoParams[v].volume || 50 });
+						// Send isolated pre-mix, pre-volume audio to Whisper per VFO
+						pushWhisper(v, this.vfoParams[v].freq, out);
+					}
+					// POCSAG decoding runs regardless of mute — it's a data decoder
+					// (NFM only — requires clean FM demodulated audio)
 					if (pocsagCallback && this.vfoParams[v].pocsag && this.vfoParams[v].mode === 'nfm') {
 						if (!this.vfoStates[v].pocsagDecoder) {
 							const vi = v;
