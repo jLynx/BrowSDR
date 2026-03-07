@@ -92,6 +92,7 @@ createApp({
 			showStats: false,
 			fps: 0,
 			vfoSquelchOpen: [],  // per-VFO squelch activity indicator
+			vfoSquelchHangUntil: [], // per-VFO timestamp until which we hang the UI open
 			view: {
 				zoomScale: 1.0,
 				zoomOffset: 0.0
@@ -155,6 +156,18 @@ createApp({
 		};
 	},
 	computed: {
+		activeAudioVfos() {
+			const active = [];
+			for (let i = 0; i < this.vfos.length; i++) {
+				const vfo = this.vfos[i];
+				if (vfo.enabled) {
+					if (!vfo.squelchEnabled || this.vfoSquelchOpen[i]) {
+						active.push({ index: i, vfo });
+					}
+				}
+			}
+			return active;
+		},
 		// Bookmarks split into individual/group sections, each sorted by frequency
 		bookmarkGroups() {
 			const filter = this.bookmarkCategoryFilter;
@@ -330,12 +343,20 @@ createApp({
 
 			this.running = true;
 
-			// Start DSP stats polling
 			this._statsTimer = setInterval(async () => {
 				if (this.backend && this.running) {
 					this.dspStats = await this.backend.getDspStats();
 					if (this.dspStats && this.dspStats.squelchOpen) {
-						this.vfoSquelchOpen = this.dspStats.squelchOpen.slice();
+						const now = Date.now();
+						const squelchStates = this.dspStats.squelchOpen.slice();
+						for (let i = 0; i < squelchStates.length; i++) {
+							if (squelchStates[i]) {
+								this.vfoSquelchHangUntil[i] = now + 1000;
+							} else if (this.vfoSquelchHangUntil[i] && now < this.vfoSquelchHangUntil[i]) {
+								squelchStates[i] = true;
+							}
+						}
+						this.vfoSquelchOpen = squelchStates;
 					}
 				}
 			}, 500);

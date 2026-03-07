@@ -1179,6 +1179,8 @@ class Worker {
 				if (!state || !params) return;
 
 				state.squelchOpen = msg.squelchOpen;
+				if (!this._latchedSquelchOpen) this._latchedSquelchOpen = [];
+				if (msg.squelchOpen) this._latchedSquelchOpen[v] = true;
 				if (msg.dspTime) {
 					perf.dspTimeSum += msg.dspTime;
 					if (msg.dspTime > perf.dspTimeMax) perf.dspTimeMax = msg.dspTime;
@@ -1342,9 +1344,17 @@ class Worker {
 
 	getDspStats() {
 		if (!this._perf) return null;
+
+		const currentSquelch = this.vfoStates ? this.vfoStates.map(s => s.squelchOpen || false) : [];
+		const latchedSquelch = this._latchedSquelchOpen || [];
+		const combinedSquelch = currentSquelch.map((sq, i) => sq || latchedSquelch[i]);
+
+		// Reset latched state to only what is currently open
+		this._latchedSquelchOpen = [...currentSquelch];
+
 		return {
 			...this._perf.report,
-			squelchOpen: this.vfoStates ? this.vfoStates.map(s => s.squelchOpen || false) : [],
+			squelchOpen: combinedSquelch,
 		};
 	}
 

@@ -345,6 +345,21 @@
 						<div>Dropped: {{ dspStats.dropped }}</div>
 					</div>
 				</div>
+				<!-- Active Audio VFOs Overlay -->
+				<div class="active-audio-overlay" v-if="activeAudioVfos.length > 0">
+					<div class="active-audio-title">Active Audio</div>
+					<div class="active-audio-chips">
+						<div v-for="item in activeAudioVfos" :key="'active-vfo-' + item.index" 
+							class="active-audio-chip" 
+							:style="{ borderColor: vfoColor(item.index), '--chip-color': vfoColor(item.index) }"
+							@click="activeVfoIndex = item.index"
+							:title="'Switch to VFO ' + (item.index + 1)">
+							<span class="vfo-dot" :style="{ background: vfoColor(item.index) }"></span>
+							<span class="vfo-num">{{ item.index + 1 }}</span>
+							<span class="vfo-freq">{{ item.vfo.freq.toFixed(3) }}</span>
+						</div>
+					</div>
+				</div>
 				<div class="waterfall-container">
 					<canvas id="waterfall" ref="waterfall"></canvas>
 				</div>
