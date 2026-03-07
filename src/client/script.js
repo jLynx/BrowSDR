@@ -71,6 +71,7 @@ createApp({
 			hoverFreqText: "",
 			dspStats: null,
 			showStats: false,
+			fps: 0,
 			vfoSquelchOpen: [],  // per-VFO squelch activity indicator
 			view: {
 				zoomScale: 1.0,
@@ -341,11 +342,13 @@ createApp({
 			this.renderSize = renderSize;
 			const nx = Math.pow(2, Math.ceil(Math.log2(renderSize)));
 			const useWebGL = nx <= 16384;
-			this.waterfallEngine = useWebGL ?
+
+			// Attach non-reactively to prevent Vue DevTools from deep-inspecting rendering engine objects and freezing
+			this._waterfallEngine = useWebGL ?
 				new WaterfallGL(waterfall, renderSize, 512) :
 				new Waterfall(waterfall, renderSize, 512);
 
-			this.waterfallEngine.setRange(this.display.minDB, this.display.maxDB);
+			this._waterfallEngine.setRange(this.display.minDB, this.display.maxDB);
 
 			const rect = this.$refs.fftContainer.getBoundingClientRect();
 			const dpr = window.devicePixelRatio || 1;
@@ -353,11 +356,25 @@ createApp({
 			fft.height = rect.height * dpr;
 			fft.style.width = rect.width + 'px';
 			fft.style.height = rect.height + 'px';
-			this.fftCtx = fft.getContext('2d');
-			this.fftCtx.scale(dpr, dpr);
+			this._fftCtx = fft.getContext('2d');
+			this._fftCtx.scale(dpr, dpr);
 		},
 		drawSpectrum(data) {
-			if (!this.running || !this.fftCtx) return;
+			if (!this.running || !this._fftCtx) return;
+
+			// FPS calculation
+			const now = performance.now();
+			if (!this._lastFrameTime) {
+				this._lastFrameTime = now;
+				this._framesDrawn = 0;
+			} else {
+				this._framesDrawn++;
+				if (now - this._lastFrameTime >= 1000) {
+					this.fps = Math.round((this._framesDrawn * 1000) / (now - this._lastFrameTime));
+					this._framesDrawn = 0;
+					this._lastFrameTime = now;
+				}
+			}
 
 			// Downsample for waterfall history
 			let wfData = data;
@@ -376,9 +393,9 @@ createApp({
 			}
 
 			// Waterfall drawing
-			this.waterfallEngine.renderLine(wfData);
+			this._waterfallEngine.renderLine(wfData);
 
-			const ctx = this.fftCtx;
+			const ctx = this._fftCtx;
 			const dpr = window.devicePixelRatio || 1;
 			const w = ctx.canvas.width / dpr;
 			const h = ctx.canvas.height / dpr;
@@ -601,12 +618,12 @@ createApp({
 				if (json) {
 					const setting = JSON.parse(json);
 					if (setting.radio) {
-					Object.assign(this.radio, setting.radio);
-					// Migrate: enforce minimum fftSize (old saves may have used 2048)
-					if (!this.radio.fftSize || this.radio.fftSize < 8192) {
-						this.radio.fftSize = 65536;
+						Object.assign(this.radio, setting.radio);
+						// Migrate: enforce minimum fftSize (old saves may have used 2048)
+						if (!this.radio.fftSize || this.radio.fftSize < 8192) {
+							this.radio.fftSize = 65536;
+						}
 					}
-				}
 					if (setting.gains) Object.assign(this.gains, setting.gains);
 					// Handle new format (vfos array) or legacy format (audio/audio2)
 					if (setting.vfos && Array.isArray(setting.vfos)) {
@@ -629,8 +646,8 @@ createApp({
 			} catch (e) { }
 		},
 		applyZoomToEngine() {
-			if (this.waterfallEngine) {
-				this.waterfallEngine.setZoom(this.view.zoomOffset, this.view.zoomScale);
+			if (this._waterfallEngine) {
+				this._waterfallEngine.setZoom(this.view.zoomOffset, this.view.zoomScale);
 			}
 		},
 		// ─── Whisper transcription ───────────────────────────
@@ -1091,7 +1108,7 @@ createApp({
 					// Migrate old bookmarks without a type field
 					if (Array.isArray(bms)) this.bookmarks = bms.map(b => ({ type: 'group', ...b }));
 				}
-			} catch (e) {}
+			} catch (e) { }
 		},
 		// ─────────────────────────────────────────────────────────────────────────
 		clearTranscript() {

@@ -21,7 +21,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 
 import * as Comlink from "./lib/comlink.mjs";
 import { HackRF } from "./hackrf.js";
-import init, { FFT, DspProcessor, set_panic_hook } from "./hackrf-web/pkg/hackrf_web.js";
+import init, { FFT, DspProcessor, set_panic_hook, alloc_iq_buffer, free_iq_buffer } from "./hackrf-web/pkg/hackrf_web.js";
 
 // wasm module (top-level import)
 let wasmInitialized = false;
@@ -49,54 +49,54 @@ async function ensureWasmInitialized() {
 function _pocsagHamming(a, b) {
 	let x = (a ^ b) >>> 0;
 	x -= (x >>> 1) & 0x55555555;
-	x  = (x & 0x33333333) + ((x >>> 2) & 0x33333333);
-	x  = (x + (x >>> 4)) & 0x0f0f0f0f;
+	x = (x & 0x33333333) + ((x >>> 2) & 0x33333333);
+	x = (x + (x >>> 4)) & 0x0f0f0f0f;
 	return Math.imul(x, 0x01010101) >>> 24;
 }
 
 class _POCSAGSingleBaud {
-	static SYNC_WORD     = 0x7CD215D8 >>> 0;
+	static SYNC_WORD = 0x7CD215D8 >>> 0;
 	static SYNC_INVERTED = (~0x7CD215D8) >>> 0;
-	static IDLE_CW       = 0x7A89C197 >>> 0;
+	static IDLE_CW = 0x7A89C197 >>> 0;
 	// Max Hamming distance to still recognise a sync / idle word
 	static SYNC_TOLERANCE = 2;
 
 	constructor(audioRate, baud, onMessage) {
-		this.audioRate  = audioRate;
-		this.spb        = audioRate / baud;   // samples per bit
-		this.baudRate   = baud;
-		this.onMessage  = onMessage;
+		this.audioRate = audioRate;
+		this.spb = audioRate / baud;   // samples per bit
+		this.baudRate = baud;
+		this.onMessage = onMessage;
 
-		this.dcLevel    = 0;
-		this.dcAlpha    = 0.001;              // fast initial DC tracking
+		this.dcLevel = 0;
+		this.dcAlpha = 0.001;              // fast initial DC tracking
 		this.clockPhase = 0;
 		this.lastSample = 0;
 
-		this.shiftReg   = 0;
-		this.inverted   = false;
-		this.state      = 'hunt';
+		this.shiftReg = 0;
+		this.inverted = false;
+		this.state = 'hunt';
 
-		this.cwBitCnt   = 0;
-		this.currentCw  = 0;
+		this.cwBitCnt = 0;
+		this.currentCw = 0;
 		this.batchCwIdx = 0;
 
-		this.pageActive  = false;
+		this.pageActive = false;
 		this.pageCapcode = 0;
-		this.pageFunc    = 0;
-		this.pageBits    = [];
+		this.pageFunc = 0;
+		this.pageBits = [];
 	}
 
 	reset() {
-		this.dcLevel    = 0;
+		this.dcLevel = 0;
 		this.clockPhase = 0;
 		this.lastSample = 0;
-		this.shiftReg   = 0;
-		this.state      = 'hunt';
-		this.cwBitCnt   = 0;
-		this.currentCw  = 0;
+		this.shiftReg = 0;
+		this.state = 'hunt';
+		this.cwBitCnt = 0;
+		this.currentCw = 0;
 		this.batchCwIdx = 0;
 		this.pageActive = false;
-		this.pageBits   = [];
+		this.pageBits = [];
 	}
 
 	process(samples) {
@@ -115,7 +115,7 @@ class _POCSAGSingleBaud {
 			if ((this.lastSample < 0) !== (s < 0)) {
 				let err = this.clockPhase - spbHalf;
 				// Wrap to [-spbHalf, +spbHalf]
-				if (err >  spbHalf) err -= spb;
+				if (err > spbHalf) err -= spb;
 				if (err < -spbHalf) err += spb;
 				// Hard-gate: ignore corrections larger than 40% of a bit period
 				// (those are glitches, not true bit edges)
@@ -139,7 +139,7 @@ class _POCSAGSingleBaud {
 		if (this.state === 'hunt') {
 			// Accept sync word with up to SYNC_TOLERANCE bit errors
 			const dNorm = _pocsagHamming(this.shiftReg, _POCSAGSingleBaud.SYNC_WORD);
-			const dInv  = _pocsagHamming(this.shiftReg, _POCSAGSingleBaud.SYNC_INVERTED);
+			const dInv = _pocsagHamming(this.shiftReg, _POCSAGSingleBaud.SYNC_INVERTED);
 			if (dNorm <= _POCSAGSingleBaud.SYNC_TOLERANCE) {
 				this.inverted = false;
 				this._onSync();
@@ -152,12 +152,12 @@ class _POCSAGSingleBaud {
 			// While doing so, keep watching for a new sync word in case we drift
 			// — if we see one mid-batch, re-align immediately.
 			const dNorm = _pocsagHamming(this.shiftReg, _POCSAGSingleBaud.SYNC_WORD);
-			const dInv  = _pocsagHamming(this.shiftReg, _POCSAGSingleBaud.SYNC_INVERTED);
+			const dInv = _pocsagHamming(this.shiftReg, _POCSAGSingleBaud.SYNC_INVERTED);
 			if (this.cwBitCnt >= 28 && (dNorm <= _POCSAGSingleBaud.SYNC_TOLERANCE || dInv <= _POCSAGSingleBaud.SYNC_TOLERANCE)) {
 				// Sync word received as a codeword → new batch starts
-				this.inverted   = dInv < dNorm;
-				this.cwBitCnt   = 0;
-				this.currentCw  = 0;
+				this.inverted = dInv < dNorm;
+				this.cwBitCnt = 0;
+				this.currentCw = 0;
 				this.batchCwIdx = 0;
 				return;
 			}
@@ -165,7 +165,7 @@ class _POCSAGSingleBaud {
 			const b = this.inverted ? (1 - bit) : bit;
 			this.currentCw = ((this.currentCw << 1) | b) >>> 0;
 			if (++this.cwBitCnt === 32) {
-				this.cwBitCnt  = 0;
+				this.cwBitCnt = 0;
 				this._onCodeword(this.currentCw);
 				this.currentCw = 0;
 			}
@@ -173,9 +173,9 @@ class _POCSAGSingleBaud {
 	}
 
 	_onSync() {
-		this.state      = 'data';
-		this.cwBitCnt   = 0;
-		this.currentCw  = 0;
+		this.state = 'data';
+		this.cwBitCnt = 0;
+		this.currentCw = 0;
 		this.batchCwIdx = 0;
 	}
 
@@ -211,13 +211,13 @@ class _POCSAGSingleBaud {
 		if (type === 0) {
 			// Address codeword → flush any previous page, start new one
 			if (this.pageActive && this.pageBits.length > 0) this._emitPage();
-			const addrHigh   = (cw >>> 13) & 0x3FFFF;
-			const func       = (cw >>> 11) & 0x3;
-			const frame      = (cwIdx >> 1) & 0x7;
+			const addrHigh = (cw >>> 13) & 0x3FFFF;
+			const func = (cw >>> 11) & 0x3;
+			const frame = (cwIdx >> 1) & 0x7;
 			this.pageCapcode = (addrHigh << 3) | frame;
-			this.pageFunc    = func;
-			this.pageBits    = [];
-			this.pageActive  = true;
+			this.pageFunc = func;
+			this.pageBits = [];
+			this.pageActive = true;
 		} else {
 			// Message codeword: 20 data bits (bits 30..11), MSB first
 			if (this.pageActive) {
@@ -248,7 +248,7 @@ class _POCSAGSingleBaud {
 		for (let i = 0; i <= 20; i++) {
 			ecs[i] = srr;
 			if (srr & 1) srr = (srr >>> 1) ^ 0x3b4;
-			else         srr = srr >>> 1;
+			else srr = srr >>> 1;
 		}
 
 		// Two errors in data
@@ -290,7 +290,7 @@ class _POCSAGSingleBaud {
 
 		// Compute syndrome from data bits (31..11) and received ECC bits (10..1)
 		let pari = 0;
-		let ecc  = 0;
+		let ecc = 0;
 		for (let i = 31; i >= 11; i--) {
 			if ((val >>> i) & 1) {
 				ecc ^= ecs[31 - i];
@@ -345,7 +345,7 @@ class _POCSAGSingleBaud {
 			for (let i = 0; i < bits.length; i++) {
 				c |= (bits[i] << cb);
 				if (++cb === 7) {
-					if (c >= 32 && c < 127)        text += String.fromCharCode(c);
+					if (c >= 32 && c < 127) text += String.fromCharCode(c);
 					else if (c === 10 || c === 13) text += '\n';
 					c = 0; cb = 0;
 				}
@@ -354,7 +354,7 @@ class _POCSAGSingleBaud {
 			// Numeric BCD (func 1/2): 4-bit nibbles, LSB-first
 			const NMAP = '0123456789 -.)(';
 			for (let i = 0; i + 3 < bits.length; i += 4) {
-				const n = bits[i] | (bits[i+1]<<1) | (bits[i+2]<<2) | (bits[i+3]<<3);
+				const n = bits[i] | (bits[i + 1] << 1) | (bits[i + 2] << 2) | (bits[i + 3] << 3);
 				if (n < NMAP.length) text += NMAP[n];
 			}
 		}
@@ -372,7 +372,7 @@ class _POCSAGSingleBaud {
 			});
 		}
 
-		this.pageBits   = [];
+		this.pageBits = [];
 		this.pageActive = false;
 	}
 }
@@ -381,7 +381,7 @@ class _POCSAGSingleBaud {
 class POCSAGDecoder {
 	constructor(audioRate, onMessage) {
 		this._d1200 = new _POCSAGSingleBaud(audioRate, 1200, onMessage);
-		this._d512  = new _POCSAGSingleBaud(audioRate,  512, onMessage);
+		this._d512 = new _POCSAGSingleBaud(audioRate, 512, onMessage);
 	}
 
 	process(samples) {
@@ -401,6 +401,8 @@ class Worker {
 
 	async init() {
 		await ensureWasmInitialized();
+		// In wasm-bindgen, the top-level init function returns the wasm exports
+		this.wasm = await init();
 	}
 
 	async open(opts) {
@@ -614,64 +616,64 @@ class Worker {
 					this.phases[phaseIdx][tapIdx] = (i < taps.length) ? taps[i] : 0.0;
 				}
 
-					// Delay line: only needs tapsPerPhase-1 history samples + a working
-					// window for the largest expected input block.  We start conservatively
-					// at 4096 samples and grow on demand so we don't waste 256 KB per VFO.
-					const initBlockSize = 4096;
-					this.bufStartOffset = this.tapsPerPhase - 1;
-					this.buffer = new Float32Array(this.bufStartOffset + initBlockSize);
-					this.phase = 0;
-					this.offset = 0;
+				// Delay line: only needs tapsPerPhase-1 history samples + a working
+				// window for the largest expected input block.  We start conservatively
+				// at 4096 samples and grow on demand so we don't waste 256 KB per VFO.
+				const initBlockSize = 4096;
+				this.bufStartOffset = this.tapsPerPhase - 1;
+				this.buffer = new Float32Array(this.bufStartOffset + initBlockSize);
+				this.phase = 0;
+				this.offset = 0;
 
-					// Pre-allocated output buffer — grown as needed, never shrunk.
-					// Avoids the per-call JS Array + Float32Array(array) allocations
-					// that previously caused 900 heap objects/sec with 6 VFOs.
-					this._outBuf = new Float32Array(Math.ceil(initBlockSize * interp / decim) + 4);
-				}
-
-				process(input, count) {
-					// Grow delay buffer on demand (rare; only on the first large block)
-					const needed = this.bufStartOffset + count;
-					if (needed > this.buffer.length) {
-						const bigger = new Float32Array(needed + 1024);
-						bigger.set(this.buffer.subarray(0, this.bufStartOffset));
-						this.buffer = bigger;
-					}
-
-					// Copy input into the delay line
-					this.buffer.set(input.subarray(0, count), this.bufStartOffset);
-
-					// Pre-calculate max output count and grow output buffer if needed
-					const maxOut = Math.ceil(count * this.interp / this.decim) + 4;
-					if (maxOut > this._outBuf.length) {
-						this._outBuf = new Float32Array(maxOut + 64);
-					}
-
-					let outIdx = 0;
-					while (this.offset < count) {
-						// Convolution for this polyphase sub-filter
-						let sum = 0.0;
-						const phaseTaps = this.phases[this.phase];
-						const bufOff = this.offset;
-						for (let i = 0; i < this.tapsPerPhase; i++) {
-							sum += this.buffer[bufOff + i] * phaseTaps[i];
-						}
-						this._outBuf[outIdx++] = sum;
-
-						this.phase += this.decim;
-						this.offset += Math.floor(this.phase / this.interp);
-						this.phase = this.phase % this.interp;
-					}
-					this.offset -= count;
-
-					// Shift history samples to the front of the delay line
-					this.buffer.copyWithin(0, count, count + this.bufStartOffset);
-
-					// Return a view — callers copy immediately via pushAudio/pushWhisper
-					// or iterate read-only, so a view is safe and allocation-free.
-					return this._outBuf.subarray(0, outIdx);
-				}
+				// Pre-allocated output buffer — grown as needed, never shrunk.
+				// Avoids the per-call JS Array + Float32Array(array) allocations
+				// that previously caused 900 heap objects/sec with 6 VFOs.
+				this._outBuf = new Float32Array(Math.ceil(initBlockSize * interp / decim) + 4);
 			}
+
+			process(input, count) {
+				// Grow delay buffer on demand (rare; only on the first large block)
+				const needed = this.bufStartOffset + count;
+				if (needed > this.buffer.length) {
+					const bigger = new Float32Array(needed + 1024);
+					bigger.set(this.buffer.subarray(0, this.bufStartOffset));
+					this.buffer = bigger;
+				}
+
+				// Copy input into the delay line
+				this.buffer.set(input.subarray(0, count), this.bufStartOffset);
+
+				// Pre-calculate max output count and grow output buffer if needed
+				const maxOut = Math.ceil(count * this.interp / this.decim) + 4;
+				if (maxOut > this._outBuf.length) {
+					this._outBuf = new Float32Array(maxOut + 64);
+				}
+
+				let outIdx = 0;
+				while (this.offset < count) {
+					// Convolution for this polyphase sub-filter
+					let sum = 0.0;
+					const phaseTaps = this.phases[this.phase];
+					const bufOff = this.offset;
+					for (let i = 0; i < this.tapsPerPhase; i++) {
+						sum += this.buffer[bufOff + i] * phaseTaps[i];
+					}
+					this._outBuf[outIdx++] = sum;
+
+					this.phase += this.decim;
+					this.offset += Math.floor(this.phase / this.interp);
+					this.phase = this.phase % this.interp;
+				}
+				this.offset -= count;
+
+				// Shift history samples to the front of the delay line
+				this.buffer.copyWithin(0, count, count + this.bufStartOffset);
+
+				// Return a view — callers copy immediately via pushAudio/pushWhisper
+				// or iterate read-only, so a view is safe and allocation-free.
+				return this._outBuf.subarray(0, outIdx);
+			}
+		}
 
 		class RationalResampler {
 			constructor(inSamplerate, outSamplerate) {
@@ -723,10 +725,15 @@ class Worker {
 			raw: 48000,
 		};
 		const AUDIO_RATE = 48000;
-		// Use the max possible IF rate (WFM 250kHz) for buffer sizing
-		const MAX_IF_RATE = 250000;
-		const maxDdcOut = Math.ceil(131072 * MAX_IF_RATE / sampleRate) * 2 + 4096;
-		this.ddcOutputs = [new Float32Array(maxDdcOut)];
+
+		// ── Shared memory pointer for WASM zero-copy processing ──
+		// Capacity: 131072 * 2 (I/Q bytes)
+		const MAX_USB_SAMPLES = 131072;
+		const SHARED_IQ_CAPACITY = MAX_USB_SAMPLES * 2;
+		// Allocate shared IQ buffer in WASM memory
+		if (this.sharedIqPtr) free_iq_buffer(this.sharedIqPtr, SHARED_IQ_CAPACITY);
+		this.sharedIqPtr = alloc_iq_buffer(SHARED_IQ_CAPACITY);
+		this.sharedIqCapacity = SHARED_IQ_CAPACITY;
 
 		// ── Audio Demodulator state (matching SDR++ radio_module.h) ───
 		const makeVfoState = () => ({
@@ -764,7 +771,6 @@ class Worker {
 		// Store factories for addVfo/removeVfo
 		this._makeVfoState = makeVfoState;
 		this._sampleRate = sampleRate;
-		this._maxDdcOut = maxDdcOut;
 		this._centerFreq = centerFreq;
 
 		// ── DSP Performance Counters ──────────────────────────────────
@@ -844,7 +850,8 @@ class Worker {
 				whisperBatchPos[v] += toCopy;
 				srcOff += toCopy;
 				if (whisperBatchPos[v] >= WHISPER_BATCH_THRESHOLD) {
-					whisperCallback(v, freq, whisperBatchBufs[v].slice(0, whisperBatchPos[v]));
+					const wCopy = whisperBatchBufs[v].slice(0, whisperBatchPos[v]);
+					whisperCallback(v, freq, Comlink.transfer(wCopy, [wCopy.buffer]));
 					whisperBatchPos[v] = 0;
 				}
 			}
@@ -853,7 +860,8 @@ class Worker {
 		const flushAudio = () => {
 			if (audioBatchPos > 0) {
 				perf.msgsSent++;
-				audioCallback(audioBatchBuf.slice(0, audioBatchPos));
+				const aCopy = audioBatchBuf.slice(0, audioBatchPos);
+				audioCallback(Comlink.transfer(aCopy, [aCopy.buffer]));
 				audioBatchPos = 0;
 			}
 		};
@@ -875,7 +883,7 @@ class Worker {
 
 		// ── Audio Processing — helper processes a single VFO ──────────
 		// Returns Float32Array of audio samples, or null if none produced
-		const processVfoAudio = (signed, ddc, params, vfoState, ddcOut) => {
+		const processVfoAudio = (iqPtr, numIqBytes, ddc, params, vfoState) => {
 			// Mute = silence the speakers, not stop DSP. Still run the pipeline
 			// when POCSAG decoding is active so messages aren't lost while muted.
 			if (!params.enabled && !params.pocsag) return null;
@@ -923,7 +931,8 @@ class Worker {
 			if (mode === 'wfm' || mode === 'nfm') {
 				// ── FM Path: Full pipeline in Rust (matches SDR++ exactly) ────
 				const t0 = performance.now();
-				const numAudioSamples = ddc.process(signed, ddcOut);
+				const outPtr = ddc.process_ptr(iqPtr, numIqBytes);
+				const numAudioSamples = ddc.get_output_len();
 				const elapsed = performance.now() - t0;
 				perf.audioCalls++;
 				perf.dspTimeSum += elapsed;
@@ -931,10 +940,8 @@ class Worker {
 				if (numAudioSamples === 0) { perf.droppedChunks++; vfoState.squelchOpen = false; return null; }
 				perf.audioSamplesOut += numAudioSamples;
 
-				// Work directly on ddcOut — no throwaway copy allocation.
-				// pushAudio/pushWhisper copy via .set() before the next chunk
-				// can overwrite this buffer, so a subarray view is safe.
-				const result = ddcOut.subarray(0, numAudioSamples);
+				// Create float32 view of the returned pointer
+				const result = new Float32Array(this.wasm.memory.buffer, outPtr, numAudioSamples);
 
 				// Detect if Rust squelch is blocking: output is all zeros when closed.
 				// Sample a handful of values to check for actual audio energy.
@@ -973,18 +980,26 @@ class Worker {
 					}
 				}
 
-				return result;
+				// We MUST create a fast slice/copy here!
+				// The `result` array memory view points inside the WASM heap.
+				// Returning the raw view and passing it to postMessage / AudioWorklet 
+				// can cause the browser to clone the *entire* WASM Memory buffer (16MB+),
+				// destroying performance and causing massive lag spikes. 
+				return result.slice();
 			} else {
 				// ── Non-FM Path: NCO + resampler + channel FIR in Rust, demod in JS ──
-				const numOutValues = ddc.process_iq_only(signed, ddcOut);
+				const outPtr = ddc.process_iq_only_ptr(iqPtr, numIqBytes);
+				const numOutValues = ddc.get_iq_output_len();
 				const numDemodSamples = numOutValues / 2;
 				if (numDemodSamples === 0) return null;
+
+				const _ddcOut = new Float32Array(this.wasm.memory.buffer, outPtr, numOutValues);
 
 				// ── Squelch (SDR++ style: average magnitude in dB) ────────
 				let squelchMag = 0;
 				for (let i = 0; i < numDemodSamples; i++) {
-					const dI = ddcOut[i * 2];
-					const dQ = ddcOut[i * 2 + 1];
+					const dI = _ddcOut[i * 2];
+					const dQ = _ddcOut[i * 2 + 1];
 					squelchMag += Math.sqrt(dI * dI + dQ * dQ);
 				}
 				squelchMag /= numDemodSamples;
@@ -1010,8 +1025,8 @@ class Worker {
 
 				if (mode === 'am') {
 					for (let i = 0; i < numDemodSamples; i++) {
-						const dI = ddcOut[i * 2];
-						const dQ = ddcOut[i * 2 + 1];
+						const dI = _ddcOut[i * 2];
+						const dQ = _ddcOut[i * 2 + 1];
 						const mag = Math.sqrt(dI * dI + dQ * dQ);
 						const dcAlpha = 0.9999;
 						vfoState.dcAvg = dcAlpha * vfoState.dcAvg + (1 - dcAlpha) * mag;
@@ -1030,8 +1045,8 @@ class Worker {
 				}
 				else if (mode === 'usb' || mode === 'lsb' || mode === 'dsb') {
 					for (let i = 0; i < numDemodSamples; i++) {
-						const dI = ddcOut[i * 2];
-						const dQ = ddcOut[i * 2 + 1];
+						const dI = _ddcOut[i * 2];
+						const dQ = _ddcOut[i * 2 + 1];
 						let shiftFreq = 0;
 						if (mode === 'usb') shiftFreq = bw / 2.0;
 						else if (mode === 'lsb') shiftFreq = -bw / 2.0;
@@ -1057,8 +1072,8 @@ class Worker {
 				}
 				else if (mode === 'cw') {
 					for (let i = 0; i < numDemodSamples; i++) {
-						const dI = ddcOut[i * 2];
-						const dQ = ddcOut[i * 2 + 1];
+						const dI = _ddcOut[i * 2];
+						const dQ = _ddcOut[i * 2 + 1];
 						const cwTone = vfoState.cwTone || 700;
 						const phaseInc = (cwTone / ifRate) * 2 * Math.PI;
 						vfoState.ssbPhase += phaseInc;
@@ -1082,7 +1097,7 @@ class Worker {
 				}
 				else if (mode === 'raw') {
 					for (let i = 0; i < numDemodSamples; i++) {
-						audioDemodRateSamples[i] = ddcOut[i * 2];
+						audioDemodRateSamples[i] = _ddcOut[i * 2];
 					}
 				}
 				else {
@@ -1097,18 +1112,23 @@ class Worker {
 					else if (result[i] < -1.0) result[i] = -1.0;
 				}
 
-				return result;
+				return result.slice();
 			}
 		};
 
 		await hackrf.startRx((data) => {
 			perf.usbCallbacks++;
 
-			// 1. Waterfall / Spectrum processing
+			// 1. Spectrum / Audio buffer loading
 			const signed = new Int8Array(data.buffer, data.byteOffset, data.length);
 			perf.lastChunkSize = signed.length;
 			perf.inputSamplesSum += signed.length / 2;
-			// Bulk copy instead of byte-by-byte — lets the JIT use SIMD memcpy
+
+			// Write USB chunk directly to WASM memory shared buffer
+			const memBytesView = new Int8Array(this.wasm.memory.buffer);
+			memBytesView.set(signed, this.sharedIqPtr);
+
+			// Bulk copy for spectrum buffer
 			{
 				let srcOff = 0;
 				while (srcOff < signed.length) {
@@ -1121,8 +1141,11 @@ class Worker {
 						iqBufferPos = 0;
 						spectrumThrottle++;
 						if (spectrumThrottle % fftSkipFrames === 0) {
+							// Revert back to copy-based FFT for the spectrum waterfall
+							// because `iqBuffer` batches data across USB chunk boundaries.
 							spectrumFft.fft(iqBuffer, spectrumOutput);
-							spectrumCallback(new Float32Array(spectrumOutput));
+							const specCopy = new Float32Array(spectrumOutput);
+							spectrumCallback(Comlink.transfer(specCopy, [specCopy.buffer]));
 						}
 					}
 				}
@@ -1132,36 +1155,37 @@ class Worker {
 			try {
 				const vfoOutputs = [];
 				for (let v = 0; v < this.vfoParams.length; v++) {
-					if (!this.ddcs[v] || !this.vfoStates[v] || !this.ddcOutputs[v]) continue;
+					if (!this.ddcs[v] || !this.vfoStates[v]) continue;
 					this.vfoStates[v].chunkCount++;
-					const out = processVfoAudio(signed, this.ddcs[v], this.vfoParams[v], this.vfoStates[v], this.ddcOutputs[v]);
-				if (out) {
-					// Only route to audio output when the VFO is unmuted
-					if (this.vfoParams[v].enabled) {
-						vfoOutputs.push({ audio: out, volume: this.vfoParams[v].volume || 50 });
-						// Send isolated pre-mix, pre-volume audio to Whisper per VFO
-						// Skip Whisper when POCSAG is active — it's a data signal, not speech
-						if (!this.vfoParams[v].pocsag) {
-							pushWhisper(v, this.vfoParams[v].freq, out);
+					const out = processVfoAudio(this.sharedIqPtr, signed.length, this.ddcs[v], this.vfoParams[v], this.vfoStates[v]);
+					if (out) {
+						// Only route to audio output when the VFO is unmuted
+						if (this.vfoParams[v].enabled) {
+							vfoOutputs.push({ audio: out, volume: this.vfoParams[v].volume || 50 });
+							// Send isolated pre-mix, pre-volume audio to Whisper per VFO
+							// Skip Whisper when POCSAG is active — it's a data signal, not speech
+							if (!this.vfoParams[v].pocsag) {
+								pushWhisper(v, this.vfoParams[v].freq, out);
+							}
+						}
+						// POCSAG decoding runs regardless of mute — it's a data decoder
+						// (NFM only — requires clean FM demodulated audio)
+						if (pocsagCallback && this.vfoParams[v].pocsag && this.vfoParams[v].mode === 'nfm') {
+							if (!this.vfoStates[v].pocsagDecoder) {
+								const vi = v;
+								const vp = this.vfoParams[vi];
+								this.vfoStates[v].pocsagDecoder = new POCSAGDecoder(AUDIO_RATE, (msg) => {
+									pocsagCallback(vi, vp.freq, msg);
+								});
+							}
+							this.vfoStates[v].pocsagDecoder.process(out);
+						} else if (!this.vfoParams[v].pocsag && this.vfoStates[v].pocsagDecoder) {
+							this.vfoStates[v].pocsagDecoder = null;
 						}
 					}
-					// POCSAG decoding runs regardless of mute — it's a data decoder
-					// (NFM only — requires clean FM demodulated audio)
-					if (pocsagCallback && this.vfoParams[v].pocsag && this.vfoParams[v].mode === 'nfm') {
-						if (!this.vfoStates[v].pocsagDecoder) {
-							const vi = v;
-							const vp = this.vfoParams[vi];
-							this.vfoStates[v].pocsagDecoder = new POCSAGDecoder(AUDIO_RATE, (msg) => {
-								pocsagCallback(vi, vp.freq, msg);
-							});
-						}
-						this.vfoStates[v].pocsagDecoder.process(out);
-					} else if (!this.vfoParams[v].pocsag && this.vfoStates[v].pocsagDecoder) {
-						this.vfoStates[v].pocsagDecoder = null;
-					}
-				}
 				}
 
+				let toPush = null;
 				if (vfoOutputs.length === 1) {
 					// Single VFO: apply volume and push
 					const { audio, volume } = vfoOutputs[0];
@@ -1171,7 +1195,7 @@ class Worker {
 						const s = audio[i] * vol;
 						audio[i] = s < -1.0 ? -1.0 : s > 1.0 ? 1.0 : s;
 					}
-					pushAudio(audio);
+					toPush = audio;
 				} else if (vfoOutputs.length > 1) {
 					// Mix multiple VFOs with per-VFO volume (SDR++ volume² curve).
 					// Re-use a shared mix buffer (grown on demand) to avoid
@@ -1195,7 +1219,11 @@ class Worker {
 						if (mixed[i] > 1.0) mixed[i] = 1.0;
 						else if (mixed[i] < -1.0) mixed[i] = -1.0;
 					}
-					pushAudio(mixed.subarray(0, maxLen));
+					toPush = mixed.subarray(0, maxLen);
+				}
+
+				if (toPush) {
+					pushAudio(toPush);
 				}
 			} catch (e) {
 				console.error('Audio DSP error:', e.message || e);
@@ -1244,7 +1272,6 @@ class Worker {
 		this.vfoParams.push(params);
 		this.ddcs.push(new DspProcessor(this._sampleRate, 0.0, bw));
 		this.vfoStates.push(this._makeVfoState());
-		this.ddcOutputs.push(new Float32Array(this._maxDdcOut));
 		return this.vfoParams.length - 1;
 	}
 
@@ -1255,7 +1282,6 @@ class Worker {
 		this.vfoParams.splice(index, 1);
 		this.ddcs.splice(index, 1);
 		this.vfoStates.splice(index, 1);
-		this.ddcOutputs.splice(index, 1);
 	}
 
 	async setSampleRateManual(freq, divider) {

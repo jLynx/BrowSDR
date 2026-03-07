@@ -332,7 +332,10 @@
 					<div class="hover-tick" ref="hoverTick" style="display: none">{{ hoverFreqText }}</div>
 					<!-- DSP Performance Stats Overlay -->
 					<div v-if="showStats && dspStats" class="dsp-stats-overlay">
-						<div><b>DSP Stats</b></div>
+						<div style="display: flex; justify-content: space-between;">
+							<b>DSP Stats</b>
+							<span style="color: #0f0;">{{ fps }} FPS</span>
+						</div>
 						<div>USB: {{ dspStats.usbFps }} cb/s | Chunk: {{ dspStats.chunkSize }} B</div>
 						<div>DSP: {{ dspStats.dspAvgMs }}ms avg / {{ dspStats.dspMaxMs }}ms max</div>
 						<div>Audio: {{ dspStats.audioFps }} calls/s | {{ dspStats.audioRate }} samp/s</div>
