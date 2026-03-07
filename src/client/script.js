@@ -95,7 +95,8 @@ createApp({
 			vfoSquelchHangUntil: [], // per-VFO timestamp until which we hang the UI open
 			view: {
 				zoomScale: 1.0,
-				zoomOffset: 0.0
+				zoomOffset: 0.0,
+				locked: false
 			},
 			whisper: {
 				panelOpen: false,
@@ -642,6 +643,12 @@ createApp({
 				this.updateBackendVfoParams(this.vfos.length - 1);
 			}
 			this.activeVfoIndex = this.vfos.length - 1;
+
+			// Auto lock when 5 or more VFOs are loaded
+			if (this.vfos.length >= 5 && !this.view.locked) {
+				this.view.locked = true;
+				this.showMsg("Display auto-locked (> 5 VFOs)");
+			}
 		},
 		async removeVfo(index) {
 			if (this.vfos.length <= 1) return;
@@ -1336,7 +1343,7 @@ createApp({
 		};
 
 		const handleMouseMove = (e) => {
-			if (isDraggingVFO) {
+			if (isDraggingVFO && !this.view.locked) {
 				const f = getFreqFromEvent(e);
 				const idx = this.activeVfoIndex;
 				if (idx >= 0 && idx < this.vfos.length) {
@@ -1372,7 +1379,7 @@ createApp({
 		};
 
 		const handleMouseDown = (e) => {
-			if (e.button === 0) {
+			if (e.button === 0 && !this.view.locked) {
 				// Left click: set active VFO frequency
 				isDraggingVFO = true;
 				const f = getFreqFromEvent(e);
