@@ -990,6 +990,28 @@ canvas {
 	border-bottom: 1px solid var(--border);
 }
 
+.bm-filter-row {
+	grid-column: 1 / -1;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+
+.bm-cat-filter-select {
+	flex: 1;
+	background: #111;
+	border: 1px solid var(--border);
+	color: var(--text-main);
+	padding: 4px 6px;
+	border-radius: 4px;
+	font-size: 11px;
+	outline: none;
+	transition: border-color 0.15s;
+}
+.bm-cat-filter-select:focus {
+	border-color: var(--accent);
+}
+
 .bookmark-toolbar-row {
 	display: contents;
 }
@@ -1262,6 +1284,83 @@ canvas {
 	background: rgba(56, 176, 94, 0.22);
 	color: #6dd68e;
 	border: 1px solid rgba(56, 176, 94, 0.4);
+}
+
+/* Category badges */
+.bm-cat-badge {
+	display: inline-block;
+	font-size: 9px;
+	font-weight: 700;
+	letter-spacing: 0.05em;
+	padding: 1px 5px;
+	border-radius: 3px;
+	vertical-align: middle;
+	text-transform: uppercase;
+}
+.bm-cat-marine    { background: rgba(0,136,255,0.2);   color: #55aaff; border: 1px solid rgba(0,136,255,0.45); }
+.bm-cat-aviation  { background: rgba(255,152,0,0.2);   color: #ffb84d; border: 1px solid rgba(255,152,0,0.45); }
+.bm-cat-fire      { background: rgba(244,67,54,0.2);   color: #ff7066; border: 1px solid rgba(244,67,54,0.45); }
+.bm-cat-ambulance { background: rgba(233,30,99,0.2);   color: #ff6699; border: 1px solid rgba(233,30,99,0.45); }
+.bm-cat-police    { background: rgba(63,81,181,0.25);  color: #8899ee; border: 1px solid rgba(63,81,181,0.5);  }
+.bm-cat-pocsag    { background: rgba(156,39,176,0.2);  color: #cc77ee; border: 1px solid rgba(156,39,176,0.45); }
+.bm-cat-amateur   { background: rgba(76,175,80,0.2);   color: #77dd77; border: 1px solid rgba(76,175,80,0.45); }
+.bm-cat-weather   { background: rgba(0,188,212,0.2);   color: #44ddee; border: 1px solid rgba(0,188,212,0.45); }
+.bm-cat-military  { background: rgba(121,85,72,0.25);  color: #bb9984; border: 1px solid rgba(121,85,72,0.5);  }
+.bm-cat-utility   { background: rgba(96,125,139,0.25); color: #99bbcc; border: 1px solid rgba(96,125,139,0.5); }
+.bm-cat-other     { background: rgba(158,158,158,0.2); color: #bbbbbb; border: 1px solid rgba(158,158,158,0.4); }
+
+/* Import mode dialog */
+.bm-import-dialog {
+	width: 300px;
+}
+.bm-import-body {
+	gap: 12px;
+}
+.bm-import-desc {
+	margin: 0;
+	font-size: 12px;
+	color: var(--text-muted);
+}
+.bm-import-choices {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+.bm-import-choice {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 12px;
+	background: #1a1a1a;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	text-align: left;
+	width: 100%;
+	cursor: pointer;
+	transition: background 0.15s, border-color 0.15s;
+	color: var(--text-main);
+}
+.bm-import-choice:hover {
+	background: #252525;
+	border-color: var(--accent);
+}
+.bm-import-replace:hover {
+	border-color: #e57373;
+}
+.bm-import-choice-label {
+	font-size: 13px;
+	font-weight: 600;
+	display: block;
+}
+.bm-import-choice-desc {
+	font-size: 10px;
+	color: var(--text-muted);
+	display: block;
+	margin-top: 1px;
+}
+.bm-import-choice > svg {
+	flex-shrink: 0;
+	opacity: 0.7;
 }
 
 /* Edit button */

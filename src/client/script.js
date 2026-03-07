@@ -32,6 +32,25 @@ const makeDefaultVfo = (freq = 100.0) => ({
 	focused: false,
 });
 
+// Bookmark categories
+const BOOKMARK_CATEGORIES = [
+	{ value: '', label: 'Uncategorised' },
+	{ value: 'marine', label: 'Marine' },
+	{ value: 'aviation', label: 'Aviation' },
+	{ value: 'fire', label: 'Fire' },
+	{ value: 'ambulance', label: 'Ambulance / EMS' },
+	{ value: 'police', label: 'Police' },
+	{ value: 'emergency', label: 'Emergency Services (Mixed)' }, // Added for mixed emergency groups
+	{ value: 'pocsag', label: 'POCSAG' },
+	{ value: 'amateur', label: 'Amateur Radio' },
+	{ value: 'weather', label: 'Weather' },
+	{ value: 'military', label: 'Military' },
+	{ value: 'radio', label: 'Broadcast Radio' }, // Clarified label
+	{ value: 'utility', label: 'Utility' },
+	{ value: 'mixed', label: 'Mixed / Multiple' }, // Added for groups spanning unrelated categories
+	{ value: 'other', label: 'Other' },
+];
+
 // SDR++ mode defaults
 const MODE_DEFAULTS = {
 	wfm: { bandwidth: 150000, snapInterval: 100000, deEmphasis: '50us', lowPass: true },
@@ -100,13 +119,17 @@ createApp({
 				panelOpen: false,
 				log: [],   // { time, freq, vfoIndex, capcode, type, text, baud }
 			},
-			bookmarks: [],         // [{ id, type, name, ...type-specific fields }]
-			bookmarkModal: { show: false, type: 'individual', name: '' },
+			bookmarks: [],         // [{ id, type, name, category, ...type-specific fields }]
+			bookmarkCategories: BOOKMARK_CATEGORIES,
+			bookmarkCategoryFilter: '',
+			bookmarkModal: { show: false, type: 'individual', name: '', category: '' },
+			bookmarkImportModal: { show: false },
 			bookmarkEdit: {
 				show: false,
 				index: -1,
 				type: 'individual',
 				name: '',
+				category: '',
 				// individual fields
 				freq: 100.0,
 				mode: 'nfm',
@@ -134,12 +157,13 @@ createApp({
 	computed: {
 		// Bookmarks split into individual/group sections, each sorted by frequency
 		bookmarkGroups() {
-			const individual = this.bookmarks
-				.map((bm, i) => ({ bm, i }))
+			const filter = this.bookmarkCategoryFilter;
+			const all = this.bookmarks.map((bm, i) => ({ bm, i }));
+			const filtered = filter ? all.filter(({ bm }) => (bm.category || '') === filter) : all;
+			const individual = filtered
 				.filter(({ bm }) => (bm.type || 'group') === 'individual')
 				.sort((a, b) => a.bm.freq - b.bm.freq);
-			const group = this.bookmarks
-				.map((bm, i) => ({ bm, i }))
+			const group = filtered
 				.filter(({ bm }) => (bm.type || 'group') === 'group')
 				.sort((a, b) => a.bm.centerFreq - b.bm.centerFreq);
 			return { individual, group };
@@ -877,9 +901,14 @@ createApp({
 			);
 		},
 		// ─── Bookmarks ───────────────────────────────────────────────────────────
+		categoryLabel(value) {
+			const cat = BOOKMARK_CATEGORIES.find(c => c.value === value);
+			return cat ? cat.label : value;
+		},
 		openSaveBookmark(type) {
 			const count = this.bookmarks.filter(b => (b.type || 'group') === type).length + 1;
 			this.bookmarkModal.type = type;
+			this.bookmarkModal.category = '';
 			this.bookmarkModal.name = type === 'individual'
 				? `Frequency ${count}`
 				: `Group ${count}`;
@@ -892,7 +921,7 @@ createApp({
 			});
 		},
 		confirmBookmark() {
-			const { type, name } = this.bookmarkModal;
+			const { type, name, category } = this.bookmarkModal;
 			if (!name.trim()) return;
 			let bm;
 			if (type === 'individual') {
@@ -900,6 +929,7 @@ createApp({
 				bm = {
 					id: Date.now() + '-' + Math.random().toString(36).slice(2),
 					type: 'individual',
+					category: category || '',
 					name: name.trim(),
 					freq: vfo.freq,
 					mode: vfo.mode,
@@ -920,6 +950,7 @@ createApp({
 				bm = {
 					id: Date.now() + '-' + Math.random().toString(36).slice(2),
 					type: 'group',
+					category: category || '',
 					name: name.trim(),
 					centerFreq: this.radio.centerFreq,
 					sampleRate: this.radio.sampleRate,
@@ -986,6 +1017,7 @@ createApp({
 			e.index = index;
 			e.type = type;
 			e.name = bm.name;
+			e.category = bm.category || '';
 			if (type === 'individual') {
 				e.freq = bm.freq;
 				e.mode = bm.mode;
@@ -1014,6 +1046,7 @@ createApp({
 			if (!e.name.trim()) return;
 			const bm = { ...this.bookmarks[e.index] };
 			bm.name = e.name.trim();
+			bm.category = e.category || '';
 			if (e.type === 'individual') {
 				bm.freq = parseFloat(e.freq) || bm.freq;
 				bm.mode = e.mode;
@@ -1078,27 +1111,41 @@ createApp({
 		importBookmarks(event) {
 			const file = event.target.files[0];
 			if (!file) return;
+			// Stash the file, reset input, then show mode dialog
+			this._pendingImportFile = file;
+			event.target.value = '';
+			this.bookmarkImportModal.show = true;
+		},
+		confirmImport(mode) {
+			this.bookmarkImportModal.show = false;
+			const file = this._pendingImportFile;
+			if (!file) return;
+			this._pendingImportFile = null;
 			const reader = new FileReader();
 			reader.onload = (e) => {
 				try {
 					const imported = JSON.parse(e.target.result);
 					if (!Array.isArray(imported)) throw new Error('Not an array');
-					// Merge: skip any bookmark whose id already exists
-					const existingIds = new Set(this.bookmarks.map(b => b.id));
-					const newOnes = imported
+					const cleaned = imported
 						.filter(b => b && typeof b === 'object')
-						.map(b => ({ type: 'group', ...b }))
-						.filter(b => !existingIds.has(b.id));
-					this.bookmarks.push(...newOnes);
-					this.saveBookmarks();
-					this.showMsg(`Imported ${newOnes.length} bookmark${newOnes.length !== 1 ? 's' : ''}.`);
+						.map(b => ({ type: 'group', ...b }));
+					if (mode === 'replace') {
+						this.bookmarks = cleaned;
+						this.saveBookmarks();
+						this.showMsg(`Replaced with ${cleaned.length} bookmark${cleaned.length !== 1 ? 's' : ''}.`);
+					} else {
+						// Merge: skip duplicates by id
+						const existingIds = new Set(this.bookmarks.map(b => b.id));
+						const newOnes = cleaned.filter(b => !existingIds.has(b.id));
+						this.bookmarks.push(...newOnes);
+						this.saveBookmarks();
+						this.showMsg(`Imported ${newOnes.length} bookmark${newOnes.length !== 1 ? 's' : ''}.`);
+					}
 				} catch (err) {
 					this.showMsg('Import failed: invalid JSON file.');
 				}
 			};
 			reader.readAsText(file);
-			// Reset so the same file can be re-imported if needed
-			event.target.value = '';
 		},
 		loadBookmarks() {
 			try {
