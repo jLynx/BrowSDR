@@ -397,6 +397,15 @@ class POCSAGDecoder {
 
 class Worker {
 	constructor() {
+		this._fftViewOffset = 0.0;
+		this._fftViewScale = 1.0;
+		this._fftCanvasWidth = 1920;
+	}
+
+	setFftView(offset, scale, width) {
+		this._fftViewOffset = offset;
+		this._fftViewScale = scale;
+		if (width > 0) this._fftCanvasWidth = width;
 	}
 
 	async init() {
@@ -1144,8 +1153,47 @@ class Worker {
 							// Revert back to copy-based FFT for the spectrum waterfall
 							// because `iqBuffer` batches data across USB chunk boundaries.
 							spectrumFft.fft(iqBuffer, spectrumOutput);
-							const specCopy = new Float32Array(spectrumOutput);
-							spectrumCallback(Comlink.transfer(specCopy, [specCopy.buffer]));
+
+							// 1. Waterfall downsample (8192 max)
+							const MAX_WF = 8192;
+							const wfLen = Math.min(fftSize, MAX_WF);
+							const wfData = new Float32Array(wfLen);
+							const wfFactor = fftSize / wfLen;
+							for (let i = 0; i < wfLen; i++) {
+								let maxV = -1000;
+								const start = Math.floor(i * wfFactor);
+								const end = Math.floor((i + 1) * wfFactor);
+								for (let j = start; j < end; j++) {
+									if (spectrumOutput[j] > maxV) maxV = spectrumOutput[j];
+								}
+								wfData[i] = maxV;
+							}
+
+							// 2. Spectrum slice downsample
+							const pointsToDraw = Math.floor(fftSize / this._fftViewScale);
+							const startIdx = Math.floor(fftSize * this._fftViewOffset);
+							const drawPoints = Math.min(this._fftCanvasWidth, pointsToDraw);
+							const specData = new Float32Array(drawPoints);
+							const sFactor = pointsToDraw / drawPoints;
+
+							for (let i = 0; i < drawPoints; i++) {
+								const start = startIdx + Math.floor(i * sFactor);
+								const end = startIdx + Math.floor((i + 1) * sFactor);
+								let maxV = -1000;
+								for (let j = start; j < end; j++) {
+									if (j >= fftSize) break;
+									if (spectrumOutput[j] > maxV) maxV = spectrumOutput[j];
+								}
+								specData[i] = maxV;
+							}
+
+							const payload = new Float32Array(2 + wfLen + drawPoints);
+							payload[0] = wfLen;
+							payload[1] = drawPoints;
+							payload.set(wfData, 2);
+							payload.set(specData, 2 + wfLen);
+
+							spectrumCallback(Comlink.transfer(payload, [payload.buffer]));
 						}
 					}
 				}

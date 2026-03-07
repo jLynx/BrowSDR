@@ -47,7 +47,6 @@ const MODE_DEFAULTS = {
 createApp({
 	data() {
 		return {
-			backend: null,
 			connected: false,
 			running: false,
 			snackbar: { show: false, message: "" },
@@ -69,9 +68,7 @@ createApp({
 			activeVfoIndex: 0,
 			info: { boardName: "" },
 			hoverFreqText: "",
-			dspStats: null,
 			showStats: false,
-			fps: 0,
 			vfoSquelchOpen: [],  // per-VFO squelch activity indicator
 			view: {
 				zoomScale: 1.0,
@@ -312,10 +309,24 @@ createApp({
 
 			// Start DSP stats polling
 			this._statsTimer = setInterval(async () => {
-				if (this.backend && this.running) {
-					this.dspStats = await this.backend.getDspStats();
-					if (this.dspStats && this.dspStats.squelchOpen) {
-						this.vfoSquelchOpen = this.dspStats.squelchOpen.slice();
+				if (this.backend && this.running && this.showStats) {
+					const stats = await this.backend.getDspStats();
+					if (stats) {
+						if (stats.squelchOpen) {
+							this.vfoSquelchOpen = stats.squelchOpen.slice();
+						}
+						const el = document.getElementById('stat-usb');
+						if (el) {
+							el.innerText = stats.usbFps;
+							document.getElementById('stat-chunk').innerText = stats.chunkSize;
+							document.getElementById('stat-dspavg').innerText = stats.dspAvgMs;
+							document.getElementById('stat-dspmax').innerText = stats.dspMaxMs;
+							document.getElementById('stat-audiocalls').innerText = stats.audioFps;
+							document.getElementById('stat-audiorate').innerText = stats.audioRate;
+							document.getElementById('stat-msgs').innerText = stats.msgRate;
+							document.getElementById('stat-input').innerText = (stats.inputRate / 1e6).toFixed(2);
+							document.getElementById('stat-dropped').innerText = stats.dropped;
+						}
 					}
 				}
 			}, 500);
@@ -358,9 +369,12 @@ createApp({
 			fft.style.height = rect.height + 'px';
 			this._fftCtx = fft.getContext('2d');
 			this._fftCtx.scale(dpr, dpr);
+			if (this.backend) {
+				this.backend.setFftView(this.view.zoomOffset, this.view.zoomScale, rect.width);
+			}
 		},
-		drawSpectrum(data) {
-			if (!this.running || !this._fftCtx) return;
+		drawSpectrum(payload) {
+			if (!this.running || !this._fftCtx || !payload || payload.length < 2) return;
 
 			// FPS calculation
 			const now = performance.now();
@@ -370,27 +384,21 @@ createApp({
 			} else {
 				this._framesDrawn++;
 				if (now - this._lastFrameTime >= 1000) {
-					this.fps = Math.round((this._framesDrawn * 1000) / (now - this._lastFrameTime));
+					const fps = Math.round((this._framesDrawn * 1000) / (now - this._lastFrameTime));
+					if (this.showStats) {
+						const el = document.getElementById('stat-fps');
+						if (el) el.innerText = fps + " FPS";
+					}
 					this._framesDrawn = 0;
 					this._lastFrameTime = now;
 				}
 			}
 
-			// Downsample for waterfall history
-			let wfData = data;
-			if (data.length > this.renderSize) {
-				wfData = new Float32Array(this.renderSize);
-				const factor = data.length / this.renderSize;
-				for (let i = 0; i < this.renderSize; i++) {
-					let maxVal = -1000;
-					const start = Math.floor(i * factor);
-					const end = Math.floor((i + 1) * factor);
-					for (let j = start; j < end; j++) {
-						if (data[j] > maxVal) maxVal = data[j];
-					}
-					wfData[i] = maxVal;
-				}
-			}
+			// Unpack optimized dual-payload from worker
+			const wfLen = payload[0];
+			const specLen = payload[1];
+			const wfData = payload.subarray(2, 2 + wfLen);
+			const specData = payload.subarray(2 + wfLen, 2 + wfLen + specLen);
 
 			// Waterfall drawing
 			this._waterfallEngine.renderLine(wfData);
@@ -417,31 +425,17 @@ createApp({
 			ctx.save();
 			ctx.beginPath();
 
-			const pointsToDraw = Math.floor(data.length / this.view.zoomScale);
-			const startIdx = Math.floor(data.length * this.view.zoomOffset);
 			const dbRange = this.display.maxDB - this.display.minDB;
 
-			// Decimate points so we don't draw 65k lines
-			const drawPoints = Math.min(w, pointsToDraw);
-			const factor = pointsToDraw / drawPoints;
-
-			for (let i = 0; i < drawPoints; i++) {
-				const start = startIdx + Math.floor(i * factor);
-				const end = startIdx + Math.floor((i + 1) * factor);
-
-				let valDB = -1000;
-				for (let j = start; j < end; j++) {
-					if (j >= data.length) break;
-					if (data[j] > valDB) valDB = data[j];
-				}
-
+			for (let i = 0; i < specLen; i++) {
+				let valDB = specData[i];
 				valDB = Math.max(this.display.minDB, Math.min(this.display.maxDB, valDB));
 
 				// 0 is bottom (minDB), 1 is top (maxDB)
 				const n = (valDB - this.display.minDB) / dbRange;
 				let y = h - (h * n);
 
-				const x = (i / drawPoints) * w;
+				const x = (i / specLen) * w;
 
 				if (i === 0) {
 					ctx.moveTo(x, y);
@@ -648,6 +642,10 @@ createApp({
 		applyZoomToEngine() {
 			if (this._waterfallEngine) {
 				this._waterfallEngine.setZoom(this.view.zoomOffset, this.view.zoomScale);
+			}
+			if (this.backend) {
+				const w = this.$refs.fftContainer ? this.$refs.fftContainer.clientWidth : 1920;
+				this.backend.setFftView(this.view.zoomOffset, this.view.zoomScale, w);
 			}
 		},
 		// ─── Whisper transcription ───────────────────────────

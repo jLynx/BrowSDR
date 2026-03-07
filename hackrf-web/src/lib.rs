@@ -1696,22 +1696,24 @@ impl DspProcessor {
         let mut dc_q = self.dc_avg_q;
 
         for k in 0..num_iq {
-            let mut i_val = input[k * 2] as f32 / 128.0;
-            let mut q_val = input[k * 2 + 1] as f32 / 128.0;
+            // Unsafe avoids WASM bounds-checking branches that plague Liftoff execution
+            let (mut i_val, mut q_val) = unsafe {
+                (
+                    *input.get_unchecked(k * 2) as f32 * (1.0 / 128.0),
+                    *input.get_unchecked(k * 2 + 1) as f32 * (1.0 / 128.0)
+                )
+            };
 
-            // DC Blocker (matches SDR++ genDCBlockRate)
             dc_i = dc_i * alpha + i_val * (1.0 - alpha);
             dc_q = dc_q * alpha + q_val * (1.0 - alpha);
             i_val -= dc_i;
             q_val -= dc_q;
 
-            // Standard complex multiply: (i + jq) * (pr + j*pi)
-            //   = (i*pr - q*pi) + j(i*pi + q*pr)
-            // Matches SDR++ VOLK volk_32fc_s32fc_x2_rotator2_32fc
-            self.nco_buf_i[k] = i_val * pr - q_val * pi;
-            self.nco_buf_q[k] = i_val * pi + q_val * pr;
+            unsafe {
+                *self.nco_buf_i.get_unchecked_mut(k) = i_val * pr - q_val * pi;
+                *self.nco_buf_q.get_unchecked_mut(k) = i_val * pi + q_val * pr;
+            }
 
-            // Rotate phasor: phasor *= phasor_inc
             let new_r = pr * ir - pi * ii;
             let new_i = pr * ii + pi * ir;
             pr = new_r;
@@ -1733,9 +1735,15 @@ impl DspProcessor {
         let mut cic_len = num_iq;
         for _ in 0..self.cic_stages {
             let half = cic_len / 2;
+            let mut r = 0;
             for k in 0..half {
-                self.nco_buf_i[k] = (self.nco_buf_i[2 * k] + self.nco_buf_i[2 * k + 1]) * 0.5;
-                self.nco_buf_q[k] = (self.nco_buf_q[2 * k] + self.nco_buf_q[2 * k + 1]) * 0.5;
+                unsafe {
+                    let i_sum = *self.nco_buf_i.get_unchecked(r) + *self.nco_buf_i.get_unchecked(r + 1);
+                    let q_sum = *self.nco_buf_q.get_unchecked(r) + *self.nco_buf_q.get_unchecked(r + 1);
+                    *self.nco_buf_i.get_unchecked_mut(k) = i_sum * 0.5;
+                    *self.nco_buf_q.get_unchecked_mut(k) = q_sum * 0.5;
+                }
+                r += 2;
             }
             cic_len = half;
         }
@@ -1775,17 +1783,20 @@ impl DspProcessor {
         if self.squelch_enabled {
             let mut mag_sum = 0.0f32;
             for k in 0..if_count {
-                let i_val = self.scratch_i[k];
-                let q_val = self.scratch_q[k];
-                mag_sum += (i_val * i_val + q_val * q_val).sqrt();
+                unsafe {
+                    let i_val = *self.scratch_i.get_unchecked(k);
+                    let q_val = *self.scratch_q.get_unchecked(k);
+                    mag_sum += (i_val * i_val + q_val * q_val).sqrt();
+                }
             }
             let avg_mag = mag_sum / if_count as f32;
             let db = 10.0 * (avg_mag + 1e-12).log10();
             if db < self.squelch_level {
-                // Mute: zero the IQ data (SDR++ memset to 0)
                 for k in 0..if_count {
-                    self.scratch_i[k] = 0.0;
-                    self.scratch_q[k] = 0.0;
+                    unsafe {
+                        *self.scratch_i.get_unchecked_mut(k) = 0.0;
+                        *self.scratch_q.get_unchecked_mut(k) = 0.0;
+                    }
                 }
             }
         }
@@ -1795,7 +1806,8 @@ impl DspProcessor {
         self.scratch_audio.resize(if_count, 0.0);
         let mut prev_phase = self.prev_phase;
         for k in 0..if_count {
-            let cur_phase = self.scratch_q[k].atan2(self.scratch_i[k]);
+            let (i_k, q_k) = unsafe { (*self.scratch_i.get_unchecked(k), *self.scratch_q.get_unchecked(k)) };
+            let cur_phase = q_k.atan2(i_k);
             let mut diff = cur_phase - prev_phase;
             // normalizePhase (single if/else, matches SDR++ math/normalize_phase.h)
             if diff > PI {
@@ -1803,7 +1815,9 @@ impl DspProcessor {
             } else if diff <= -PI {
                 diff += 2.0 * PI;
             }
-            self.scratch_audio[k] = diff * self.inv_deviation;
+            unsafe {
+                *self.scratch_audio.get_unchecked_mut(k) = diff * self.inv_deviation;
+            }
             prev_phase = cur_phase;
         }
         self.prev_phase = prev_phase;

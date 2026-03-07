@@ -330,17 +330,16 @@
 						<div class="tick" style="right: 0px">{{ labelFreq(1) }}</div>
 					</div>
 					<div class="hover-tick" ref="hoverTick" style="display: none">{{ hoverFreqText }}</div>
-					<!-- DSP Performance Stats Overlay -->
-					<div v-if="showStats && dspStats" class="dsp-stats-overlay">
+					<div v-show="showStats" class="dsp-stats-overlay">
 						<div style="display: flex; justify-content: space-between;">
 							<b>DSP Stats</b>
-							<span style="color: #0f0;">{{ fps }} FPS</span>
+							<span style="color: #0f0;" id="stat-fps">0 FPS</span>
 						</div>
-						<div>USB: {{ dspStats.usbFps }} cb/s | Chunk: {{ dspStats.chunkSize }} B</div>
-						<div>DSP: {{ dspStats.dspAvgMs }}ms avg / {{ dspStats.dspMaxMs }}ms max</div>
-						<div>Audio: {{ dspStats.audioFps }} calls/s | {{ dspStats.audioRate }} samp/s</div>
-						<div>Msgs: {{ dspStats.msgRate }} /s | Input: {{ (dspStats.inputRate/1e6).toFixed(2) }} MSa/s</div>
-						<div>Dropped: {{ dspStats.dropped }}</div>
+						<div>USB: <span id="stat-usb">0</span> cb/s | Chunk: <span id="stat-chunk">0</span> B</div>
+						<div>DSP: <span id="stat-dspavg">0</span>ms avg / <span id="stat-dspmax">0</span>ms max</div>
+						<div>Audio: <span id="stat-audiocalls">0</span> calls/s | <span id="stat-audiorate">0</span> samp/s</div>
+						<div>Msgs: <span id="stat-msgs">0</span> /s | Input: <span id="stat-input">0</span> MSa/s</div>
+						<div>Dropped: <span id="stat-dropped">0</span></div>
 					</div>
 				</div>
 				<div class="waterfall-container">
