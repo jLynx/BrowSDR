@@ -27,6 +27,7 @@ const makeDefaultVfo = (freq = 100.0) => ({
 	rds: false,
 	rdsRegion: 'eu',
 	volume: 50,
+	pocsag: false,
 	displayFreq: freq.toFixed(6).padStart(10, '0'),
 	focused: false,
 });
@@ -93,6 +94,10 @@ createApp({
 				recordStart: null,     // Date when current recording started
 				recordDuration: 0,     // seconds of current recording buffer
 				pendingChunks: 0,      // number of chunks sent but not yet returned
+			},
+			pocsag: {
+				panelOpen: false,
+				log: [],   // { time, freq, vfoIndex, capcode, type, text, baud }
 			},
 			bookmarks: [],         // [{ id, type, name, ...type-specific fields }]
 			bookmarkModal: { show: false, type: 'individual', name: '' },
@@ -294,7 +299,8 @@ createApp({
 				await this.backend.startRxStream(opts,
 					Comlink.proxy((spectrumData) => this.drawSpectrum(spectrumData)),
 					Comlink.proxy((audioSamples) => this.playAudio(audioSamples)),
-					Comlink.proxy((vfoIndex, freq, samples) => this._feedWhisperVfo(vfoIndex, freq, samples))
+					Comlink.proxy((vfoIndex, freq, samples) => this._feedWhisperVfo(vfoIndex, freq, samples)),
+					Comlink.proxy((vfoIndex, freq, msg) => this._onPocsagMessage(vfoIndex, freq, msg))
 				);
 			} catch (e) {
 				console.error('Error starting RX stream:', e);
@@ -554,6 +560,7 @@ createApp({
 					rds: vfo.rds,
 					rdsRegion: vfo.rdsRegion,
 					volume: vfo.volume,
+					pocsag: vfo.pocsag,
 				});
 			}
 		},
@@ -1089,6 +1096,43 @@ createApp({
 			const a = document.createElement('a');
 			a.href = url;
 			a.download = `transcript-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.txt`;
+			a.click();
+			URL.revokeObjectURL(url);
+		},
+		// ─── POCSAG ──────────────────────────────────────────────────────────────
+		togglePocsagPanel() {
+			this.pocsag.panelOpen = !this.pocsag.panelOpen;
+		},
+		_onPocsagMessage(vfoIndex, freqMhz, msg) {
+			const time = new Date().toLocaleTimeString();
+			const freq = freqMhz ? this.formatFreq(freqMhz) + ' MHz' : '';
+			this.pocsag.log.push({
+				time,
+				freq,
+				vfoIndex,
+				capcode: msg.capcode,
+				type: msg.type,
+				text: msg.text,
+				baud: msg.baud,
+			});
+			// Auto-scroll
+			this.$nextTick(() => {
+				const el = this.$refs.pocsagBody;
+				if (el) el.scrollTop = el.scrollHeight;
+			});
+		},
+		clearPocsag() {
+			this.pocsag.log = [];
+		},
+		exportPocsag() {
+			const lines = this.pocsag.log.map(e =>
+				`[${e.time}] ${e.freq}  CAP:${e.capcode}  TYPE:${e.type}  ${e.text || '(tone)'}`
+			);
+			const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+			const url = URL.createObjectURL(blob);
+			const a = document.createElement('a');
+			a.href = url;
+			a.download = `pocsag-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.txt`;
 			a.click();
 			URL.revokeObjectURL(url);
 		},
