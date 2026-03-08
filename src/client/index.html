@@ -270,36 +270,47 @@
 							Import
 						</button>
 						<input ref="bookmarkImportInput" type="file" accept=".json,application/json" style="display:none" @change="importBookmarks">
+						<div class="bm-filter-row">
+							<svg viewBox="0 0 24 24" width="13" height="13" style="flex-shrink:0;color:var(--text-muted)"><path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+							<input type="text" v-model="bookmarkSearch" class="bm-search-input" placeholder="Search bookmarks…" autocomplete="off">
+							<button v-if="bookmarkSearch" class="bm-search-clear" @click="bookmarkSearch = ''" title="Clear search">&times;</button>
+						</div>
 					</div>
 					<div class="panel-body" style="padding: 4px 0; min-height: 36px;" v-show="!collapsedPanels['bookmarks']">
 						<div v-if="bookmarks.length === 0" class="bookmark-empty">No bookmarks saved.</div>
-						<!-- Individual Freq Bookmarks -->
-						<template v-if="bookmarkGroups.individual.length > 0">
-							<div class="bookmark-group-header bm-group-header-freq">Individual Frequencies</div>
-							<div v-for="entry in bookmarkGroups.individual" :key="entry.bm.id" class="bookmark-item">
-								<div class="bookmark-info">
-									<span class="bookmark-name" :title="entry.bm.name">{{ entry.bm.name }}</span>
-									<div style="display:flex;align-items:center;gap:5px;margin-top:2px;flex-wrap:wrap">
-										<span class="bm-badge bm-badge-freq">FREQ</span>
-										<span v-if="entry.bm.category" class="bm-cat-badge" :class="'bm-cat-' + entry.bm.category">{{ categoryLabel(entry.bm.category) }}</span>
-										<span class="bookmark-meta">{{ entry.bm.freq }} MHz &bull; {{ (entry.bm.mode || '').toUpperCase() }}</span>
+						<div v-else-if="bookmarkGroupsByCategory.categories.length === 0 && bookmarkGroupsByCategory.flatGroups.length === 0" class="bookmark-empty">No bookmarks match your search.</div>
+						<!-- Individual Freq bookmarks, grouped by category -->
+						<template v-for="group in bookmarkGroupsByCategory.categories" :key="group.collKey">
+							<div class="bookmark-group-header bookmark-cat-header" @click="toggleBookmarkCategory(group.collKey)">
+								<span class="bookmark-cat-label">{{ group.label }}</span>
+								<span class="bookmark-cat-count">{{ group.items.length }}</span>
+								<svg class="panel-chevron" :class="{ 'panel-chevron-collapsed': collapsedPanels[group.collKey] }" viewBox="0 0 24 24" width="12" height="12"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+							</div>
+							<div v-show="!collapsedPanels[group.collKey]">
+								<div v-for="entry in group.items" :key="entry.bm.id" class="bookmark-item">
+									<div class="bookmark-info">
+										<span class="bookmark-name" :title="entry.bm.name">{{ entry.bm.name }}</span>
+										<div style="display:flex;align-items:center;gap:5px;margin-top:2px;flex-wrap:wrap">
+											<span class="bm-badge bm-badge-freq">FREQ</span>
+											<span class="bookmark-meta">{{ entry.bm.freq }} MHz &bull; {{ (entry.bm.mode || '').toUpperCase() }}</span>
+										</div>
 									</div>
-								</div>
-								<div class="bookmark-actions">
-									<button class="bookmark-btn bookmark-jump" @click="jumpToBookmark(entry.i)" title="Jump to this bookmark">
-										<svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
-									</button>
-									<button class="bookmark-btn bookmark-edit" @click="openEditBookmark(entry.i)" title="Edit bookmark">
-										<svg viewBox="0 0 24 24" width="12" height="12"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm17.71-10.21a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
-									</button>
-									<button class="bookmark-btn bookmark-delete" @click="deleteBookmark(entry.i)" title="Delete bookmark">&times;</button>
+									<div class="bookmark-actions">
+										<button class="bookmark-btn bookmark-jump" @click="jumpToBookmark(entry.i)" title="Jump to this bookmark">
+											<svg viewBox="0 0 24 24" width="13" height="13"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+										</button>
+										<button class="bookmark-btn bookmark-edit" @click="openEditBookmark(entry.i)" title="Edit bookmark">
+											<svg viewBox="0 0 24 24" width="12" height="12"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zm17.71-10.21a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+										</button>
+										<button class="bookmark-btn bookmark-delete" @click="deleteBookmark(entry.i)" title="Delete bookmark">&times;</button>
+									</div>
 								</div>
 							</div>
 						</template>
-						<!-- Group Bookmarks -->
-						<template v-if="bookmarkGroups.group.length > 0">
+						<!-- Group bookmarks, flat list -->
+						<template v-if="bookmarkGroupsByCategory.flatGroups.length > 0">
 							<div class="bookmark-group-header bm-group-header-group">Groups</div>
-							<div v-for="entry in bookmarkGroups.group" :key="entry.bm.id" class="bookmark-item">
+							<div v-for="entry in bookmarkGroupsByCategory.flatGroups" :key="entry.bm.id" class="bookmark-item">
 								<div class="bookmark-info">
 									<span class="bookmark-name" :title="entry.bm.name">{{ entry.bm.name }}</span>
 									<div style="display:flex;align-items:center;gap:5px;margin-top:2px;flex-wrap:wrap">

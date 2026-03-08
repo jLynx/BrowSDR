@@ -124,6 +124,7 @@ createApp({
 			bookmarks: [],         // [{ id, type, name, category, ...type-specific fields }]
 			bookmarkCategories: BOOKMARK_CATEGORIES,
 			bookmarkCategoryFilter: '',
+			bookmarkSearch: '',
 			bookmarkModal: { show: false, type: 'individual', name: '', category: '' },
 			bookmarkImportModal: { show: false },
 			bookmarkEdit: {
@@ -169,18 +170,44 @@ createApp({
 			}
 			return active;
 		},
-		// Bookmarks split into individual/group sections, each sorted by frequency
-		bookmarkGroups() {
-			const filter = this.bookmarkCategoryFilter;
+		// Individual bookmarks grouped by category; group bookmarks as a flat sorted list
+		bookmarkGroupsByCategory() {
+			const search = (this.bookmarkSearch || '').toLowerCase().trim();
 			const all = this.bookmarks.map((bm, i) => ({ bm, i }));
-			const filtered = filter ? all.filter(({ bm }) => (bm.category || '') === filter) : all;
-			const individual = filtered
-				.filter(({ bm }) => (bm.type || 'group') === 'individual')
-				.sort((a, b) => a.bm.freq - b.bm.freq);
-			const group = filtered
+			const filtered = search
+				? all.filter(({ bm }) =>
+					(bm.name || '').toLowerCase().includes(search) ||
+					String(bm.freq || bm.centerFreq || '').includes(search)
+				)
+				: all;
+			// Flat group list (sorted by centerFreq)
+			const flatGroups = filtered
 				.filter(({ bm }) => (bm.type || 'group') === 'group')
-				.sort((a, b) => a.bm.centerFreq - b.bm.centerFreq);
-			return { individual, group };
+				.sort((a, b) => (a.bm.centerFreq || 0) - (b.bm.centerFreq || 0));
+			// Individual bookmarks bucketed by category
+			const cats = {};
+			for (const entry of filtered) {
+				if ((entry.bm.type || 'group') !== 'individual') continue;
+				const cat = entry.bm.category || '';
+				if (!cats[cat]) cats[cat] = [];
+				cats[cat].push(entry);
+			}
+			for (const arr of Object.values(cats)) {
+				arr.sort((a, b) => (a.bm.freq || 0) - (b.bm.freq || 0));
+			}
+			const categories = Object.keys(cats)
+				.map(key => ({
+					key,
+					collKey: 'bm:' + (key || '__uncategorised__'),
+					label: BOOKMARK_CATEGORIES.find(c => c.value === key)?.label || 'Uncategorised',
+					items: cats[key],
+				}))
+				.sort((a, b) => {
+					if (a.key === '' && b.key !== '') return 1;
+					if (a.key !== '' && b.key === '') return -1;
+					return a.label.localeCompare(b.label);
+				});
+			return { categories, flatGroups };
 		},
 		// Calculate the min/max display bandwidth based on sampleRate AND zoom state
 		minFreq() {
@@ -197,6 +224,9 @@ createApp({
 	methods: {
 		togglePanel(key) {
 			this.collapsedPanels[key] = !this.collapsedPanels[key];
+		},
+		toggleBookmarkCategory(collKey) {
+			this.collapsedPanels[collKey] = !this.collapsedPanels[collKey];
 		},
 		formatFreq(mhz) {
 			if (!mhz) return "000.000000";
