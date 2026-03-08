@@ -395,6 +395,63 @@ class POCSAGDecoder {
 	}
 }
 
+class MockHackRF {
+	constructor() {
+		this.running = false;
+		this.sampleRate = 2000000;
+		this.centerFreq = 100000000;
+		this.callback = null;
+		this.phase = 0;
+	}
+	async open() { return true; }
+	async readBoardId() { return 2; }
+	async readVersionString() { return "Mock Firmware V1"; }
+	async readApiVersion() { return [1, 6, 0]; }
+	async readPartIdSerialNo() { return { partId: [0,0], serialNo: [1,2,3,4] }; }
+	async readSupportedPlatform() { return HackRF.HACKRF_PLATFORM_HACKRF1_OG; }
+	async boardRevRead() { return HackRF.BOARD_REV_HACKRF1_OLD | HackRF.HACKRF_BOARD_REV_GSG; }
+	
+	async setSampleRateManual(freq, div) { this.sampleRate = freq / div; }
+	async setBasebandFilterBandwidth(bw) {}
+	async setFreq(freq) { this.centerFreq = freq; }
+	async setAmpEnable(e) {}
+	async setLnaGain(g) {}
+	async setVgaGain(g) {}
+	
+	async startRx(callback) {
+		this.callback = callback;
+		this.running = true;
+		this.thread = setInterval(() => {
+			if (!this.running) return;
+			// Emulate USB chunk size of HackRF
+			const chunkSize = 262144;
+			const buffer = new ArrayBuffer(chunkSize);
+			const view = new Int8Array(buffer);
+			// Generate a 100 kHz tone relative to center freq + noise
+			const toneFreq = 100000;
+			const phaseInc = 2 * Math.PI * toneFreq / this.sampleRate;
+			for (let i = 0; i < chunkSize / 2; i++) {
+				this.phase += phaseInc;
+				if (this.phase > Math.PI * 2) this.phase -= Math.PI * 2;
+				const i_val = Math.cos(this.phase) * 50 + (Math.random() - 0.5) * 20;
+				const q_val = Math.sin(this.phase) * 50 + (Math.random() - 0.5) * 20;
+				view[i * 2] = i_val;
+				view[i * 2 + 1] = q_val;
+			}
+			callback({ buffer, byteOffset: 0, length: chunkSize });
+		}, ((262144 / 2) / this.sampleRate) * 1000); // Trigger at the expected sample rate
+	}
+
+	async stopRx() {
+		this.running = false;
+		clearInterval(this.thread);
+	}
+	
+	async close() {}
+	async exit() {}
+	async getOperacakeBoards() { return []; }
+}
+
 class Worker {
 	constructor() {
 	}
@@ -406,6 +463,12 @@ class Worker {
 	}
 
 	async open(opts) {
+		if (opts === "mock") {
+			this.hackrf = new MockHackRF();
+			await this.hackrf.open();
+			return true;
+		}
+
 		const devices = await navigator.usb.getDevices();
 		const device = !opts ? devices[0] : devices.find(d => {
 			if (opts.vendorId) {
@@ -493,7 +556,6 @@ class Worker {
 			}
 		}
 
-		// Opera Cake
 		try {
 			const operacakes = await hackrf.getOperacakeBoards();
 			for (const addr of operacakes) {
@@ -504,6 +566,42 @@ class Worker {
 		}
 
 		return { boardId, versionString, apiVersion, partId, serialNo };
+	}
+
+	async setRemoteHostCallback(callback) {
+		this._remoteHostCb = callback;
+	}
+
+	async initRemoteClient() {
+		await ensureWasmInitialized();
+		this.wasm = await init();
+		// Initialise dummy structure for standalone client
+		this.hackrf = {
+			setSampleRateManual: async () => {},
+			setBasebandFilterBandwidth: async () => {},
+			setFreq: async () => {},
+			startRx: async (cb) => {
+				this._remoteClientCb = cb;
+			},
+			stopRx: async () => {
+				this._remoteClientCb = null;
+			},
+			close: async () => {},
+			exit: async () => {},
+			setAmpEnable: async () => {},
+			setLnaGain: async () => {},
+			setVgaGain: async () => {}
+		};
+	}
+
+	async feedRemoteChunk(chunk) {
+		if (this._remoteClientCb) {
+			this._remoteClientCb({
+				buffer: chunk.buffer,
+				byteOffset: chunk.byteOffset,
+				length: chunk.byteLength
+			});
+		}
 	}
 
 	async startRxStream(opts, spectrumCallback, audioCallback, whisperCallback = null, pocsagCallback = null) {
@@ -1284,6 +1382,12 @@ class Worker {
 				// Write USB chunk directly to WASM memory shared buffer if using SAB
 				this.sharedIqViews[this.sabPoolIndex].set(signed);
 				chunkCounter++;
+
+				if (this._remoteHostCb) {
+					// Use Comlink.transfer to avoid copying if we are just relaying
+					const chunkCopy = new Int8Array(signed);
+					this._remoteHostCb(Comlink.transfer(chunkCopy, [chunkCopy.buffer]));
+				}
 
 				// Bulk copy for spectrum buffer
 				{

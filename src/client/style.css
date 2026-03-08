@@ -86,6 +86,43 @@ body {
 	padding-bottom: 14px;
 }
 
+.remote-status {
+	display: flex;
+	align-items: center;
+	background: #1e1e1e;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 4px 8px;
+	margin-right: 16px;
+	font-size: 12px;
+	font-weight: 600;
+	flex-shrink: 0;
+}
+
+.remote-host {
+	border-color: #ffaa44;
+}
+
+.remote-client {
+	border-color: #4488ff;
+}
+
+.remote-badge {
+	color: #fff;
+	padding: 1px 4px;
+	border-radius: 3px;
+	margin-right: 6px;
+	font-size: 10px;
+	letter-spacing: 0.5px;
+}
+
+.remote-host .remote-badge { background: #ffaa44; }
+.remote-client .remote-badge { background: #4488ff; }
+
+.remote-text {
+	color: #ccc;
+}
+
 .vfo-display {
 	position: relative;
 	display: flex;

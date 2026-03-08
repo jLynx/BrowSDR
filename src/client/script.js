@@ -2,6 +2,7 @@ import { createApp } from "./lib/vue.esm-browser.js";
 import * as Comlink from "./lib/comlink.mjs";
 import { HackRF } from "./hackrf.js";
 import { Waterfall, WaterfallGL } from "./utils.js";
+import { WebRTCHandler } from "./webrtc.js";
 
 const Backend = Comlink.wrap(new Worker("./worker.js", { type: "module" }));
 
@@ -69,6 +70,10 @@ createApp({
 			backend: null,
 			connected: false,
 			running: false,
+			remoteMode: 'none', // 'none' | 'host' | 'client'
+			remoteStatus: '',
+			remoteLink: '',
+			remotePeerId: '',
 			snackbar: { show: false, message: "" },
 			radio: {
 				centerFreq: 100.0,
@@ -400,7 +405,43 @@ createApp({
 				this.showMsg("Connect Error: " + e.message);
 			}
 		},
+		async connectMock() {
+			if (!this.backend) return;
+			this.showMsg("Connecting Mock SDR...");
+			try {
+				const ok = await this.backend.open("mock");
+				if (ok) {
+					this.connected = true;
+					this.info.boardName = "Mock SDR (Signal Gen)";
+					this.showMsg("Connected to Mock SDR");
+					await this.startStream();
+				} else {
+					this.showMsg("Failed to open Mock SDR.");
+				}
+			} catch (e) {
+				this.showMsg("Mock Connect Error: " + e.message);
+			}
+		},
 		async disconnect() {
+			if (this.remoteMode === 'client' && this._webrtc) {
+				this._webrtc.close();
+				this._webrtc = null;
+				this.remoteMode = 'none';
+				if (this.running) await this.togglePlay();
+				this.connected = false;
+				this.showMsg("Disconnected from remote device");
+				// Clear the URL
+				window.history.replaceState({}, document.title, "/");
+				return;
+			}
+
+			if (this.remoteMode === 'host' && this._webrtc) {
+				this._webrtc.close();
+				this._webrtc = null;
+				this.remoteMode = 'none';
+				this.showMsg("Remote sharing stopped");
+			}
+
 			if (this.running) await this.togglePlay();
 			await this.backend.close();
 			this.connected = false;
@@ -755,7 +796,7 @@ createApp({
 		updateBackendVfoParams(index) {
 			if (this.backend && this.running && index >= 0 && index < this.vfos.length) {
 				const vfo = this.vfos[index];
-				this.backend.setVfoParams(index, {
+				const params = {
 					freq: vfo.freq,
 					mode: vfo.mode,
 					enabled: vfo.enabled,
@@ -771,7 +812,15 @@ createApp({
 					rdsRegion: vfo.rdsRegion,
 					volume: vfo.volume,
 					pocsag: vfo.pocsag,
-				});
+				};
+				this.backend.setVfoParams(index, params);
+				if (this.remoteMode === 'client' && this._webrtc) {
+					this._webrtc.sendCommand({ type: 'vfo', index, params });
+				} else if (this.remoteMode === 'host' && this._webrtc) {
+					// Host can also sync VFO changes *to* the client if desired, 
+					// but usually Client drives or they follow each other. Let's sync to client.
+					this._webrtc.sendCommand({ type: 'vfo', index, params });
+				}
 			}
 		},
 		async addVfo() {
@@ -780,6 +829,7 @@ createApp({
 			if (this.backend && this.running) {
 				await this.backend.addVfo();
 				this.updateBackendVfoParams(this.vfos.length - 1);
+				if (this._webrtc) this._webrtc.sendCommand({ type: 'addVfo' });
 			}
 			this.activeVfoIndex = this.vfos.length - 1;
 
@@ -794,12 +844,14 @@ createApp({
 			this.vfos.splice(index, 1);
 			if (this.backend && this.running) {
 				await this.backend.removeVfo(index);
+				if (this._webrtc) this._webrtc.sendCommand({ type: 'removeVfo', index });
 			}
 			if (this.activeVfoIndex >= this.vfos.length) {
 				this.activeVfoIndex = this.vfos.length - 1;
 			}
 		},
 		saveSetting() {
+			if (this.remoteMode === 'client') return; // Don't save settings when connected as client
 			const json = JSON.stringify({ radio: this.radio, gains: this.gains, vfos: this.vfos, activeVfoIndex: this.activeVfoIndex, view: this.view, display: this.display, collapsedPanels: this.collapsedPanels });
 			localStorage.setItem('sdr-web-setting', json);
 		},
@@ -1407,6 +1459,110 @@ createApp({
 			this.view.zoomOffset = newOffset;
 
 			this.applyZoomToEngine();
+		},
+		async startRemoteHost() {
+			console.log("[WebRTC] startRemoteHost clicked");
+			if (!this.connected || !this.running) {
+				console.log("[WebRTC] Device not connected or running");
+				this.showMsg("Start the device first to share it.");
+				return;
+			}
+			console.log("[WebRTC] Setting up Host Mode. Mode =", this.remoteMode);
+			this.remoteMode = 'host';
+			this.remoteStatus = 'Generating ID...';
+			
+			console.log("[WebRTC] Instantiating WebRTCHandler");
+			this._webrtc = new WebRTCHandler(true); // isHost = true
+			
+			this._webrtc.onStatusChange = (status) => {
+				console.log("[WebRTC] Host status changed:", status);
+				if (status.status === 'ready') {
+					this.remoteStatus = 'Waiting for connection';
+					const origin = window.location.origin;
+					this.remoteLink = `${origin}/?connect=${status.id}`;
+					console.log("[WebRTC] Link completely generated:", this.remoteLink);
+				} else if (status.status === 'connected') {
+					this.remoteStatus = 'Client connected';
+					this.showMsg("Remote client joined!");
+					// Sync current state to client
+					this._webrtc.sendCommand({ type: 'sync', radio: this.radio, gains: this.gains, vfos: this.vfos });
+				} else if (status.status === 'disconnected') {
+					this.remoteStatus = 'Client disconnected';
+					this.showMsg("Remote client left.");
+				} else if (status.status === 'error') {
+					this.remoteMode = 'none';
+					this.showMsg("WebRTC Error: " + status.error);
+				}
+			};
+
+			this._webrtc.onCommand = (cmd) => this.handleRemoteCommand(cmd);
+
+			console.log("[WebRTC] Calling _webrtc.init()");
+			await this._webrtc.init();
+			console.log("[WebRTC] _webrtc.init() finished. Resolving remote host callback.");
+			// Setup worker to push raw USB chunks via Comlink callback
+			await this.backend.setRemoteHostCallback(Comlink.proxy((chunk) => {
+				if (this._webrtc) {
+					this._webrtc.sendIqChunk(chunk);
+				}
+			}));
+		},
+		async connectRemoteClient(hostId) {
+			this.remoteMode = 'client';
+			this.remoteStatus = 'Connecting...';
+			this.showMsg("Connecting to remote host...");
+			
+			this._webrtc = new WebRTCHandler(false, hostId);
+			this._webrtc.onStatusChange = (status) => {
+				if (status.status === 'connecting') {
+					this.remoteStatus = 'Connecting...';
+				} else if (status.status === 'connected') {
+					this.remoteStatus = 'Connected to Host';
+					this.connected = true;
+					this.info.boardName = "Remote SDR";
+					this.showMsg("Connected to Host successfully");
+					// Start local processing stream using mock device hooked up to WebRTC
+					this.startStream();
+				} else if (status.status === 'disconnected') {
+					this.remoteStatus = 'Disconnected from Host';
+					this.disconnect();
+				} else if (status.status === 'error') {
+					this.remoteMode = 'none';
+					this.showMsg("WebRTC Error: " + status.error);
+				}
+			};
+
+			this._webrtc.onCommand = (cmd) => this.handleRemoteCommand(cmd);
+			this._webrtc.onIqChunk = async (chunk) => {
+				if (this.running && this.backend) {
+					await this.backend.feedRemoteChunk(chunk);
+				}
+			};
+
+			try {
+				await this._webrtc.init();
+				await this.backend.initRemoteClient();
+			} catch(e) {
+				this.showMsg("Failed to initialize remote client.");
+			}
+		},
+		handleRemoteCommand(cmd) {
+			if (cmd.type === 'sync') {
+				if (cmd.radio) Object.assign(this.radio, cmd.radio);
+				if (cmd.gains) Object.assign(this.gains, cmd.gains);
+				if (cmd.vfos) {
+					this.vfos = cmd.vfos;
+				}
+			} else if (cmd.type === 'vfo') {
+				if (this.vfos[cmd.index]) {
+					Object.assign(this.vfos[cmd.index], cmd.params);
+				}
+			} else if (cmd.type === 'addVfo') {
+				const newVfo = makeDefaultVfo(this.radio.centerFreq);
+				this.vfos.push(newVfo);
+			} else if (cmd.type === 'removeVfo') {
+				this.vfos.splice(cmd.index, 1);
+			}
 		}
 	},
 	created: async function () {
@@ -1565,5 +1721,15 @@ createApp({
 
 		// Initial application of zoom bounds
 		this.applyZoomToEngine();
+
+		// Check for remote connection link in URL
+		const urlParams = new URLSearchParams(window.location.search);
+		const connectId = urlParams.get('connect');
+		if (connectId) {
+			// Auto-connect after brief delay to ensure components loaded
+			setTimeout(() => {
+				this.connectRemoteClient(connectId);
+			}, 500);
+		}
 	}
 }).mount('#app');
