@@ -294,6 +294,46 @@ createApp({
 		focusVfoFreq(index) {
 			this.vfos[index].focused = true;
 		},
+		focusActivityVfo(index) {
+			this.activeVfoIndex = index;
+
+			// Scroll the VFO tab into view within the top-bar (overflow-x: auto container)
+			this.$nextTick(() => {
+				const container = document.querySelector('.vfo-displays');
+				const tabs = document.querySelectorAll('.vfo-display');
+				if (container && tabs[index]) {
+					const tab = tabs[index];
+					const containerLeft = container.scrollLeft;
+					const containerRight = containerLeft + container.clientWidth;
+					const tabLeft = tab.offsetLeft;
+					const tabRight = tabLeft + tab.offsetWidth;
+					if (tabLeft < containerLeft) {
+						container.scrollTo({ left: tabLeft - 8, behavior: 'smooth' });
+					} else if (tabRight > containerRight) {
+						container.scrollTo({ left: tabRight - container.clientWidth + 8, behavior: 'smooth' });
+					}
+				}
+			});
+
+			// Pan (and optionally zoom) the waterfall to centre on the VFO's frequency
+			const vfo = this.vfos[index];
+			if (!vfo) return;
+			// Normalised position within the full spectrum [0, 1]
+			const normalizedPos = (vfo.freq - this.radio.centerFreq) * 1e6 / this.radio.sampleRate + 0.5;
+			// Only act if the frequency is within the tuned bandwidth
+			if (normalizedPos < 0 || normalizedPos > 1) return;
+
+			// Ensure we are zoomed in enough to clearly see the signal
+			const targetZoom = Math.max(this.view.zoomScale, 32.0);
+			// Centre the offset on the target frequency
+			let newOffset = normalizedPos - (0.5 / targetZoom);
+			const maxOffset = 1.0 - (1.0 / targetZoom);
+			newOffset = Math.max(0, Math.min(maxOffset, newOffset));
+
+			// Updates trigger the watch('view') to call applyZoomToEngine()
+			this.view.zoomScale = targetZoom;
+			this.view.zoomOffset = newOffset;
+		},
 		applyVfoFreq(e, index) {
 			const vfo = this.vfos[index];
 			vfo.focused = false;
@@ -492,7 +532,11 @@ createApp({
 			this._fftCtx.scale(dpr, dpr);
 		},
 		drawSpectrum(data) {
-			if (!this.running || !this._fftCtx) return;
+			if (!this._fftCtx) return;
+			if (!this.running && !this._zoomRepaint) return;
+
+			// Cache latest frame so zoom/pan can repaint immediately without new data
+			if (!this._zoomRepaint) this._lastSpectrumData = data;
 
 			// FPS calculation
 			const now = performance.now();
@@ -524,8 +568,13 @@ createApp({
 				}
 			}
 
-			// Waterfall drawing
-			this._waterfallEngine.renderLine(wfData);
+			// Waterfall drawing — skip adding a new history row when this is just a zoom repaint
+			if (!this._zoomRepaint) {
+				this._waterfallEngine.renderLine(wfData);
+			} else if (this._waterfallEngine.render) {
+				// For a zoom-only repaint, just redraw the existing texture at the new zoom
+				this._waterfallEngine.render();
+			}
 
 			const ctx = this._fftCtx;
 			const dpr = window.devicePixelRatio || 1;
@@ -790,6 +839,12 @@ createApp({
 		applyZoomToEngine() {
 			if (this._waterfallEngine) {
 				this._waterfallEngine.setZoom(this.view.zoomOffset, this.view.zoomScale);
+				// Force an immediate repaint so the new zoom is visible without waiting for the next data frame
+				if (this._lastSpectrumData && this._fftCtx) {
+					this._zoomRepaint = true;
+					this.drawSpectrum(this._lastSpectrumData);
+					this._zoomRepaint = false;
+				}
 			}
 		},
 		// ─── Whisper transcription ───────────────────────────

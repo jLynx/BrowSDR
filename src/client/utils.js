@@ -342,6 +342,18 @@ export class Waterfall {
 		this.zoomScale = scale;
 	}
 
+	render() {
+		const { canvas, ctx, offscreen } = this;
+		ctx.fillStyle = 'black';
+		ctx.fillRect(0, 0, canvas.width, canvas.height);
+		const sourceX = this.zoomOffset * offscreen.width;
+		const sourceWidth = offscreen.width / this.zoomScale;
+		ctx.drawImage(offscreen,
+			sourceX, 0, sourceWidth, offscreen.height,
+			0, 0, canvas.width, canvas.height
+		);
+	}
+
 	setRange(minDB, maxDB) {
 		this.minDB = minDB;
 		this.maxDB = maxDB;

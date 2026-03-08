@@ -370,7 +370,7 @@
 						<div v-for="item in activeAudioVfos" :key="'active-vfo-' + item.index" 
 							class="active-audio-chip" 
 							:style="{ borderColor: vfoColor(item.index), '--chip-color': vfoColor(item.index) }"
-							@click="activeVfoIndex = item.index"
+							@click="focusActivityVfo(item.index)"
 							:title="'Switch to VFO ' + (item.index + 1)">
 							<span class="vfo-dot" :style="{ background: vfoColor(item.index) }"></span>
 							<span class="vfo-num">{{ item.index + 1 }}</span>
@@ -511,8 +511,8 @@
 						class="activity-row"
 						:class="{ 'activity-row-live': item.isLive, 'activity-row-zero': !item.isLive && item.totalMs === 0 }"
 						:style="{ '--act-color': vfoColor(item.index) }"
-						@click="activeVfoIndex = item.index"
-						:title="'Click to focus VFO ' + (item.index + 1)">
+							@click="focusActivityVfo(item.index)"
+							:title="'Click to focus VFO ' + (item.index + 1)">    
 						<div class="act-bar-fill" :style="{ width: item.pct + '%' }"></div>
 						<span class="act-rank">#{{ rank + 1 }}</span>
 						<span class="act-dot" :style="{ background: vfoColor(item.index) }"></span>
