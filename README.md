@@ -1,4 +1,4 @@
-# 📻 BrowSDR
+# 📻 [BrowSDR](https://browsdr.jlynx.net)
 
 [![BrowSDR Live](https://img.shields.io/badge/Live-browsdr.jlynx.net-success?style=for-the-badge&logo=cloudflare)](https://browsdr.jlynx.net)
 [![Rust](https://img.shields.io/badge/Rust-High%20Performance-orange?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
