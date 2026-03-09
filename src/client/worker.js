@@ -596,10 +596,11 @@ class Worker {
 
 	async feedRemoteChunk(chunk) {
 		if (this._remoteClientCb) {
+			const buf = chunk.buffer || chunk;
 			this._remoteClientCb({
-				buffer: chunk.buffer,
-				byteOffset: chunk.byteOffset,
-				length: chunk.byteLength
+				buffer: buf,
+				byteOffset: 0,
+				length: buf.byteLength
 			});
 		}
 	}

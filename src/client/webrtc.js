@@ -4,6 +4,8 @@ export class WebRTCHandler {
 		this.peer = null;
 		this.connCmd = null;
 		this.connIq = null;
+		this.connIqOverflow = false; // Add High/Low Watermark state
+
 		this.remoteId = remoteId; // Used by client to connect to host
 
 		this.onStatusChange = null;
@@ -115,7 +117,22 @@ export class WebRTCHandler {
 
 	sendIqChunk(chunk) {
 		if (this.connIq && this.connIq.open) {
-			this.connIq.send(chunk);
+			// Web-888 style High/Low Watermark Backpressure
+			// PeerJS bufferedAmount grows when socket can't flush fast enough
+			if (this.connIq.dataChannel) {
+				const buffered = this.connIq.dataChannel.bufferedAmount;
+				if (buffered > 2097152) { // 2 MB High Watermark
+					this.connIqOverflow = true;
+				} else if (buffered < 524288) { // 500 KB Low Watermark
+					this.connIqOverflow = false;
+				}
+				if (this.connIqOverflow) {
+					return; // Drop chunk safely to avoid compounding lag
+				}
+			}
+
+			// Send primitive ArrayBuffer to skip wrapper structural cloning loop
+			this.connIq.send(chunk.buffer || chunk);
 		}
 	}
 	

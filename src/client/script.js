@@ -1554,9 +1554,11 @@ createApp({
 			};
 
 			this._webrtc.onCommand = (cmd) => this.handleRemoteCommand(cmd);
-			this._webrtc.onIqChunk = async (chunk) => {
+			this._webrtc.onIqChunk = (chunk) => {
 				if (this.running && this.backend) {
-					await this.backend.feedRemoteChunk(chunk);
+					// Use Comlink.transfer for zero-copy memory handoff to eliminate GC lag
+					const buf = chunk.buffer || chunk;
+					this.backend.feedRemoteChunk(Comlink.transfer(chunk, [buf]));
 				}
 			};
 
