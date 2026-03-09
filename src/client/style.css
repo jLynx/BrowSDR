@@ -408,6 +408,29 @@ body {
 	margin-left: 6px;
 }
 
+.lock-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	margin-left: 6px;
+	border-radius: 4px;
+	color: var(--text-muted);
+	background: transparent;
+	transition: all 0.15s;
+}
+.lock-btn.host {
+	cursor: pointer;
+}
+.lock-btn.host:hover {
+	background: rgba(255,255,255,0.1);
+	color: var(--text-main);
+}
+.lock-btn.locked {
+	color: #ffaa44;
+}
+
 select {
 	background: #000;
 	border: 1px solid var(--border);

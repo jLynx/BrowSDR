@@ -122,8 +122,12 @@
 						<div class="form-row">
 							<label>Center</label>
 							<div class="input-group">
-								<input type="number" v-model.number="radio.centerFreq" step="0.1" title="Center Frequency (MHz)">
+								<input type="number" v-model.number="radio.centerFreq" step="0.1" title="Center Frequency (MHz)" :disabled="remoteMode === 'client' && locks.centerFreq">
 								<span>MHz</span>
+							</div>
+							<div class="lock-btn" v-if="remoteMode === 'host' || (remoteMode === 'client' && locks.centerFreq)" @click="remoteMode === 'host' && (locks.centerFreq = !locks.centerFreq)" :class="{ locked: locks.centerFreq, host: remoteMode === 'host' }" :title="remoteMode === 'host' ? 'Toggle Lock' : 'Locked by Host'">
+								<svg v-if="locks.centerFreq" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+								<svg v-else viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm5.1-9H7.9V6c0-2.26 1.84-4.1 4.1-4.1s4.1 1.84 4.1 4.1v2z" opacity="0.3"/></svg>
 							</div>
 						</div>
 						<div class="form-row">
@@ -140,21 +144,33 @@
 						<div class="form-row">
 							<label>LNA Gain</label>
 							<div class="slider-group">
-								<input type="range" v-model.number="gains.lna" min="0" max="40" step="8">
+								<input type="range" v-model.number="gains.lna" min="0" max="40" step="8" :disabled="remoteMode === 'client' && locks.lna">
 								<span class="val">{{ gains.lna }}dB</span>
+							</div>
+							<div class="lock-btn" v-if="remoteMode === 'host' || (remoteMode === 'client' && locks.lna)" @click="remoteMode === 'host' && (locks.lna = !locks.lna)" :class="{ locked: locks.lna, host: remoteMode === 'host' }" :title="remoteMode === 'host' ? 'Toggle Lock' : 'Locked by Host'">
+								<svg v-if="locks.lna" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+								<svg v-else viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm5.1-9H7.9V6c0-2.26 1.84-4.1 4.1-4.1s4.1 1.84 4.1 4.1v2z" opacity="0.3"/></svg>
 							</div>
 						</div>
 						<div class="form-row">
 							<label>VGA Gain</label>
 							<div class="slider-group">
-								<input type="range" v-model.number="gains.vga" min="0" max="62" step="2">
+								<input type="range" v-model.number="gains.vga" min="0" max="62" step="2" :disabled="remoteMode === 'client' && locks.vga">
 								<span class="val">{{ gains.vga }}dB</span>
+							</div>
+							<div class="lock-btn" v-if="remoteMode === 'host' || (remoteMode === 'client' && locks.vga)" @click="remoteMode === 'host' && (locks.vga = !locks.vga)" :class="{ locked: locks.vga, host: remoteMode === 'host' }" :title="remoteMode === 'host' ? 'Toggle Lock' : 'Locked by Host'">
+								<svg v-if="locks.vga" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+								<svg v-else viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm5.1-9H7.9V6c0-2.26 1.84-4.1 4.1-4.1s4.1 1.84 4.1 4.1v2z" opacity="0.3"/></svg>
 							</div>
 						</div>
 						<div class="form-row">
-							<label class="checkbox">
-								<input type="checkbox" v-model="gains.ampEnabled"> Amp (14dB)
+							<label class="checkbox" style="flex:1" :style="{ opacity: (remoteMode === 'client' && locks.amp) ? 0.5 : 1 }">
+								<input type="checkbox" v-model="gains.ampEnabled" :disabled="remoteMode === 'client' && locks.amp"> Amp (14dB)
 							</label>
+							<div class="lock-btn" v-if="remoteMode === 'host' || (remoteMode === 'client' && locks.amp)" @click="remoteMode === 'host' && (locks.amp = !locks.amp)" :class="{ locked: locks.amp, host: remoteMode === 'host' }" :title="remoteMode === 'host' ? 'Toggle Lock' : 'Locked by Host'">
+								<svg v-if="locks.amp" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+								<svg v-else viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm5.1-9H7.9V6c0-2.26 1.84-4.1 4.1-4.1s4.1 1.84 4.1 4.1v2z" opacity="0.3"/></svg>
+							</div>
 						</div>
 					</div>
 				</div>

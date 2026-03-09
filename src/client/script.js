@@ -89,6 +89,12 @@ createApp({
 				vga: 16,
 				ampEnabled: false,
 			},
+			locks: {
+				centerFreq: false,
+				lna: false,
+				vga: false,
+				amp: false,
+			},
 			vfos: [makeDefaultVfo(100.0)],
 			activeVfoIndex: 0,
 			info: { boardName: "" },
@@ -129,10 +135,10 @@ createApp({
 				panelOpen: false,
 				log: [],   // { time, freq, vfoIndex, capcode, type, text, baud }
 			},
-			bookmarks: [],         // [{ id, type, name, category, ...type-specific fields }]
 			bookmarkCategories: BOOKMARK_CATEGORIES,
 			bookmarkCategoryFilter: '',
 			bookmarkSearch: '',
+			bookmarks: [],
 			bookmarkModal: { show: false, type: 'individual', name: '', category: '' },
 			bookmarkImportModal: { show: false },
 			bookmarkEdit: {
@@ -823,6 +829,17 @@ createApp({
 				}
 			}
 		},
+		requestOrApplyChange(target, property, value) {
+			if (this.remoteMode === 'client') {
+				this._webrtc.sendCommand({ type: 'requestChange', target, property, value });
+			} else {
+				if (target === 'radio') {
+					this.radio[property] = value;
+				} else if (target === 'gains') {
+					this.gains[property] = value;
+				}
+			}
+		},
 		async addVfo() {
 			const newVfo = makeDefaultVfo(this.radio.centerFreq);
 			this.vfos.push(newVfo);
@@ -851,13 +868,20 @@ createApp({
 			}
 		},
 		saveSetting() {
-			if (this.remoteMode === 'client') return; // Don't save settings when connected as client
-			const json = JSON.stringify({ radio: this.radio, gains: this.gains, vfos: this.vfos, activeVfoIndex: this.activeVfoIndex, view: this.view, display: this.display, collapsedPanels: this.collapsedPanels });
-			localStorage.setItem('sdr-web-setting', json);
+			const obj = {
+				radio: this.radio,
+				display: this.display,
+				gains: this.gains,
+				locks: this.locks,
+				vfos: this.vfos,
+				view: this.view,
+				collapsedPanels: this.collapsedPanels,
+			};
+			localStorage.setItem("SDRSetting", JSON.stringify(obj));
 		},
 		loadSetting() {
 			try {
-				const json = localStorage.getItem('sdr-web-setting');
+				const json = localStorage.getItem('SDRSetting');
 				if (json) {
 					const setting = JSON.parse(json);
 					if (setting.radio) {
@@ -867,7 +891,9 @@ createApp({
 							this.radio.fftSize = 65536;
 						}
 					}
+					if (setting.display) Object.assign(this.display, setting.display);
 					if (setting.gains) Object.assign(this.gains, setting.gains);
+					if (setting.locks) Object.assign(this.locks, setting.locks);
 					// Handle new format (vfos array) or legacy format (audio/audio2)
 					if (setting.vfos && Array.isArray(setting.vfos)) {
 						this.vfos = setting.vfos.map(v => ({ ...makeDefaultVfo(), ...v }));
@@ -883,7 +909,6 @@ createApp({
 					if (setting.activeVfoIndex !== undefined) this.activeVfoIndex = setting.activeVfoIndex;
 					else if (setting.activeVfo) this.activeVfoIndex = setting.activeVfo - 1;
 					if (setting.view) Object.assign(this.view, setting.view);
-					if (setting.display) Object.assign(this.display, setting.display);
 					if (setting.collapsedPanels && typeof setting.collapsedPanels === 'object') Object.assign(this.collapsedPanels, setting.collapsedPanels);
 				}
 			} catch (e) { }
@@ -1485,7 +1510,7 @@ createApp({
 					this.remoteStatus = 'Client connected';
 					this.showMsg("Remote client joined!");
 					// Sync current state to client
-					this._webrtc.sendCommand({ type: 'sync', radio: this.radio, gains: this.gains, vfos: this.vfos });
+					this._webrtc.sendCommand({ type: 'sync', radio: this.radio, gains: this.gains, vfos: this.vfos, locks: this.locks });
 				} else if (status.status === 'disconnected') {
 					this.remoteStatus = 'Client disconnected';
 					this.showMsg("Remote client left.");
@@ -1553,6 +1578,29 @@ createApp({
 				if (cmd.vfos) {
 					this.vfos = cmd.vfos;
 				}
+				if (cmd.locks) Object.assign(this.locks, cmd.locks);
+			} else if (cmd.type === 'requestChange') {
+				if (this.remoteMode === 'host') {
+					const { target, property, value } = cmd;
+					let allow = true;
+
+					if (target === 'radio' && property === 'centerFreq' && this.locks.centerFreq) allow = false;
+					if (target === 'gains') {
+						if (property === 'lna' && this.locks.lna) allow = false;
+						if (property === 'vga' && this.locks.vga) allow = false;
+						if (property === 'ampEnabled' && this.locks.amp) allow = false;
+					}
+
+					if (allow) {
+						if (target === 'radio') this.radio[property] = value;
+						else if (target === 'gains') this.gains[property] = value;
+						// Sync back so the client updates their frontend
+						this._webrtc.sendCommand({ type: 'sync', radio: this.radio, gains: this.gains });
+					} else {
+						// Reject the change. Sync back the *current* real state so the client's UI snaps back.
+						this._webrtc.sendCommand({ type: 'sync', radio: this.radio, gains: this.gains });
+					}
+				}
 			} else if (cmd.type === 'vfo') {
 				if (this.vfos[cmd.index]) {
 					Object.assign(this.vfos[cmd.index], cmd.params);
@@ -1571,12 +1619,24 @@ createApp({
 		this.backend = await new Backend();
 		await this.backend.init();
 
-		this.$watch('radio', async () => {
+		this.$watch('radio', async (newVal, oldVal) => {
 			this.saveSetting();
 			// Reset zoom on radio change
 			this.view.zoomScale = 1.0;
 			this.view.zoomOffset = 0.0;
 			this.applyZoomToEngine();
+
+			if (this.remoteMode === 'client') {
+				// We don't want to restart the stream purely client-side unless the host tells us to via a sync.
+				// However, if the client modifies the radio, they are requesting a change. We intercept the UI change.
+				// This watch fires *after* the UI modifies `this.radio`. Wait, `this.radio` is already modified here.
+				// To intercept correctly, we should have the UI call a method rather than v-model directly,
+				// OR we can observe changes, revert them visually if locked, and send the request.
+				// For now, since `radio` is modified, we just send a sync request if client.
+				this._webrtc.sendCommand({ type: 'requestChange', target: 'radio', property: 'centerFreq', value: this.radio.centerFreq });
+				this._webrtc.sendCommand({ type: 'requestChange', target: 'radio', property: 'sampleRate', value: this.radio.sampleRate });
+				return;
+			}
 
 			if (this.running) {
 				await this.togglePlay();
@@ -1585,6 +1645,13 @@ createApp({
 		}, { deep: true });
 
 		this.$watch('gains', () => {
+			if (this.remoteMode === 'client') {
+				this._webrtc.sendCommand({ type: 'requestChange', target: 'gains', property: 'lna', value: this.gains.lna });
+				this._webrtc.sendCommand({ type: 'requestChange', target: 'gains', property: 'vga', value: this.gains.vga });
+				this._webrtc.sendCommand({ type: 'requestChange', target: 'gains', property: 'ampEnabled', value: this.gains.ampEnabled });
+				return;
+			}
+
 			if (this.running && this.connected) {
 				// We don't have individual gain methods anymore since they were removed.
 				// However, changing startRxStream will re-apply gains. Or we can just restart.
@@ -1617,6 +1684,13 @@ createApp({
 		}, { deep: true });
 
 		this.$watch('collapsedPanels', () => {
+			this.saveSetting();
+		}, { deep: true });
+
+		this.$watch('locks', () => {
+			if (this.remoteMode === 'host' && this._webrtc) {
+				this._webrtc.sendCommand({ type: 'sync', locks: this.locks });
+			}
 			this.saveSetting();
 		}, { deep: true });
 	},
