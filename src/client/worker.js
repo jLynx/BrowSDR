@@ -578,20 +578,31 @@ class Worker {
 		this._remoteHostAudioCb = callback;
 	}
 
-	// Called by the host whenever the remote client sends a vfoUpdate command.
-	// Spawns (or reconfigures) a dedicated DSP worker for the client's VFO.
-	// Audio from this worker bypasses the host's own VFO mixer and goes
-	// straight to _remoteHostAudioCb so the two VFO sets are fully independent.
-	async setRemoteVfoParams(params) {
-		this._remoteVfoParamsCurrent = params;
+	// ── Remote-client VFO management ─────────────────────────────────────────
+	// The client has its own independent set of VFOs. For each one the host
+	// spawns a dedicated DSP worker so the client can tune freely without
+	// affecting the host's own VFOs. Audio from all remote workers is mixed
+	// (respecting per-VFO volume) before being sent to _remoteHostAudioCb.
 
-		if (!this._remoteVfoWorker) {
-			if (!this._sampleRate || !this.sharedIqPools) return; // startRxStream not yet running
+	_ensureRemoteVfoArrays() {
+		if (!this._remoteVfoWorkers) {
+			this._remoteVfoWorkers = [];
+			this._remoteVfoParams  = [];
+			this._remoteAudioQueues = [];
+		}
+	}
+
+	async setRemoteVfoParams(index, params) {
+		this._ensureRemoteVfoArrays();
+		this._remoteVfoParams[index] = params;
+
+		if (!this._remoteVfoWorkers[index]) {
+			if (!this._sampleRate || !this.sharedIqPools) return;
 			const worker = new globalThis.Worker('./dsp-worker.js', { type: 'module' });
 			worker.onmessage = (e) => {
 				const msg = e.data;
-				if (msg.type === 'audio' && msg.samples && this._remoteHostAudioCb) {
-					this._remoteHostAudioCb(new Float32Array(msg.samples));
+				if (msg.type === 'audio' && msg.samples) {
+					this._queueRemoteAudio(index, new Float32Array(msg.samples));
 				}
 			};
 			worker.postMessage({
@@ -601,14 +612,82 @@ class Worker {
 				params: params,
 				sabs: typeof SharedArrayBuffer !== 'undefined' ? this.sharedIqPools : null
 			});
-			this._remoteVfoWorker = worker;
+			this._remoteVfoWorkers[index] = worker;
+			this._remoteAudioQueues[index] = { queue: new Float32Array(32768), len: 0 };
 		} else {
-			this._remoteVfoWorker.postMessage({
+			this._remoteVfoWorkers[index].postMessage({
 				type: 'configure',
 				params: params,
 				centerFreq: this._centerFreq
 			});
 		}
+	}
+
+	async addRemoteVfo() {
+		this._ensureRemoteVfoArrays();
+		// Worker is spawned lazily on first setRemoteVfoParams for this index.
+		// Pre-initialise the audio queue slot so the mixer doesn't see sparse gaps.
+		const idx = this._remoteVfoWorkers.length;
+		this._remoteVfoWorkers[idx] = null;
+		this._remoteVfoParams[idx]   = null;
+		this._remoteAudioQueues[idx] = { queue: new Float32Array(32768), len: 0 };
+	}
+
+	async removeRemoteVfo(index) {
+		if (!this._remoteVfoWorkers) return;
+		const w = this._remoteVfoWorkers[index];
+		if (w) { try { w.terminate(); } catch (_) {} }
+		this._remoteVfoWorkers.splice(index, 1);
+		this._remoteVfoParams.splice(index, 1);
+		this._remoteAudioQueues.splice(index, 1);
+	}
+
+	_queueRemoteAudio(index, samples) {
+		const entry = this._remoteAudioQueues && this._remoteAudioQueues[index];
+		if (!entry) return;
+		const needed = entry.len + samples.length;
+		if (needed > entry.queue.length) {
+			const grown = new Float32Array(Math.max(needed * 2, 32768));
+			grown.set(entry.queue.subarray(0, entry.len));
+			entry.queue = grown;
+		}
+		entry.queue.set(samples, entry.len);
+		entry.len += samples.length;
+		this._mixAndEmitRemoteAudio();
+	}
+
+	_mixAndEmitRemoteAudio() {
+		if (!this._remoteVfoWorkers || !this._remoteHostAudioCb) return;
+		const BATCH = 512;
+		let minAvailable = Infinity;
+		const active = [];
+		for (let i = 0; i < this._remoteVfoWorkers.length; i++) {
+			const p = this._remoteVfoParams[i];
+			if (!p || !p.enabled) continue;
+			const q = this._remoteAudioQueues[i];
+			if (!q) continue;
+			if (q.len < minAvailable) minAvailable = q.len;
+			active.push({ q, p });
+		}
+		if (!active.length || minAvailable < BATCH || minAvailable === Infinity) return;
+		if (!this._remoteMixBuf || this._remoteMixBuf.length < minAvailable) {
+			this._remoteMixBuf = new Float32Array(minAvailable + 1024);
+		}
+		const mixed = this._remoteMixBuf;
+		mixed.fill(0, 0, minAvailable);
+		for (const { q, p } of active) {
+			const vol = (p.volume ?? 50) / 100;
+			const vScale = vol * vol;
+			for (let k = 0; k < minAvailable; k++) mixed[k] += q.queue[k] * vScale;
+			const rem = q.len - minAvailable;
+			if (rem > 0) q.queue.copyWithin(0, minAvailable, q.len);
+			q.len = rem;
+		}
+		for (let k = 0; k < minAvailable; k++) {
+			if (mixed[k] > 1) mixed[k] = 1;
+			else if (mixed[k] < -1) mixed[k] = -1;
+		}
+		this._remoteHostAudioCb(mixed.slice(0, minAvailable));
 	}
 
 	async initRemoteClient() {
@@ -1478,14 +1557,18 @@ class Worker {
 					}
 				}
 
-				// Also feed the dedicated remote-client VFO worker (independent from the host mixer)
-				if (this._remoteVfoWorker) {
-					const rp = this._remoteVfoParamsCurrent;
-					if (typeof SharedArrayBuffer !== 'undefined') {
-						this._remoteVfoWorker.postMessage({ type: 'process', params: rp, useSab: true, sabIndex: this.sabPoolIndex, chunkLen: signed.length, chunkId: chunkCounter });
-					} else {
-						const rClone = signed.slice().buffer;
-						this._remoteVfoWorker.postMessage({ type: 'process', params: rp, useSab: false, chunk: rClone, chunkLen: signed.length, chunkId: chunkCounter }, [rClone]);
+				// Feed all remote-client VFO workers (independent from the host mixer)
+				if (this._remoteVfoWorkers) {
+					for (let rv = 0; rv < this._remoteVfoWorkers.length; rv++) {
+						const rw = this._remoteVfoWorkers[rv];
+						if (!rw) continue;
+						const rp = this._remoteVfoParams[rv];
+						if (typeof SharedArrayBuffer !== 'undefined') {
+							rw.postMessage({ type: 'process', params: rp, useSab: true, sabIndex: this.sabPoolIndex, chunkLen: signed.length, chunkId: chunkCounter });
+						} else {
+							const rClone = signed.slice().buffer;
+							rw.postMessage({ type: 'process', params: rp, useSab: false, chunk: rClone, chunkLen: signed.length, chunkId: chunkCounter }, [rClone]);
+						}
 					}
 				}
 

@@ -548,16 +548,21 @@ createApp({
 				}
 			}, 500);
 
-			// Add additional VFOs to the worker (first one is created by default in worker)
+			// Add additional VFOs beyond the first (which is created by default in the worker).
+			// In client mode, notify the host via WebRTC instead of calling the mock backend.
 			for (let i = 1; i < this.vfos.length; i++) {
-				await this.backend.addVfo();
+				if (this.remoteMode === 'client' && this._webrtc) {
+					this._webrtc.sendCommand({ type: 'addRemoteVfo' });
+				} else {
+					await this.backend.addVfo();
+				}
 			}
 
 			// Enable first VFO by default when starting stream
 			this.vfos[0].enabled = true;
 			this.toggleVfoCheckbox(0);
 
-			// Send all VFO params to worker
+			// Send all VFO params to worker (or host in client mode)
 			for (let i = 0; i < this.vfos.length; i++) {
 				this.updateBackendVfoParams(i);
 			}
@@ -832,9 +837,9 @@ createApp({
 
 				if (this.remoteMode === 'client' && this._webrtc) {
 					// In client mode the local backend has no real DSP (mock hackrf).
-					// Send the VFO params to the host over the cmd channel so the host's
-					// dedicated _remoteVfoWorker demodulates the correct frequency and mode.
-					this._webrtc.sendCommand({ type: 'vfoUpdate', params });
+					// Send the VFO params to the host over the cmd channel so the host
+					// can configure the correct indexed remote VFO worker.
+					this._webrtc.sendCommand({ type: 'vfoUpdate', index, params });
 				} else {
 					this.backend.setVfoParams(index, params);
 				}
@@ -855,8 +860,14 @@ createApp({
 			const newVfo = makeDefaultVfo(this.radio.centerFreq);
 			this.vfos.push(newVfo);
 			if (this.backend && this.running) {
-				await this.backend.addVfo();
-				this.updateBackendVfoParams(this.vfos.length - 1);
+				if (this.remoteMode === 'client' && this._webrtc) {
+					// Tell the host to allocate a new remote VFO worker slot.
+					this._webrtc.sendCommand({ type: 'addRemoteVfo' });
+					this.updateBackendVfoParams(this.vfos.length - 1);
+				} else {
+					await this.backend.addVfo();
+					this.updateBackendVfoParams(this.vfos.length - 1);
+				}
 			}
 			this.activeVfoIndex = this.vfos.length - 1;
 
@@ -870,7 +881,11 @@ createApp({
 			if (this.vfos.length <= 1) return;
 			this.vfos.splice(index, 1);
 			if (this.backend && this.running) {
-				await this.backend.removeVfo(index);
+				if (this.remoteMode === 'client' && this._webrtc) {
+					this._webrtc.sendCommand({ type: 'removeRemoteVfo', index });
+				} else {
+					await this.backend.removeVfo(index);
+				}
 			}
 			if (this.activeVfoIndex >= this.vfos.length) {
 				this.activeVfoIndex = this.vfos.length - 1;
@@ -1617,9 +1632,15 @@ createApp({
 				if (cmd.locks) Object.assign(this.locks, cmd.locks);
 			} else if (cmd.type === 'vfoUpdate') {
 				if (this.remoteMode === 'host') {
-					// Client is telling us what frequency/mode they want. Configure the
-					// dedicated remote DSP worker on the host for this client.
-					this.backend.setRemoteVfoParams(cmd.params);
+					this.backend.setRemoteVfoParams(cmd.index, cmd.params);
+				}
+			} else if (cmd.type === 'addRemoteVfo') {
+				if (this.remoteMode === 'host') {
+					this.backend.addRemoteVfo();
+				}
+			} else if (cmd.type === 'removeRemoteVfo') {
+				if (this.remoteMode === 'host') {
+					this.backend.removeRemoteVfo(cmd.index);
 				}
 			} else if (cmd.type === 'requestChange') {
 				if (this.remoteMode === 'host') {
