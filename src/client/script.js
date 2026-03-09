@@ -613,19 +613,33 @@ createApp({
 				}
 			}
 
-			// Downsample for waterfall history
+			// Re-sample data to exactly renderSize bins for the waterfall texture.
+			// Downsample (max-hold) when input is larger, linear-interpolate when smaller
+			// (e.g. compressed remote frames arrive as 2048 bins but renderSize is 8192).
 			let wfData = data;
-			if (data.length > this.renderSize) {
+			if (data.length !== this.renderSize) {
 				wfData = new Float32Array(this.renderSize);
 				const factor = data.length / this.renderSize;
-				for (let i = 0; i < this.renderSize; i++) {
-					let maxVal = -1000;
-					const start = Math.floor(i * factor);
-					const end = Math.floor((i + 1) * factor);
-					for (let j = start; j < end; j++) {
-						if (data[j] > maxVal) maxVal = data[j];
+				if (data.length > this.renderSize) {
+					// Downsample: max-hold over each output bin's source span
+					for (let i = 0; i < this.renderSize; i++) {
+						let maxVal = -1000;
+						const start = Math.floor(i * factor);
+						const end = Math.floor((i + 1) * factor);
+						for (let j = start; j < end; j++) {
+							if (data[j] > maxVal) maxVal = data[j];
+						}
+						wfData[i] = maxVal;
 					}
-					wfData[i] = maxVal;
+				} else {
+					// Upsample: linear interpolation so compressed remote frames fill the texture
+					for (let i = 0; i < this.renderSize; i++) {
+						const srcPos = i * factor;
+						const lo = Math.floor(srcPos);
+						const hi = Math.min(lo + 1, data.length - 1);
+						const t = srcPos - lo;
+						wfData[i] = data[lo] * (1 - t) + data[hi] * t;
+					}
 				}
 			}
 
