@@ -96,16 +96,16 @@
 					<div class="panel-body" v-show="!collapsedPanels['source']">
 						<div class="form-row" style="flex-direction: column; gap: 8px;">
 							<template v-if="!connected && remoteMode !== 'client'">
-								<button class="btn btn-primary" @click="connect">Connect Device</button>
-								<button class="btn btn-secondary" v-if="isLocal" @click="connectMock">Connect Mock SDR</button>
+								<button class="btn btn-primary" style="width: 100%;" @click="connect">Connect Device</button>
+								<button class="btn btn-secondary" style="width: 100%;" v-if="isLocal" @click="connectMock">Connect Mock SDR</button>
 							</template>
-							<button class="btn" v-else @click="disconnect">{{ remoteMode === 'client' ? 'Disconnect Remote' : 'Disconnect' }}</button>
+							<button class="btn" style="width: 100%;" v-else @click="disconnect">{{ remoteMode === 'client' ? 'Disconnect Remote' : 'Disconnect' }}</button>
 						</div>
 						<div class="form-row info-row" v-if="connected && remoteMode !== 'client'">
 							<small>{{ info.boardName }}</small>
 						</div>
 						<div class="form-row" v-if="connected && remoteMode === 'none'">
-							<button class="btn btn-secondary" @click="startRemoteHost">Share Remote Access</button>
+							<button class="btn btn-secondary" style="width: 100%;" @click="startRemoteHost">Share Remote Access</button>
 						</div>
 						<div class="form-row" v-if="remoteMode === 'host'">
 							<small>Share this link: <a :href="remoteLink" target="_blank" style="color:var(--text);word-break:break-all">{{ remoteLink }}</a></small>
