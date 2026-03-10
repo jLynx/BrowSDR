@@ -1731,7 +1731,12 @@ createApp({
 
 			if (cmd.type === 'sync') {
 				this._applyingSync = true;
-				if (cmd.radio) Object.assign(this.radio, cmd.radio);
+				if (cmd.radio) {
+					// Flush stale audio to prevent glitches when sample rate or center freq changes
+					this.audioRingPos = 0;
+					this.nextPlayTime = 0;
+					Object.assign(this.radio, cmd.radio);
+				}
 				if (cmd.gains) Object.assign(this.gains, cmd.gains);
 				if (cmd.locks) Object.assign(this.locks, cmd.locks);
 				this.$nextTick(() => { this._applyingSync = false; });

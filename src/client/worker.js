@@ -722,6 +722,38 @@ class Worker {
 		this._remoteHostAudioCb(clientId, mixed.slice(0, minAvailable));
 	}
 
+	_reinitRemoteClientWorkers() {
+		if (!this._remoteClients) return;
+		for (const [clientId, state] of this._remoteClients) {
+			for (let i = 0; i < state.workers.length; i++) {
+				const oldWorker = state.workers[i];
+				if (!oldWorker) continue;
+				try { oldWorker.terminate(); } catch (_) {}
+
+				const params = state.params[i];
+				if (!params) { state.workers[i] = null; continue; }
+
+				const worker = new globalThis.Worker('./dsp-worker.js', { type: 'module' });
+				worker.onmessage = (e) => {
+					const msg = e.data;
+					if (msg.type === 'audio' && msg.samples) {
+						this._queueRemoteAudio(clientId, i, new Float32Array(msg.samples));
+					}
+				};
+				worker.postMessage({
+					type: 'init',
+					sampleRate: this._sampleRate,
+					centerFreq: this._centerFreq,
+					params: params,
+					sabs: typeof SharedArrayBuffer !== 'undefined' ? this.sharedIqPools : null
+				});
+				state.workers[i] = worker;
+				// Reset audio queue to discard stale samples
+				state.audioQueues[i] = { queue: new Float32Array(32768), len: 0 };
+			}
+		}
+	}
+
 	async initRemoteClient() {
 		await ensureWasmInitialized();
 		this.wasm = await init();
@@ -1612,6 +1644,11 @@ class Worker {
 			if (ampEnabled !== undefined) await hackrf.setAmpEnable(ampEnabled);
 			if (lnaGain !== undefined) await hackrf.setLnaGain(lnaGain);
 			if (vgaGain !== undefined) await hackrf.setVgaGain(vgaGain);
+
+			// Reinitialize all remote client DSP workers with the new sample rate
+			// and shared IQ buffers. Without this, remote workers hold stale references
+			// from the previous startRxStream and produce garbled audio.
+			this._reinitRemoteClientWorkers();
 		} catch (e) {
 			console.error("DEBUG CRASH IN STARTRXSTREAM:", e);
 			throw e;
