@@ -94,6 +94,7 @@ createApp({
 			},
 			locks: {
 				centerFreq: false,
+				sampleRate: false,
 				lna: false,
 				vga: false,
 				amp: false,
@@ -1738,6 +1739,7 @@ createApp({
 					let allow = true;
 
 					if (target === 'radio' && property === 'centerFreq' && this.locks.centerFreq) allow = false;
+					if (target === 'radio' && property === 'sampleRate' && this.locks.sampleRate) allow = false;
 					if (target === 'gains') {
 						if (property === 'lna' && this.locks.lna) allow = false;
 						if (property === 'vga' && this.locks.vga) allow = false;

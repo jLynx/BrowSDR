@@ -136,7 +136,7 @@
 						</div>
 						<div class="form-row">
 							<label>Sample Rate</label>
-							<select v-model.number="radio.sampleRate">
+							<select v-model.number="radio.sampleRate" :disabled="remoteMode === 'client' && locks.sampleRate">
 								<option value="2000000">2 MSPS</option>
 								<option value="4000000">4 MSPS</option>
 								<option value="8000000">8 MSPS</option>
@@ -144,6 +144,10 @@
 								<option value="16000000">16 MSPS</option>
 								<option value="20000000">20 MSPS</option>
 							</select>
+							<div class="lock-btn" v-if="remoteMode === 'host' || (remoteMode === 'client' && locks.sampleRate)" @click="remoteMode === 'host' && (locks.sampleRate = !locks.sampleRate)" :class="{ locked: locks.sampleRate, host: remoteMode === 'host' }" :title="remoteMode === 'host' ? 'Toggle Lock' : 'Locked by Host'">
+								<svg v-if="locks.sampleRate" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+								<svg v-else viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm5.1-9H7.9V6c0-2.26 1.84-4.1 4.1-4.1s4.1 1.84 4.1 4.1v2z" opacity="0.3"/></svg>
+							</div>
 						</div>
 						<div class="form-row">
 							<label>LNA Gain</label>
