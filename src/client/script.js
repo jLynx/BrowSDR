@@ -1551,6 +1551,11 @@ createApp({
 			}
 			console.log("[WebRTC] Setting up Host Mode. Mode =", this.remoteMode);
 			this.remoteMode = 'host';
+			this.locks.centerFreq = true;
+			this.locks.sampleRate = true;
+			this.locks.lna = true;
+			this.locks.vga = true;
+			this.locks.amp = true;
 			this.remoteStatus = 'Generating ID...';
 			
 			console.log("[WebRTC] Instantiating WebRTCHandler");
