@@ -618,6 +618,9 @@ createApp({
 			fft.style.height = rect.height + 'px';
 			this._fftCtx = fft.getContext('2d');
 			this._fftCtx.scale(dpr, dpr);
+
+			// Re-apply saved zoom to the newly created engine
+			this.applyZoomToEngine();
 		},
 		drawSpectrum(data) {
 			if (!this._fftCtx) return;
