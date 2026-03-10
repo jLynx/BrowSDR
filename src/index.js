@@ -20,38 +20,43 @@ export default {
 			);
 		}
 
-		// Generate short-lived TURN credentials via Cloudflare Calls
-		// Requires TURN_KEY_ID and TURN_KEY_API_TOKEN secrets set on the Worker
+		// Return TURN/STUN ICE servers for WebRTC connectivity.
+		// Uses ExpressTURN (free) as primary, Cloudflare TURN as fallback.
 		if (url.pathname === '/api/turn') {
-			if (!env.TURN_KEY_ID || !env.TURN_KEY_API_TOKEN) {
-				return new Response(
-					JSON.stringify({ iceServers: [] }),
-					{ headers: { 'Content-Type': 'application/json' } }
-				);
+			const iceServers = [];
+
+			// Primary: ExpressTURN (free, static credentials)
+			if (env.EXPRESS_TURN_URL && env.EXPRESS_TURN_USER && env.EXPRESS_TURN_PASS) {
+				iceServers.push({
+					urls: [`turn:${env.EXPRESS_TURN_URL}`, `stun:${env.EXPRESS_TURN_URL}`],
+					username: env.EXPRESS_TURN_USER,
+					credential: env.EXPRESS_TURN_PASS,
+				});
 			}
-			try {
-				const turnResp = await fetch(
-					`https://rtc.live.cloudflare.com/v1/turn/keys/${env.TURN_KEY_ID}/credentials/generate-ice-servers`,
-					{
-						method: 'POST',
-						headers: {
-							'Authorization': `Bearer ${env.TURN_KEY_API_TOKEN}`,
-							'Content-Type': 'application/json',
-						},
-						body: JSON.stringify({ ttl: 14400 }), // 4 hours
-					}
-				);
-				const data = await turnResp.json();
-				return new Response(
-					JSON.stringify(data),
-					{ headers: { 'Content-Type': 'application/json' } }
-				);
-			} catch (err) {
-				return new Response(
-					JSON.stringify({ iceServers: [], error: err.message }),
-					{ status: 500, headers: { 'Content-Type': 'application/json' } }
-				);
+
+			// Fallback: Cloudflare TURN (paid beyond 1TB free tier)
+			if (env.TURN_KEY_ID && env.TURN_KEY_API_TOKEN) {
+				try {
+					const turnResp = await fetch(
+						`https://rtc.live.cloudflare.com/v1/turn/keys/${env.TURN_KEY_ID}/credentials/generate-ice-servers`,
+						{
+							method: 'POST',
+							headers: {
+								'Authorization': `Bearer ${env.TURN_KEY_API_TOKEN}`,
+								'Content-Type': 'application/json',
+							},
+							body: JSON.stringify({ ttl: 14400 }), // 4 hours
+						}
+					);
+					const data = await turnResp.json();
+					if (data.iceServers) iceServers.push(...data.iceServers);
+				} catch (_) {}
 			}
+
+			return new Response(
+				JSON.stringify({ iceServers }),
+				{ headers: { 'Content-Type': 'application/json' } }
+			);
 		}
 
 		// Proxy HuggingFace model downloads to avoid CORS issues

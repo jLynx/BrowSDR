@@ -1570,7 +1570,7 @@ createApp({
 					console.log("[WebRTC] Link completely generated:", this.remoteLink);
 				} else if (status.status === 'client-connected') {
 					const clientId = status.clientId;
-					this.remoteClients.push({ id: clientId, connectedAt: Date.now(), country: '', vfoCount: 1, firstFreq: null });
+					this.remoteClients.push({ id: clientId, connectedAt: Date.now(), country: '', vfoCount: 1, firstFreq: null, isRelay: !!status.isRelay });
 					this.remoteStatus = this.remoteClients.length + ' client' + (this.remoteClients.length !== 1 ? 's' : '') + ' connected';
 					this.showMsg("Remote client joined!");
 					// Register client in worker and sync current state

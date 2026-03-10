@@ -1536,6 +1536,15 @@ canvas {
 .remote-client-freq {
 	font-family: monospace;
 }
+.remote-client-relay {
+	background: rgba(255, 165, 0, 0.2);
+	color: #ffa500;
+	border: 1px solid rgba(255, 165, 0, 0.4);
+	border-radius: 3px;
+	padding: 0 4px;
+	font-size: 10px;
+	font-weight: 700;
+}
 .remote-client-duration {
 	font-size: 11px;
 	color: var(--text-dim);
