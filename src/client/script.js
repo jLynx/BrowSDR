@@ -73,6 +73,8 @@ createApp({
 			remoteMode: 'none', // 'none' | 'host' | 'client'
 			remoteStatus: '',
 			remoteLink: '',
+			remoteClients: [],        // [{ id, connectedAt }]
+			showRemoteClientsDialog: false,
 			remotePeerId: '',
 			snackbar: { show: false, message: "" },
 			audioUnlockPendingId: null,
@@ -471,6 +473,8 @@ createApp({
 				this._webrtc.close();
 				this._webrtc = null;
 				this.remoteMode = 'none';
+				this.remoteClients = [];
+				this.showRemoteClientsDialog = false;
 				this.showMsg("Remote sharing stopped");
 			}
 
@@ -1558,13 +1562,23 @@ createApp({
 					const origin = window.location.origin;
 					this.remoteLink = `${origin}/?connect=${status.id}`;
 					console.log("[WebRTC] Link completely generated:", this.remoteLink);
-				} else if (status.status === 'connected') {
-					this.remoteStatus = 'Client connected';
+				} else if (status.status === 'client-connected') {
+					const clientId = status.clientId;
+					this.remoteClients.push({ id: clientId, connectedAt: Date.now() });
+					this.remoteStatus = this.remoteClients.length + ' client' + (this.remoteClients.length !== 1 ? 's' : '') + ' connected';
 					this.showMsg("Remote client joined!");
-					// Sync current state to client
-					this._webrtc.sendCommand({ type: 'sync', radio: this.radio, gains: this.gains, locks: this.locks });
-				} else if (status.status === 'disconnected') {
-					this.remoteStatus = 'Client disconnected';
+					// Register client in worker and sync current state
+					this.backend.addRemoteClient(clientId);
+					this._webrtc.sendCommandTo(clientId, { type: 'sync', radio: this.radio, gains: this.gains, locks: this.locks });
+				} else if (status.status === 'client-disconnected') {
+					const clientId = status.clientId;
+					this.remoteClients = this.remoteClients.filter(c => c.id !== clientId);
+					this.backend.removeRemoteClient(clientId);
+					if (this.remoteClients.length > 0) {
+						this.remoteStatus = this.remoteClients.length + ' client' + (this.remoteClients.length !== 1 ? 's' : '') + ' connected';
+					} else {
+						this.remoteStatus = 'Waiting for connection';
+					}
 					this.showMsg("Remote client left.");
 				} else if (status.status === 'error') {
 					this.remoteMode = 'none';
@@ -1572,7 +1586,7 @@ createApp({
 				}
 			};
 
-			this._webrtc.onCommand = (cmd) => this.handleRemoteCommand(cmd);
+			this._webrtc.onCommand = (clientId, cmd) => this.handleRemoteCommand(clientId, cmd);
 
 			console.log("[WebRTC] Calling _webrtc.init()");
 			await this._webrtc.init();
@@ -1606,10 +1620,10 @@ createApp({
 				}
 				this._webrtc.sendFftChunk(pkt);
 			}));
-			// Setup worker to push processed Audio buffer callbacks
-			await this.backend.setRemoteHostAudioCallback(Comlink.proxy((chunk) => {
+			// Setup worker to push processed Audio buffer callbacks (per-client)
+			await this.backend.setRemoteHostAudioCallback(Comlink.proxy((clientId, chunk) => {
 				if (this._webrtc) {
-					this._webrtc.sendAudioChunk(chunk);
+					this._webrtc.sendAudioChunkTo(clientId, chunk);
 				}
 			}));
 		},
@@ -1691,22 +1705,32 @@ createApp({
 				this.showMsg("Failed to initialize remote client.");
 			}
 		},
-		handleRemoteCommand(cmd) {
+		handleRemoteCommand(clientIdOrCmd, cmdOrUndefined) {
+			// Support both (clientId, cmd) from host and (cmd) from client
+			let clientId, cmd;
+			if (cmdOrUndefined === undefined) {
+				cmd = clientIdOrCmd;
+				clientId = null;
+			} else {
+				clientId = clientIdOrCmd;
+				cmd = cmdOrUndefined;
+			}
+
 			if (cmd.type === 'sync') {
 				if (cmd.radio) Object.assign(this.radio, cmd.radio);
 				if (cmd.gains) Object.assign(this.gains, cmd.gains);
 				if (cmd.locks) Object.assign(this.locks, cmd.locks);
 			} else if (cmd.type === 'vfoUpdate') {
-				if (this.remoteMode === 'host') {
-					this.backend.setRemoteVfoParams(cmd.index, cmd.params);
+				if (this.remoteMode === 'host' && clientId) {
+					this.backend.setRemoteVfoParams(clientId, cmd.index, cmd.params);
 				}
 			} else if (cmd.type === 'addRemoteVfo') {
-				if (this.remoteMode === 'host') {
-					this.backend.addRemoteVfo();
+				if (this.remoteMode === 'host' && clientId) {
+					this.backend.addRemoteVfo(clientId);
 				}
 			} else if (cmd.type === 'removeRemoteVfo') {
-				if (this.remoteMode === 'host') {
-					this.backend.removeRemoteVfo(cmd.index);
+				if (this.remoteMode === 'host' && clientId) {
+					this.backend.removeRemoteVfo(clientId, cmd.index);
 				}
 			} else if (cmd.type === 'requestChange') {
 				if (this.remoteMode === 'host') {
@@ -1723,14 +1747,34 @@ createApp({
 					if (allow) {
 						if (target === 'radio') this.radio[property] = value;
 						else if (target === 'gains') this.gains[property] = value;
-						// Sync back so the client updates their frontend
+						// Sync back so all clients update their frontend
 						this._webrtc.sendCommand({ type: 'sync', radio: this.radio, gains: this.gains });
-					} else {
-						// Reject the change. Sync back the *current* real state so the client's UI snaps back.
-						this._webrtc.sendCommand({ type: 'sync', radio: this.radio, gains: this.gains });
+					} else if (clientId) {
+						// Reject the change. Sync back the *current* real state so the requesting client's UI snaps back.
+						this._webrtc.sendCommandTo(clientId, { type: 'sync', radio: this.radio, gains: this.gains });
 					}
 				}
 			}
+		},
+		kickRemoteClient(clientId) {
+			if (!this._webrtc) return;
+			this._webrtc.kickClient(clientId);
+			this.backend.removeRemoteClient(clientId);
+			this.remoteClients = this.remoteClients.filter(c => c.id !== clientId);
+			if (this.remoteClients.length > 0) {
+				this.remoteStatus = this.remoteClients.length + ' client' + (this.remoteClients.length !== 1 ? 's' : '') + ' connected';
+			} else {
+				this.remoteStatus = 'Waiting for connection';
+			}
+			this.showMsg("Client kicked.");
+		},
+		remoteClientDuration(connectedAt) {
+			const seconds = Math.floor((Date.now() - connectedAt) / 1000);
+			if (seconds < 60) return seconds + 's';
+			const minutes = Math.floor(seconds / 60);
+			if (minutes < 60) return minutes + 'm';
+			const hours = Math.floor(minutes / 60);
+			return hours + 'h ' + (minutes % 60) + 'm';
 		}
 	},
 	created: async function () {

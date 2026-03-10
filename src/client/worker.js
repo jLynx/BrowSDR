@@ -575,34 +575,62 @@ class Worker {
 		this._remoteHostFftCb = callback;
 	}
 	async setRemoteHostAudioCallback(callback) {
+		// callback signature: (clientId, chunk)
 		this._remoteHostAudioCb = callback;
 	}
 
-	// ── Remote-client VFO management ─────────────────────────────────────────
-	// The client has its own independent set of VFOs. For each one the host
-	// spawns a dedicated DSP worker so the client can tune freely without
-	// affecting the host's own VFOs. Audio from all remote workers is mixed
-	// (respecting per-VFO volume) before being sent to _remoteHostAudioCb.
+	// ── Remote-client VFO management (multi-client) ──────────────────────────
+	// Each connected client has its own independent set of VFOs. For each one
+	// the host spawns a dedicated DSP worker so the client can tune freely
+	// without affecting the host's or other clients' VFOs. Audio from each
+	// client's workers is mixed (respecting per-VFO volume) and sent back to
+	// that specific client via _remoteHostAudioCb(clientId, chunk).
 
-	_ensureRemoteVfoArrays() {
-		if (!this._remoteVfoWorkers) {
-			this._remoteVfoWorkers = [];
-			this._remoteVfoParams  = [];
-			this._remoteAudioQueues = [];
+	_ensureRemoteClients() {
+		if (!this._remoteClients) {
+			this._remoteClients = new Map();
 		}
 	}
 
-	async setRemoteVfoParams(index, params) {
-		this._ensureRemoteVfoArrays();
-		this._remoteVfoParams[index] = params;
+	_getOrCreateClientState(clientId) {
+		this._ensureRemoteClients();
+		if (!this._remoteClients.has(clientId)) {
+			this._remoteClients.set(clientId, {
+				workers: [],
+				params: [],
+				audioQueues: [],
+				mixBuf: null
+			});
+		}
+		return this._remoteClients.get(clientId);
+	}
 
-		if (!this._remoteVfoWorkers[index]) {
+	async addRemoteClient(clientId) {
+		this._getOrCreateClientState(clientId);
+	}
+
+	async removeRemoteClient(clientId) {
+		this._ensureRemoteClients();
+		const state = this._remoteClients.get(clientId);
+		if (!state) return;
+		// Terminate all DSP workers for this client
+		for (const w of state.workers) {
+			if (w) { try { w.terminate(); } catch (_) {} }
+		}
+		this._remoteClients.delete(clientId);
+	}
+
+	async setRemoteVfoParams(clientId, index, params) {
+		const state = this._getOrCreateClientState(clientId);
+		state.params[index] = params;
+
+		if (!state.workers[index]) {
 			if (!this._sampleRate || !this.sharedIqPools) return;
 			const worker = new globalThis.Worker('./dsp-worker.js', { type: 'module' });
 			worker.onmessage = (e) => {
 				const msg = e.data;
 				if (msg.type === 'audio' && msg.samples) {
-					this._queueRemoteAudio(index, new Float32Array(msg.samples));
+					this._queueRemoteAudio(clientId, index, new Float32Array(msg.samples));
 				}
 			};
 			worker.postMessage({
@@ -612,10 +640,10 @@ class Worker {
 				params: params,
 				sabs: typeof SharedArrayBuffer !== 'undefined' ? this.sharedIqPools : null
 			});
-			this._remoteVfoWorkers[index] = worker;
-			this._remoteAudioQueues[index] = { queue: new Float32Array(32768), len: 0 };
+			state.workers[index] = worker;
+			state.audioQueues[index] = { queue: new Float32Array(32768), len: 0 };
 		} else {
-			this._remoteVfoWorkers[index].postMessage({
+			state.workers[index].postMessage({
 				type: 'configure',
 				params: params,
 				centerFreq: this._centerFreq
@@ -623,27 +651,30 @@ class Worker {
 		}
 	}
 
-	async addRemoteVfo() {
-		this._ensureRemoteVfoArrays();
+	async addRemoteVfo(clientId) {
+		const state = this._getOrCreateClientState(clientId);
 		// Worker is spawned lazily on first setRemoteVfoParams for this index.
 		// Pre-initialise the audio queue slot so the mixer doesn't see sparse gaps.
-		const idx = this._remoteVfoWorkers.length;
-		this._remoteVfoWorkers[idx] = null;
-		this._remoteVfoParams[idx]   = null;
-		this._remoteAudioQueues[idx] = { queue: new Float32Array(32768), len: 0 };
+		const idx = state.workers.length;
+		state.workers[idx] = null;
+		state.params[idx]   = null;
+		state.audioQueues[idx] = { queue: new Float32Array(32768), len: 0 };
 	}
 
-	async removeRemoteVfo(index) {
-		if (!this._remoteVfoWorkers) return;
-		const w = this._remoteVfoWorkers[index];
+	async removeRemoteVfo(clientId, index) {
+		const state = this._remoteClients && this._remoteClients.get(clientId);
+		if (!state) return;
+		const w = state.workers[index];
 		if (w) { try { w.terminate(); } catch (_) {} }
-		this._remoteVfoWorkers.splice(index, 1);
-		this._remoteVfoParams.splice(index, 1);
-		this._remoteAudioQueues.splice(index, 1);
+		state.workers.splice(index, 1);
+		state.params.splice(index, 1);
+		state.audioQueues.splice(index, 1);
 	}
 
-	_queueRemoteAudio(index, samples) {
-		const entry = this._remoteAudioQueues && this._remoteAudioQueues[index];
+	_queueRemoteAudio(clientId, index, samples) {
+		const state = this._remoteClients && this._remoteClients.get(clientId);
+		if (!state) return;
+		const entry = state.audioQueues[index];
 		if (!entry) return;
 		const needed = entry.len + samples.length;
 		if (needed > entry.queue.length) {
@@ -653,27 +684,29 @@ class Worker {
 		}
 		entry.queue.set(samples, entry.len);
 		entry.len += samples.length;
-		this._mixAndEmitRemoteAudio();
+		this._mixAndEmitRemoteAudio(clientId);
 	}
 
-	_mixAndEmitRemoteAudio() {
-		if (!this._remoteVfoWorkers || !this._remoteHostAudioCb) return;
+	_mixAndEmitRemoteAudio(clientId) {
+		if (!this._remoteHostAudioCb) return;
+		const state = this._remoteClients && this._remoteClients.get(clientId);
+		if (!state) return;
 		const BATCH = 512;
 		let minAvailable = Infinity;
 		const active = [];
-		for (let i = 0; i < this._remoteVfoWorkers.length; i++) {
-			const p = this._remoteVfoParams[i];
+		for (let i = 0; i < state.workers.length; i++) {
+			const p = state.params[i];
 			if (!p || !p.enabled) continue;
-			const q = this._remoteAudioQueues[i];
+			const q = state.audioQueues[i];
 			if (!q) continue;
 			if (q.len < minAvailable) minAvailable = q.len;
 			active.push({ q, p });
 		}
 		if (!active.length || minAvailable < BATCH || minAvailable === Infinity) return;
-		if (!this._remoteMixBuf || this._remoteMixBuf.length < minAvailable) {
-			this._remoteMixBuf = new Float32Array(minAvailable + 1024);
+		if (!state.mixBuf || state.mixBuf.length < minAvailable) {
+			state.mixBuf = new Float32Array(minAvailable + 1024);
 		}
-		const mixed = this._remoteMixBuf;
+		const mixed = state.mixBuf;
 		mixed.fill(0, 0, minAvailable);
 		for (const { q, p } of active) {
 			const vol = (p.volume ?? 50) / 100;
@@ -687,7 +720,7 @@ class Worker {
 			if (mixed[k] > 1) mixed[k] = 1;
 			else if (mixed[k] < -1) mixed[k] = -1;
 		}
-		this._remoteHostAudioCb(mixed.slice(0, minAvailable));
+		this._remoteHostAudioCb(clientId, mixed.slice(0, minAvailable));
 	}
 
 	async initRemoteClient() {
@@ -1558,16 +1591,18 @@ class Worker {
 				}
 
 				// Feed all remote-client VFO workers (independent from the host mixer)
-				if (this._remoteVfoWorkers) {
-					for (let rv = 0; rv < this._remoteVfoWorkers.length; rv++) {
-						const rw = this._remoteVfoWorkers[rv];
-						if (!rw) continue;
-						const rp = this._remoteVfoParams[rv];
-						if (typeof SharedArrayBuffer !== 'undefined') {
-							rw.postMessage({ type: 'process', params: rp, useSab: true, sabIndex: this.sabPoolIndex, chunkLen: signed.length, chunkId: chunkCounter });
-						} else {
-							const rClone = signed.slice().buffer;
-							rw.postMessage({ type: 'process', params: rp, useSab: false, chunk: rClone, chunkLen: signed.length, chunkId: chunkCounter }, [rClone]);
+				if (this._remoteClients) {
+					for (const [, clientState] of this._remoteClients) {
+						for (let rv = 0; rv < clientState.workers.length; rv++) {
+							const rw = clientState.workers[rv];
+							if (!rw) continue;
+							const rp = clientState.params[rv];
+							if (typeof SharedArrayBuffer !== 'undefined') {
+								rw.postMessage({ type: 'process', params: rp, useSab: true, sabIndex: this.sabPoolIndex, chunkLen: signed.length, chunkId: chunkCounter });
+							} else {
+								const rClone = signed.slice().buffer;
+								rw.postMessage({ type: 'process', params: rp, useSab: false, chunk: rClone, chunkLen: signed.length, chunkId: chunkCounter }, [rClone]);
+							}
 						}
 					}
 				}
