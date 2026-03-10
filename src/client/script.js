@@ -73,6 +73,8 @@ createApp({
 			remoteMode: 'none', // 'none' | 'host' | 'client'
 			remoteStatus: '',
 			remoteLink: '',
+			copyLinkSuccess: false,
+			copyLinkTooltip: 'Copy link',
 			remoteClients: [],        // [{ id, connectedAt }]
 			showRemoteClientsDialog: false,
 			remotePeerId: '',
@@ -260,6 +262,16 @@ createApp({
 		}
 	},
 	methods: {
+		copyRemoteLink() {
+			navigator.clipboard.writeText(this.remoteLink).then(() => {
+				this.copyLinkSuccess = true;
+				this.copyLinkTooltip = 'Copied!';
+				setTimeout(() => {
+					this.copyLinkSuccess = false;
+					this.copyLinkTooltip = 'Copy link';
+				}, 2000);
+			});
+		},
 		togglePanel(key) {
 			this.collapsedPanels[key] = !this.collapsedPanels[key];
 		},

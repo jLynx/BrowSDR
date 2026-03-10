@@ -108,7 +108,14 @@
 							<button class="btn btn-secondary" style="width: 100%;" @click="startRemoteHost">Share Remote Access</button>
 						</div>
 						<div class="form-row remote-host-info" v-if="remoteMode === 'host'">
-							<small>Share this link: <a :href="remoteLink" target="_blank" class="remote-share-link">{{ remoteLink }}</a></small>
+							<small>Share this link:</small>
+							<div class="share-link-box">
+								<a :href="remoteLink" target="_blank" class="remote-share-link">{{ remoteLink }}</a>
+								<button class="btn-copy" @click="copyRemoteLink" :title="copyLinkTooltip">
+									<svg v-if="!copyLinkSuccess" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+									<svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+								</button>
+							</div>
 							<button class="btn btn-secondary btn-full" @click="showRemoteClientsDialog = true">
 								Manage Clients
 								<span v-if="remoteClients.length" class="client-count-badge">{{ remoteClients.length }}</span>

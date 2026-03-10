@@ -1477,9 +1477,42 @@ canvas {
 	flex-direction: column;
 	gap: 12px;
 }
-.remote-share-link {
+.share-link-box {
+	display: flex;
+	align-items: stretch;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	overflow: hidden;
+}
+.share-link-box .remote-share-link {
+	flex: 1;
+	min-width: 0;
+	padding: 6px 10px;
 	color: var(--text);
 	word-break: break-all;
+	font-size: 12px;
+	line-height: 1.4;
+	text-decoration: none;
+}
+.share-link-box .remote-share-link:hover {
+	text-decoration: underline;
+}
+.btn-copy {
+	background: var(--bg-header);
+	border: none;
+	border-left: 1px solid var(--border);
+	color: var(--text);
+	cursor: pointer;
+	padding: 6px 10px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: background 0.15s;
+	flex-shrink: 0;
+}
+.btn-copy:hover {
+	background: var(--border);
 }
 .btn-full {
 	width: 100%;
