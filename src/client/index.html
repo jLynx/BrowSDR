@@ -24,6 +24,7 @@
 
 	<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&family=Roboto+Mono&display=swap" rel="stylesheet">
 	<link rel="stylesheet" href="style.css">
+	<script src="lib/peerjs.min.js"></script>
 	<script src="script.js" type="module"></script>
 </head>
 <body>
@@ -52,7 +53,7 @@
 						@focus="focusVfoFreq(i)">
 					<div class="vfo-unit">MHz</div>
 					<span class="vfo-rx-badge" v-if="vfo.squelchEnabled && vfoSquelchOpen[i]" :style="{ background: vfoColor(i) }" title="Squelch open – receiving">RX</span>
-					<span class="vfo-mute-badge" v-if="!vfo.enabled" title="Audio disabled">MUTE</span>
+					<span class="vfo-mute-badge" v-if="!vfo.enabled" title="Audio disabled"><svg viewBox="0 0 24 24" width="12" height="12"><path fill="currentColor" d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg></span>
 					<span class="vfo-bookmark-label" v-if="vfoBookmarkLabel(i)" :title="vfoBookmarkLabel(i)">{{ vfoBookmarkLabel(i) }}</span>
 				</div>
 			</div>
@@ -89,12 +90,36 @@
 						<svg class="panel-chevron" :class="{ 'panel-chevron-collapsed': collapsedPanels['source'] }" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
 					</div>
 					<div class="panel-body" v-show="!collapsedPanels['source']">
-						<div class="form-row">
-							<button class="btn btn-primary" v-if="!connected" @click="connect">Connect Device</button>
-							<button class="btn" v-else @click="disconnect">Disconnect</button>
+						<div class="remote-status" v-if="remoteMode !== 'none'" :class="'remote-' + remoteMode">
+							<span class="remote-badge">{{ remoteMode.toUpperCase() }}</span>
+							<span class="remote-text">{{ remoteStatus }}</span>
 						</div>
-						<div class="form-row info-row" v-if="connected">
+						<div class="form-row" style="flex-direction: column; gap: 8px;">
+							<template v-if="!connected && remoteMode !== 'client'">
+								<button class="btn btn-primary" style="width: 100%;" @click="connect">Connect Device</button>
+								<button class="btn btn-secondary" style="width: 100%;" v-if="isLocal" @click="connectMock">Connect Mock SDR</button>
+							</template>
+							<button class="btn" style="width: 100%;" v-else @click="disconnect">{{ remoteMode === 'client' ? 'Disconnect Remote' : 'Disconnect' }}</button>
+						</div>
+						<div class="form-row info-row" v-if="connected && remoteMode !== 'client'">
 							<small>{{ info.boardName }}</small>
+						</div>
+						<div class="form-row" v-if="connected && remoteMode === 'none'">
+							<button class="btn btn-secondary" style="width: 100%;" @click="startRemoteHost">Share Remote Access</button>
+						</div>
+						<div class="form-row remote-host-info" v-if="remoteMode === 'host'">
+							<small>Share this link:</small>
+							<div class="share-link-box">
+								<a :href="remoteLink" target="_blank" class="remote-share-link">{{ remoteLink }}</a>
+								<button class="btn-copy" @click="copyRemoteLink" :title="copyLinkTooltip">
+									<svg v-if="!copyLinkSuccess" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+									<svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+								</button>
+							</div>
+							<button class="btn btn-secondary btn-full" @click="showRemoteClientsDialog = true">
+								Manage Clients
+								<span v-if="remoteClients.length" class="client-count-badge">{{ remoteClients.length }}</span>
+							</button>
 						</div>
 					</div>
 				</div>
@@ -108,13 +133,17 @@
 						<div class="form-row">
 							<label>Center</label>
 							<div class="input-group">
-								<input type="number" v-model.number="radio.centerFreq" step="0.1" title="Center Frequency (MHz)">
+								<input type="number" v-model.number="radio.centerFreq" step="0.1" title="Center Frequency (MHz)" :disabled="remoteMode === 'client' && locks.centerFreq">
 								<span>MHz</span>
+							</div>
+							<div class="lock-btn" v-if="remoteMode === 'host' || (remoteMode === 'client' && locks.centerFreq)" @click="remoteMode === 'host' && (locks.centerFreq = !locks.centerFreq)" :class="{ locked: locks.centerFreq, host: remoteMode === 'host' }" :title="remoteMode === 'host' ? 'Toggle Lock' : 'Locked by Host'">
+								<svg v-if="locks.centerFreq" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+								<svg v-else viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm5.1-9H7.9V6c0-2.26 1.84-4.1 4.1-4.1s4.1 1.84 4.1 4.1v2z" opacity="0.3"/></svg>
 							</div>
 						</div>
 						<div class="form-row">
 							<label>Sample Rate</label>
-							<select v-model.number="radio.sampleRate">
+							<select v-model.number="radio.sampleRate" :disabled="remoteMode === 'client' && locks.sampleRate">
 								<option value="2000000">2 MSPS</option>
 								<option value="4000000">4 MSPS</option>
 								<option value="8000000">8 MSPS</option>
@@ -122,25 +151,41 @@
 								<option value="16000000">16 MSPS</option>
 								<option value="20000000">20 MSPS</option>
 							</select>
+							<div class="lock-btn" v-if="remoteMode === 'host' || (remoteMode === 'client' && locks.sampleRate)" @click="remoteMode === 'host' && (locks.sampleRate = !locks.sampleRate)" :class="{ locked: locks.sampleRate, host: remoteMode === 'host' }" :title="remoteMode === 'host' ? 'Toggle Lock' : 'Locked by Host'">
+								<svg v-if="locks.sampleRate" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+								<svg v-else viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm5.1-9H7.9V6c0-2.26 1.84-4.1 4.1-4.1s4.1 1.84 4.1 4.1v2z" opacity="0.3"/></svg>
+							</div>
 						</div>
 						<div class="form-row">
 							<label>LNA Gain</label>
 							<div class="slider-group">
-								<input type="range" v-model.number="gains.lna" min="0" max="40" step="8">
+								<input type="range" v-model.number="gains.lna" min="0" max="40" step="8" :disabled="remoteMode === 'client' && locks.lna">
 								<span class="val">{{ gains.lna }}dB</span>
+							</div>
+							<div class="lock-btn" v-if="remoteMode === 'host' || (remoteMode === 'client' && locks.lna)" @click="remoteMode === 'host' && (locks.lna = !locks.lna)" :class="{ locked: locks.lna, host: remoteMode === 'host' }" :title="remoteMode === 'host' ? 'Toggle Lock' : 'Locked by Host'">
+								<svg v-if="locks.lna" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+								<svg v-else viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm5.1-9H7.9V6c0-2.26 1.84-4.1 4.1-4.1s4.1 1.84 4.1 4.1v2z" opacity="0.3"/></svg>
 							</div>
 						</div>
 						<div class="form-row">
 							<label>VGA Gain</label>
 							<div class="slider-group">
-								<input type="range" v-model.number="gains.vga" min="0" max="62" step="2">
+								<input type="range" v-model.number="gains.vga" min="0" max="62" step="2" :disabled="remoteMode === 'client' && locks.vga">
 								<span class="val">{{ gains.vga }}dB</span>
+							</div>
+							<div class="lock-btn" v-if="remoteMode === 'host' || (remoteMode === 'client' && locks.vga)" @click="remoteMode === 'host' && (locks.vga = !locks.vga)" :class="{ locked: locks.vga, host: remoteMode === 'host' }" :title="remoteMode === 'host' ? 'Toggle Lock' : 'Locked by Host'">
+								<svg v-if="locks.vga" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+								<svg v-else viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm5.1-9H7.9V6c0-2.26 1.84-4.1 4.1-4.1s4.1 1.84 4.1 4.1v2z" opacity="0.3"/></svg>
 							</div>
 						</div>
 						<div class="form-row">
-							<label class="checkbox">
-								<input type="checkbox" v-model="gains.ampEnabled"> Amp (14dB)
+							<label class="checkbox" style="flex:1" :style="{ opacity: (remoteMode === 'client' && locks.amp) ? 0.5 : 1 }">
+								<input type="checkbox" v-model="gains.ampEnabled" :disabled="remoteMode === 'client' && locks.amp"> Amp (14dB)
 							</label>
+							<div class="lock-btn" v-if="remoteMode === 'host' || (remoteMode === 'client' && locks.amp)" @click="remoteMode === 'host' && (locks.amp = !locks.amp)" :class="{ locked: locks.amp, host: remoteMode === 'host' }" :title="remoteMode === 'host' ? 'Toggle Lock' : 'Locked by Host'">
+								<svg v-if="locks.amp" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+								<svg v-else viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm5.1-9H7.9V6c0-2.26 1.84-4.1 4.1-4.1s4.1 1.84 4.1 4.1v2z" opacity="0.3"/></svg>
+							</div>
 						</div>
 					</div>
 				</div>
@@ -154,10 +199,10 @@
 						</div>
 						<div style="display: flex; align-items: center; gap: 4px;" @click.stop>
 							<button v-if="vfos.length > 1" class="vfo-remove-btn" @click="removeVfo(i)" title="Remove VFO">&times;</button>
-							<label class="custom-checkbox header-checkbox">
-								<input type="checkbox" v-model="vfo.enabled" @change="toggleVfoCheckbox(i)" :disabled="!running">
-								<span class="checkmark"></span>
-							</label>
+							<button class="vfo-mute-btn" :class="{ muted: !vfo.enabled }" @click="vfo.enabled = !vfo.enabled; toggleVfoCheckbox(i)" :disabled="!running" :title="vfo.enabled ? 'Mute VFO' : 'Unmute VFO'">
+								<svg v-if="vfo.enabled" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+								<svg v-else viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
+							</button>
 						</div>
 					</div>
 					<div class="panel-body panel-condensed" v-show="!collapsedPanels['vfo-' + i]">
@@ -723,6 +768,45 @@
 					<button class="btn" @click="bookmarkEdit.show = false">Cancel</button>
 					<button class="btn btn-primary" @click="confirmEditBookmark" :disabled="!bookmarkEdit.name.trim()">Save Changes</button>
 				</div>
+			</div>
+		</div>
+
+		<!-- Remote clients management dialog -->
+		<div v-if="showRemoteClientsDialog" class="bookmark-overlay" @click.self="showRemoteClientsDialog = false">
+			<div class="bookmark-dialog remote-clients-dialog">
+				<div class="bookmark-dialog-title">Connected Clients</div>
+				<div class="bookmark-dialog-body">
+					<div v-if="remoteClients.length === 0" class="remote-clients-empty">
+						No clients connected
+					</div>
+					<div v-else class="remote-client-list">
+						<div v-for="client in remoteClients" :key="client.id" class="remote-client-item">
+							<div class="remote-client-info">
+								<div class="remote-client-id">{{ client.id.substring(0, 12) }}</div>
+								<div class="remote-client-meta">
+									<span v-if="client.country" class="remote-client-country">{{ client.country }}</span>
+									<span v-if="client.firstFreq !== null" class="remote-client-freq">{{ formatFreq(client.firstFreq) }} MHz</span>
+									<span class="remote-client-vfos">{{ client.vfoCount }} VFO{{ client.vfoCount !== 1 ? 's' : '' }}</span>
+									<span v-if="client.isRelay" class="remote-client-relay">RELAY</span>
+								</div>
+								<div class="remote-client-duration">Connected {{ remoteClientDuration(client.connectedAt) }}</div>
+							</div>
+							<button class="btn btn-kick" @click="kickRemoteClient(client.id)">Kick</button>
+						</div>
+					</div>
+				</div>
+				<div class="bookmark-dialog-footer">
+					<button class="btn" @click="showRemoteClientsDialog = false">Close</button>
+				</div>
+			</div>
+		</div>
+
+		<!-- Audio unlock overlay (shown when auto-connecting via URL, browser requires a user gesture) -->
+		<div class="audio-unlock-overlay" v-if="audioUnlockPendingId" @click="unlockAndConnect">
+			<div class="audio-unlock-box">
+				<svg viewBox="0 0 24 24" width="48" height="48"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+				<div class="audio-unlock-title">Click to Enable Audio</div>
+				<div class="audio-unlock-sub">Connecting in background&hellip;</div>
 			</div>
 		</div>
 

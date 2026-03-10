@@ -2,6 +2,7 @@ import { createApp } from "./lib/vue.esm-browser.js";
 import * as Comlink from "./lib/comlink.mjs";
 import { HackRF } from "./hackrf.js";
 import { Waterfall, WaterfallGL } from "./utils.js";
+import { WebRTCHandler } from "./webrtc.js";
 
 const Backend = Comlink.wrap(new Worker("./worker.js", { type: "module" }));
 
@@ -69,7 +70,16 @@ createApp({
 			backend: null,
 			connected: false,
 			running: false,
+			remoteMode: 'none', // 'none' | 'host' | 'client'
+			remoteStatus: '',
+			remoteLink: '',
+			copyLinkSuccess: false,
+			copyLinkTooltip: 'Copy link',
+			remoteClients: [],        // [{ id, connectedAt }]
+			showRemoteClientsDialog: false,
+			remotePeerId: '',
 			snackbar: { show: false, message: "" },
+			audioUnlockPendingId: null,
 			radio: {
 				centerFreq: 100.0,
 				sampleRate: 8000000,
@@ -83,6 +93,13 @@ createApp({
 				lna: 16,
 				vga: 16,
 				ampEnabled: false,
+			},
+			locks: {
+				centerFreq: false,
+				sampleRate: false,
+				lna: false,
+				vga: false,
+				amp: false,
 			},
 			vfos: [makeDefaultVfo(100.0)],
 			activeVfoIndex: 0,
@@ -124,10 +141,10 @@ createApp({
 				panelOpen: false,
 				log: [],   // { time, freq, vfoIndex, capcode, type, text, baud }
 			},
-			bookmarks: [],         // [{ id, type, name, category, ...type-specific fields }]
 			bookmarkCategories: BOOKMARK_CATEGORIES,
 			bookmarkCategoryFilter: '',
 			bookmarkSearch: '',
+			bookmarks: [],
 			bookmarkModal: { show: false, type: 'individual', name: '', category: '' },
 			bookmarkImportModal: { show: false },
 			bookmarkEdit: {
@@ -161,6 +178,10 @@ createApp({
 		};
 	},
 	computed: {
+		isLocal() {
+			const host = window.location.hostname;
+			return host === 'localhost' || host === '127.0.0.1';
+		},
 		activeAudioVfos() {
 			const active = [];
 			for (let i = 0; i < this.vfos.length; i++) {
@@ -241,6 +262,16 @@ createApp({
 		}
 	},
 	methods: {
+		copyRemoteLink() {
+			navigator.clipboard.writeText(this.remoteLink).then(() => {
+				this.copyLinkSuccess = true;
+				this.copyLinkTooltip = 'Copied!';
+				setTimeout(() => {
+					this.copyLinkSuccess = false;
+					this.copyLinkTooltip = 'Copy link';
+				}, 2000);
+			});
+		},
 		togglePanel(key) {
 			this.collapsedPanels[key] = !this.collapsedPanels[key];
 		},
@@ -373,8 +404,28 @@ createApp({
 			this.snackbar.show = true;
 			setTimeout(() => { this.snackbar.show = false; }, 3000);
 		},
+		unlockAndConnect() {
+			this.audioUnlockPendingId = null;
+			this._initAudioCtx();
+		},
+		_initAudioCtx() {
+			if (!this.audioCtx) {
+				const AudioContext = window.AudioContext || window.webkitAudioContext;
+				this.audioCtx = new AudioContext({ sampleRate: 48000 });
+				this.gainNode = this.audioCtx.createGain();
+				this.gainNode.gain.value = 1.0;
+				this.gainNode.connect(this.audioCtx.destination);
+				this.nextPlayTime = 0;
+				this.audioRingBuf = new Float32Array(4800);
+				this.audioRingPos = 0;
+			}
+			if (this.audioCtx.state === 'suspended') {
+				this.audioCtx.resume().catch(e => console.warn('AudioContext resume blocked:', e));
+			}
+		},
 		async connect() {
 			if (!this.backend) return;
+			this._initAudioCtx(); // create AudioContext within user gesture
 			this.showMsg("Connecting...");
 			try {
 				let ok = await this.backend.open();
@@ -400,7 +451,46 @@ createApp({
 				this.showMsg("Connect Error: " + e.message);
 			}
 		},
+		async connectMock() {
+			if (!this.backend) return;
+			this._initAudioCtx(); // create AudioContext within user gesture
+			this.showMsg("Connecting Mock SDR...");
+			try {
+				const ok = await this.backend.open("mock");
+				if (ok) {
+					this.connected = true;
+					this.info.boardName = "Mock SDR (Signal Gen)";
+					this.showMsg("Connected to Mock SDR");
+					await this.startStream();
+				} else {
+					this.showMsg("Failed to open Mock SDR.");
+				}
+			} catch (e) {
+				this.showMsg("Mock Connect Error: " + e.message);
+			}
+		},
 		async disconnect() {
+			if (this.remoteMode === 'client' && this._webrtc) {
+				this._webrtc.close();
+				this._webrtc = null;
+				this.remoteMode = 'none';
+				if (this.running) await this.togglePlay();
+				this.connected = false;
+				this.showMsg("Disconnected from remote device");
+				// Clear the URL
+				window.history.replaceState({}, document.title, "/");
+				return;
+			}
+
+			if (this.remoteMode === 'host' && this._webrtc) {
+				this._webrtc.close();
+				this._webrtc = null;
+				this.remoteMode = 'none';
+				this.remoteClients = [];
+				this.showRemoteClientsDialog = false;
+				this.showMsg("Remote sharing stopped");
+			}
+
 			if (this.running) await this.togglePlay();
 			await this.backend.close();
 			this.connected = false;
@@ -426,6 +516,11 @@ createApp({
 
 			this.initCanvas();
 
+			// Set running=true synchronously so drawSpectrum() isn't blocked by the
+			// `if (!this.running)` guard while we're awaiting startRxStream(). For
+			// remote clients, WebRTC FFT chunks can arrive before that await resolves.
+			this.running = true;
+
 			const opts = {
 				centerFreq: this.radio.centerFreq,
 				sampleRate: this.radio.sampleRate,
@@ -445,9 +540,9 @@ createApp({
 			} catch (e) {
 				console.error('Error starting RX stream:', e);
 				this.showMsg("Error starting stream.");
+				this.running = false;
+				return;
 			}
-
-			this.running = true;
 
 			this._statsTimer = setInterval(async () => {
 				if (this.backend && this.running) {
@@ -492,16 +587,21 @@ createApp({
 				}
 			}, 500);
 
-			// Add additional VFOs to the worker (first one is created by default in worker)
+			// Add additional VFOs beyond the first (which is created by default in the worker).
+			// In client mode, notify the host via WebRTC instead of calling the mock backend.
 			for (let i = 1; i < this.vfos.length; i++) {
-				await this.backend.addVfo();
+				if (this.remoteMode === 'client' && this._webrtc) {
+					this._webrtc.sendCommand({ type: 'addRemoteVfo' });
+				} else {
+					await this.backend.addVfo();
+				}
 			}
 
 			// Enable first VFO by default when starting stream
 			this.vfos[0].enabled = true;
 			this.toggleVfoCheckbox(0);
 
-			// Send all VFO params to worker
+			// Send all VFO params to worker (or host in client mode)
 			for (let i = 0; i < this.vfos.length; i++) {
 				this.updateBackendVfoParams(i);
 			}
@@ -530,6 +630,9 @@ createApp({
 			fft.style.height = rect.height + 'px';
 			this._fftCtx = fft.getContext('2d');
 			this._fftCtx.scale(dpr, dpr);
+
+			// Re-apply saved zoom to the newly created engine
+			this.applyZoomToEngine();
 		},
 		drawSpectrum(data) {
 			if (!this._fftCtx) return;
@@ -552,19 +655,33 @@ createApp({
 				}
 			}
 
-			// Downsample for waterfall history
+			// Re-sample data to exactly renderSize bins for the waterfall texture.
+			// Downsample (max-hold) when input is larger, linear-interpolate when smaller
+			// (e.g. compressed remote frames arrive as 2048 bins but renderSize is 8192).
 			let wfData = data;
-			if (data.length > this.renderSize) {
+			if (data.length !== this.renderSize) {
 				wfData = new Float32Array(this.renderSize);
 				const factor = data.length / this.renderSize;
-				for (let i = 0; i < this.renderSize; i++) {
-					let maxVal = -1000;
-					const start = Math.floor(i * factor);
-					const end = Math.floor((i + 1) * factor);
-					for (let j = start; j < end; j++) {
-						if (data[j] > maxVal) maxVal = data[j];
+				if (data.length > this.renderSize) {
+					// Downsample: max-hold over each output bin's source span
+					for (let i = 0; i < this.renderSize; i++) {
+						let maxVal = -1000;
+						const start = Math.floor(i * factor);
+						const end = Math.floor((i + 1) * factor);
+						for (let j = start; j < end; j++) {
+							if (data[j] > maxVal) maxVal = data[j];
+						}
+						wfData[i] = maxVal;
 					}
-					wfData[i] = maxVal;
+				} else {
+					// Upsample: linear interpolation so compressed remote frames fill the texture
+					for (let i = 0; i < this.renderSize; i++) {
+						const srcPos = i * factor;
+						const lo = Math.floor(srcPos);
+						const hi = Math.min(lo + 1, data.length - 1);
+						const t = srcPos - lo;
+						wfData[i] = data[lo] * (1 - t) + data[hi] * t;
+					}
 				}
 			}
 
@@ -683,26 +800,19 @@ createApp({
 				ctx.restore();
 			}
 		},
-		async toggleVfoCheckbox(index) {
+		toggleVfoCheckbox(index) {
 			const anyEnabled = this.vfos.some(v => v.enabled);
-			if (anyEnabled && !this.audioCtx) {
-				const AudioContext = window.AudioContext || window.webkitAudioContext;
-				this.audioCtx = new AudioContext({ sampleRate: 48000 });
-				if (this.audioCtx.state === 'suspended') {
-					await this.audioCtx.resume();
-				}
-				this.gainNode = this.audioCtx.createGain();
-				this.gainNode.gain.value = 1.0; // Volume is handled per-VFO in worker
-				this.gainNode.connect(this.audioCtx.destination);
-				this.nextPlayTime = 0;
-				this.audioRingBuf = new Float32Array(4800);
-				this.audioRingPos = 0;
+			if (anyEnabled) {
+				this._initAudioCtx();
 			}
 			this.updateBackendVfoParams(index);
 		},
 		playAudio(samples) {
 			if (!this.vfos.some(v => v.enabled) || !this.audioCtx) return;
-			if (this.audioCtx.state === 'suspended') return;
+			if (this.audioCtx.state === 'suspended') {
+				this.audioCtx.resume().catch(() => {});
+				return;
+			}
 
 			let floats;
 			if (samples instanceof Float32Array) floats = samples;
@@ -755,7 +865,7 @@ createApp({
 		updateBackendVfoParams(index) {
 			if (this.backend && this.running && index >= 0 && index < this.vfos.length) {
 				const vfo = this.vfos[index];
-				this.backend.setVfoParams(index, {
+				const params = {
 					freq: vfo.freq,
 					mode: vfo.mode,
 					enabled: vfo.enabled,
@@ -771,15 +881,41 @@ createApp({
 					rdsRegion: vfo.rdsRegion,
 					volume: vfo.volume,
 					pocsag: vfo.pocsag,
-				});
+				};
+
+				if (this.remoteMode === 'client' && this._webrtc) {
+					// In client mode the local backend has no real DSP (mock hackrf).
+					// Send the VFO params to the host over the cmd channel so the host
+					// can configure the correct indexed remote VFO worker.
+					this._webrtc.sendCommand({ type: 'vfoUpdate', index, params });
+				} else {
+					this.backend.setVfoParams(index, params);
+				}
+			}
+		},
+		requestOrApplyChange(target, property, value) {
+			if (this.remoteMode === 'client') {
+				this._webrtc.sendCommand({ type: 'requestChange', target, property, value });
+			} else {
+				if (target === 'radio') {
+					this.radio[property] = value;
+				} else if (target === 'gains') {
+					this.gains[property] = value;
+				}
 			}
 		},
 		async addVfo() {
 			const newVfo = makeDefaultVfo(this.radio.centerFreq);
 			this.vfos.push(newVfo);
 			if (this.backend && this.running) {
-				await this.backend.addVfo();
-				this.updateBackendVfoParams(this.vfos.length - 1);
+				if (this.remoteMode === 'client' && this._webrtc) {
+					// Tell the host to allocate a new remote VFO worker slot.
+					this._webrtc.sendCommand({ type: 'addRemoteVfo' });
+					this.updateBackendVfoParams(this.vfos.length - 1);
+				} else {
+					await this.backend.addVfo();
+					this.updateBackendVfoParams(this.vfos.length - 1);
+				}
 			}
 			this.activeVfoIndex = this.vfos.length - 1;
 
@@ -793,19 +929,31 @@ createApp({
 			if (this.vfos.length <= 1) return;
 			this.vfos.splice(index, 1);
 			if (this.backend && this.running) {
-				await this.backend.removeVfo(index);
+				if (this.remoteMode === 'client' && this._webrtc) {
+					this._webrtc.sendCommand({ type: 'removeRemoteVfo', index });
+				} else {
+					await this.backend.removeVfo(index);
+				}
 			}
 			if (this.activeVfoIndex >= this.vfos.length) {
 				this.activeVfoIndex = this.vfos.length - 1;
 			}
 		},
 		saveSetting() {
-			const json = JSON.stringify({ radio: this.radio, gains: this.gains, vfos: this.vfos, activeVfoIndex: this.activeVfoIndex, view: this.view, display: this.display, collapsedPanels: this.collapsedPanels });
-			localStorage.setItem('sdr-web-setting', json);
+			const obj = {
+				radio: this.radio,
+				display: this.display,
+				gains: this.gains,
+				locks: this.locks,
+				vfos: this.vfos,
+				view: this.view,
+				collapsedPanels: this.collapsedPanels,
+			};
+			localStorage.setItem("SDRSetting", JSON.stringify(obj));
 		},
 		loadSetting() {
 			try {
-				const json = localStorage.getItem('sdr-web-setting');
+				const json = localStorage.getItem('SDRSetting');
 				if (json) {
 					const setting = JSON.parse(json);
 					if (setting.radio) {
@@ -815,7 +963,9 @@ createApp({
 							this.radio.fftSize = 65536;
 						}
 					}
+					if (setting.display) Object.assign(this.display, setting.display);
 					if (setting.gains) Object.assign(this.gains, setting.gains);
+					if (setting.locks) Object.assign(this.locks, setting.locks);
 					// Handle new format (vfos array) or legacy format (audio/audio2)
 					if (setting.vfos && Array.isArray(setting.vfos)) {
 						this.vfos = setting.vfos.map(v => ({ ...makeDefaultVfo(), ...v }));
@@ -831,7 +981,6 @@ createApp({
 					if (setting.activeVfoIndex !== undefined) this.activeVfoIndex = setting.activeVfoIndex;
 					else if (setting.activeVfo) this.activeVfoIndex = setting.activeVfo - 1;
 					if (setting.view) Object.assign(this.view, setting.view);
-					if (setting.display) Object.assign(this.display, setting.display);
 					if (setting.collapsedPanels && typeof setting.collapsedPanels === 'object') Object.assign(this.collapsedPanels, setting.collapsedPanels);
 				}
 			} catch (e) { }
@@ -1407,6 +1556,271 @@ createApp({
 			this.view.zoomOffset = newOffset;
 
 			this.applyZoomToEngine();
+		},
+		async startRemoteHost() {
+			console.log("[WebRTC] startRemoteHost clicked");
+			if (!this.connected || !this.running) {
+				console.log("[WebRTC] Device not connected or running");
+				this.showMsg("Start the device first to share it.");
+				return;
+			}
+			console.log("[WebRTC] Setting up Host Mode. Mode =", this.remoteMode);
+			this.remoteMode = 'host';
+			this.locks.centerFreq = true;
+			this.locks.sampleRate = true;
+			this.locks.lna = true;
+			this.locks.vga = true;
+			this.locks.amp = true;
+			this.remoteStatus = 'Generating ID...';
+			
+			console.log("[WebRTC] Instantiating WebRTCHandler");
+			this._webrtc = new WebRTCHandler(true); // isHost = true
+			
+			this._webrtc.onStatusChange = (status) => {
+				console.log("[WebRTC] Host status changed:", status);
+				if (status.status === 'ready') {
+					this.remoteStatus = 'Waiting for connection';
+					const origin = window.location.origin;
+					this.remoteLink = `${origin}/?connect=${status.id}`;
+					console.log("[WebRTC] Link completely generated:", this.remoteLink);
+				} else if (status.status === 'client-connected') {
+					const clientId = status.clientId;
+					this.remoteClients.push({ id: clientId, connectedAt: Date.now(), country: '', vfoCount: 1, firstFreq: null, isRelay: !!status.isRelay });
+					this.remoteStatus = this.remoteClients.length + ' client' + (this.remoteClients.length !== 1 ? 's' : '') + ' connected';
+					this.showMsg("Remote client joined!");
+					// Register client in worker and sync current state
+					this.backend.addRemoteClient(clientId);
+					this._webrtc.sendCommandTo(clientId, { type: 'sync', radio: this.radio, gains: this.gains, locks: this.locks });
+				} else if (status.status === 'client-disconnected') {
+					const clientId = status.clientId;
+					this.remoteClients = this.remoteClients.filter(c => c.id !== clientId);
+					this.backend.removeRemoteClient(clientId);
+					if (this.remoteClients.length > 0) {
+						this.remoteStatus = this.remoteClients.length + ' client' + (this.remoteClients.length !== 1 ? 's' : '') + ' connected';
+					} else {
+						this.remoteStatus = 'Waiting for connection';
+					}
+					this.showMsg("Remote client left.");
+				} else if (status.status === 'error') {
+					this.remoteMode = 'none';
+					this.showMsg("WebRTC Error: " + status.error);
+				}
+			};
+
+			this._webrtc.onCommand = (clientId, cmd) => this.handleRemoteCommand(clientId, cmd);
+
+			console.log("[WebRTC] Calling _webrtc.init()");
+			await this._webrtc.init();
+			console.log("[WebRTC] _webrtc.init() finished. Resolving remote host callback.");
+			// Setup worker to push FFT arrays via Comlink callback.
+			// KiwiSDR-style compression: downsample to WF_REMOTE_BINS and quantize
+			// each bin's dB value to a uint8 (1 dB/step, WF_DB_MIN offset).
+			// This reduces bandwidth from ~5 MB/s (65536 Float32 @ 20fps) to
+			// ~40 KB/s (2048 uint8 @ 20fps) — a ~128× reduction that prevents the
+			// DataChannel from saturating and the waterfall from freezing.
+			const WF_REMOTE_BINS = 2048;
+			const WF_DB_MIN = -120.0; // uint8 0 ↔ -120 dBfs, 1 dB per LSB
+			await this.backend.setRemoteHostFftCallback(Comlink.proxy((chunk) => {
+				if (!this._webrtc) return;
+				const bins = WF_REMOTE_BINS;
+				const factor = chunk.length / bins;
+				// 4-byte header: 0xFF 0xDA (magic) + uint16-LE bin count
+				const pkt = new Uint8Array(4 + bins);
+				pkt[0] = 0xFF; pkt[1] = 0xDA;
+				pkt[2] = bins & 0xFF; pkt[3] = (bins >> 8) & 0xFF;
+				for (let i = 0; i < bins; i++) {
+					// Max-hold downsample (same as local waterfall renderSize path)
+					let maxVal = -1e9;
+					const s = Math.floor(i * factor);
+					const e = Math.floor((i + 1) * factor);
+					for (let j = s; j < e; j++) {
+						if (chunk[j] > maxVal) maxVal = chunk[j];
+					}
+					// Clamp to [0..255]: 0 = WF_DB_MIN (-120 dB), 255 = -120+255 = +135 dB
+					pkt[4 + i] = Math.max(0, Math.min(255, Math.round(maxVal - WF_DB_MIN)));
+				}
+				this._webrtc.sendFftChunk(pkt);
+			}));
+			// Setup worker to push processed Audio buffer callbacks (per-client)
+			await this.backend.setRemoteHostAudioCallback(Comlink.proxy((clientId, chunk) => {
+				if (this._webrtc) {
+					this._webrtc.sendAudioChunkTo(clientId, chunk);
+				}
+			}));
+		},
+		async connectRemoteClient(hostId) {
+			this._initAudioCtx(); // create AudioContext within user gesture before any await
+			this.remoteMode = 'client';
+			this.remoteStatus = 'Connecting...';
+			this.showMsg("Connecting to remote host...");
+			
+			this._webrtc = new WebRTCHandler(false, hostId);
+			this._webrtc.onStatusChange = (status) => {
+				if (status.status === 'connecting') {
+					this.remoteStatus = 'Connecting...';
+				} else if (status.status === 'connected') {
+					this.remoteStatus = 'Connected to Host';
+					this.connected = true;
+					this.info.boardName = "Remote SDR";
+					this.showMsg("Connected to remote host.");
+					// Send country info to host
+					fetch('/api/geo').then(r => r.json()).then(data => {
+						if (this._webrtc) this._webrtc.sendCommand({ type: 'clientInfo', country: data.country || 'XX' });
+					}).catch(() => {});
+					// Start local processing stream using mock device hooked up to WebRTC
+					this.startStream();
+				} else if (status.status === 'disconnected') {
+					this.remoteStatus = 'Disconnected from Host';
+					this.disconnect();
+				} else if (status.status === 'error') {
+					this.remoteMode = 'none';
+					this.showMsg("WebRTC Error: " + status.error);
+				}
+			};
+
+			this._webrtc.onCommand = (cmd) => this.handleRemoteCommand(cmd);
+			this._webrtc.onFftChunk = (chunk) => {
+				// Guard on _fftCtx (canvas ready) rather than this.running.
+				// this.running is set only after `await backend.startRxStream()` resolves,
+				// so frames that arrive in that async gap were silently dropped.
+				if (!this._fftCtx) return;
+				// chunk arrives as ArrayBuffer (PeerJS serialization:'raw').
+				// Guard against Uint8Array in case of fallback path: extract the true
+				// underlying bytes via byteOffset + byteLength, not numeric element cast.
+				const buf = (chunk instanceof ArrayBuffer)
+					? chunk
+					: chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength);
+				const u8 = new Uint8Array(buf);
+				let fftData;
+				if (u8.length >= 4 && u8[0] === 0xFF && u8[1] === 0xDA) {
+					// KiwiSDR-style quantized packet: 4-byte header + N uint8 bins.
+					// Unpack: uint8 → Float32 dB using WF_DB_MIN + uint8 value (1 dB/step).
+					const WF_DB_MIN = -120.0;
+					const binCount = u8[2] | (u8[3] << 8);
+					fftData = new Float32Array(binCount);
+					for (let i = 0; i < binCount; i++) {
+						fftData[i] = WF_DB_MIN + u8[4 + i];
+					}
+				} else {
+					// Legacy fallback: raw Float32 (old host)
+					fftData = new Float32Array(buf);
+				}
+				if (fftData.length > 0) this.drawSpectrum(fftData);
+			};
+			this._webrtc.onAudioChunk = (chunk) => {
+				if (this.running && this.backend) {
+					// chunk arrives as ArrayBuffer (serialization:'raw').
+					// Use .slice() with byteOffset/byteLength to handle typed-array views.
+					const buf = (chunk instanceof ArrayBuffer)
+						? chunk
+						: chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength);
+					this.backend.feedRemoteAudioChunk(Comlink.transfer(buf, [buf]));
+				}
+			};
+
+			try {
+				// initRemoteClient MUST come first — it installs the mock hackrf stub.
+				// _webrtc.init() may fire the 'connected' event synchronously, which calls
+				// startStream() -> startRxStream() -> hackrf.setSampleRateManual(). If the
+				// mock isn't in place yet, hackrf is null and the call throws, leaving
+				// this.running = false forever (all FFT frames get dropped).
+				await this.backend.initRemoteClient();
+				await this._webrtc.init();
+			} catch(e) {
+				this.showMsg("Failed to initialize remote client.");
+			}
+		},
+		handleRemoteCommand(clientIdOrCmd, cmdOrUndefined) {
+			// Support both (clientId, cmd) from host and (cmd) from client
+			let clientId, cmd;
+			if (cmdOrUndefined === undefined) {
+				cmd = clientIdOrCmd;
+				clientId = null;
+			} else {
+				clientId = clientIdOrCmd;
+				cmd = cmdOrUndefined;
+			}
+
+			if (cmd.type === 'sync') {
+				this._applyingSync = true;
+				if (cmd.radio) {
+					// Flush stale audio to prevent glitches when sample rate or center freq changes
+					this.audioRingPos = 0;
+					this.nextPlayTime = 0;
+					Object.assign(this.radio, cmd.radio);
+				}
+				if (cmd.gains) Object.assign(this.gains, cmd.gains);
+				if (cmd.locks) Object.assign(this.locks, cmd.locks);
+				this.$nextTick(() => { this._applyingSync = false; });
+			} else if (cmd.type === 'clientInfo') {
+				if (this.remoteMode === 'host' && clientId) {
+					const rc = this.remoteClients.find(c => c.id === clientId);
+					if (rc) rc.country = cmd.country || 'XX';
+				}
+			} else if (cmd.type === 'vfoUpdate') {
+				if (this.remoteMode === 'host' && clientId) {
+					this.backend.setRemoteVfoParams(clientId, cmd.index, cmd.params);
+					if (cmd.index === 0 && cmd.params) {
+						const rc = this.remoteClients.find(c => c.id === clientId);
+						if (rc) rc.firstFreq = cmd.params.freq;
+					}
+				}
+			} else if (cmd.type === 'addRemoteVfo') {
+				if (this.remoteMode === 'host' && clientId) {
+					this.backend.addRemoteVfo(clientId);
+					const rc = this.remoteClients.find(c => c.id === clientId);
+					if (rc) rc.vfoCount++;
+				}
+			} else if (cmd.type === 'removeRemoteVfo') {
+				if (this.remoteMode === 'host' && clientId) {
+					this.backend.removeRemoteVfo(clientId, cmd.index);
+					const rc = this.remoteClients.find(c => c.id === clientId);
+					if (rc && rc.vfoCount > 0) rc.vfoCount--;
+				}
+			} else if (cmd.type === 'requestChange') {
+				if (this.remoteMode === 'host') {
+					const { target, property, value } = cmd;
+					let allow = true;
+
+					if (target === 'radio' && property === 'centerFreq' && this.locks.centerFreq) allow = false;
+					if (target === 'radio' && property === 'sampleRate' && this.locks.sampleRate) allow = false;
+					if (target === 'gains') {
+						if (property === 'lna' && this.locks.lna) allow = false;
+						if (property === 'vga' && this.locks.vga) allow = false;
+						if (property === 'ampEnabled' && this.locks.amp) allow = false;
+					}
+
+					if (allow) {
+						if (target === 'radio') this.radio[property] = value;
+						else if (target === 'gains') this.gains[property] = value;
+						// Sync back so all clients update their frontend
+						this._webrtc.sendCommand({ type: 'sync', radio: this.radio, gains: this.gains });
+					} else if (clientId) {
+						// Reject the change. Sync back the *current* real state so the requesting client's UI snaps back.
+						this._webrtc.sendCommandTo(clientId, { type: 'sync', radio: this.radio, gains: this.gains });
+					}
+				}
+			}
+		},
+		kickRemoteClient(clientId) {
+			if (!this._webrtc) return;
+			this._webrtc.kickClient(clientId);
+			this.backend.removeRemoteClient(clientId);
+			this.remoteClients = this.remoteClients.filter(c => c.id !== clientId);
+			if (this.remoteClients.length > 0) {
+				this.remoteStatus = this.remoteClients.length + ' client' + (this.remoteClients.length !== 1 ? 's' : '') + ' connected';
+			} else {
+				this.remoteStatus = 'Waiting for connection';
+			}
+			this.showMsg("Client kicked.");
+		},
+		remoteClientDuration(connectedAt) {
+			const seconds = Math.floor((Date.now() - connectedAt) / 1000);
+			if (seconds < 60) return seconds + 's';
+			const minutes = Math.floor(seconds / 60);
+			if (minutes < 60) return minutes + 'm';
+			const hours = Math.floor(minutes / 60);
+			return hours + 'h ' + (minutes % 60) + 'm';
 		}
 	},
 	created: async function () {
@@ -1415,33 +1829,55 @@ createApp({
 		this.backend = await new Backend();
 		await this.backend.init();
 
-		this.$watch('radio', async () => {
+		this.$watch('radio', async (newVal, oldVal) => {
 			this.saveSetting();
 			// Reset zoom on radio change
 			this.view.zoomScale = 1.0;
 			this.view.zoomOffset = 0.0;
 			this.applyZoomToEngine();
 
+			if (this.remoteMode === 'client') {
+				if (!this._applyingSync) {
+					this._webrtc.sendCommand({ type: 'requestChange', target: 'radio', property: 'centerFreq', value: this.radio.centerFreq });
+					this._webrtc.sendCommand({ type: 'requestChange', target: 'radio', property: 'sampleRate', value: this.radio.sampleRate });
+				}
+				return;
+			}
+
 			if (this.running) {
 				await this.togglePlay();
 				await this.togglePlay();
 			}
+
+			// Broadcast updated radio settings to all remote clients
+			if (this.remoteMode === 'host' && this._webrtc) {
+				this._webrtc.sendCommand({ type: 'sync', radio: this.radio, gains: this.gains, locks: this.locks });
+			}
 		}, { deep: true });
 
 		this.$watch('gains', () => {
+			if (this.remoteMode === 'client') {
+				if (!this._applyingSync) {
+					this._webrtc.sendCommand({ type: 'requestChange', target: 'gains', property: 'lna', value: this.gains.lna });
+					this._webrtc.sendCommand({ type: 'requestChange', target: 'gains', property: 'vga', value: this.gains.vga });
+					this._webrtc.sendCommand({ type: 'requestChange', target: 'gains', property: 'ampEnabled', value: this.gains.ampEnabled });
+				}
+				return;
+			}
+
 			if (this.running && this.connected) {
-				// We don't have individual gain methods anymore since they were removed.
-				// However, changing startRxStream will re-apply gains. Or we can just restart.
-				// Wait actually I never removed them, they are back in worker.js! But they aren't exposed in worker.js.
-				// It's safest to just restart the stream since we are using DDC anyway, 
-				// but actually restarting isn't ideal. Let me just leave this.
-				// Actually they ARE exposed by `Comlink` directly grabbing the methods.
 				if (this.backend.setAmpEnable) {
 					this.backend.setAmpEnable(this.gains.ampEnabled);
 					this.backend.setLnaGain(this.gains.lna);
 					this.backend.setVgaGain(this.gains.vga);
 				}
 			}
+
+			// Broadcast updated gains to all remote clients
+			if (this.remoteMode === 'host' && this._webrtc) {
+				this._webrtc.sendCommand({ type: 'sync', gains: this.gains, locks: this.locks });
+			}
+
 			this.saveSetting();
 		}, { deep: true });
 
@@ -1463,8 +1899,23 @@ createApp({
 		this.$watch('collapsedPanels', () => {
 			this.saveSetting();
 		}, { deep: true });
+
+		this.$watch('locks', () => {
+			if (this.remoteMode === 'host' && this._webrtc) {
+				this._webrtc.sendCommand({ type: 'sync', locks: this.locks });
+			}
+			this.saveSetting();
+		}, { deep: true });
 	},
 	mounted() {
+		const resumeAudio = () => {
+			if (this.audioCtx && this.audioCtx.state === 'suspended') {
+				this.audioCtx.resume().catch(() => {});
+			}
+		};
+		document.body.addEventListener('click', resumeAudio, { passive: true });
+		document.body.addEventListener('touchstart', resumeAudio, { passive: true });
+
 		// Event listeners for tuning on canvas
 		let isDraggingVFO = false;
 		let isPanning = false;
@@ -1565,5 +2016,15 @@ createApp({
 
 		// Initial application of zoom bounds
 		this.applyZoomToEngine();
+
+		// Check for remote connection link in URL
+		const urlParams = new URLSearchParams(window.location.search);
+		const connectId = urlParams.get('connect');
+		if (connectId) {
+			// Start connecting immediately in the background.
+			setTimeout(() => this.connectRemoteClient(connectId), 500);
+			// Show overlay so the user provides a click gesture to unlock AudioContext.
+			this.audioUnlockPendingId = connectId;
+		}
 	}
 }).mount('#app');

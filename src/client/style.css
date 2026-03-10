@@ -86,6 +86,42 @@ body {
 	padding-bottom: 14px;
 }
 
+.remote-status {
+	display: flex;
+	align-items: center;
+	background: #1e1e1e;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	padding: 4px 8px;
+	font-size: 12px;
+	font-weight: 600;
+	flex-shrink: 0;
+}
+
+.remote-host {
+	border-color: #ffaa44;
+}
+
+.remote-client {
+	border-color: #4488ff;
+}
+
+.remote-badge {
+	color: #fff;
+	padding: 1px 4px;
+	border-radius: 3px;
+	margin-right: 6px;
+	font-size: 10px;
+	letter-spacing: 0.5px;
+}
+
+.remote-host .remote-badge { background: #ffaa44; }
+.remote-client .remote-badge { background: #4488ff; }
+
+.remote-text {
+	color: #ccc;
+}
+
 .vfo-display {
 	position: relative;
 	display: flex;
@@ -135,16 +171,35 @@ body {
 }
 
 .vfo-mute-badge {
-	font-size: 9px;
-	font-weight: 700;
-	letter-spacing: 0.5px;
-	color: #fff;
-	background: #666;
-	padding: 1px 4px;
-	border-radius: 3px;
 	align-self: center;
 	margin-left: 5px;
-	opacity: 0.85;
+	opacity: 0.7;
+	color: #f44;
+	display: flex;
+	align-items: center;
+}
+
+.vfo-mute-btn {
+	background: none;
+	border: none;
+	cursor: pointer;
+	padding: 2px;
+	border-radius: 3px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	color: #4caf50;
+	transition: color 0.15s;
+}
+.vfo-mute-btn:hover {
+	background: rgba(255,255,255,0.08);
+}
+.vfo-mute-btn.muted {
+	color: #f44;
+}
+.vfo-mute-btn:disabled {
+	opacity: 0.35;
+	cursor: default;
 }
 
 .vfo-rx-badge {
@@ -369,6 +424,29 @@ body {
 	font-size: 11px;
 	color: var(--text-muted);
 	margin-left: 6px;
+}
+
+.lock-btn {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 24px;
+	height: 24px;
+	margin-left: 6px;
+	border-radius: 4px;
+	color: var(--text-muted);
+	background: transparent;
+	transition: all 0.15s;
+}
+.lock-btn.host {
+	cursor: pointer;
+}
+.lock-btn.host:hover {
+	background: rgba(255,255,255,0.1);
+	color: var(--text-main);
+}
+.lock-btn.locked {
+	color: #ffaa44;
 }
 
 select {
@@ -1394,6 +1472,150 @@ canvas {
 	background: var(--bg-header);
 }
 
+/* Remote client management */
+.remote-host-info {
+	flex-direction: column;
+	gap: 12px;
+}
+.share-link-box {
+	display: flex;
+	align-items: stretch;
+	background: var(--bg);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	overflow: hidden;
+}
+.share-link-box .remote-share-link {
+	flex: 1;
+	min-width: 0;
+	padding: 6px 10px;
+	color: var(--text);
+	word-break: break-all;
+	font-size: 12px;
+	line-height: 1.4;
+	text-decoration: none;
+}
+.share-link-box .remote-share-link:hover {
+	text-decoration: underline;
+}
+.btn-copy {
+	background: var(--bg-header);
+	border: none;
+	border-left: 1px solid var(--border);
+	color: var(--text);
+	cursor: pointer;
+	padding: 6px 10px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: background 0.15s;
+	flex-shrink: 0;
+}
+.btn-copy:hover {
+	background: var(--border);
+}
+.btn-full {
+	width: 100%;
+}
+.remote-clients-dialog {
+	min-width: 320px;
+}
+.remote-clients-empty {
+	color: var(--text-dim);
+	text-align: center;
+	padding: 16px 0;
+}
+.client-count-badge {
+	display: inline-block;
+	background: var(--accent);
+	color: #fff;
+	font-size: 11px;
+	font-weight: 700;
+	min-width: 18px;
+	height: 18px;
+	line-height: 18px;
+	text-align: center;
+	border-radius: 9px;
+	margin-left: 6px;
+	padding: 0 5px;
+}
+.remote-client-list {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	max-height: 300px;
+	overflow-y: auto;
+}
+.remote-client-item {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+	padding: 10px 12px;
+	background: var(--bg-header);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+}
+.remote-client-info {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	min-width: 0;
+	flex: 1;
+}
+.remote-client-id {
+	font-family: monospace;
+	font-size: 12px;
+	color: var(--text);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.remote-client-meta {
+	display: flex;
+	gap: 8px;
+	font-size: 11px;
+	color: var(--text-dim);
+	flex-wrap: wrap;
+}
+.remote-client-meta span {
+	white-space: nowrap;
+}
+.remote-client-country {
+	font-weight: 600;
+	color: var(--accent);
+}
+.remote-client-freq {
+	font-family: monospace;
+}
+.remote-client-relay {
+	background: rgba(255, 165, 0, 0.2);
+	color: #ffa500;
+	border: 1px solid rgba(255, 165, 0, 0.4);
+	border-radius: 3px;
+	padding: 0 4px;
+	font-size: 10px;
+	font-weight: 700;
+}
+.remote-client-duration {
+	font-size: 11px;
+	color: var(--text-dim);
+}
+.btn-kick {
+	background: rgba(220, 53, 69, 0.2);
+	color: #ff6b7a;
+	border: 1px solid rgba(220, 53, 69, 0.4);
+	font-size: 11px;
+	padding: 4px 12px;
+	border-radius: 4px;
+	cursor: pointer;
+	flex-shrink: 0;
+	white-space: nowrap;
+}
+.btn-kick:hover {
+	background: rgba(220, 53, 69, 0.4);
+}
+
 /* Bookmark type badges */
 .bm-badge {
 	display: inline-block;
@@ -1756,4 +1978,46 @@ canvas {
 	color: #e0e0e0;
 	min-width: 60px;
 	text-align: right;
+}
+
+/* ────── Audio Unlock Overlay ────── */
+.audio-unlock-overlay {
+	position: fixed;
+	inset: 0;
+	z-index: 9999;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background: rgba(0, 0, 0, 0.82);
+	cursor: pointer;
+	animation: unlock-fade-in 0.2s ease;
+}
+@keyframes unlock-fade-in {
+	from { opacity: 0; }
+	to   { opacity: 1; }
+}
+.audio-unlock-box {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 12px;
+	color: #fff;
+	user-select: none;
+	animation: unlock-pop 0.25s cubic-bezier(0.34,1.56,0.64,1);
+}
+@keyframes unlock-pop {
+	from { transform: scale(0.85); opacity: 0; }
+	to   { transform: scale(1);    opacity: 1; }
+}
+.audio-unlock-box svg {
+	opacity: 0.9;
+}
+.audio-unlock-title {
+	font-size: 22px;
+	font-weight: 600;
+	letter-spacing: 0.5px;
+}
+.audio-unlock-sub {
+	font-size: 13px;
+	opacity: 0.6;
 }

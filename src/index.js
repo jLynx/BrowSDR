@@ -12,6 +12,53 @@ export default {
 	async fetch(request, env, ctx) {
 		const url = new URL(request.url);
 
+		// Return the caller's country code (from Cloudflare headers)
+		if (url.pathname === '/api/geo') {
+			return new Response(
+				JSON.stringify({ country: request.headers.get('CF-IPCountry') || 'XX' }),
+				{ headers: { 'Content-Type': 'application/json' } }
+			);
+		}
+
+		// Return TURN/STUN ICE servers for WebRTC connectivity.
+		// Uses ExpressTURN (free) as primary, Cloudflare TURN as fallback.
+		if (url.pathname === '/api/turn') {
+			const iceServers = [];
+
+			// Primary: ExpressTURN (free, static credentials)
+			if (env.EXPRESS_TURN_URL && env.EXPRESS_TURN_USER && env.EXPRESS_TURN_PASS) {
+				iceServers.push({
+					urls: [`turn:${env.EXPRESS_TURN_URL}`, `stun:${env.EXPRESS_TURN_URL}`],
+					username: env.EXPRESS_TURN_USER,
+					credential: env.EXPRESS_TURN_PASS,
+				});
+			}
+
+			// Fallback: Cloudflare TURN (paid beyond 1TB free tier)
+			if (env.TURN_KEY_ID && env.TURN_KEY_API_TOKEN) {
+				try {
+					const turnResp = await fetch(
+						`https://rtc.live.cloudflare.com/v1/turn/keys/${env.TURN_KEY_ID}/credentials/generate-ice-servers`,
+						{
+							method: 'POST',
+							headers: {
+								'Authorization': `Bearer ${env.TURN_KEY_API_TOKEN}`,
+								'Content-Type': 'application/json',
+							},
+							body: JSON.stringify({ ttl: 14400 }), // 4 hours
+						}
+					);
+					const data = await turnResp.json();
+					if (data.iceServers) iceServers.push(...data.iceServers);
+				} catch (_) {}
+			}
+
+			return new Response(
+				JSON.stringify({ iceServers }),
+				{ headers: { 'Content-Type': 'application/json' } }
+			);
+		}
+
 		// Proxy HuggingFace model downloads to avoid CORS issues
 		if (url.pathname.startsWith('/hf-proxy/')) {
 			const hfPath = url.pathname.slice('/hf-proxy/'.length) + url.search;

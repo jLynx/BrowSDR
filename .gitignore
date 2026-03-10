@@ -37,3 +37,4 @@ Thumbs.db
 .cache
 *.tsbuildinfo
 *.tgz
+.claude
