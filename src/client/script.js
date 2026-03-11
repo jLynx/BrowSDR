@@ -608,7 +608,7 @@ createApp({
 		},
 		initCanvas() {
 			const { fftSize } = this.radio;
-			const { waterfall, fft } = this.$refs;
+			const { waterfall } = this.$refs;
 
 			const renderSize = Math.min(fftSize, 8192);
 			this.renderSize = renderSize;
@@ -622,17 +622,30 @@ createApp({
 
 			this._waterfallEngine.setRange(this.display.minDB, this.display.maxDB);
 
-			const rect = this.$refs.fftContainer.getBoundingClientRect();
-			const dpr = window.devicePixelRatio || 1;
-			fft.width = rect.width * dpr; // Draw spectrum based on physical pixels, not full FFT
-			fft.height = rect.height * dpr;
-			fft.style.width = rect.width + 'px';
-			fft.style.height = rect.height + 'px';
-			this._fftCtx = fft.getContext('2d');
-			this._fftCtx.scale(dpr, dpr);
+			this.resizeFftCanvas();
 
 			// Re-apply saved zoom to the newly created engine
 			this.applyZoomToEngine();
+		},
+		resizeFftCanvas() {
+			const fft = this.$refs.fft;
+			const rect = this.$refs.fftContainer.getBoundingClientRect();
+			const dpr = window.devicePixelRatio || 1;
+			fft.width = rect.width * dpr;
+			fft.height = rect.height * dpr;
+			// Let CSS width:100%/height:100% handle display sizing
+			// so the canvas shrinks with its container
+			fft.style.width = '';
+			fft.style.height = '';
+			this._fftCtx = fft.getContext('2d');
+			this._fftCtx.scale(dpr, dpr);
+
+			// Redraw spectrum with last frame data if available
+			if (this._lastSpectrumData) {
+				this._zoomRepaint = true;
+				this.drawSpectrum(this._lastSpectrumData);
+				this._zoomRepaint = false;
+			}
 		},
 		drawSpectrum(data) {
 			if (!this._fftCtx) return;
@@ -2013,6 +2026,15 @@ createApp({
 
 		attachCanvasEvents(this.$refs.fft);
 		attachCanvasEvents(this.$refs.waterfall);
+
+		// Resize FFT canvas when browser window is resized
+		let resizeTimer;
+		window.addEventListener('resize', () => {
+			clearTimeout(resizeTimer);
+			resizeTimer = setTimeout(() => {
+				if (this._fftCtx) this.resizeFftCanvas();
+			}, 150);
+		});
 
 		// Initial application of zoom bounds
 		this.applyZoomToEngine();
