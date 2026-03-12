@@ -90,6 +90,7 @@ export interface RemoteClientState {
 	params: (VfoParams | null)[];
 	audioQueues: { queue: Float32Array; len: number }[];
 	mixBuf: Float32Array | null;
+	pocsagDecoders: any[];
 }
 
 export interface POCSAGMessage {

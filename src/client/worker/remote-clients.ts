@@ -19,6 +19,8 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 */
 
 import type { VfoParams, RemoteClientState } from './types';
+import { AUDIO_RATE } from './types';
+import { POCSAGDecoder } from './pocsag';
 import { ensureWasmInitialized, init } from './wasm-init';
 
 import type { Backend } from './backend';
@@ -42,6 +44,10 @@ export async function setRemoteHostAudioCallback(this: Backend, callback: any): 
 	this._remoteHostAudioCb = callback;
 }
 
+export async function setRemoteHostPocsagCallback(this: Backend, callback: any): Promise<void> {
+	this._remoteHostPocsagCb = callback;
+}
+
 export function _ensureRemoteClients(this: Backend): void {
 	if (!this._remoteClients) {
 		this._remoteClients = new Map();
@@ -55,7 +61,8 @@ export function _getOrCreateClientState(this: Backend, clientId: string): Remote
 			workers: [],
 			params: [],
 			audioQueues: [],
-			mixBuf: null
+			mixBuf: null,
+			pocsagDecoders: []
 		});
 	}
 	return this._remoteClients!.get(clientId)!;
@@ -127,6 +134,7 @@ export async function removeRemoteVfo(this: Backend, clientId: string, index: nu
 	state.workers.splice(index, 1);
 	state.params.splice(index, 1);
 	state.audioQueues.splice(index, 1);
+	state.pocsagDecoders.splice(index, 1);
 }
 
 export function _queueRemoteAudio(this: Backend, clientId: string, index: number, samples: Float32Array): void {
@@ -134,6 +142,20 @@ export function _queueRemoteAudio(this: Backend, clientId: string, index: number
 	if (!state) return;
 	const entry = state.audioQueues[index];
 	if (!entry) return;
+
+	// Run POCSAG decoding on the raw audio before mixing
+	const params = state.params[index];
+	if (this._remoteHostPocsagCb && params && params.pocsag && params.mode === 'nfm') {
+		if (!state.pocsagDecoders[index]) {
+			state.pocsagDecoders[index] = new POCSAGDecoder(AUDIO_RATE, (pmsg: any) => {
+				this._remoteHostPocsagCb(clientId, index, params.freq, pmsg);
+			});
+		}
+		state.pocsagDecoders[index].process(samples);
+	} else if (state.pocsagDecoders[index]) {
+		state.pocsagDecoders[index] = null;
+	}
+
 	const needed = entry.len + samples.length;
 	if (needed > entry.queue.length) {
 		const grown = new Float32Array(Math.max(needed * 2, 32768));

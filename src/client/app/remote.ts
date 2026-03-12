@@ -93,6 +93,12 @@ export const remoteMethods = {
 				this._webrtc.sendAudioChunkTo(clientId, chunk);
 			}
 		}));
+		// Setup POCSAG message callback — forward decoded messages to the specific remote client
+		await this.backend.setRemoteHostPocsagCallback(Comlink.proxy((clientId: string, vfoIndex: number, freq: number, msg: any) => {
+			if (this._webrtc) {
+				this._webrtc.sendCommandTo(clientId, { type: 'pocsag', vfoIndex, freq, msg });
+			}
+		}));
 	},
 	async connectRemoteClient(this: AppInstance, hostId: string) {
 		this._initAudioCtx(); // create AudioContext within user gesture before any await
@@ -222,6 +228,10 @@ export const remoteMethods = {
 				this.backend.removeRemoteVfo(clientId, cmd.index);
 				const rc = this.remoteClients.find((c: any) => c.id === clientId);
 				if (rc && rc.vfoCount > 0) rc.vfoCount--;
+			}
+		} else if (cmd.type === 'pocsag') {
+			if (this.remoteMode === 'client') {
+				this._onPocsagMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
 			}
 		} else if (cmd.type === 'requestChange') {
 			if (this.remoteMode === 'host') {

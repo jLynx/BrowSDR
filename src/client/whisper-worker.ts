@@ -17,7 +17,7 @@
  *     { type: 'error',   message: string }
  */
 
-const workerSelf = self as unknown as { postMessage(msg: any): void; addEventListener(type: string, listener: (e: MessageEvent) => void): void; location: { origin: string } };
+const workerSelf = self as unknown as { postMessage(msg: any): void; addEventListener(type: string, listener: (e: MessageEvent) => void): void; location: { origin: string; hostname: string } };
 
 interface LoadMessage {
 	type: 'load';
@@ -61,8 +61,14 @@ async function loadModel(model: string): Promise<void> {
 		// Disable local model check -- always fetch from HF Hub via CDN
 		env.allowLocalModels = false;
 
-		// Route model downloads through our Worker proxy to avoid CORS issues
-		env.remoteHost = `${workerSelf.location.origin}/hf-proxy`;
+		// In production (Cloudflare Workers), route model downloads through our
+		// same-origin proxy to satisfy COEP (Cross-Origin-Embedder-Policy).
+		// In local dev, fetch directly from HuggingFace — no proxy needed.
+		const hostname = workerSelf.location.hostname;
+		const isLocalDev = hostname === 'localhost' || hostname === '127.0.0.1';
+		if (!isLocalDev) {
+			env.remoteHost = `${workerSelf.location.origin}/hf-proxy`;
+		}
 
 		// English-only models (.en) reject language/task parameters
 		isMultilingual = !model.endsWith('.en');

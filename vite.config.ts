@@ -97,6 +97,32 @@ function postBuildPlugin(): Plugin {
 				}
 			}
 
+			// --- Bundle whisper-worker (loaded via plain URL, not Vite worker syntax) ---
+			const whisperEntry = path.resolve(__dirname, 'src/client/whisper-worker.ts');
+			if (fs.existsSync(whisperEntry)) {
+				console.log('[post-build] Bundling whisper-worker');
+				await build({
+					configFile: false,
+					root: path.resolve(__dirname, 'src/client'),
+					build: {
+						outDir: distDir,
+						emptyOutDir: false,
+						lib: {
+							entry: whisperEntry,
+							formats: ['es'],
+							fileName: () => 'whisper-worker.js',
+						},
+						rollupOptions: {
+							external: [
+								/^https?:\/\//,  // CDN imports stay external
+							],
+						},
+						minify: true,
+					},
+					logLevel: 'warn',
+				});
+			}
+
 			// --- Copy WASM files ---
 			const wasmSrc = path.resolve(__dirname, 'hackrf-web/pkg');
 			const wasmDest = path.resolve(distDir, 'hackrf-web/pkg');
