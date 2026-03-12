@@ -7,6 +7,11 @@ export const vfoMethods = {
 		if (anyEnabled) {
 			this._initAudioCtx();
 		}
+		// When muting a VFO, flush any partially-filled whisper buffer so the
+		// recording doesn't hang waiting for samples that will never arrive.
+		if (!this.vfos[index].enabled && this._whisperVfoStates?.[index]?.bufLen > 0) {
+			this._flushWhisperVfoBuf(index);
+		}
 		this.updateBackendVfoParams(index);
 	},
 	applyVfoFreq(this: AppInstance, e: Event, index: number) {

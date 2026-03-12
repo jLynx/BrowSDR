@@ -48,6 +48,11 @@ let pipeline: any = null;
 let pipelinePromise: Promise<void> | null = null;
 let isMultilingual: boolean = false;
 
+// Serialise transcription requests — the WASM pipeline cannot handle concurrent
+// calls.  Without this, continuous audio (e.g. WFM) queues overlapping pipeline()
+// invocations that hang the worker, causing the UI to stay stuck on "REC".
+let transcribeChain: Promise<void> = Promise.resolve();
+
 async function loadModel(model: string): Promise<void> {
 	try {
 		workerSelf.postMessage({ type: 'status', message: `Loading Transformers.js…` });
@@ -217,12 +222,13 @@ workerSelf.addEventListener('message', (e: MessageEvent<WorkerInMessage>) => {
 		pipelinePromise = loadModel(msg.model || 'onnx-community/whisper-small');
 	} else if (msg.type === 'transcribe') {
 		const { id, audioDuration, audio } = msg;
-		// Ensure model is loaded first, then run sequentially
-		const run = async (): Promise<void> => {
+		// Chain each transcription so only one pipeline() call runs at a time.
+		// The WASM runtime hangs when concurrent calls overlap (common with
+		// continuous-audio modes like WFM where chunks arrive every ~10 s).
+		transcribeChain = transcribeChain.then(async () => {
 			if (pipelinePromise) await pipelinePromise;
 			await transcribe(audio, id, audioDuration);
-		};
-		run().catch((err: unknown) => {
+		}).catch((err: unknown) => {
 			// Last-resort catch: ensure the main thread is never left hanging
 			const message = err instanceof Error ? err.message : String(err);
 			console.error('[whisper-worker] Unhandled error in run():', err);
