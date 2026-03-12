@@ -2335,6 +2335,13 @@ canvas {
 	.pocsag-entry {
 		flex-wrap: wrap;
 		gap: 4px;
+		margin-bottom: 8px;
+	}
+
+	.pocsag-text {
+		flex-basis: 100%;
+		white-space: normal;
+		word-break: break-word;
 	}
 
 	.activity-row {
