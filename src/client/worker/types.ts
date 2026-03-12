@@ -91,6 +91,7 @@ export interface RemoteClientState {
 	audioQueues: { queue: Float32Array; len: number }[];
 	mixBuf: Float32Array | null;
 	pocsagDecoders: any[];
+	squelchOpen: boolean[];
 }
 
 export interface POCSAGMessage {

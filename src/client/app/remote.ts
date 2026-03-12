@@ -99,6 +99,12 @@ export const remoteMethods = {
 				this._webrtc.sendCommandTo(clientId, { type: 'pocsag', vfoIndex, freq, msg });
 			}
 		}));
+		// Forward squelch state changes so remote clients can track frequency activity
+		await this.backend.setRemoteHostSquelchCallback(Comlink.proxy((clientId: string, squelchOpen: boolean[]) => {
+			if (this._webrtc) {
+				this._webrtc.sendCommandTo(clientId, { type: 'squelchState', squelchOpen });
+			}
+		}));
 	},
 	async connectRemoteClient(this: AppInstance, hostId: string) {
 		this._initAudioCtx(); // create AudioContext within user gesture before any await
@@ -232,6 +238,34 @@ export const remoteMethods = {
 		} else if (cmd.type === 'pocsag') {
 			if (this.remoteMode === 'client') {
 				this._onPocsagMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
+			}
+		} else if (cmd.type === 'squelchState') {
+			if (this.remoteMode === 'client') {
+				// Apply host-side squelch states to local VFO state so
+				// getDspStats() returns correct values for frequency activity.
+				const states: boolean[] = cmd.squelchOpen;
+				for (let i = 0; i < states.length; i++) {
+					if (!this.vfoSquelchOpen) this.vfoSquelchOpen = [];
+					this.vfoSquelchOpen[i] = states[i];
+					// Update activity stats directly (mirrors _statsTimer logic)
+					if (!this.vfoActivityStats[i]) {
+						this.vfoActivityStats[i] = { count: 0, totalMs: 0, squelchOpenSince: null };
+					}
+					const stat = this.vfoActivityStats[i];
+					const now = Date.now();
+					if (states[i] && this.vfos[i]?.enabled) {
+						if (stat.squelchOpenSince === null) {
+							stat.squelchOpenSince = now;
+							stat.count++;
+						}
+					} else {
+						if (stat.squelchOpenSince !== null) {
+							stat.totalMs += now - stat.squelchOpenSince;
+							stat.squelchOpenSince = null;
+						}
+					}
+				}
+				this.activityNow = Date.now();
 			}
 		} else if (cmd.type === 'requestChange') {
 			if (this.remoteMode === 'host') {

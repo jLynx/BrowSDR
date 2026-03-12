@@ -48,6 +48,10 @@ export async function setRemoteHostPocsagCallback(this: Backend, callback: any):
 	this._remoteHostPocsagCb = callback;
 }
 
+export async function setRemoteHostSquelchCallback(this: Backend, callback: any): Promise<void> {
+	this._remoteHostSquelchCb = callback;
+}
+
 export function _ensureRemoteClients(this: Backend): void {
 	if (!this._remoteClients) {
 		this._remoteClients = new Map();
@@ -62,7 +66,8 @@ export function _getOrCreateClientState(this: Backend, clientId: string): Remote
 			params: [],
 			audioQueues: [],
 			mixBuf: null,
-			pocsagDecoders: []
+			pocsagDecoders: [],
+			squelchOpen: []
 		});
 	}
 	return this._remoteClients!.get(clientId)!;
@@ -96,8 +101,16 @@ export async function setRemoteVfoParams(this: Backend, clientId: string, index:
 		const worker = new globalThis.Worker(new URL('../dsp-worker.ts', import.meta.url), { type: 'module' });
 		worker.onmessage = (e: MessageEvent) => {
 			const msg = e.data;
-			if (msg.type === 'audio' && msg.samples) {
-				this._queueRemoteAudio(clientId, index, new Float32Array(msg.samples));
+			if (msg.type === 'audio') {
+				const prev = state.squelchOpen[index] || false;
+				const curr = !!msg.squelchOpen;
+				state.squelchOpen[index] = curr;
+				if (curr !== prev && this._remoteHostSquelchCb) {
+					this._remoteHostSquelchCb(clientId, state.squelchOpen.slice());
+				}
+				if (msg.samples) {
+					this._queueRemoteAudio(clientId, index, new Float32Array(msg.samples));
+				}
 			}
 		};
 		worker.postMessage({
@@ -219,8 +232,16 @@ export function _reinitRemoteClientWorkers(this: Backend): void {
 			const worker = new globalThis.Worker(new URL('../dsp-worker.ts', import.meta.url), { type: 'module' });
 			worker.onmessage = (e: MessageEvent) => {
 				const msg = e.data;
-				if (msg.type === 'audio' && msg.samples) {
-					this._queueRemoteAudio(clientId, i, new Float32Array(msg.samples));
+				if (msg.type === 'audio') {
+					const prev = state.squelchOpen[i] || false;
+					const curr = !!msg.squelchOpen;
+					state.squelchOpen[i] = curr;
+					if (curr !== prev && this._remoteHostSquelchCb) {
+						this._remoteHostSquelchCb(clientId, state.squelchOpen.slice());
+					}
+					if (msg.samples) {
+						this._queueRemoteAudio(clientId, i, new Float32Array(msg.samples));
+					}
 				}
 			};
 			worker.postMessage({
