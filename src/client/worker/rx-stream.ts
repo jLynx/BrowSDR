@@ -36,6 +36,7 @@ export async function startRxStream(
 	pocsagCallback: any
 ): Promise<void> {
 	backend._remoteClientAudioCb = audioCallback; // Save reference for when chunk arrives
+	backend._remoteClientWhisperCb = whisperCallback; // Save for remote client transcription
 	try {
 		const { hackrf } = backend;
 		const { centerFreq, sampleRate, fftSize, lnaGain, vgaGain, ampEnabled } = opts;

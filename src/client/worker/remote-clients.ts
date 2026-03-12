@@ -263,5 +263,11 @@ export async function feedRemoteAudioChunk(this: Backend, chunk: any): Promise<v
 			? chunk
 			: new Float32Array(chunk instanceof ArrayBuffer ? chunk : chunk.buffer);
 		this._remoteClientAudioCb(floats);
+
+		// Feed whisper for local transcription on remote clients.
+		// The audio arrives pre-mixed from the host, so attribute it to VFO 0.
+		if (this._remoteClientWhisperCb && this.vfoParams && this.vfoParams[0]) {
+			this._remoteClientWhisperCb(0, this.vfoParams[0].freq, floats);
+		}
 	}
 }

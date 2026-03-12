@@ -79,6 +79,7 @@ export class Backend {
 	_remoteHostPocsagCb?: any;
 	_remoteClientCb?: any;
 	_remoteClientAudioCb?: any;
+	_remoteClientWhisperCb?: any;
 
 	constructor() {
 	}
