@@ -36,7 +36,7 @@
 	 * https://developers.cloudflare.com/workers/static-assets/binding/
 	 */
 	"assets": { "directory": "./dist/", "binding": "ASSETS" },
-	"build": { "command": "node build.js", "watch_dir": "src/client" }
+	"build": { "command": "npx vite build", "watch_dir": "src/client" }
 	/**
 	 * Service Bindings (communicate between multiple Workers)
 	 * https://developers.cloudflare.com/workers/wrangler/configuration/#service-bindings

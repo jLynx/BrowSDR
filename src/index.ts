@@ -8,8 +8,29 @@
  * - Run `npm run deploy` to publish to Cloudflare
  */
 
+interface Env {
+	EXPRESS_TURN_URL: string;
+	EXPRESS_TURN_USER: string;
+	EXPRESS_TURN_PASS: string;
+	TURN_KEY_ID: string;
+	TURN_KEY_API_TOKEN: string;
+	ASSETS: {
+		fetch(request: Request): Promise<Response>;
+	};
+}
+
+interface IceServerEntry {
+	urls: string[];
+	username?: string;
+	credential?: string;
+}
+
+interface TurnApiResponse {
+	iceServers?: IceServerEntry[];
+}
+
 export default {
-	async fetch(request, env, ctx) {
+	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 		const url = new URL(request.url);
 
 		// Return the caller's country code (from Cloudflare headers)
@@ -23,7 +44,7 @@ export default {
 		// Return TURN/STUN ICE servers for WebRTC connectivity.
 		// Uses ExpressTURN (free) as primary, Cloudflare TURN as fallback.
 		if (url.pathname === '/api/turn') {
-			const iceServers = [];
+			const iceServers: IceServerEntry[] = [];
 
 			// Primary: ExpressTURN (free, static credentials)
 			if (env.EXPRESS_TURN_URL && env.EXPRESS_TURN_USER && env.EXPRESS_TURN_PASS) {
@@ -48,7 +69,7 @@ export default {
 							body: JSON.stringify({ ttl: 14400 }), // 4 hours
 						}
 					);
-					const data = await turnResp.json();
+					const data: TurnApiResponse = await turnResp.json();
 					if (data.iceServers) iceServers.push(...data.iceServers);
 				} catch (_) {}
 			}

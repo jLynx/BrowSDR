@@ -3,11 +3,12 @@
 	"version": "0.0.0",
 	"private": true,
 	"scripts": {
-		"build": "node build.js",
-		"deploy": "npm run build && wrangler deploy",
-		"dev": "npm run build && wrangler dev",
-		"start": "npm run build && wrangler dev",
-		"test": "vitest"
+		"build": "vite build",
+		"deploy": "vite build && wrangler deploy",
+		"dev": "vite",
+		"start": "vite",
+		"test": "vitest",
+		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
 		"comlink": "^4.4.2",
@@ -16,6 +17,8 @@
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.12.4",
+		"typescript": "^5.9.3",
+		"vite": "^6.4.1",
 		"vitest": "~3.2.0",
 		"wrangler": "^4.69.0"
 	}
