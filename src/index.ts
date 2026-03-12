@@ -8,22 +8,49 @@
  * - Run `npm run deploy` to publish to Cloudflare
  */
 
+interface Env {
+	EXPRESS_TURN_URL: string;
+	EXPRESS_TURN_USER: string;
+	EXPRESS_TURN_PASS: string;
+	TURN_KEY_ID: string;
+	TURN_KEY_API_TOKEN: string;
+	ASSETS: {
+		fetch(request: Request): Promise<Response>;
+	};
+}
+
+interface IceServerEntry {
+	urls: string[];
+	username?: string;
+	credential?: string;
+}
+
+interface TurnApiResponse {
+	iceServers?: IceServerEntry[];
+}
+
 export default {
-	async fetch(request, env, ctx) {
+	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
 		const url = new URL(request.url);
+
+		// Cross-origin isolation headers (required for SharedArrayBuffer)
+		const coopHeaders = {
+			'Cross-Origin-Opener-Policy': 'same-origin',
+			'Cross-Origin-Embedder-Policy': 'require-corp',
+		};
 
 		// Return the caller's country code (from Cloudflare headers)
 		if (url.pathname === '/api/geo') {
 			return new Response(
 				JSON.stringify({ country: request.headers.get('CF-IPCountry') || 'XX' }),
-				{ headers: { 'Content-Type': 'application/json' } }
+				{ headers: { 'Content-Type': 'application/json', ...coopHeaders } }
 			);
 		}
 
 		// Return TURN/STUN ICE servers for WebRTC connectivity.
 		// Uses ExpressTURN (free) as primary, Cloudflare TURN as fallback.
 		if (url.pathname === '/api/turn') {
-			const iceServers = [];
+			const iceServers: IceServerEntry[] = [];
 
 			// Primary: ExpressTURN (free, static credentials)
 			if (env.EXPRESS_TURN_URL && env.EXPRESS_TURN_USER && env.EXPRESS_TURN_PASS) {
@@ -48,14 +75,14 @@ export default {
 							body: JSON.stringify({ ttl: 14400 }), // 4 hours
 						}
 					);
-					const data = await turnResp.json();
+					const data: TurnApiResponse = await turnResp.json();
 					if (data.iceServers) iceServers.push(...data.iceServers);
 				} catch (_) {}
 			}
 
 			return new Response(
 				JSON.stringify({ iceServers }),
-				{ headers: { 'Content-Type': 'application/json' } }
+				{ headers: { 'Content-Type': 'application/json', ...coopHeaders } }
 			);
 		}
 
@@ -80,8 +107,11 @@ export default {
 			return response;
 		}
 
-		// The ASSETS binding automatically serves static files from ./public/
-		// This handler is called for requests that don't match a static asset
-		return env.ASSETS.fetch(request);
+		// Serve static assets with cross-origin isolation headers
+		const response = await env.ASSETS.fetch(request);
+		const newResponse = new Response(response.body, response);
+		newResponse.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
+		newResponse.headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
+		return newResponse;
 	},
 };

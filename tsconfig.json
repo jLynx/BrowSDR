@@ -1,0 +1,21 @@
+{
+	"compilerOptions": {
+		"target": "ES2022",
+		"module": "ESNext",
+		"moduleResolution": "bundler",
+		"strict": true,
+		"noEmit": true,
+		"esModuleInterop": true,
+		"skipLibCheck": true,
+		"forceConsistentCasingInFileNames": true,
+		"lib": ["ES2022", "DOM", "DOM.Iterable"],
+		"types": ["vite/client"],
+		"baseUrl": ".",
+		"paths": {
+			"hackrf-web/*": ["hackrf-web/pkg/*"],
+			"/hackrf-web/pkg/*": ["hackrf-web/pkg/*"]
+		}
+	},
+	"include": ["src/**/*.ts", "src/**/*.d.ts", "hackrf-web/pkg/*.d.ts"],
+	"exclude": ["node_modules", "dist"]
+}

@@ -19,7 +19,13 @@ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABI
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-const DEFAULT_COLOR_MAP = [
+interface RGB {
+	r: number;
+	g: number;
+	b: number;
+}
+
+const DEFAULT_COLOR_MAP: [number, number, number][] = [
 	[0x00, 0x00, 0x20],
 	[0x00, 0x00, 0x30],
 	[0x00, 0x00, 0x50],
@@ -37,7 +43,7 @@ const DEFAULT_COLOR_MAP = [
 	[0x4A, 0x00, 0x00]
 ];
 
-export function convertDecibelToRGB(dB, minDB = -70, maxDB = 0) {
+export function convertDecibelToRGB(dB: number, minDB: number = -70, maxDB: number = 0): RGB {
 	// Map dB into a 0.0 to 1.0 range
 	let p = (dB - minDB) / (maxDB - minDB);
 	p = Math.max(0.0, Math.min(1.0, p));
@@ -68,8 +74,8 @@ export function convertDecibelToRGB(dB, minDB = -70, maxDB = 0) {
  *
  * [Design Intent]
  * By cycling two textures, we avoid shifting the entire texture (full transfer every frame).
- * If we tried to shift with a single texture, bandSize × historySize bytes would need to be
- * transferred every frame; with this approach only bandSize × 1 row is transferred at a time.
+ * If we tried to shift with a single texture, bandSize x historySize bytes would need to be
+ * transferred every frame; with this approach only bandSize x 1 row is transferred at a time.
  *
  * [Texture Roles]
  * - textures[0]: The current write target (new data is written row by row starting at _current)
@@ -82,12 +88,27 @@ export function convertDecibelToRGB(dB, minDB = -70, maxDB = 0) {
  *
  * [Rotation Timing]
  * When _current reaches historySize, textures[0] is "full", so:
- * 1. Rotate the textures array ([0,1] → [1,0]) — the full texture becomes textures[1]
+ * 1. Rotate the textures array ([0,1] -> [1,0]) -- the full texture becomes textures[1]
  * 2. Reset _current to 0
  * 3. Resume writing from the start of the new textures[0]
  */
 export class WaterfallGL {
-	constructor(canvas, bandSize, historySize) {
+	bandSize: number;
+	historySize: number;
+	canvas: HTMLCanvasElement;
+	data: Uint8Array;
+	minDB: number;
+	maxDB: number;
+	gl!: WebGLRenderingContext;
+	shaderProgram!: WebGLProgram;
+	vertexPositionAttribute!: number;
+	vertices1!: WebGLBuffer;
+	textures!: WebGLTexture[];
+	uZoomOffsetLocation!: WebGLUniformLocation | null;
+	uZoomScaleLocation!: WebGLUniformLocation | null;
+	_current!: number;
+
+	constructor(canvas: HTMLCanvasElement, bandSize: number, historySize: number) {
 		this.bandSize = bandSize;
 		this.historySize = historySize;
 		this.canvas = canvas;
@@ -97,19 +118,19 @@ export class WaterfallGL {
 		this.initWebGL();
 	}
 
-	setRange(minDB, maxDB) {
+	setRange(minDB: number, maxDB: number): void {
 		this.minDB = minDB;
 		this.maxDB = maxDB;
 	}
 
-	initWebGL() {
+	initWebGL(): void {
 		this._current = 0;
 
 		this.canvas.width = this.bandSize;
 		this.canvas.height = this.historySize;
 
 		try {
-			this.gl = this.canvas.getContext("webgl") || this.canvas.getContext("experimental-webgl");
+			this.gl = (this.canvas.getContext("webgl") || this.canvas.getContext("experimental-webgl")) as WebGLRenderingContext;
 		} catch (e) {
 		}
 
@@ -128,7 +149,7 @@ export class WaterfallGL {
 		gl.clearColor(0.0, 0.0, 0.0, 1.0);
 		gl.clear(gl.COLOR_BUFFER_BIT);
 
-		const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER);
+		const fragmentShader = gl.createShader(gl.FRAGMENT_SHADER)!;
 		gl.shaderSource(fragmentShader, `
 			// uTexture0: The current write texture (new data)
 			// uTexture1: The previous texture (remaining old data)
@@ -143,16 +164,16 @@ export class WaterfallGL {
 
 			void main(void) {
 				highp vec4 screen = gl_FragCoord;
-				
+
 				// Apply horizontal zoom
 				highp float normalizedX = screen.x / uViewCoords.x;
 				highp float zoomedX = (normalizedX / uZoomScale) + uZoomOffset;
-				
+
 				if (zoomedX < 0.0 || zoomedX > 1.0) {
 					gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
 					return;
 				}
-				
+
 				// Re-map actual screen X coordinate back for texture lookup
 				screen.x = zoomedX * uViewCoords.x;
 
@@ -160,7 +181,7 @@ export class WaterfallGL {
 				// gl_FragCoord.y goes from 0 (bottom) to uViewCoords.y (top)
 				highp float sy = screen.y;
 				highp float splitY = uViewCoords.y - uOffsetY;
-				
+
 				if (sy < splitY) {
 					// Bottom part: oldest data from uTexture1
 					highp float ty = uOffsetY + sy;
@@ -178,7 +199,7 @@ export class WaterfallGL {
 			return;
 		}
 
-		const vertexShader = gl.createShader(gl.VERTEX_SHADER);
+		const vertexShader = gl.createShader(gl.VERTEX_SHADER)!;
 		gl.shaderSource(vertexShader, `
 			attribute vec3 aVertexPosition;
 
@@ -192,7 +213,7 @@ export class WaterfallGL {
 			return;
 		}
 
-		this.shaderProgram = gl.createProgram();
+		this.shaderProgram = gl.createProgram()!;
 		gl.attachShader(this.shaderProgram, vertexShader);
 		gl.attachShader(this.shaderProgram, fragmentShader);
 		gl.linkProgram(this.shaderProgram);
@@ -206,7 +227,7 @@ export class WaterfallGL {
 		this.vertexPositionAttribute = gl.getAttribLocation(this.shaderProgram, "aVertexPosition");
 		gl.enableVertexAttribArray(this.vertexPositionAttribute);
 
-		this.vertices1 = gl.createBuffer();
+		this.vertices1 = gl.createBuffer()!;
 		gl.bindBuffer(gl.ARRAY_BUFFER, this.vertices1);
 		gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
 			1.0, 1.0, 0.0,
@@ -216,12 +237,12 @@ export class WaterfallGL {
 		]), gl.STATIC_DRAW);
 
 		// texture sources
-		this.textures = [gl.createTexture(), gl.createTexture()];
+		this.textures = [gl.createTexture()!, gl.createTexture()!];
 
 		this.canvas.width = this.bandSize;
 		this.canvas.height = this.historySize;
 
-		for (var i = 0, it; (it = this.textures[i]); i++) {
+		for (var i = 0, it: WebGLTexture; (it = this.textures[i]); i++) {
 			gl.bindTexture(gl.TEXTURE_2D, it);
 			gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
 			gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
@@ -260,13 +281,13 @@ export class WaterfallGL {
 		this.render();
 	}
 
-	setZoom(offset, scale) {
+	setZoom(offset: number, scale: number): void {
 		const gl = this.gl;
 		gl.uniform1f(this.uZoomOffsetLocation, offset);
 		gl.uniform1f(this.uZoomScaleLocation, scale);
 	}
 
-	render() {
+	render(): void {
 		const gl = this.gl;
 
 		gl.uniform1f(gl.getUniformLocation(this.shaderProgram, 'uOffsetY'), this._current);
@@ -274,7 +295,7 @@ export class WaterfallGL {
 		gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 	}
 
-	renderLine(array) {
+	renderLine(array: Float32Array | number[]): void {
 		const gl = this.gl;
 		const data = this.data;
 
@@ -295,9 +316,9 @@ export class WaterfallGL {
 
 		if (this._current >= this.historySize) {
 			// When the texture is full, rotate it
-			// [A, B] → [B, A]: A (the full texture) becomes the "old data" texture
+			// [A, B] -> [B, A]: A (the full texture) becomes the "old data" texture
 			this._current = 0;
-			this.textures.push(this.textures.shift());
+			this.textures.push(this.textures.shift()!);
 
 			gl.activeTexture(gl.TEXTURE1);
 			gl.bindTexture(gl.TEXTURE_2D, this.textures[1]);
@@ -314,14 +335,26 @@ export class WaterfallGL {
 }
 
 export class Waterfall {
-	constructor(canvas, bandSize, historySize) {
+	bandSize: number;
+	historySize: number;
+	canvas: HTMLCanvasElement;
+	data: Uint8Array;
+	ctx: CanvasRenderingContext2D;
+	minDB: number;
+	maxDB: number;
+	offscreen: HTMLCanvasElement;
+	offCtx: CanvasRenderingContext2D;
+	zoomOffset: number;
+	zoomScale: number;
+
+	constructor(canvas: HTMLCanvasElement, bandSize: number, historySize: number) {
 		this.bandSize = bandSize;
 		this.historySize = historySize;
 		this.canvas = canvas;
 		this.data = new Uint8Array(this.bandSize * 4);
 		this.canvas.width = this.bandSize;
 		this.canvas.height = this.historySize;
-		this.ctx = this.canvas.getContext('2d');
+		this.ctx = this.canvas.getContext('2d')!;
 		this.ctx.imageSmoothingEnabled = true;
 
 		this.minDB = -70;
@@ -331,18 +364,18 @@ export class Waterfall {
 		this.offscreen = document.createElement('canvas');
 		this.offscreen.width = this.bandSize;
 		this.offscreen.height = this.historySize;
-		this.offCtx = this.offscreen.getContext('2d');
+		this.offCtx = this.offscreen.getContext('2d')!;
 
 		this.zoomOffset = 0.0;
 		this.zoomScale = 1.0;
 	}
 
-	setZoom(offset, scale) {
+	setZoom(offset: number, scale: number): void {
 		this.zoomOffset = offset;
 		this.zoomScale = scale;
 	}
 
-	render() {
+	render(): void {
 		const { canvas, ctx, offscreen } = this;
 		ctx.fillStyle = 'black';
 		ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -354,12 +387,12 @@ export class Waterfall {
 		);
 	}
 
-	setRange(minDB, maxDB) {
+	setRange(minDB: number, maxDB: number): void {
 		this.minDB = minDB;
 		this.maxDB = maxDB;
 	}
 
-	renderLine(array) {
+	renderLine(array: Float32Array | number[]): void {
 		const { canvas, ctx, offCtx, offscreen } = this;
 
 		// shift data to down on offscreen

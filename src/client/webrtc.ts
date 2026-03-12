@@ -1,10 +1,54 @@
+interface ClientEntry {
+	cmd: any;
+	fft: any;
+	audio: any;
+	fftOverflow: boolean;
+	audioOverflow: boolean;
+	isRelay: boolean;
+}
+
+interface StatusMessage {
+	status: string;
+	id?: string;
+	error?: string;
+	clientId?: string;
+	isRelay?: boolean;
+}
+
+type StatusChangeCallback = (msg: StatusMessage) => void;
+type CommandCallbackHost = (clientId: string, cmd: any) => void;
+type CommandCallbackClient = (cmd: any) => void;
+type ChunkCallback = (data: ArrayBuffer) => void;
+
+declare const window: Window & { Peer: any };
+
 export class WebRTCHandler {
-	constructor(isHost, remoteId = null) {
+	isHost: boolean;
+	peer: any;
+
+	// --- Multi-client (host) ---
+	// Map<peerId, ClientEntry>
+	clients: Map<string, ClientEntry>;
+
+	// --- Single-connection (client) ---
+	connCmd: any;
+	connFft: any;
+	connAudio: any;
+	connFftOverflow: boolean;
+	connAudioOverflow: boolean;
+
+	remoteId: string | null; // Used by client to connect to host
+
+	onStatusChange: StatusChangeCallback | null;
+	onCommand: CommandCallbackHost | CommandCallbackClient | null;
+	onFftChunk: ChunkCallback | null;
+	onAudioChunk: ChunkCallback | null;
+
+	constructor(isHost: boolean, remoteId: string | null = null) {
 		this.isHost = isHost;
 		this.peer = null;
 
 		// --- Multi-client (host) ---
-		// Map<peerId, { cmd, fft, audio, fftOverflow, audioOverflow }>
 		this.clients = new Map();
 
 		// --- Single-connection (client) ---
@@ -14,15 +58,15 @@ export class WebRTCHandler {
 		this.connFftOverflow = false;
 		this.connAudioOverflow = false;
 
-		this.remoteId = remoteId; // Used by client to connect to host
+		this.remoteId = remoteId;
 
 		this.onStatusChange = null;
-		this.onCommand = null;   // Host: (clientId, cmd) — Client: (cmd)
+		this.onCommand = null;
 		this.onFftChunk = null;
 		this.onAudioChunk = null;
 	}
 
-	async init() {
+	async init(): Promise<string | false> {
 		// Import peerjs dynamically from window.Peer since it's loaded as a script
 		if (!window.Peer) {
 			console.error("PeerJS not loaded!");
@@ -30,7 +74,7 @@ export class WebRTCHandler {
 		}
 
 		// Fetch TURN credentials from our Cloudflare Worker endpoint
-		let peerConfig = undefined;
+		let peerConfig: { iceServers: RTCIceServer[] } | undefined = undefined;
 		try {
 			const turnResp = await fetch('/api/turn');
 			const turnData = await turnResp.json();
@@ -40,11 +84,12 @@ export class WebRTCHandler {
 			} else {
 				console.warn('[WebRTC] No TURN servers available, using STUN only');
 			}
-		} catch (err) {
-			console.warn('[WebRTC] Failed to fetch TURN credentials:', err.message);
+		} catch (err: unknown) {
+			const msg = err instanceof Error ? err.message : String(err);
+			console.warn('[WebRTC] Failed to fetch TURN credentials:', msg);
 		}
 
-		return new Promise((resolve, reject) => {
+		return new Promise<string>((resolve, reject) => {
 			const peerOpts = peerConfig ? { config: peerConfig } : {};
 			if (this.isHost) {
 				// Host generates a random alphabet id
@@ -55,7 +100,7 @@ export class WebRTCHandler {
 				this.peer = new window.Peer(undefined, peerOpts);
 			}
 
-			this.peer.on('open', (id) => {
+			this.peer.on('open', (id: string) => {
 				console.log('[WebRTC] Peer ID:', id);
 
 				if (this.isHost) {
@@ -69,13 +114,13 @@ export class WebRTCHandler {
 				resolve(id);
 			});
 
-			this.peer.on('connection', (conn) => {
+			this.peer.on('connection', (conn: any) => {
 				if (this.isHost) {
 					this._handleIncomingConnection(conn);
 				}
 			});
 
-			this.peer.on('error', (err) => {
+			this.peer.on('error', (err: any) => {
 				console.error('[WebRTC] PeerJS error:', err);
 				this._setStatus({ status: 'error', error: err.type });
 				reject(err);
@@ -87,21 +132,21 @@ export class WebRTCHandler {
 		});
 	}
 
-	_setStatus(msgObj) {
+	_setStatus(msgObj: StatusMessage): void {
 		if (this.onStatusChange) this.onStatusChange(msgObj);
 	}
 
 	// Check whether a connection is using a TURN relay (vs direct peer-to-peer)
-	async _checkRelayType(conn, clientId) {
-		const pc = conn.peerConnection;
-		if (!pc) return;
+	async _checkRelayType(conn: any, clientId: string | null): Promise<boolean | null> {
+		const pc: RTCPeerConnection | undefined = conn.peerConnection;
+		if (!pc) return null;
 		try {
 			const stats = await pc.getStats();
 			for (const [, report] of stats) {
 				if (report.type === 'candidate-pair' && report.state === 'succeeded') {
 					const localCandidate = stats.get(report.localCandidateId);
 					if (localCandidate) {
-						const isRelay = localCandidate.candidateType === 'relay';
+						const isRelay: boolean = localCandidate.candidateType === 'relay';
 						const label = clientId ? clientId.substring(0, 8) : 'host';
 						if (isRelay) {
 							console.warn(`[WebRTC] Client ${label} is using TURN relay`);
@@ -121,15 +166,15 @@ export class WebRTCHandler {
 		return null;
 	}
 
-	_connectToHost() {
+	_connectToHost(): void {
 		console.log('[WebRTC] Connecting to host...');
 		// Client connects to Host. Open three channels.
 		// serialization:'binary' is required for all channels that carry typed arrays.
 		// Without it PeerJS defaults to binary-pack (msgpack) which wraps the
-		// ArrayBuffer in a Uint8Array envelope — Float32Array reconstruction on the
+		// ArrayBuffer in a Uint8Array envelope -- Float32Array reconstruction on the
 		// receiving end then produces garbage values or an array of the wrong length.
 		this.connCmd = this.peer.connect(this.remoteId, { label: 'cmd', reliable: true, serialization: 'binary' });
-		// 'raw' bypasses binarypack entirely — send/receive as plain ArrayBuffer.
+		// 'raw' bypasses binarypack entirely -- send/receive as plain ArrayBuffer.
 		// With 'binary' (binarypack), the receiver gets a Uint8Array; doing
 		// new Float32Array(uint8Array) then numerically casts each byte (0-255)
 		// instead of reinterpreting the raw bytes, producing garbage float values.
@@ -144,9 +189,9 @@ export class WebRTCHandler {
 		setTimeout(() => {
 			if (!(this.connCmd?.open && this.connFft?.open && this.connAudio?.open)) {
 				console.warn('[WebRTC] Connection timeout after 15s. Not all channels opened.');
-				const channels = [['cmd', this.connCmd], ['fft', this.connFft], ['audio', this.connAudio]];
+				const channels: [string, any][] = [['cmd', this.connCmd], ['fft', this.connFft], ['audio', this.connAudio]];
 				channels.forEach(([label, c]) => {
-					const pc = c?.peerConnection;
+					const pc: RTCPeerConnection | undefined = c?.peerConnection;
 					if (pc) {
 						console.warn(`[WebRTC] ${label}: open=${c.open}, ICE=${pc.iceConnectionState}, connection=${pc.connectionState}`);
 					} else {
@@ -157,14 +202,14 @@ export class WebRTCHandler {
 		}, 15000);
 	}
 
-	// ── Host: incoming connection handling (multi-client) ─────────────────
+	// -- Host: incoming connection handling (multi-client) --
 
-	_handleIncomingConnection(conn) {
-		const clientId = conn.peer;
+	_handleIncomingConnection(conn: any): void {
+		const clientId: string = conn.peer;
 		if (!this.clients.has(clientId)) {
 			this.clients.set(clientId, { cmd: null, fft: null, audio: null, fftOverflow: false, audioOverflow: false, isRelay: false });
 		}
-		const client = this.clients.get(clientId);
+		const client = this.clients.get(clientId)!;
 
 		if (conn.label === 'cmd') {
 			client.cmd = conn;
@@ -177,25 +222,25 @@ export class WebRTCHandler {
 		this._setupHostListeners(conn, conn.label, clientId);
 	}
 
-	_setupHostListeners(conn, type, clientId) {
+	_setupHostListeners(conn: any, type: string, clientId: string): void {
 		conn.on('open', () => {
 			const client = this.clients.get(clientId);
 			if (client && client.cmd && client.cmd.open && client.fft && client.fft.open && client.audio && client.audio.open) {
-				// All 3 channels open — check relay type on the cmd channel, then emit connected
-				this._checkRelayType(client.cmd, clientId).then((isRelay) => {
+				// All 3 channels open -- check relay type on the cmd channel, then emit connected
+				this._checkRelayType(client.cmd, clientId).then((isRelay: boolean | null) => {
 					this._setStatus({ status: 'client-connected', clientId, isRelay: !!isRelay });
 				});
 			}
 		});
 
-		conn.on('data', (data) => {
+		conn.on('data', (data: any) => {
 			if (type === 'cmd') {
-				if (this.onCommand) this.onCommand(clientId, data);
+				if (this.onCommand) (this.onCommand as CommandCallbackHost)(clientId, data);
 			}
 			// Host doesn't receive fft/audio from clients
 		});
 
-		conn.on('error', (err) => {
+		conn.on('error', (err: any) => {
 			console.error(`[WebRTC] Channel error for ${clientId.substring(0, 8)}/${type}:`, err);
 		});
 
@@ -210,9 +255,9 @@ export class WebRTCHandler {
 		});
 	}
 
-	// ── Client: connection listeners (single host) ───────────────────────
+	// -- Client: connection listeners (single host) --
 
-	_setupClientListeners(conn, type) {
+	_setupClientListeners(conn: any, type: string): void {
 		conn.on('open', () => {
 			if (this.connCmd && this.connCmd.open && this.connFft && this.connFft.open && this.connAudio && this.connAudio.open) {
 				this._checkRelayType(this.connCmd, null);
@@ -220,9 +265,9 @@ export class WebRTCHandler {
 			}
 		});
 
-		conn.on('data', (data) => {
+		conn.on('data', (data: any) => {
 			if (type === 'cmd') {
-				if (this.onCommand) this.onCommand(data);
+				if (this.onCommand) (this.onCommand as CommandCallbackClient)(data);
 			} else if (type === 'fft') {
 				if (this.onFftChunk) this.onFftChunk(data);
 			} else if (type === 'audio') {
@@ -230,7 +275,7 @@ export class WebRTCHandler {
 			}
 		});
 
-		conn.on('error', (err) => {
+		conn.on('error', (err: any) => {
 			console.error(`[WebRTC] ${type} channel error:`, err);
 		});
 
@@ -239,9 +284,9 @@ export class WebRTCHandler {
 		});
 	}
 
-	// ── Sending: Host → Clients ──────────────────────────────────────────
+	// -- Sending: Host -> Clients --
 
-	sendCommand(cmd) {
+	sendCommand(cmd: any): void {
 		if (this.isHost) {
 			// Broadcast to all clients
 			for (const [, client] of this.clients) {
@@ -257,7 +302,7 @@ export class WebRTCHandler {
 		}
 	}
 
-	sendCommandTo(clientId, cmd) {
+	sendCommandTo(clientId: string, cmd: any): void {
 		const client = this.clients.get(clientId);
 		if (client && client.cmd && client.cmd.open) {
 			client.cmd.send(cmd);
@@ -266,20 +311,21 @@ export class WebRTCHandler {
 
 	// Returns an ArrayBuffer that contains exactly the bytes of `chunk`.
 	// If chunk is a typed-array view (e.g. a subarray of a larger buffer),
-	// chunk.buffer is the ENTIRE backing buffer — we must slice to the view bounds.
-	_toArrayBuffer(chunk) {
+	// chunk.buffer is the ENTIRE backing buffer -- we must slice to the view bounds.
+	_toArrayBuffer(chunk: ArrayBuffer | ArrayBufferView): ArrayBuffer {
 		if (chunk instanceof ArrayBuffer) return chunk;
-		return chunk.buffer.slice(chunk.byteOffset, chunk.byteOffset + chunk.byteLength);
+		const view = chunk as ArrayBufferView;
+		return (view.buffer as ArrayBuffer).slice(view.byteOffset, view.byteOffset + view.byteLength);
 	}
 
-	sendFftChunk(chunk) {
+	sendFftChunk(chunk: ArrayBuffer | ArrayBufferView): void {
 		if (this.isHost) {
 			const buf = this._toArrayBuffer(chunk);
 			// Broadcast to all clients with per-client backpressure
 			for (const [, client] of this.clients) {
 				if (client.fft && client.fft.open) {
 					if (client.fft.dataChannel) {
-						const buffered = client.fft.dataChannel.bufferedAmount;
+						const buffered: number = client.fft.dataChannel.bufferedAmount;
 						if (buffered > 2097152) client.fftOverflow = true;
 						else if (buffered < 524288) client.fftOverflow = false;
 						if (client.fftOverflow) continue;
@@ -290,7 +336,7 @@ export class WebRTCHandler {
 		} else {
 			if (this.connFft && this.connFft.open) {
 				if (this.connFft.dataChannel) {
-					const buffered = this.connFft.dataChannel.bufferedAmount;
+					const buffered: number = this.connFft.dataChannel.bufferedAmount;
 					if (buffered > 2097152) this.connFftOverflow = true;
 					else if (buffered < 524288) this.connFftOverflow = false;
 					if (this.connFftOverflow) return;
@@ -300,11 +346,11 @@ export class WebRTCHandler {
 		}
 	}
 
-	sendAudioChunk(chunk) {
+	sendAudioChunk(chunk: ArrayBuffer | ArrayBufferView): void {
 		// Client-side only (client doesn't send audio)
 		if (this.connAudio && this.connAudio.open) {
 			if (this.connAudio.dataChannel) {
-				const buffered = this.connAudio.dataChannel.bufferedAmount;
+				const buffered: number = this.connAudio.dataChannel.bufferedAmount;
 				if (buffered > 1048576) this.connAudioOverflow = true;
 				else if (buffered < 262144) this.connAudioOverflow = false;
 				if (this.connAudioOverflow) return;
@@ -313,11 +359,11 @@ export class WebRTCHandler {
 		}
 	}
 
-	sendAudioChunkTo(clientId, chunk) {
+	sendAudioChunkTo(clientId: string, chunk: ArrayBuffer | ArrayBufferView): void {
 		const client = this.clients.get(clientId);
 		if (!client || !client.audio || !client.audio.open) return;
 		if (client.audio.dataChannel) {
-			const buffered = client.audio.dataChannel.bufferedAmount;
+			const buffered: number = client.audio.dataChannel.bufferedAmount;
 			if (buffered > 1048576) client.audioOverflow = true;
 			else if (buffered < 262144) client.audioOverflow = false;
 			if (client.audioOverflow) return;
@@ -325,9 +371,9 @@ export class WebRTCHandler {
 		client.audio.send(this._toArrayBuffer(chunk));
 	}
 
-	// ── Client management (host) ─────────────────────────────────────────
+	// -- Client management (host) --
 
-	kickClient(clientId) {
+	kickClient(clientId: string): void {
 		const client = this.clients.get(clientId);
 		if (!client) return;
 		if (client.cmd) try { client.cmd.close(); } catch (_) {}
@@ -336,11 +382,11 @@ export class WebRTCHandler {
 		this.clients.delete(clientId);
 	}
 
-	getConnectedClientIds() {
+	getConnectedClientIds(): string[] {
 		return Array.from(this.clients.keys());
 	}
 
-	close() {
+	close(): void {
 		if (this.isHost) {
 			for (const [, client] of this.clients) {
 				if (client.cmd) try { client.cmd.close(); } catch (_) {}
