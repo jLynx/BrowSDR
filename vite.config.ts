@@ -32,6 +32,21 @@ export default defineConfig({
 	},
 	worker: {
 		format: 'es',
+		plugins: () => [
+			{
+				name: 'worker-ts-to-js',
+				generateBundle(_options: any, bundle: any) {
+					for (const key of Object.keys(bundle)) {
+						if (key.endsWith('.ts')) {
+							const newKey = key.replace(/\.ts$/, '.js');
+							bundle[newKey] = bundle[key];
+							bundle[newKey].fileName = bundle[key].fileName.replace(/\.ts$/, '.js');
+							delete bundle[key];
+						}
+					}
+				},
+			},
+		],
 		rollupOptions: {
 			external: [
 				/\/hackrf-web\/pkg\//,
