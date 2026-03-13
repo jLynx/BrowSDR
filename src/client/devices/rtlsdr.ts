@@ -825,6 +825,14 @@ export class RtlSdrDevice implements SdrDevice {
 
 	async setSampleRate(rate: number): Promise<void> {
 		console.log('RTL-SDR: setSampleRate', rate);
+		// Stop any active bulk transfers before reconfiguring the demod.
+		// SDR++ fully closes/reopens the device for sample rate changes;
+		// we can't do that in WebUSB, so we flush the endpoint instead.
+		await this.stopRx();
+		// Reset the USB endpoint buffer (rtlsdr_reset_buffer equivalent).
+		// This flushes stale data that would otherwise block control transfers.
+		await this.com.writeReg(BLOCK.USB, REG.EPA_CTL, 0x0210, 2);
+		await this.com.writeReg(BLOCK.USB, REG.EPA_CTL, 0x0000, 2);
 		const xtalFreq = Math.floor(XTAL_FREQ * (1 + this.ppm / 1000000));
 		let ratio = Math.floor(xtalFreq * (1 << 22) / rate);
 		ratio &= 0x0ffffffc;
@@ -949,7 +957,15 @@ export class RtlSdrDevice implements SdrDevice {
 		if (this.rxRunning) {
 			const promises = this.rxRunning;
 			this.rxRunning = null;
-			try { await Promise.allSettled(promises); } catch (_) { /* ignore */ }
+			// Wait for transfer loops to exit (they check rxRunning after each
+			// readBulk completes). Use a timeout to prevent deadlocks if the
+			// USB stack stalls a pending transferIn.
+			try {
+				await Promise.race([
+					Promise.allSettled(promises),
+					new Promise<void>(r => setTimeout(r, 500)),
+				]);
+			} catch (_) { /* ignore */ }
 		}
 	}
 }
