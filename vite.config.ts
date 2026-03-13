@@ -1,4 +1,5 @@
 import { defineConfig, build, type Plugin } from 'vite';
+import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
 import fs from 'fs';
 
@@ -155,7 +156,42 @@ export default defineConfig({
 			],
 		},
 	},
-	plugins: [postBuildPlugin()],
+	plugins: [
+		VitePWA({
+			registerType: 'autoUpdate',
+			injectRegister: 'script',
+			workbox: {
+				globPatterns: ['**/*.{js,css,html,wasm}'],
+				navigateFallback: null,
+				runtimeCaching: [
+					{
+						// API routes: network-first (only works online)
+						urlPattern: /^.*\/api\/.*/i,
+						handler: 'NetworkFirst',
+						options: {
+							cacheName: 'api-cache',
+							networkTimeoutSeconds: 5,
+							expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 },
+						},
+					},
+				],
+			},
+			manifest: {
+				name: 'BrowSDR – Web SDR Receiver',
+				short_name: 'BrowSDR',
+				description: 'A blazing-fast browser-based Software Defined Radio receiver.',
+				theme_color: '#0f0f1a',
+				background_color: '#0f0f1a',
+				display: 'standalone',
+				start_url: '/',
+				icons: [
+					{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+					{ src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+				],
+			},
+		}),
+		postBuildPlugin(),
+	],
 	publicDir: path.resolve(__dirname, 'public'),
 	define: {
 		__VUE_OPTIONS_API__: true,

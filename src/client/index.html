@@ -3,6 +3,7 @@
 <head>
 	<meta charset="utf-8" />
 	<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+	<meta name="theme-color" content="#0f0f1a" />
 	<title>BrowSDR - Web-Based SDR Receiver</title>
 	
 	<!-- Primary Meta Tags -->
@@ -110,7 +111,7 @@
 							<small>{{ info.boardName }}</small>
 						</div>
 						<div class="form-row" v-if="connected && remoteMode === 'none'">
-							<button class="btn btn-secondary" style="width: 100%;" @click="startRemoteHost">Share Remote Access</button>
+							<button class="btn btn-secondary" style="width: 100%;" @click="startRemoteHost" :disabled="!isOnline" :title="!isOnline ? 'Not available offline' : 'Share remote access via WebRTC'">Share Remote Access</button>
 						</div>
 						<div class="form-row remote-host-info" v-if="remoteMode === 'host'">
 							<small>Share this link:</small>

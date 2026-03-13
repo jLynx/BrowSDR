@@ -35,6 +35,11 @@ createApp({
 	created: async function () {
 		this.loadSetting();
 		this.loadBookmarks();
+
+		// Track online/offline status for PWA — disables internet-dependent features when offline
+		window.addEventListener('online', () => { this.isOnline = true; });
+		window.addEventListener('offline', () => { this.isOnline = false; });
+
 		this.backend = await new (Backend as any)();
 		await this.backend.init();
 

@@ -5,6 +5,7 @@ export function createAppData() {
 		backend: null as any,
 		connected: false,
 		running: false,
+		isOnline: navigator.onLine,
 		remoteMode: 'none' as 'none' | 'host' | 'client',
 		remoteStatus: '',
 		remoteLink: '',
