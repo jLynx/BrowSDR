@@ -35,6 +35,11 @@ createApp({
 	created: async function () {
 		this.loadSetting();
 		this.loadBookmarks();
+
+		// Track online/offline status for PWA — disables internet-dependent features when offline
+		window.addEventListener('online', () => { this.isOnline = true; });
+		window.addEventListener('offline', () => { this.isOnline = false; });
+
 		this.backend = await new (Backend as any)();
 		await this.backend.init();
 
@@ -67,18 +72,18 @@ createApp({
 		this.$watch('gains', () => {
 			if (this.remoteMode === 'client') {
 				if (!this._applyingSync) {
-					this._webrtc.sendCommand({ type: 'requestChange', target: 'gains', property: 'lna', value: this.gains.lna });
-					this._webrtc.sendCommand({ type: 'requestChange', target: 'gains', property: 'vga', value: this.gains.vga });
-					this._webrtc.sendCommand({ type: 'requestChange', target: 'gains', property: 'ampEnabled', value: this.gains.ampEnabled });
+					// Send all gain values generically
+					for (const [name, value] of Object.entries(this.gains)) {
+						this._webrtc.sendCommand({ type: 'requestChange', target: 'gains', property: name, value });
+					}
 				}
 				return;
 			}
 
-			if (this.running && this.connected) {
-				if (this.backend.setAmpEnable) {
-					this.backend.setAmpEnable(this.gains.ampEnabled);
-					this.backend.setLnaGain(this.gains.lna);
-					this.backend.setVgaGain(this.gains.vga);
+			if (this.running && this.connected && this.backend) {
+				// Apply all gains generically via the device-agnostic API
+				for (const [name, value] of Object.entries(this.gains)) {
+					this.backend.setGain(name, value as number);
 				}
 			}
 

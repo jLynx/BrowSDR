@@ -18,9 +18,15 @@ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABI
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-import { HackRF } from '../hackrf';
 import { ensureWasmInitialized, init } from './wasm-init';
 import { MockHackRF } from './mock-hackrf';
+import type { SdrDevice, SdrDeviceInfo, DeviceCapabilities } from '../sdr-device';
+import { detectDevice } from '../sdr-device';
+// Import device drivers so they self-register
+import '../devices/hackrf';
+import '../devices/rtlsdr';
+import '../devices/airspy';
+import '../devices/airspyhf';
 import {
 	setRemoteHostCallback,
 	setRemoteHostFftCallback,
@@ -44,8 +50,8 @@ import { startRxStream } from './rx-stream';
 import type { VfoParams, VfoState, PerfCounters, RxStreamOpts, RemoteClientState, DeviceOpenOpts } from './types';
 
 export class Backend {
-	// Hardware
-	hackrf: any;
+	// Hardware — generic SDR device
+	device: SdrDevice | null = null;
 	wasm: any;
 
 	// VFO state
@@ -93,105 +99,47 @@ export class Backend {
 
 	async open(opts?: DeviceOpenOpts | "mock"): Promise<boolean> {
 		if (opts === "mock") {
-			this.hackrf = new MockHackRF();
-			await this.hackrf.open();
+			this.device = new MockHackRF();
+			await this.device.open(null as any);
 			return true;
 		}
 
 		const devices = await (navigator as any).usb.getDevices();
-		const device = !opts ? devices[0] : devices.find((d: any) => {
-			if (opts.vendorId) {
-				if (d.vendorId !== opts.vendorId) {
-					return false;
-				}
-			}
-			if (opts.productId) {
-				if (d.productId !== opts.productId) {
-					return false;
-				}
-			}
-			if (opts.serialNumber) {
-				if (d.serialNumber !== opts.serialNumber) {
-					return false;
-				}
-			}
+		const usbDevice = !opts ? devices[0] : devices.find((d: any) => {
+			if (opts.vendorId && d.vendorId !== opts.vendorId) return false;
+			if (opts.productId && d.productId !== opts.productId) return false;
+			if (opts.serialNumber && d.serialNumber !== opts.serialNumber) return false;
 			return true;
 		});
-		if (!device) {
+		if (!usbDevice) {
 			return false;
 		}
-		this.hackrf = new HackRF();
-		await this.hackrf.open(device);
+
+		// Detect which driver matches this USB device
+		const driverEntry = detectDevice(usbDevice);
+		if (!driverEntry) {
+			console.error('No SDR driver found for device:', usbDevice.vendorId.toString(16), usbDevice.productId.toString(16));
+			return false;
+		}
+
+		this.device = driverEntry.create();
+		await this.device.open(usbDevice);
 		return true;
 	}
 
-	async info(): Promise<{ boardId: number; versionString: string; apiVersion: number[]; partId: number[]; serialNo: number[] }> {
-		const { hackrf } = this;
-		const boardId = await hackrf.readBoardId();
-		const versionString = await hackrf.readVersionString();
-		const apiVersion = await hackrf.readApiVersion();
-		const { partId, serialNo } = await hackrf.readPartIdSerialNo();
+	async info(): Promise<SdrDeviceInfo> {
+		if (!this.device) throw new Error('No device connected');
+		return this.device.getInfo();
+	}
 
-		const [apiMajor, apiMinor, apiSubminor] = apiVersion;
-		const bcdVersion = (apiMajor << 8) | (apiMinor << 4) | apiSubminor;
-
-		const serialStr = serialNo.map((i: number) => (i + 0x100000000).toString(16).slice(1)).join('');
-		const partIdStr = partId.map((i: number) => '0x' + (i + 0x100000000).toString(16).slice(1)).join(' ');
-
-		console.log(`Serial number: ${serialStr}`);
-		console.log(`Board ID Number: ${boardId} (${HackRF.BOARD_ID_NAME.get(boardId)})`);
-		console.log(`Firmware Version: ${versionString} (API:${apiMajor}.${String(apiMinor) + String(apiSubminor)})`);
-		console.log(`Part ID Number: ${partIdStr}`);
-
-		let boardRev = HackRF.BOARD_REV_UNDETECTED;
-		if (bcdVersion >= 0x0106 && (boardId === 2 || boardId === 4 || boardId === 5)) {
-			try {
-				boardRev = await hackrf.boardRevRead();
-				if (boardRev === HackRF.BOARD_REV_UNDETECTED) {
-					console.log('Hardware Revision: Error: Hardware revision not yet detected by firmware.');
-				} else if (boardRev === HackRF.BOARD_REV_UNRECOGNIZED) {
-					console.log('Hardware Revision: Warning: Hardware revision not recognized by firmware.');
-				} else {
-					console.log(`Hardware Revision: ${HackRF.BOARD_REV_NAME.get(boardRev)}`);
-					if (boardRev > 0) {
-						if (boardRev & HackRF.HACKRF_BOARD_REV_GSG) {
-							console.log('Hardware appears to have been manufactured by Great Scott Gadgets.');
-						} else {
-							console.log('Hardware does not appear to have been manufactured by Great Scott Gadgets.');
-						}
-					}
-				}
-			} catch (e) {
-				console.warn('boardRevRead not supported:', e);
-			}
-		}
-
-		if (bcdVersion >= 0x0106) {
-			try {
-				const platform = await hackrf.readSupportedPlatform();
-				const platforms: string[] = [];
-				if (platform & HackRF.HACKRF_PLATFORM_JAWBREAKER) platforms.push('Jawbreaker');
-				if (platform & HackRF.HACKRF_PLATFORM_RAD1O) platforms.push('rad1o');
-				if ((platform & HackRF.HACKRF_PLATFORM_HACKRF1_OG) || (platform & HackRF.HACKRF_PLATFORM_HACKRF1_R9)) platforms.push('HackRF One');
-				if (platform & HackRF.HACKRF_PLATFORM_PRALINE) {
-					platforms.push((boardRev & HackRF.HACKRF_BOARD_REV_GSG) ? 'HackRF Pro' : 'Praline');
-				}
-				console.log(`Hardware supported by installed firmware: ${platforms.join(', ')}`);
-			} catch (e) {
-				console.warn('readSupportedPlatform not supported:', e);
-			}
-		}
-
-		try {
-			const operacakes = await hackrf.getOperacakeBoards();
-			for (const addr of operacakes) {
-				console.log(`Opera Cake found, address: ${addr}`);
-			}
-		} catch (e) {
-			// Opera Cake detection not supported or not present — ignore
-		}
-
-		return { boardId, versionString, apiVersion, partId, serialNo };
+	getDeviceCapabilities(): DeviceCapabilities | null {
+		if (!this.device) return null;
+		return {
+			deviceType: this.device.deviceType,
+			sampleRates: this.device.sampleRates,
+			gainControls: this.device.gainControls,
+			sampleFormat: this.device.sampleFormat,
+		};
 	}
 
 	// Remote client methods (imported from remote-clients.ts)
@@ -276,52 +224,36 @@ export class Backend {
 		this.vfoStates!.splice(index, 1);
 	}
 
-	async setSampleRateManual(freq: number, divider: number): Promise<void> {
-		await this.hackrf.setSampleRateManual(freq, divider);
+	// ── Generic device control methods ──────────────────────────────
+
+	async setSampleRate(rate: number): Promise<void> {
+		if (!this.device) throw new Error('No device connected');
+		await this.device.setSampleRate(rate);
 	}
 
-	async setBasebandFilterBandwidth(bandwidthHz: number): Promise<void> {
-		await this.hackrf.setBasebandFilterBandwidth(bandwidthHz);
+	async setFrequency(freqHz: number): Promise<void> {
+		if (!this.device) throw new Error('No device connected');
+		await this.device.setFrequency(freqHz);
 	}
 
-	async setLnaGain(value: number): Promise<void> {
-		await this.hackrf.setLnaGain(value);
-	}
-
-	async setVgaGain(value: number): Promise<void> {
-		await this.hackrf.setVgaGain(value);
-	}
-
-	async setFreq(freqHz: number): Promise<void> {
-		await this.hackrf.setFreq(freqHz);
-	}
-
-	async setAmpEnable(enable: boolean): Promise<void> {
-		await this.hackrf.setAmpEnable(enable);
-	}
-
-	async setAntennaEnable(enable: boolean): Promise<void> {
-		await this.hackrf.setAntennaEnable(enable);
-	}
-
-	async initSweep(ranges: any, numBytes: number, stepWidth: number, offset: number, style: number): Promise<void> {
-		await this.hackrf.initSweep(ranges, numBytes, stepWidth, offset, style);
+	async setGain(name: string, value: number): Promise<void> {
+		if (!this.device) throw new Error('No device connected');
+		await this.device.setGain(name, value);
 	}
 
 	async startRx(callback: any): Promise<void> {
-		await this.hackrf.startRx(callback);
-	}
-
-	async startRxSweep(callback: any): Promise<void> {
-		await this.hackrf.startRxSweep(callback);
+		if (!this.device) throw new Error('No device connected');
+		await this.device.startRx(callback);
 	}
 
 	async stopRx(): Promise<void> {
-		await this.hackrf.stopRx();
+		if (!this.device) throw new Error('No device connected');
+		await this.device.stopRx();
 	}
 
 	async close(): Promise<void> {
-		await this.hackrf.close();
-		await this.hackrf.exit();
+		if (!this.device) return;
+		await this.device.close();
+		this.device = null;
 	}
 }

@@ -14,9 +14,12 @@ export const remoteMethods = {
 		this.remoteMode = 'host';
 		this.locks.centerFreq = true;
 		this.locks.sampleRate = true;
-		this.locks.lna = true;
-		this.locks.vga = true;
-		this.locks.amp = true;
+		// Lock all gain controls
+		if (this.deviceCapabilities) {
+			for (const gc of this.deviceCapabilities.gainControls) {
+				this.locks[gc.name] = true;
+			}
+		}
 		this.remoteStatus = 'Generating ID...';
 
 		console.log("[WebRTC] Instantiating WebRTCHandler");
@@ -275,9 +278,7 @@ export const remoteMethods = {
 				if (target === 'radio' && property === 'centerFreq' && this.locks.centerFreq) allow = false;
 				if (target === 'radio' && property === 'sampleRate' && this.locks.sampleRate) allow = false;
 				if (target === 'gains') {
-					if (property === 'lna' && this.locks.lna) allow = false;
-					if (property === 'vga' && this.locks.vga) allow = false;
-					if (property === 'ampEnabled' && this.locks.amp) allow = false;
+					if (this.locks[property]) allow = false;
 				}
 
 				if (allow) {

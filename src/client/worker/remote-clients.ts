@@ -260,21 +260,22 @@ export function _reinitRemoteClientWorkers(this: Backend): void {
 export async function initRemoteClient(this: Backend): Promise<void> {
 	await ensureWasmInitialized();
 	this.wasm = await init();
-	this.hackrf = {
-		setSampleRateManual: async () => {},
-		setBasebandFilterBandwidth: async () => {},
-		setFreq: async () => {},
-		startRx: async (cb: any) => {
-			this._remoteClientCb = cb;
-		},
-		stopRx: async () => {
-			this._remoteClientCb = null;
-		},
-		close: async () => {},
-		exit: async () => {},
-		setAmpEnable: async () => {},
-		setLnaGain: async () => {},
-		setVgaGain: async () => {}
+	// Create a stub SdrDevice for the remote client — it receives IQ data
+	// via WebRTC rather than USB, so all hardware methods are no-ops.
+	const self = this;
+	this.device = {
+		deviceType: 'remote',
+		sampleRates: [2000000, 4000000, 8000000, 10000000, 16000000, 20000000],
+		gainControls: [],
+		sampleFormat: 'int8',
+		async open() {},
+		async close() {},
+		async getInfo() { return { name: 'Remote SDR' }; },
+		async setSampleRate() {},
+		async setFrequency() {},
+		async setGain() {},
+		async startRx(cb: any) { self._remoteClientCb = cb; },
+		async stopRx() { self._remoteClientCb = null; },
 	} as any;
 }
 

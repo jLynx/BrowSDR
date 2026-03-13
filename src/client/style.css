@@ -2476,3 +2476,36 @@ canvas {
 		width: 90vw;
 	}
 }
+
+/* ── Device Picker Dialog ────────────────────────────────────── */
+.device-picker-list {
+	max-height: 300px;
+	overflow-y: auto;
+}
+
+.device-picker-item {
+	padding: 10px 14px;
+	cursor: pointer;
+	border-bottom: 1px solid var(--border);
+	transition: background 0.15s;
+}
+
+.device-picker-item:last-child {
+	border-bottom: none;
+}
+
+.device-picker-item:hover {
+	background: rgba(255, 255, 255, 0.06);
+}
+
+.device-picker-name {
+	font-weight: 600;
+	font-size: 13px;
+	color: #ddd;
+}
+
+.device-picker-meta {
+	font-size: 11px;
+	color: #888;
+	margin-top: 2px;
+}

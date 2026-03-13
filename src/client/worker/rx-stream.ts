@@ -19,7 +19,6 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 */
 
 import * as Comlink from 'comlink';
-import { HackRF } from '../hackrf';
 import { FFT } from './wasm-init';
 import { RationalResampler } from './dsp-pipeline';
 import { POCSAGDecoder } from './pocsag';
@@ -38,14 +37,12 @@ export async function startRxStream(
 	backend._remoteClientAudioCb = audioCallback; // Save reference for when chunk arrives
 	backend._remoteClientWhisperCb = whisperCallback; // Save for remote client transcription
 	try {
-		const { hackrf } = backend;
-		const { centerFreq, sampleRate, fftSize, lnaGain, vgaGain, ampEnabled } = opts;
+		const { device } = backend;
+		if (!device) throw new Error('No device connected');
+		const { centerFreq, sampleRate, fftSize, gains } = opts;
 
-		await hackrf.setSampleRateManual(sampleRate, 1);
-		await hackrf.setBasebandFilterBandwidth(
-			HackRF.computeBasebandFilterBw(sampleRate)
-		);
-		await hackrf.setFreq(centerFreq * 1e6);
+		await device.setSampleRate(sampleRate);
+		await device.setFrequency(centerFreq * 1e6);
 
 		// ── Spectrum FFT setup ────────────────────────────────────────
 		const spectrumWindowFunc = (x: number): number => {
@@ -596,7 +593,7 @@ export async function startRxStream(
 		// Expose for worker closure inside spawnWorker
 		backend._handleWorkerAudio = handleWorkerAudio;
 
-		await hackrf.startRx((data: any) => {
+		await device.startRx((data: any) => {
 			perf.usbCallbacks++;
 
 			const signed = new Int8Array(data.buffer, data.byteOffset, data.length);
@@ -677,9 +674,12 @@ export async function startRxStream(
 			backend.sabPoolIndex = (backend.sabPoolIndex! + 1) % SAB_POOL_SIZE;
 		});
 
-		if (ampEnabled !== undefined) await hackrf.setAmpEnable(ampEnabled);
-		if (lnaGain !== undefined) await hackrf.setLnaGain(lnaGain);
-		if (vgaGain !== undefined) await hackrf.setVgaGain(vgaGain);
+		// Apply initial gains from opts
+		if (gains) {
+			for (const [name, value] of Object.entries(gains)) {
+				await device.setGain(name, value);
+			}
+		}
 
 		// Reinitialize all remote client DSP workers with the new sample rate
 		// and shared IQ buffers. Without this, remote workers hold stale references

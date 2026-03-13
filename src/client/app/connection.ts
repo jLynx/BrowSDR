@@ -1,27 +1,73 @@
 import type { AppInstance } from './types';
 import * as Comlink from 'comlink';
-import { HackRF } from '../hackrf';
+import { getAllCatalogFilters, lookupDevice } from '../device-catalog';
 
 export const connectionMethods = {
 	async connect(this: AppInstance) {
 		if (!this.backend) return;
 		this._initAudioCtx(); // create AudioContext within user gesture
+
+		// Get already-paired USB devices and filter to recognized SDR devices
+		const allPaired = await navigator.usb.getDevices();
+		type PairedSdr = { device: USBDevice; driverName: string; productName: string };
+		const sdrDevices: PairedSdr[] = [];
+		for (const device of allPaired) {
+			const driver = lookupDevice(device);
+			if (driver) {
+				sdrDevices.push({ device, driverName: driver.name, productName: device.productName || '' });
+			}
+		}
+
+		if (sdrDevices.length === 0) {
+			// No paired SDR devices — go straight to browser USB picker
+			await this.pairNewDevice();
+		} else {
+			// Show our custom picker dialog
+			this.devicePicker.devices = sdrDevices;
+			this.devicePicker.show = true;
+		}
+	},
+
+	async pairNewDevice(this: AppInstance) {
+		this.devicePicker.show = false;
+		const device = await navigator.usb.requestDevice({
+			filters: getAllCatalogFilters()
+		}).catch(() => null);
+		if (!device) return;
+		await this.connectToDevice(device);
+	},
+
+	async connectToDevice(this: AppInstance, device: USBDevice) {
+		this.devicePicker.show = false;
 		this.showMsg("Connecting...");
 		try {
-			let ok = await this.backend.open();
-			if (!ok) {
-				const device = await HackRF.requestDevice();
-				if (!device) return;
-				ok = await this.backend.open({
-					vendorId: device.vendorId,
-					productId: device.productId,
-					serialNumber: device.serialNumber
-				});
-			}
+			const ok = await this.backend.open({
+				vendorId: device.vendorId,
+				productId: device.productId,
+				serialNumber: device.serialNumber
+			});
 			if (ok) {
 				this.connected = true;
 				const info = await this.backend.info();
-				this.info.boardName = HackRF.BOARD_ID_NAME.get(info.boardId);
+				this.info.boardName = info.name;
+
+				// Populate device capabilities for dynamic UI
+				const caps = await this.backend.getDeviceCapabilities();
+				this.deviceCapabilities = caps;
+				if (caps) {
+					// Initialize gains from device defaults
+					const newGains: Record<string, number> = {};
+					for (const gc of caps.gainControls) {
+						newGains[gc.name] = gc.default;
+					}
+					this.gains = newGains;
+
+					// If current sample rate isn't in the device's supported list, pick the closest
+					if (!caps.sampleRates.includes(this.radio.sampleRate)) {
+						this.radio.sampleRate = caps.sampleRates[caps.sampleRates.length - 1];
+					}
+				}
+
 				this.showMsg("Connected to " + this.info.boardName);
 				await this.startStream();
 			} else {
@@ -31,6 +77,7 @@ export const connectionMethods = {
 			this.showMsg("Connect Error: " + e.message);
 		}
 	},
+
 	async connectMock(this: AppInstance) {
 		if (!this.backend) return;
 		this._initAudioCtx(); // create AudioContext within user gesture
@@ -39,7 +86,19 @@ export const connectionMethods = {
 			const ok = await this.backend.open("mock");
 			if (ok) {
 				this.connected = true;
-				this.info.boardName = "Mock SDR (Signal Gen)";
+				const info = await this.backend.info();
+				this.info.boardName = info.name;
+
+				const caps = await this.backend.getDeviceCapabilities();
+				this.deviceCapabilities = caps;
+				if (caps) {
+					const newGains: Record<string, number> = {};
+					for (const gc of caps.gainControls) {
+						newGains[gc.name] = gc.default;
+					}
+					this.gains = newGains;
+				}
+
 				this.showMsg("Connected to Mock SDR");
 				await this.startStream();
 			} else {
@@ -56,6 +115,7 @@ export const connectionMethods = {
 			this.remoteMode = 'none';
 			if (this.running) await this.togglePlay();
 			this.connected = false;
+			this.deviceCapabilities = null;
 			this.showMsg("Disconnected from remote device");
 			// Clear the URL
 			window.history.replaceState({}, document.title, "/");
@@ -74,6 +134,7 @@ export const connectionMethods = {
 		if (this.running) await this.togglePlay();
 		await this.backend.close();
 		this.connected = false;
+		this.deviceCapabilities = null;
 		this.showMsg("Disconnected");
 	},
 	async togglePlay(this: AppInstance, isRestart = false) {
@@ -105,9 +166,7 @@ export const connectionMethods = {
 			centerFreq: this.radio.centerFreq,
 			sampleRate: this.radio.sampleRate,
 			fftSize: this.radio.fftSize,
-			lnaGain: this.gains.lna,
-			vgaGain: this.gains.vga,
-			ampEnabled: this.gains.ampEnabled,
+			gains: { ...this.gains },
 		};
 
 		try {

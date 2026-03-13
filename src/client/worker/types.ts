@@ -80,8 +80,12 @@ export interface RxStreamOpts {
 	centerFreq: number;
 	sampleRate: number;
 	fftSize: number;
+	gains?: Record<string, number>;
+	/** @deprecated Use gains instead */
 	lnaGain?: number;
+	/** @deprecated Use gains instead */
 	vgaGain?: number;
+	/** @deprecated Use gains instead */
 	ampEnabled?: boolean;
 }
 
