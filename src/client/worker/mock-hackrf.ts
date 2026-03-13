@@ -18,44 +18,41 @@ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABI
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-import { HackRF } from '../hackrf';
+import type { SdrDevice, SdrDeviceInfo, GainControl } from '../sdr-device';
 
-export class MockHackRF {
-	running: boolean;
-	sampleRate: number;
-	centerFreq: number;
-	callback: ((data: { buffer: ArrayBuffer; byteOffset: number; length: number }) => void) | null;
-	phase: number;
-	private thread: any;
+export class MockHackRF implements SdrDevice {
+	readonly deviceType = 'mock';
+	readonly sampleRates = [2000000, 4000000, 5000000, 8000000, 10000000, 16000000, 20000000];
+	readonly sampleFormat = 'int8' as const;
+	readonly gainControls: GainControl[] = [
+		{ name: 'LNA', min: 0, max: 40, step: 8, default: 16, type: 'slider' },
+		{ name: 'VGA', min: 0, max: 62, step: 2, default: 16, type: 'slider' },
+		{ name: 'Amp', min: 0, max: 1, step: 1, default: 0, type: 'checkbox' },
+	];
 
-	constructor() {
-		this.running = false;
-		this.sampleRate = 2000000;
-		this.centerFreq = 100000000;
-		this.callback = null;
-		this.phase = 0;
+	private running = false;
+	private sampleRate = 2000000;
+	private phase = 0;
+	private thread: any = null;
+
+	async open(_device?: USBDevice): Promise<void> { /* no real device */ }
+
+	async close(): Promise<void> {
+		await this.stopRx();
 	}
-	async open(): Promise<boolean> { return true; }
-	async readBoardId(): Promise<number> { return 2; }
-	async readVersionString(): Promise<string> { return "Mock Firmware V1"; }
-	async readApiVersion(): Promise<number[]> { return [1, 6, 0]; }
-	async readPartIdSerialNo(): Promise<{ partId: number[]; serialNo: number[] }> { return { partId: [0,0], serialNo: [1,2,3,4] }; }
-	async readSupportedPlatform(): Promise<number> { return HackRF.HACKRF_PLATFORM_HACKRF1_OG; }
-	async boardRevRead(): Promise<number> { return 0x04 | HackRF.HACKRF_BOARD_REV_GSG; }
 
-	async setSampleRateManual(freq: number, div: number): Promise<void> { this.sampleRate = freq / div; }
-	async setBasebandFilterBandwidth(_bw: number): Promise<void> {}
-	async setFreq(freq: number): Promise<void> { this.centerFreq = freq; }
-	async setAmpEnable(_e: boolean): Promise<void> {}
-	async setLnaGain(_g: number): Promise<void> {}
-	async setVgaGain(_g: number): Promise<void> {}
+	async getInfo(): Promise<SdrDeviceInfo> {
+		return { name: 'Mock SDR (Signal Gen)', firmware: 'Mock Firmware V1' };
+	}
 
-	async startRx(callback: (data: { buffer: ArrayBuffer; byteOffset: number; length: number }) => void): Promise<void> {
-		this.callback = callback;
+	async setSampleRate(rate: number): Promise<void> { this.sampleRate = rate; }
+	async setFrequency(_freqHz: number): Promise<void> {}
+	async setGain(_name: string, _value: number): Promise<void> {}
+
+	async startRx(callback: (data: ArrayBufferView) => void): Promise<void> {
 		this.running = true;
 		this.thread = setInterval(() => {
 			if (!this.running) return;
-			// Emulate USB chunk size of HackRF
 			const chunkSize = 262144;
 			const buffer = new ArrayBuffer(chunkSize);
 			const view = new Int8Array(buffer);
@@ -70,16 +67,15 @@ export class MockHackRF {
 				view[i * 2] = i_val;
 				view[i * 2 + 1] = q_val;
 			}
-			callback({ buffer, byteOffset: 0, length: chunkSize });
-		}, ((262144 / 2) / this.sampleRate) * 1000); // Trigger at the expected sample rate
+			callback(new Uint8Array(buffer, 0, chunkSize));
+		}, ((262144 / 2) / this.sampleRate) * 1000);
 	}
 
 	async stopRx(): Promise<void> {
 		this.running = false;
-		clearInterval(this.thread);
+		if (this.thread) {
+			clearInterval(this.thread);
+			this.thread = null;
+		}
 	}
-
-	async close(): Promise<void> {}
-	async exit(): Promise<void> {}
-	async getOperacakeBoards(): Promise<any[]> { return []; }
 }

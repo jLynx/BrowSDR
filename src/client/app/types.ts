@@ -30,19 +30,9 @@ export interface DisplayState {
 	maxDB: number;
 }
 
-export interface GainState {
-	lna: number;
-	vga: number;
-	ampEnabled: boolean;
-}
+export type GainState = Record<string, number>;
 
-export interface LockState {
-	centerFreq: boolean;
-	sampleRate: boolean;
-	lna: boolean;
-	vga: boolean;
-	amp: boolean;
-}
+export type LockState = Record<string, boolean>;
 
 export interface WhisperState {
 	panelOpen: boolean;

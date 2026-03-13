@@ -1,6 +1,6 @@
 import type { AppInstance } from './types';
 import * as Comlink from 'comlink';
-import { HackRF } from '../hackrf';
+import { getAllFilters } from '../sdr-device';
 
 export const connectionMethods = {
 	async connect(this: AppInstance) {
@@ -10,7 +10,10 @@ export const connectionMethods = {
 		try {
 			let ok = await this.backend.open();
 			if (!ok) {
-				const device = await HackRF.requestDevice();
+				// Request any supported SDR device using all registered driver filters
+				const device = await navigator.usb.requestDevice({
+					filters: getAllFilters()
+				}).catch(() => null);
 				if (!device) return;
 				ok = await this.backend.open({
 					vendorId: device.vendorId,
@@ -21,7 +24,25 @@ export const connectionMethods = {
 			if (ok) {
 				this.connected = true;
 				const info = await this.backend.info();
-				this.info.boardName = HackRF.BOARD_ID_NAME.get(info.boardId);
+				this.info.boardName = info.name;
+
+				// Populate device capabilities for dynamic UI
+				const caps = await this.backend.getDeviceCapabilities();
+				this.deviceCapabilities = caps;
+				if (caps) {
+					// Initialize gains from device defaults
+					const newGains: Record<string, number> = {};
+					for (const gc of caps.gainControls) {
+						newGains[gc.name] = gc.default;
+					}
+					this.gains = newGains;
+
+					// If current sample rate isn't in the device's supported list, pick the closest
+					if (!caps.sampleRates.includes(this.radio.sampleRate)) {
+						this.radio.sampleRate = caps.sampleRates[caps.sampleRates.length - 1];
+					}
+				}
+
 				this.showMsg("Connected to " + this.info.boardName);
 				await this.startStream();
 			} else {
@@ -39,7 +60,19 @@ export const connectionMethods = {
 			const ok = await this.backend.open("mock");
 			if (ok) {
 				this.connected = true;
-				this.info.boardName = "Mock SDR (Signal Gen)";
+				const info = await this.backend.info();
+				this.info.boardName = info.name;
+
+				const caps = await this.backend.getDeviceCapabilities();
+				this.deviceCapabilities = caps;
+				if (caps) {
+					const newGains: Record<string, number> = {};
+					for (const gc of caps.gainControls) {
+						newGains[gc.name] = gc.default;
+					}
+					this.gains = newGains;
+				}
+
 				this.showMsg("Connected to Mock SDR");
 				await this.startStream();
 			} else {
@@ -56,6 +89,7 @@ export const connectionMethods = {
 			this.remoteMode = 'none';
 			if (this.running) await this.togglePlay();
 			this.connected = false;
+			this.deviceCapabilities = null;
 			this.showMsg("Disconnected from remote device");
 			// Clear the URL
 			window.history.replaceState({}, document.title, "/");
@@ -74,6 +108,7 @@ export const connectionMethods = {
 		if (this.running) await this.togglePlay();
 		await this.backend.close();
 		this.connected = false;
+		this.deviceCapabilities = null;
 		this.showMsg("Disconnected");
 	},
 	async togglePlay(this: AppInstance, isRestart = false) {
@@ -105,9 +140,7 @@ export const connectionMethods = {
 			centerFreq: this.radio.centerFreq,
 			sampleRate: this.radio.sampleRate,
 			fftSize: this.radio.fftSize,
-			lnaGain: this.gains.lna,
-			vgaGain: this.gains.vga,
-			ampEnabled: this.gains.ampEnabled,
+			gains: { ...this.gains },
 		};
 
 		try {
