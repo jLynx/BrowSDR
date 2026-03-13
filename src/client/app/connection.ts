@@ -1,26 +1,51 @@
 import type { AppInstance } from './types';
 import * as Comlink from 'comlink';
-import { getAllFilters } from '../sdr-device';
+import { getAllCatalogFilters, lookupDevice } from '../device-catalog';
 
 export const connectionMethods = {
 	async connect(this: AppInstance) {
 		if (!this.backend) return;
 		this._initAudioCtx(); // create AudioContext within user gesture
+
+		// Get already-paired USB devices and filter to recognized SDR devices
+		const allPaired = await navigator.usb.getDevices();
+		type PairedSdr = { device: USBDevice; driverName: string; productName: string };
+		const sdrDevices: PairedSdr[] = [];
+		for (const device of allPaired) {
+			const driver = lookupDevice(device);
+			if (driver) {
+				sdrDevices.push({ device, driverName: driver.name, productName: device.productName || '' });
+			}
+		}
+
+		if (sdrDevices.length === 0) {
+			// No paired SDR devices — go straight to browser USB picker
+			await this.pairNewDevice();
+		} else {
+			// Show our custom picker dialog
+			this.devicePicker.devices = sdrDevices;
+			this.devicePicker.show = true;
+		}
+	},
+
+	async pairNewDevice(this: AppInstance) {
+		this.devicePicker.show = false;
+		const device = await navigator.usb.requestDevice({
+			filters: getAllCatalogFilters()
+		}).catch(() => null);
+		if (!device) return;
+		await this.connectToDevice(device);
+	},
+
+	async connectToDevice(this: AppInstance, device: USBDevice) {
+		this.devicePicker.show = false;
 		this.showMsg("Connecting...");
 		try {
-			let ok = await this.backend.open();
-			if (!ok) {
-				// Request any supported SDR device using all registered driver filters
-				const device = await navigator.usb.requestDevice({
-					filters: getAllFilters()
-				}).catch(() => null);
-				if (!device) return;
-				ok = await this.backend.open({
-					vendorId: device.vendorId,
-					productId: device.productId,
-					serialNumber: device.serialNumber
-				});
-			}
+			const ok = await this.backend.open({
+				vendorId: device.vendorId,
+				productId: device.productId,
+				serialNumber: device.serialNumber
+			});
 			if (ok) {
 				this.connected = true;
 				const info = await this.backend.info();
@@ -52,6 +77,7 @@ export const connectionMethods = {
 			this.showMsg("Connect Error: " + e.message);
 		}
 	},
+
 	async connectMock(this: AppInstance) {
 		if (!this.backend) return;
 		this._initAudioCtx(); // create AudioContext within user gesture

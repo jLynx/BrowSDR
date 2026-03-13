@@ -103,6 +103,10 @@ export function createAppData() {
 			vfos: [] as any[],
 			activeVfoIndex: 0,
 		},
+		devicePicker: {
+			show: false,
+			devices: [] as Array<{ device: USBDevice; driverName: string; productName: string }>,
+		},
 		sidebarOpen: false,
 		collapsedPanels: {} as Record<string, boolean>,
 	};

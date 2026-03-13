@@ -1021,44 +1021,92 @@ export class RtlSdrDevice implements SdrDevice {
 }
 
 // ── Register driver ───────────────────────────────────────────────
-// Comprehensive list of known RTL2832U-based device VID/PIDs
+// Complete list of known RTL2832U-based device VID/PIDs (from librtlsdr)
 const RTL_SDR_FILTERS: USBDeviceFilter[] = [
-	// Realtek RTL2832U generic
+	// Realtek RTL2832U
 	{ vendorId: 0x0bda, productId: 0x2832 },
 	// Realtek RTL2832U OEM (RTL-SDR Blog, Nooelec, etc.)
 	{ vendorId: 0x0bda, productId: 0x2838 },
 	// DigitalNow Quad DVB-T PCI-E card
 	{ vendorId: 0x0413, productId: 0x6680 },
-	// Compro Videomate U620F
-	{ vendorId: 0x185b, productId: 0x0620 },
-	// Compro Videomate U650F
-	{ vendorId: 0x185b, productId: 0x0650 },
+	// Leadtek WinFast DTV Dongle mini D
+	{ vendorId: 0x0413, productId: 0x6f0f },
+	// Genius TVGo DVB-T03 USB dongle (Ver. B)
+	{ vendorId: 0x0458, productId: 0x707f },
 	// Terratec Cinergy T Stick Black (rev 1)
 	{ vendorId: 0x0ccd, productId: 0x00a9 },
 	// Terratec NOXON DAB/DAB+ USB dongle (rev 1)
 	{ vendorId: 0x0ccd, productId: 0x00b3 },
-	// Terratec NOXON DAB Stick
+	// Terratec Deutschlandradio DAB Stick
 	{ vendorId: 0x0ccd, productId: 0x00b4 },
-	// Terratec NOXON DAB Stick (rev 2)
+	// Terratec NOXON DAB Stick - Radio Energy
+	{ vendorId: 0x0ccd, productId: 0x00b5 },
+	// Terratec Media Broadcast DAB Stick
 	{ vendorId: 0x0ccd, productId: 0x00b7 },
+	// Terratec BR DAB Stick
+	{ vendorId: 0x0ccd, productId: 0x00b8 },
+	// Terratec WDR DAB Stick
+	{ vendorId: 0x0ccd, productId: 0x00b9 },
+	// Terratec MuellerVerlag DAB Stick
+	{ vendorId: 0x0ccd, productId: 0x00c0 },
+	// Terratec Fraunhofer DAB Stick
+	{ vendorId: 0x0ccd, productId: 0x00c6 },
 	// Terratec Cinergy T Stick RC (Rev.3)
 	{ vendorId: 0x0ccd, productId: 0x00d3 },
 	// Terratec T Stick PLUS
 	{ vendorId: 0x0ccd, productId: 0x00d7 },
 	// Terratec NOXON DAB/DAB+ USB dongle (rev 2)
 	{ vendorId: 0x0ccd, productId: 0x00e0 },
+	// PixelView PV-DT235U(RN)
+	{ vendorId: 0x1554, productId: 0x5020 },
+	// Astrometa DVB-T/DVB-T2
+	{ vendorId: 0x15f4, productId: 0x0131 },
+	// HanfTek DAB+FM+DVB-T
+	{ vendorId: 0x15f4, productId: 0x0133 },
+	// Compro Videomate U620F
+	{ vendorId: 0x185b, productId: 0x0620 },
+	// Compro Videomate U650F
+	{ vendorId: 0x185b, productId: 0x0650 },
+	// Compro Videomate U680F
+	{ vendorId: 0x185b, productId: 0x0680 },
+	// GIGABYTE GT-U7300
+	{ vendorId: 0x1b80, productId: 0xd393 },
+	// DIKOM USB-DVBT HD
+	{ vendorId: 0x1b80, productId: 0xd394 },
 	// Peak 102569AGPK
-	{ vendorId: 0x1f4d, productId: 0xb803 },
-	// Generic RTL2832U
+	{ vendorId: 0x1b80, productId: 0xd395 },
+	// KWorld KW-UB450-T USB DVB-T Pico TV
+	{ vendorId: 0x1b80, productId: 0xd397 },
+	// Zaapa ZT-MINDVBZP
+	{ vendorId: 0x1b80, productId: 0xd398 },
+	// SVEON STV20 DVB-T USB & FM
+	{ vendorId: 0x1b80, productId: 0xd39d },
+	// Twintech UT-40
 	{ vendorId: 0x1b80, productId: 0xd3a4 },
-	// Dexatek DK DVB-T Dongle
+	// ASUS U3100MINI_PLUS_V2
+	{ vendorId: 0x1b80, productId: 0xd3a8 },
+	// SVEON STV27 DVB-T USB & FM
+	{ vendorId: 0x1b80, productId: 0xd3af },
+	// SVEON STV21 DVB-T USB & FM
+	{ vendorId: 0x1b80, productId: 0xd3b0 },
+	// Dexatek DK DVB-T Dongle (Logilink VG0002A)
 	{ vendorId: 0x1d19, productId: 0x1101 },
-	// Dexatek Technology Ltd. DK mini DVB-T Dongle
+	// Dexatek DK DVB-T Dongle (MSI DigiVox mini II V3.0)
 	{ vendorId: 0x1d19, productId: 0x1102 },
-	// Dexatek Technology Ltd. DK DVB-T Dongle (Logilink VG0002A)
+	// Dexatek Technology Ltd. DK 5217 DVB-T Dongle
 	{ vendorId: 0x1d19, productId: 0x1103 },
-	// Dexatek Technology Ltd. MSI DigiVox Micro HD
+	// MSI DigiVox Micro HD
 	{ vendorId: 0x1d19, productId: 0x1104 },
+	// Sweex DVB-T USB
+	{ vendorId: 0x1f4d, productId: 0xa803 },
+	// GTek T803
+	{ vendorId: 0x1f4d, productId: 0xb803 },
+	// Lifeview LV5TDeluxe
+	{ vendorId: 0x1f4d, productId: 0xc803 },
+	// MyGica TD312
+	{ vendorId: 0x1f4d, productId: 0xd286 },
+	// PROlectrix DV107669
+	{ vendorId: 0x1f4d, productId: 0xd803 },
 ];
 
 registerDriver({

@@ -823,6 +823,26 @@
 			</div>
 		</div>
 
+		<!-- Device picker dialog -->
+		<div v-if="devicePicker.show" class="bookmark-overlay" @click.self="devicePicker.show = false">
+			<div class="bookmark-dialog device-picker-dialog">
+				<div class="bookmark-dialog-title">Select SDR Device</div>
+				<div class="bookmark-dialog-body" style="padding: 0;">
+					<div class="device-picker-list">
+						<div v-for="(entry, i) in devicePicker.devices" :key="i"
+							class="device-picker-item" @click="connectToDevice(entry.device)">
+							<div class="device-picker-name">{{ entry.driverName }}</div>
+							<div class="device-picker-meta">{{ entry.productName || 'USB ' + entry.device.vendorId.toString(16) + ':' + entry.device.productId.toString(16) }}</div>
+						</div>
+					</div>
+				</div>
+				<div class="bookmark-dialog-footer" style="display: flex; gap: 8px;">
+					<button class="btn btn-primary" style="flex: 1;" @click="pairNewDevice">Pair New Device</button>
+					<button class="btn" @click="devicePicker.show = false">Cancel</button>
+				</div>
+			</div>
+		</div>
+
 		<!-- Audio unlock overlay (shown when auto-connecting via URL, browser requires a user gesture) -->
 		<div class="audio-unlock-overlay" v-if="audioUnlockPendingId" @click="unlockAndConnect">
 			<div class="audio-unlock-box">

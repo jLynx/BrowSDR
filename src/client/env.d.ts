@@ -24,6 +24,7 @@ interface USBDevice {
 	transferIn(endpointNumber: number, length: number): Promise<USBInTransferResult>;
 	vendorId: number;
 	productId: number;
+	productName: string;
 	serialNumber: string;
 	deviceVersionMajor: number;
 	deviceVersionMinor: number;
@@ -48,6 +49,7 @@ interface USBOutTransferResult {
 }
 
 interface USB {
+	getDevices(): Promise<USBDevice[]>;
 	requestDevice(options: USBDeviceRequestOptions): Promise<USBDevice>;
 }
 
