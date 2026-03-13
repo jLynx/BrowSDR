@@ -577,16 +577,24 @@ class FC0012 {
 	}
 
 	async setManualGain(gain: number): Promise<void> {
-		// FC0012 gain levels: map 0-50 dB input range to register values
-		let lnaGain: number;
-		if (gain <= 0) lnaGain = 0x02;       // -9.9 dB
-		else if (gain <= 10) lnaGain = 0x08;  // 7.1 dB
-		else if (gain <= 25) lnaGain = 0x17;  // 17.9 dB
-		else lnaGain = 0x10;                  // 19.2 dB
+		// FC0012 has 5 discrete LNA gain steps (from librtlsdr tuner_fc0012.c).
+		// Input is slider value 0-50, map to nearest step:
+		//   0-10: -9.9 dB (reg 0x02)
+		//  11-20: -4.0 dB (reg 0x00)
+		//  21-30:  7.1 dB (reg 0x08)
+		//  31-40: 17.9 dB (reg 0x17)
+		//  41-50: 19.2 dB (reg 0x10)
+		let lnaBits: number;
+		if (gain <= 10) lnaBits = 0x02;       // -9.9 dB
+		else if (gain <= 20) lnaBits = 0x00;  // -4.0 dB
+		else if (gain <= 30) lnaBits = 0x08;  //  7.1 dB
+		else if (gain <= 40) lnaBits = 0x17;  // 17.9 dB
+		else lnaBits = 0x10;                  // 19.2 dB
 
-		// Force LNA gain
-		await this.com.writeI2CReg(FC0012_I2C_ADDR, 0x0d, 0x02); // force LNA gain
-		await this.com.writeI2CReg(FC0012_I2C_ADDR, 0x13, lnaGain);
+		// Read-modify-write register 0x13: preserve bits 5-7, set gain in bits 0-4
+		// (matches librtlsdr fc0012_set_gain)
+		const reg13 = await this.com.readI2CReg(FC0012_I2C_ADDR, 0x13);
+		await this.com.writeI2CReg(FC0012_I2C_ADDR, 0x13, (reg13 & 0xe0) | lnaBits);
 	}
 
 	async close(): Promise<void> {
@@ -612,7 +620,7 @@ export class RtlSdrDevice implements SdrDevice {
 	];
 	readonly sampleFormat = 'int8' as const;
 	readonly gainControls: GainControl[] = [
-		{ name: 'Tuner Gain', min: 0, max: 50, step: 1, default: 20, type: 'slider' },
+		{ name: 'Tuner', min: 0, max: 50, step: 1, default: 20, type: 'slider' },
 		{ name: 'Bias-T', min: 0, max: 1, step: 1, default: 0, type: 'checkbox' },
 	];
 
@@ -623,7 +631,9 @@ export class RtlSdrDevice implements SdrDevice {
 	private hasIfFreq = true; // R820T uses IF offset, FC0012 does not
 	private conjugateIq = false; // FC0012 (zero-IF) needs spectrum inversion to match R820T
 	private rxRunning: Promise<void>[] | null = null;
+	private rxCallback: ((data: ArrayBufferView) => void) | null = null;
 	private ppm = 0;
+	private usbLock: Promise<void> = Promise.resolve();
 
 	async open(device: USBDevice): Promise<void> {
 		this.dev = device;
@@ -823,59 +833,98 @@ export class RtlSdrDevice implements SdrDevice {
 		return { name, serial };
 	}
 
+	/** Serialize USB operations to prevent concurrent control/bulk transfer conflicts. */
+	private withUsbLock<T>(fn: () => Promise<T>): Promise<T> {
+		const prev = this.usbLock;
+		let resolve!: () => void;
+		this.usbLock = new Promise<void>(r => { resolve = r; });
+		return prev.then(fn).finally(resolve);
+	}
+
 	async setSampleRate(rate: number): Promise<void> {
-		console.log('RTL-SDR: setSampleRate', rate);
-		// Stop any active bulk transfers before reconfiguring the demod.
-		// SDR++ fully closes/reopens the device for sample rate changes;
-		// we can't do that in WebUSB, so we flush the endpoint instead.
-		await this.stopRx();
-		// Reset the USB endpoint buffer (rtlsdr_reset_buffer equivalent).
-		// This flushes stale data that would otherwise block control transfers.
-		await this.com.writeReg(BLOCK.USB, REG.EPA_CTL, 0x0210, 2);
-		await this.com.writeReg(BLOCK.USB, REG.EPA_CTL, 0x0000, 2);
-		const xtalFreq = Math.floor(XTAL_FREQ * (1 + this.ppm / 1000000));
-		let ratio = Math.floor(xtalFreq * (1 << 22) / rate);
-		ratio &= 0x0ffffffc;
-		const ppmOffset = -1 * Math.floor(this.ppm * (1 << 24) / 1000000);
-		// Write resample ratio as individual bytes to avoid 2-byte write issues
-		// on some RTL2838 variants
-		await this.com.writeDemodReg(1, 0x9f, (ratio >> 24) & 0xff, 1);
-		await this.com.writeDemodReg(1, 0xa0, (ratio >> 16) & 0xff, 1);
-		await this.com.writeDemodReg(1, 0xa1, (ratio >> 8) & 0xff, 1);
-		await this.com.writeDemodReg(1, 0xa2, ratio & 0xff, 1);
-		// PPM offset
-		await this.com.writeDemodReg(1, 0x3e, (ppmOffset >> 8) & 0x3f, 1);
-		await this.com.writeDemodReg(1, 0x3f, ppmOffset & 0xff, 1);
-		// Reset demodulator
-		await this.com.writeDemodReg(1, 0x01, 0x14, 1);
-		await this.com.writeDemodReg(1, 0x01, 0x10, 1);
-		console.log('RTL-SDR: setSampleRate complete');
+		return this.withUsbLock(async () => {
+			console.log('RTL-SDR: setSampleRate', rate);
+			// Cancel any active bulk transfers before reconfiguring the demod.
+			await this.pauseRx();
+			const xtalFreq = Math.floor(XTAL_FREQ * (1 + this.ppm / 1000000));
+			let ratio = Math.floor(xtalFreq * (1 << 22) / rate);
+			ratio &= 0x0ffffffc;
+			const ppmOffset = -1 * Math.floor(this.ppm * (1 << 24) / 1000000);
+			await this.com.writeDemodReg(1, 0x9f, (ratio >> 24) & 0xff, 1);
+			await this.com.writeDemodReg(1, 0xa0, (ratio >> 16) & 0xff, 1);
+			await this.com.writeDemodReg(1, 0xa1, (ratio >> 8) & 0xff, 1);
+			await this.com.writeDemodReg(1, 0xa2, ratio & 0xff, 1);
+			await this.com.writeDemodReg(1, 0x3e, (ppmOffset >> 8) & 0x3f, 1);
+			await this.com.writeDemodReg(1, 0x3f, ppmOffset & 0xff, 1);
+			await this.com.writeDemodReg(1, 0x01, 0x14, 1);
+			await this.com.writeDemodReg(1, 0x01, 0x10, 1);
+			console.log('RTL-SDR: setSampleRate complete');
+		});
 	}
 
 	async setFrequency(freqHz: number): Promise<void> {
-		console.log('RTL-SDR: setFrequency', freqHz);
-		// FC0012 requires GPIO6 toggle for V-band (>300MHz) vs U-band filter
-		if (this.tunerName.startsWith('FC0012')) {
-			await this.setGpioBit(6, freqHz > 300000000);
-		}
-		await this.com.openI2C();
-		const tuneFreq = this.hasIfFreq ? freqHz + IF_FREQ : freqHz;
-		await this.tuner.setFrequency(tuneFreq);
-		await this.com.closeI2C();
+		return this.withUsbLock(async () => {
+			console.log('RTL-SDR: setFrequency', freqHz);
+			await this.pauseRx();
+			try {
+				// FC0012 requires GPIO6 toggle for V-band (>300MHz) vs U-band filter
+				if (this.tunerName.startsWith('FC0012')) {
+					await this.setGpioBit(6, freqHz > 300000000);
+				}
+				await this.com.openI2C();
+				const tuneFreq = this.hasIfFreq ? freqHz + IF_FREQ : freqHz;
+				await this.tuner.setFrequency(tuneFreq);
+				await this.com.closeI2C();
+			} finally {
+				this.resumeRx();
+			}
+		});
 	}
 
 	async setGain(name: string, value: number): Promise<void> {
-		if (name === 'Tuner Gain') {
-			await this.com.openI2C();
-			if (value <= 0) {
-				await this.tuner.setAutoGain();
-			} else {
-				await this.tuner.setManualGain(value);
+		return this.withUsbLock(async () => {
+			await this.pauseRx();
+			try {
+				if (name === 'Tuner') {
+					await this.com.openI2C();
+					if (value <= 0) {
+						await this.tuner.setAutoGain();
+					} else {
+						await this.tuner.setManualGain(value);
+					}
+					await this.com.closeI2C();
+				} else if (name === 'Bias-T') {
+					await this.setBiasTee(!!value);
+				}
+			} finally {
+				this.resumeRx();
 			}
-			await this.com.closeI2C();
-		} else if (name === 'Bias-T') {
-			await this.setBiasTee(!!value);
-		}
+		});
+	}
+
+	/**
+	 * Stop bulk transfer loops so control transfers can proceed.
+	 * Sets rxRunning to null and waits for the loops to finish their
+	 * current readBulk call naturally — no releaseInterface needed.
+	 * At 2.88 Msps with 64K transfers, each loop drains in ~11ms.
+	 */
+	private async pauseRx(): Promise<void> {
+		if (!this.rxRunning) return;
+		const promises = this.rxRunning;
+		this.rxRunning = null;
+		// Wait for transfer loops to exit after their current readBulk completes.
+		try {
+			await Promise.race([
+				Promise.allSettled(promises),
+				new Promise<void>(r => setTimeout(r, 500)),
+			]);
+		} catch (_) { /* ignore */ }
+	}
+
+	/** Restart bulk transfer loops after pauseRx, without resetting the endpoint. */
+	private resumeRx(): void {
+		if (!this.rxCallback || this.rxRunning) return;
+		this.launchBulkLoops(this.rxCallback);
 	}
 
 	private async setGpioOutput(gpioNum: number): Promise<void> {
@@ -910,13 +959,17 @@ export class RtlSdrDevice implements SdrDevice {
 
 	async startRx(callback: (data: ArrayBufferView) => void): Promise<void> {
 		if (this.rxRunning) await this.stopRx();
+		this.rxCallback = callback;
 
 		// Reset USB buffer
 		await this.com.writeReg(BLOCK.USB, REG.EPA_CTL, 0x0210, 2);
 		await this.com.writeReg(BLOCK.USB, REG.EPA_CTL, 0x0000, 2);
-		console.log('RTL-SDR: startRx — bulk transfer loops starting');
 
-		// Start concurrent bulk transfer loops (same pattern as HackRF)
+		this.launchBulkLoops(callback);
+	}
+
+	private launchBulkLoops(callback: (data: ArrayBufferView) => void): void {
+		console.log('RTL-SDR: startRx — bulk transfer loops starting');
 		let rxCount = 0;
 		const transfer = async (): Promise<void> => {
 			await Promise.resolve();
@@ -925,15 +978,12 @@ export class RtlSdrDevice implements SdrDevice {
 					const buf = await this.com.readBulk(TRANSFER_BUFFER_SIZE);
 					rxCount++;
 					if (rxCount <= 3) console.log(`RTL-SDR: bulk read #${rxCount}, ${buf.byteLength} bytes`);
-					// Convert uint8 IQ to int8 IQ by subtracting 128
-					// For zero-IF tuners (FC0012), negate Q to invert spectrum
-					// so it matches R820T's high-side-injection orientation
 					const uint8Data = new Uint8Array(buf);
 					const int8Data = new Int8Array(uint8Data.length);
 					if (this.conjugateIq) {
 						for (let i = 0; i < uint8Data.length; i += 2) {
-							int8Data[i] = uint8Data[i] - 128;       // I
-							int8Data[i + 1] = 128 - uint8Data[i + 1]; // Q negated
+							int8Data[i] = uint8Data[i] - 128;
+							int8Data[i + 1] = 128 - uint8Data[i + 1];
 						}
 					} else {
 						for (let i = 0; i < uint8Data.length; i++) {
