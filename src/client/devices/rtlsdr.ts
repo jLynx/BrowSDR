@@ -50,7 +50,7 @@ const REG = {
 // ── R820T Tuner Constants ─────────────────────────────────────────
 const R820T_I2C_ADDR = 0x34;
 const R828D_I2C_ADDR = 0x74;
-const R820T_CHECK_VAL = 0x69;
+const R820T_CHECK_VAL = 0x96;
 
 // Initial register values for R8xx (registers 0x05–0x1f, 27 bytes).
 // Matches R8xx.REGISTERS from jtarrio/webrtlsdr r8xx.ts.
@@ -1605,8 +1605,8 @@ export class RtlSdrDevice implements SdrDevice {
 		const PHASE1_PROBES: { name: string; addr: number; checkReg: number; expectVal: number; mask?: number }[] = [
 			{ name: 'E4000', addr: 0xc8, checkReg: 0x02, expectVal: 0x40 },
 			{ name: 'FC0013', addr: 0xc6, checkReg: 0x00, expectVal: 0xa3 },
-			{ name: 'R820T/R820T2/R828D', addr: 0x34, checkReg: 0x00, expectVal: 0x69 },
-			{ name: 'R828D', addr: 0x74, checkReg: 0x00, expectVal: 0x69 },
+			{ name: 'R820T/R820T2/R828D', addr: 0x34, checkReg: 0x00, expectVal: 0x96 },
+			{ name: 'R828D', addr: 0x74, checkReg: 0x00, expectVal: 0x96 },
 		];
 		// Phase 2: After GPIO5 reset — FC2580 and FC0012
 		const PHASE2_PROBES: { name: string; addr: number; checkReg: number; expectVal: number; mask?: number }[] = [
