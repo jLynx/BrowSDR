@@ -47,6 +47,14 @@ createApp({
 		window.addEventListener('online', () => { this.isOnline = true; });
 		window.addEventListener('offline', () => { this.isOnline = false; });
 
+		// Re-acquire the screen wake lock if the page becomes visible again while running
+		// (the OS releases it automatically when the screen turns off)
+		document.addEventListener('visibilitychange', () => {
+			if (document.visibilityState === 'visible' && this.running) {
+				this._acquireWakeLock();
+			}
+		});
+
 		this.backend = await new (Backend as any)();
 		await this.backend.init();
 

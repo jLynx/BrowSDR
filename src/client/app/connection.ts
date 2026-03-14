@@ -137,6 +137,19 @@ export const connectionMethods = {
 		this.deviceCapabilities = null;
 		this.showMsg("Disconnected");
 	},
+	_releaseWakeLock(this: AppInstance) {
+		if (this._wakeLock) {
+			this._wakeLock.release().catch(() => {});
+			this._wakeLock = null;
+		}
+	},
+	async _acquireWakeLock(this: AppInstance) {
+		if ('wakeLock' in navigator) {
+			try {
+				this._wakeLock = await (navigator as any).wakeLock.request('screen');
+			} catch (_) {}
+		}
+	},
 	async togglePlay(this: AppInstance, isRestart = false) {
 		if (this.running) {
 			await this.backend.stopRx();
@@ -148,6 +161,8 @@ export const connectionMethods = {
 				this.audioCtx = null;
 				this.gainNode = null;
 			}
+			this._releaseWakeLock();
+			if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused';
 		} else {
 			this.startStream(isRestart);
 		}
@@ -229,6 +244,12 @@ export const connectionMethods = {
 				}
 			}
 		}, 500);
+
+		await this._acquireWakeLock();
+		if ('mediaSession' in navigator) {
+			navigator.mediaSession.metadata = new MediaMetadata({ title: 'WebSDR', artist: 'Receiving' });
+			navigator.mediaSession.playbackState = 'playing';
+		}
 
 		// Add additional VFOs beyond the first (which is created by default in the worker).
 		// In client mode, notify the host via WebRTC instead of calling the mock backend.
