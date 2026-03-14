@@ -161,6 +161,8 @@ export default defineConfig({
 			registerType: 'autoUpdate',
 			injectRegister: 'script',
 			workbox: {
+				skipWaiting: true,
+				clientsClaim: true,
 				globPatterns: ['**/*.{js,css,html,wasm}'],
 				navigateFallback: null,
 				runtimeCaching: [

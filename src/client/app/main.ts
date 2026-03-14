@@ -16,6 +16,13 @@ import { remoteMethods } from './remote';
 
 const Backend = Comlink.wrap<any>(new Worker(new URL('../worker/main.ts', import.meta.url), { type: 'module' }));
 
+// When a new service worker takes control (after update), reload to get fresh assets
+if ('serviceWorker' in navigator) {
+	navigator.serviceWorker.addEventListener('controllerchange', () => {
+		window.location.reload();
+	});
+}
+
 createApp({
 	data() { return createAppData(); },
 	computed: { ...computedProperties },
