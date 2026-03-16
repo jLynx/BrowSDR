@@ -1,5 +1,6 @@
 import init, { DspProcessor, set_panic_hook, alloc_iq_buffer, free_iq_buffer } from "/hackrf-web/pkg/hackrf_web.js";
 import { RationalResampler } from './worker/dsp-pipeline';
+import { RDSDecoder } from './worker/rds';
 
 // --- Worker State ---
 let wasmInitPromise: Promise<void> | null = null;
@@ -10,6 +11,7 @@ let sharedIqPtr = 0;
 let sharedSabViews: Int8Array[] | null = null;
 let rdsDdc: any = null;
 let rdsPrevPhase = 0;
+let rdsDecoder: InstanceType<typeof RDSDecoder> | null = null;
 
 const IF_RATES: Record<string, number> = {
     nfm: 50000,
@@ -115,8 +117,8 @@ self.onmessage = async (e: MessageEvent) => {
                 self.postMessage({ type: "audio", samples: null, chunkId: msg.chunkId, squelchOpen: vfoState.squelchOpen, dspTime: dspTime });
             }
 
-            // RDS MPX extraction via second DspProcessor
-            if (rdsDdc && msg.params.rds && msg.params.mode === 'wfm') {
+            // RDS: extract MPX and decode in-worker (avoids blocking the audio mixer thread)
+            if (rdsDdc && rdsDecoder && msg.params.rds && msg.params.mode === 'wfm') {
                 const chunkLen = msg.useSab ? msg.chunkLen : (msg.chunk ? msg.chunk.byteLength : 0);
                 if (chunkLen > 0) {
                     const iqPtr = rdsDdc.process_iq_only_ptr(sharedIqPtr, chunkLen);
@@ -133,7 +135,8 @@ self.onmessage = async (e: MessageEvent) => {
                             mpxOut[i] = diff;
                             rdsPrevPhase = ph;
                         }
-                        (self as any).postMessage({ type: "rds_mpx", mpx: mpxOut.buffer }, [mpxOut.buffer]);
+                        // Decode RDS in this worker thread — decoded messages sent via callback
+                        rdsDecoder.process(mpxOut);
                     }
                 }
             }
@@ -163,17 +166,22 @@ function configureDDC(params: any, systemCenterFreq: number): void {
     // Apply UI audio filters (High Pass 300Hz, Low Pass BW/2)
     ddc.set_audio_filters(params.lowPass || false, params.highPass || false);
 
-    // RDS: second DspProcessor for MPX extraction (250kHz I/Q)
+    // RDS: second DspProcessor for MPX extraction + in-worker RDS decoder
     if (params.rds && params.mode === 'wfm') {
         if (!rdsDdc) {
             rdsDdc = new DspProcessor(systemSampleRate, 0.0, 250000);
             rdsDdc.set_if_sample_rate(250000);
-            rdsPrevPhase = 0; // Only reset on initial creation, not every configure
+            rdsPrevPhase = 0;
+        }
+        if (!rdsDecoder) {
+            rdsDecoder = new RDSDecoder(250000, (rmsg: any) => {
+                (self as any).postMessage({ type: "rds", msg: rmsg });
+            }, params.rdsRegion || 'eu');
         }
         rdsDdc.set_shift(systemSampleRate, offsetFreq);
-    } else if (rdsDdc) {
-        rdsDdc.free();
-        rdsDdc = null;
+    } else {
+        if (rdsDdc) { rdsDdc.free(); rdsDdc = null; }
+        rdsDecoder = null;
     }
 }
 

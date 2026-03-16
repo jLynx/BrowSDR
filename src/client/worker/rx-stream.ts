@@ -22,7 +22,6 @@ import * as Comlink from 'comlink';
 import { FFT } from './wasm-init';
 import { RationalResampler } from './dsp-pipeline';
 import { POCSAGDecoder } from './pocsag';
-import { RDSDecoder } from './rds';
 import type { RxStreamOpts, VfoParams, VfoState, PerfCounters } from './types';
 import { IF_RATES, AUDIO_RATE } from './types';
 import type { Backend } from './backend';
@@ -119,8 +118,10 @@ export async function startRxStream(
 				const msg = e.data;
 				if (msg.type === "audio") {
 					backend._handleWorkerAudio!(index, msg);
-				} else if (msg.type === "rds_mpx") {
-					handleRdsMpx(index, msg);
+				} else if (msg.type === "rds") {
+					// Decoded RDS message from dsp-worker — just forward to main thread
+					const params = backend.vfoParams![index];
+					if (rdsCallback && params) rdsCallback(index, params.freq, msg.msg);
 				} else if (msg.type === "error") {
 					console.error(`[DSP Worker ${index}] Error:`, msg.error);
 				}
@@ -490,18 +491,6 @@ export async function startRxStream(
 
 				return result.slice();
 			}
-		};
-
-		const handleRdsMpx = (v: number, msg: any): void => {
-			const state = backend.vfoStates![v];
-			const params = backend.vfoParams![v];
-			if (!state || !params || !params.rds || params.mode !== 'wfm') return;
-			if (!state.rdsDecoder) {
-				state.rdsDecoder = new RDSDecoder(250000, (rmsg: any) => {
-					if (rdsCallback) rdsCallback(v, params.freq, rmsg);
-				}, params.rdsRegion || 'eu');
-			}
-			state.rdsDecoder.process(new Float32Array(msg.mpx));
 		};
 
 		let chunkCounter = 0;

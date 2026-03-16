@@ -158,13 +158,17 @@ export class RDSDecoder {
 	private region: string;
 
 	// 19 kHz pilot PLL — BPF + quadrature mixing + ultra-narrow LPF
-	private pilotPhase: number = 0;
-	private pilotFreq: number;       // nominal 2π×19000/fs
+	// Uses phasor rotation (complex multiply) instead of Math.cos/sin per sample
+	private phasorRe: number = 1;    // cos(pilotPhase)
+	private phasorIm: number = 0;    // sin(pilotPhase)
+	private incRe: number;           // cos(pilotFreq) — precomputed rotation
+	private incIm: number;           // sin(pilotFreq)
 	private pilotAlpha: number;      // PLL proportional gain
 	private pilotBpf: BiquadSection; // 19 kHz bandpass filter
 	private pilotMixI: number = 0;   // mixed pilot baseband I (after narrow LPF)
 	private pilotMixQ: number = 0;   // mixed pilot baseband Q (after narrow LPF)
-	private pilotMixAlpha: number;   // ultra-narrow LPF coefficient
+	private pilotMixAlpha: number;   // narrow LPF coefficient
+	private phasorCount: number = 0; // renormalize counter
 
 	// 4th-order Butterworth LPF for RDS I and Q channels
 	private bqI: BiquadSection[];
@@ -205,13 +209,16 @@ export class RDSDecoder {
 	constructor(sampleRate: number, callback: (msg: RDSMessage) => void, region: string = 'eu') {
 		this.callback = callback;
 		this.region = region;
-		this.samplesPerBit = sampleRate / RDS_BITRATE;
 
 		// ── Pilot PLL: BPF at 19 kHz → quadrature mix → narrow LPF → I×Q phase error ──
-		this.pilotFreq = 2 * Math.PI * RDS_PILOT / sampleRate;
+		// Phasor rotation: precompute cos/sin of frequency increment (done once)
+		const pilotFreq = 2 * Math.PI * RDS_PILOT / sampleRate;
+		this.incRe = Math.cos(pilotFreq);
+		this.incIm = Math.sin(pilotFreq);
 		this.pilotBpf = makeBandpass(RDS_PILOT, 30, sampleRate); // Q=30, ~633 Hz BW
 		this.pilotAlpha = 2 * Math.PI * 100 / sampleRate; // High gain for fast pull-in
 		this.pilotMixAlpha = 1 - Math.exp(-2 * Math.PI * 30 / sampleRate); // 30 Hz LPF limits noise
+		this.samplesPerBit = sampleRate / RDS_BITRATE;
 
 		// 4th-order Butterworth LPF at 1.5 kHz for RDS baseband
 		this.bqI = makeButterworthLpf4(1500, sampleRate);
@@ -222,26 +229,38 @@ export class RDSDecoder {
 		for (let i = 0; i < samples.length; i++) {
 			const sample = samples[i];
 
-			// ── 19 kHz Pilot PLL ──
-			// 1. BPF extracts pilot tone from MPX (rejects audio, stereo, RDS)
+			// ── 19 kHz Pilot PLL (zero trig calls — phasor rotation only) ──
 			const pilotBpf = this.pilotBpf.process(sample);
 
-			// 2. Quadrature mix BPF output with PLL to get baseband I/Q
-			const pllCos = Math.cos(this.pilotPhase);
-			const pllSin = Math.sin(this.pilotPhase);
-			// 10 Hz LPF — rejects 38kHz mixing product AND audio beats near 19kHz
+			// Current phasor = (cos(θ), sin(θ))
+			const pllCos = this.phasorRe;
+			const pllSin = this.phasorIm;
+
+			// Quadrature mix + narrow LPF
 			this.pilotMixI += this.pilotMixAlpha * (pilotBpf * pllCos - this.pilotMixI);
 			this.pilotMixQ += this.pilotMixAlpha * (pilotBpf * pllSin - this.pilotMixQ);
 
-			// 3. Phase error: normalized I×Q (stable at φ=0 and φ=π)
+			// Phase error → small-angle phasor correction
 			const pp = this.pilotMixI * this.pilotMixI + this.pilotMixQ * this.pilotMixQ;
 			if (pp > 1e-12) {
-				this.pilotPhase -= (this.pilotMixI * this.pilotMixQ) / pp * this.pilotAlpha;
+				const corr = (this.pilotMixI * this.pilotMixQ) / pp * this.pilotAlpha;
+				// Rotate phasor by -corr (small angle: cos≈1, sin≈-corr)
+				this.phasorRe += this.phasorIm * corr;
+				this.phasorIm -= this.phasorRe * corr;
 			}
 
-			this.pilotPhase += this.pilotFreq;
-			if (this.pilotPhase > 2 * Math.PI) this.pilotPhase -= 2 * Math.PI;
-			else if (this.pilotPhase < 0) this.pilotPhase += 2 * Math.PI;
+			// Advance phasor by one sample (complex multiply with increment)
+			const newRe = this.phasorRe * this.incRe - this.phasorIm * this.incIm;
+			const newIm = this.phasorRe * this.incIm + this.phasorIm * this.incRe;
+			this.phasorRe = newRe;
+			this.phasorIm = newIm;
+
+			// Renormalize every 1024 samples to prevent amplitude drift
+			if ((++this.phasorCount & 1023) === 0) {
+				const mag = 1 / Math.sqrt(this.phasorRe * this.phasorRe + this.phasorIm * this.phasorIm);
+				this.phasorRe *= mag;
+				this.phasorIm *= mag;
+			}
 
 			// ── Coherent 57 kHz from triple-angle formulas ──
 			const c = pllCos, s = pllSin;
@@ -252,13 +271,13 @@ export class RDSDecoder {
 			const rawI = sample * cos3;
 			const rawQ = sample * sin3;
 
-			// ── 4th-order Butterworth LPF on I and Q ──
+			// 4th-order Butterworth LPF on I and Q
 			let filtI = rawI;
 			for (let k = 0; k < this.bqI.length; k++) filtI = this.bqI[k].process(filtI);
 			let filtQ = rawQ;
 			for (let k = 0; k < this.bqQ.length; k++) filtQ = this.bqQ[k].process(filtQ);
 
-			// ── Clock recovery ──
+			// Clock recovery
 			this.clockPhase += 1.0;
 			if ((filtI > 0) !== (this.prevBpskI > 0)) {
 				const error = this.clockPhase - this.samplesPerBit / 2;
@@ -266,17 +285,13 @@ export class RDSDecoder {
 			}
 			this.prevBpskI = filtI;
 
-			// ── Sample at bit boundary (mid-bit, maximum signal) ──
+			// Sample at bit boundary
 			if (this.clockPhase >= this.samplesPerBit) {
 				this.clockPhase -= this.samplesPerBit;
-
-				// Differential decode: Re{z[n] × conj(z[n-1])}
 				const diffProd = filtI * this.prevSymI + filtQ * this.prevSymQ;
 				const decodedBit = diffProd < 0 ? 1 : 0;
-
 				this.prevSymI = filtI;
 				this.prevSymQ = filtQ;
-
 				this.processBit(decodedBit);
 			}
 		}
@@ -516,7 +531,9 @@ export class RDSDecoder {
 		this.rtAbFlag = -1;
 		this.lastPs = '';
 		this.lastRt = '';
-		this.pilotPhase = 0;
+		this.phasorRe = 1;
+		this.phasorIm = 0;
+		this.phasorCount = 0;
 		this.pilotMixI = 0;
 		this.pilotMixQ = 0;
 		this.pilotBpf.reset();
