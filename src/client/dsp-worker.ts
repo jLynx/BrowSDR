@@ -166,7 +166,7 @@ function configureDDC(params: any, systemCenterFreq: number): void {
     // RDS: second DspProcessor for MPX extraction (250kHz I/Q)
     if (params.rds && params.mode === 'wfm') {
         if (!rdsDdc) {
-            rdsDdc = new DspProcessor(systemSampleRate, 0.0, 200000);
+            rdsDdc = new DspProcessor(systemSampleRate, 0.0, 250000);
             rdsDdc.set_if_sample_rate(250000);
             rdsPrevPhase = 0; // Only reset on initial creation, not every configure
         }

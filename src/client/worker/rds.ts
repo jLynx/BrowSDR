@@ -22,7 +22,7 @@ import type { RDSMessage } from './types';
 
 // ── RDS Constants ────────────────────────────────────────────────
 const RDS_BITRATE = 1187.5;
-const RDS_SUBCARRIER = 57000;
+const RDS_PILOT = 19000; // stereo pilot — RDS subcarrier = 3 × pilot
 
 // Offset words for each block position (10-bit, per IEC 62106)
 const OFFSET_A  = 0x0FC;
@@ -114,6 +114,22 @@ class BiquadSection {
 	}
 }
 
+/** Create a bandpass biquad filter at the given center frequency and Q. */
+function makeBandpass(centerHz: number, Q: number, sampleRate: number): BiquadSection {
+	const w0 = 2 * Math.PI * centerHz / sampleRate;
+	const sinW0 = Math.sin(w0);
+	const cosW0 = Math.cos(w0);
+	const alpha = sinW0 / (2 * Q);
+	const a0 = 1 + alpha;
+	return new BiquadSection(
+		alpha / a0,          // b0
+		0,                   // b1
+		-alpha / a0,         // b2
+		-2 * cosW0 / a0,    // a1
+		(1 - alpha) / a0     // a2
+	);
+}
+
 /** Create a 4th-order Butterworth low-pass filter (two cascaded biquads).
  *  Provides 24 dB/octave rolloff — much better than single-pole IIR (6 dB/oct). */
 function makeButterworthLpf4(cutoffHz: number, sampleRate: number): BiquadSection[] {
@@ -141,27 +157,42 @@ export class RDSDecoder {
 	private callback: (msg: RDSMessage) => void;
 	private region: string;
 
-	// 57 kHz carrier
-	private carrierPhase: number = 0;
-	private carrierPhaseInc: number;
+	// 19 kHz pilot PLL — BPF + quadrature mixing + ultra-narrow LPF
+	private pilotPhase: number = 0;
+	private pilotFreq: number;       // nominal 2π×19000/fs
+	private pilotAlpha: number;      // PLL proportional gain
+	private pilotBpf: BiquadSection; // 19 kHz bandpass filter
+	private pilotMixI: number = 0;   // mixed pilot baseband I (after narrow LPF)
+	private pilotMixQ: number = 0;   // mixed pilot baseband Q (after narrow LPF)
+	private pilotMixAlpha: number;   // ultra-narrow LPF coefficient
 
-	// 4th-order Butterworth LPF for I and Q channels (replaces single-pole IIR)
+	// 4th-order Butterworth LPF for RDS I and Q channels
 	private bqI: BiquadSection[];
 	private bqQ: BiquadSection[];
-
-	// Costas loop for carrier recovery (eliminates carrier phase dependency)
-	private loopAlpha: number;  // proportional gain
-	private loopBeta: number;   // integral gain
-	private loopIntegrator: number = 0;
 
 	// Clock recovery (1187.5 bps)
 	private samplesPerBit: number;
 	private clockPhase: number = 0;
 	private prevBpskI: number = 0;
 
-	// Differential decode using complex conjugate product (carrier-independent)
+	// Differential decode using complex conjugate product
 	private prevSymI: number = 0;
 	private prevSymQ: number = 0;
+
+	// Debug stats (logged every 5 seconds)
+	private dbgLastLog: number = 0;
+	private dbgBitsTotal: number = 0;
+	private dbgBlocksTotal: number = 0;
+	private dbgBlocksValid: number = 0;
+	private dbgGroupsDecoded: number = 0;
+	private dbgSyncLost: number = 0;
+	private dbgBitMagSum: number = 0;    // sum of |filtI| at bit boundaries
+	private dbgBitDiffSum: number = 0;   // sum of |diffProd| at bit boundaries
+	private dbgBitSamples: number = 0;
+	private dbgPilotIsum: number = 0;    // sum of |pilotLpfI|
+	private dbgPilotQsum: number = 0;    // sum of |pilotLpfQ|
+	private dbgPilotIQcount: number = 0;
+	private dbgClockCorr: number = 0;    // clock correction events
 
 	// Block assembly
 	private shiftReg: number = 0;
@@ -181,9 +212,7 @@ export class RDSDecoder {
 	private tp: boolean = false;
 	private ta: boolean = false;
 	private psChars: (number | null)[] = new Array(8).fill(null);
-	private psConfirm: (number | null)[] = new Array(8).fill(null); // confirm-on-second-reception
 	private rtChars: (number | null)[] = new Array(64).fill(null);
-	private rtConfirm: (number | null)[] = new Array(64).fill(null);
 	private rtAbFlag: number = -1;
 	private lastPs: string = '';
 	private lastRt: string = '';
@@ -191,36 +220,57 @@ export class RDSDecoder {
 	constructor(sampleRate: number, callback: (msg: RDSMessage) => void, region: string = 'eu') {
 		this.callback = callback;
 		this.region = region;
-
-		this.carrierPhaseInc = 2 * Math.PI * RDS_SUBCARRIER / sampleRate;
 		this.samplesPerBit = sampleRate / RDS_BITRATE;
 
-		// 4th-order Butterworth LPF at 2.4 kHz
-		// At 19 kHz (nearest interferer after 57 kHz mixing): ~72 dB rejection
-		// vs. single-pole IIR which only gave ~18 dB
-		this.bqI = makeButterworthLpf4(2400, sampleRate);
-		this.bqQ = makeButterworthLpf4(2400, sampleRate);
+		// ── Pilot PLL: BPF at 19 kHz → quadrature mix → narrow LPF → I×Q phase error ──
+		this.pilotFreq = 2 * Math.PI * RDS_PILOT / sampleRate;
+		this.pilotBpf = makeBandpass(RDS_PILOT, 30, sampleRate); // Q=30, ~633 Hz BW
+		this.pilotAlpha = 2 * Math.PI * 100 / sampleRate; // High gain for fast pull-in
+		this.pilotMixAlpha = 1 - Math.exp(-2 * Math.PI * 30 / sampleRate); // 30 Hz LPF limits noise
 
-		// Costas loop: 2nd-order PLL with ~50 Hz natural frequency
-		// Converges in ~20 ms, tracks carrier phase without affecting data
-		const loopBW = 50;
-		const wn = 2 * Math.PI * loopBW / sampleRate;
-		const zeta = 0.707; // critically damped
-		this.loopAlpha = 2 * zeta * wn;
-		this.loopBeta = wn * wn;
+		// 4th-order Butterworth LPF at 1.5 kHz for RDS baseband
+		this.bqI = makeButterworthLpf4(1500, sampleRate);
+		this.bqQ = makeButterworthLpf4(1500, sampleRate);
 	}
 
 	process(samples: Float32Array): void {
 		for (let i = 0; i < samples.length; i++) {
 			const sample = samples[i];
 
-			// ── Mix with 57 kHz carrier (phase includes Costas correction) ──
-			const cosVal = Math.cos(this.carrierPhase);
-			const sinVal = Math.sin(this.carrierPhase);
-			this.carrierPhase += this.carrierPhaseInc;
+			// ── 19 kHz Pilot PLL ──
+			// 1. BPF extracts pilot tone from MPX (rejects audio, stereo, RDS)
+			const pilotBpf = this.pilotBpf.process(sample);
 
-			const rawI = sample * cosVal;
-			const rawQ = sample * sinVal;
+			// 2. Quadrature mix BPF output with PLL to get baseband I/Q
+			const pllCos = Math.cos(this.pilotPhase);
+			const pllSin = Math.sin(this.pilotPhase);
+			// 10 Hz LPF — rejects 38kHz mixing product AND audio beats near 19kHz
+			this.pilotMixI += this.pilotMixAlpha * (pilotBpf * pllCos - this.pilotMixI);
+			this.pilotMixQ += this.pilotMixAlpha * (pilotBpf * pllSin - this.pilotMixQ);
+
+			// 3. Phase error: normalized I×Q (stable at φ=0 and φ=π)
+			const pp = this.pilotMixI * this.pilotMixI + this.pilotMixQ * this.pilotMixQ;
+			if (pp > 1e-12) {
+				this.pilotPhase -= (this.pilotMixI * this.pilotMixQ) / pp * this.pilotAlpha;
+			}
+
+			// Debug: track pilot lock quality
+			this.dbgPilotIsum += Math.abs(this.pilotMixI);
+			this.dbgPilotQsum += Math.abs(this.pilotMixQ);
+			this.dbgPilotIQcount++;
+
+			this.pilotPhase += this.pilotFreq;
+			if (this.pilotPhase > 2 * Math.PI) this.pilotPhase -= 2 * Math.PI;
+			else if (this.pilotPhase < 0) this.pilotPhase += 2 * Math.PI;
+
+			// ── Coherent 57 kHz from triple-angle formulas ──
+			const c = pllCos, s = pllSin;
+			const cos3 = 4 * c * c * c - 3 * c;
+			const sin3 = 3 * s - 4 * s * s * s;
+
+			// Mix MPX with coherent 57 kHz reference
+			const rawI = sample * cos3;
+			const rawQ = sample * sin3;
 
 			// ── 4th-order Butterworth LPF on I and Q ──
 			let filtI = rawI;
@@ -228,42 +278,27 @@ export class RDSDecoder {
 			let filtQ = rawQ;
 			for (let k = 0; k < this.bqQ.length; k++) filtQ = this.bqQ[k].process(filtQ);
 
-			// ── Costas loop: carrier phase recovery ──
-			// Error signal: I×Q / (I²+Q²) — normalized, stable at φ=0 and φ=π
-			// Both lock points are valid for BPSK (differential decode handles π ambiguity)
-			const power = filtI * filtI + filtQ * filtQ;
-			if (power > 1e-12) {
-				const loopError = (filtI * filtQ) / power;
-				this.loopIntegrator += loopError * this.loopBeta;
-				// Clamp integrator to prevent wind-up (no freq offset in digital system)
-				if (this.loopIntegrator > 0.01) this.loopIntegrator = 0.01;
-				else if (this.loopIntegrator < -0.01) this.loopIntegrator = -0.01;
-				this.carrierPhase -= loopError * this.loopAlpha + this.loopIntegrator;
-			}
-
-			// Wrap carrier phase
-			if (this.carrierPhase > 2 * Math.PI) this.carrierPhase -= 2 * Math.PI;
-			else if (this.carrierPhase < 0) this.carrierPhase += 2 * Math.PI;
-
 			// ── Clock recovery ──
-			// Zero-crossing PLL on I component (now aligned by Costas loop)
 			this.clockPhase += 1.0;
 			if ((filtI > 0) !== (this.prevBpskI > 0)) {
 				const error = this.clockPhase - this.samplesPerBit / 2;
 				this.clockPhase -= error * 0.1;
+				this.dbgClockCorr++;
 			}
 			this.prevBpskI = filtI;
 
-			// ── Sample at bit boundary ──
+			// ── Sample at bit boundary (mid-bit, maximum signal) ──
 			if (this.clockPhase >= this.samplesPerBit) {
 				this.clockPhase -= this.samplesPerBit;
 
-				// Differential decode using complex conjugate product:
-				// diffProd = Re{z[n] × conj(z[n-1])} = I·Iprev + Q·Qprev
-				// Positive → same phase (bit 0), Negative → π phase change (bit 1)
-				// This works regardless of carrier phase offset!
+				// Differential decode: Re{z[n] × conj(z[n-1])}
 				const diffProd = filtI * this.prevSymI + filtQ * this.prevSymQ;
 				const decodedBit = diffProd < 0 ? 1 : 0;
+
+				this.dbgBitMagSum += Math.abs(filtI);
+				this.dbgBitDiffSum += Math.abs(diffProd);
+				this.dbgBitSamples++;
+
 				this.prevSymI = filtI;
 				this.prevSymQ = filtQ;
 
@@ -273,6 +308,33 @@ export class RDSDecoder {
 	}
 
 	private processBit(bit: number): void {
+		this.dbgBitsTotal++;
+
+		// Periodic debug log every 5 seconds
+		const now = performance.now();
+		if (now - this.dbgLastLog > 5000) {
+			const blockRate = this.dbgBlocksTotal > 0 ? (this.dbgBlocksValid / this.dbgBlocksTotal * 100).toFixed(1) : '0';
+			const avgBitMag = this.dbgBitSamples > 0 ? (this.dbgBitMagSum / this.dbgBitSamples) : 0;
+			const avgDiffProd = this.dbgBitSamples > 0 ? (this.dbgBitDiffSum / this.dbgBitSamples) : 0;
+			const avgPI = this.dbgPilotIQcount > 0 ? (this.dbgPilotIsum / this.dbgPilotIQcount) : 0;
+			const avgPQ = this.dbgPilotIQcount > 0 ? (this.dbgPilotQsum / this.dbgPilotIQcount) : 0;
+			const qiRatio = avgPI > 1e-12 ? (avgPQ / avgPI * 100).toFixed(1) : '?';
+			console.log(`[RDS] blk=${this.dbgBlocksValid}/${this.dbgBlocksTotal}(${blockRate}%) pllI=${avgPI.toExponential(2)} Q/I=${qiRatio}% |I|=${avgBitMag.toExponential(2)} |diff|=${avgDiffProd.toExponential(2)} clk=${this.dbgClockCorr}`);
+			this.dbgBitsTotal = 0;
+			this.dbgBlocksTotal = 0;
+			this.dbgBlocksValid = 0;
+			this.dbgGroupsDecoded = 0;
+			this.dbgSyncLost = 0;
+			this.dbgBitMagSum = 0;
+			this.dbgBitDiffSum = 0;
+			this.dbgBitSamples = 0;
+			this.dbgPilotIsum = 0;
+			this.dbgPilotQsum = 0;
+			this.dbgPilotIQcount = 0;
+			this.dbgClockCorr = 0;
+			this.dbgLastLog = now;
+		}
+
 		// Shift bit into 26-bit register
 		this.shiftReg = ((this.shiftReg << 1) | bit) & 0x3FFFFFF;
 		this.bitCount++;
@@ -321,17 +383,20 @@ export class RDSDecoder {
 		const isValid = (syn === expectedSyn) ||
 			(this.blockIndex === 2 && syn === SYNDROME_CP);
 
+		this.dbgBlocksTotal++;
 		if (isValid) {
 			this.blocks[this.blockIndex] = (this.shiftReg >> 10) & 0xFFFF;
 			this.blockValid[this.blockIndex] = true;
 			this.goodBlocks++;
 			this.blockErrors = 0;
+			this.dbgBlocksValid++;
 		} else {
 			this.blockValid[this.blockIndex] = false;
 			this.blockErrors++;
-			if (this.blockErrors > 10) {
+			if (this.blockErrors > 30) {
 				// Lost sync
 				this.synced = false;
+				this.dbgSyncLost++;
 				this.goodBlocks = 0;
 				this.blockErrors = 0;
 				return;
@@ -351,17 +416,14 @@ export class RDSDecoder {
 		}
 	}
 
-	/** Accept a character only after it has been received identically twice
-	 *  at the same position (standard RDS error-rejection technique). */
-	private confirmChar(pos: number, char: number, chars: (number | null)[], confirm: (number | null)[]): void {
-		if (char < 0x20 || char >= 0x7F) return;
-		if (confirm[pos] === char) {
-			chars[pos] = char; // confirmed — accept
-		}
-		confirm[pos] = char;
+	/** Accept a printable character at a given position.
+	 *  CRC + block-validity checks upstream ensure data integrity. */
+	private acceptChar(pos: number, char: number, chars: (number | null)[]): void {
+		if (char >= 0x20 && char < 0x7F) chars[pos] = char;
 	}
 
 	private decodeGroup(): void {
+		this.dbgGroupsDecoded++;
 		const bv = this.blockValid;
 
 		// Block A: PI code — only if block A passed CRC
@@ -410,8 +472,8 @@ export class RDSDecoder {
 			const c1 = (blockD >> 8) & 0xFF;
 			const c2 = blockD & 0xFF;
 
-			this.confirmChar(segment * 2, c1, this.psChars, this.psConfirm);
-			this.confirmChar(segment * 2 + 1, c2, this.psChars, this.psConfirm);
+			this.acceptChar(segment * 2, c1, this.psChars);
+			this.acceptChar(segment * 2 + 1, c2, this.psChars);
 
 			// Check if PS is complete (all 8 chars received)
 			const ps = this.buildPS();
@@ -428,7 +490,6 @@ export class RDSDecoder {
 			// A/B flag change means new RT message — clear buffer
 			if (this.rtAbFlag !== -1 && abFlag !== this.rtAbFlag) {
 				this.rtChars.fill(null);
-				this.rtConfirm.fill(null);
 			}
 			this.rtAbFlag = abFlag;
 
@@ -443,10 +504,10 @@ export class RDSDecoder {
 				const c3 = (blockD >> 8) & 0xFF;
 				const c4 = blockD & 0xFF;
 				const base = segment * 4;
-				this.confirmChar(base, c1, this.rtChars, this.rtConfirm);
-				this.confirmChar(base + 1, c2, this.rtChars, this.rtConfirm);
-				this.confirmChar(base + 2, c3, this.rtChars, this.rtConfirm);
-				this.confirmChar(base + 3, c4, this.rtChars, this.rtConfirm);
+				this.acceptChar(base, c1, this.rtChars);
+				this.acceptChar(base + 1, c2, this.rtChars);
+				this.acceptChar(base + 2, c3, this.rtChars);
+				this.acceptChar(base + 3, c4, this.rtChars);
 
 				// Check for end-of-message marker (0x0D)
 				if (c1 === 0x0D || c2 === 0x0D || c3 === 0x0D || c4 === 0x0D) {
@@ -462,8 +523,8 @@ export class RDSDecoder {
 				const c1 = (blockD >> 8) & 0xFF;
 				const c2 = blockD & 0xFF;
 				const base = segment * 2;
-				this.confirmChar(base, c1, this.rtChars, this.rtConfirm);
-				this.confirmChar(base + 1, c2, this.rtChars, this.rtConfirm);
+				this.acceptChar(base, c1, this.rtChars);
+				this.acceptChar(base + 1, c2, this.rtChars);
 			}
 
 			// Periodically emit partial RT
@@ -507,18 +568,18 @@ export class RDSDecoder {
 		this.tp = false;
 		this.ta = false;
 		this.psChars.fill(null);
-		this.psConfirm.fill(null);
 		this.rtChars.fill(null);
-		this.rtConfirm.fill(null);
 		this.rtAbFlag = -1;
 		this.lastPs = '';
 		this.lastRt = '';
-		this.carrierPhase = 0;
+		this.pilotPhase = 0;
+		this.pilotMixI = 0;
+		this.pilotMixQ = 0;
+		this.pilotBpf.reset();
 		this.clockPhase = 0;
 		this.prevBpskI = 0;
 		this.prevSymI = 0;
 		this.prevSymQ = 0;
-		this.loopIntegrator = 0;
 		for (const bq of this.bqI) bq.reset();
 		for (const bq of this.bqQ) bq.reset();
 	}
