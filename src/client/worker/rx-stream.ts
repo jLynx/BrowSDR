@@ -22,6 +22,7 @@ import * as Comlink from 'comlink';
 import { FFT } from './wasm-init';
 import { RationalResampler } from './dsp-pipeline';
 import { POCSAGDecoder } from './pocsag';
+import { RDSDecoder } from './rds';
 import type { RxStreamOpts, VfoParams, VfoState, PerfCounters } from './types';
 import { IF_RATES, AUDIO_RATE } from './types';
 import type { Backend } from './backend';
@@ -32,7 +33,8 @@ export async function startRxStream(
 	spectrumCallback: any,
 	audioCallback: any,
 	whisperCallback: any,
-	pocsagCallback: any
+	pocsagCallback: any,
+	rdsCallback: any
 ): Promise<void> {
 	backend._remoteClientAudioCb = audioCallback; // Save reference for when chunk arrives
 	backend._remoteClientWhisperCb = whisperCallback; // Save for remote client transcription
@@ -83,7 +85,7 @@ export async function startRxStream(
 		if (backend.ddcs) backend.ddcs.forEach((d: any) => { try { d.free(); } catch (_) { } });
 
 		// Initialize dynamic VFO arrays (start with one VFO)
-		const defaultVfoParams: VfoParams = { freq: centerFreq, mode: 'wfm', enabled: false, deEmphasis: '50us', squelchEnabled: false, squelchLevel: -100.0, lowPass: true, highPass: false, bandwidth: initialBandwidth, volume: 50, pocsag: false };
+		const defaultVfoParams: VfoParams = { freq: centerFreq, mode: 'wfm', enabled: false, deEmphasis: '50us', squelchEnabled: false, squelchLevel: -100.0, lowPass: true, highPass: false, bandwidth: initialBandwidth, volume: 50, pocsag: false, rds: false, rdsRegion: 'eu' };
 		backend.vfoParams = [{ ...defaultVfoParams }];
 
 		const MAX_USB_SAMPLES = 131072;
@@ -104,6 +106,7 @@ export async function startRxStream(
 		const makeVfoState = (): VfoState => ({
 			squelchOpen: false,
 			pocsagDecoder: null,
+			rdsDecoder: null,
 			audioQueue: new Float32Array(32768),
 			audioQueueLen: 0,
 		});
@@ -116,6 +119,8 @@ export async function startRxStream(
 				const msg = e.data;
 				if (msg.type === "audio") {
 					backend._handleWorkerAudio!(index, msg);
+				} else if (msg.type === "rds_mpx") {
+					handleRdsMpx(index, msg);
 				} else if (msg.type === "error") {
 					console.error(`[DSP Worker ${index}] Error:`, msg.error);
 				}
@@ -487,6 +492,18 @@ export async function startRxStream(
 			}
 		};
 
+		const handleRdsMpx = (v: number, msg: any): void => {
+			const state = backend.vfoStates![v];
+			const params = backend.vfoParams![v];
+			if (!state || !params || !params.rds || params.mode !== 'wfm') return;
+			if (!state.rdsDecoder) {
+				state.rdsDecoder = new RDSDecoder(250000, (rmsg: any) => {
+					if (rdsCallback) rdsCallback(v, params.freq, rmsg);
+				}, params.rdsRegion || 'eu');
+			}
+			state.rdsDecoder.process(new Float32Array(msg.mpx));
+		};
+
 		let chunkCounter = 0;
 
 		const handleWorkerAudio = (v: number, msg: any): void => {
@@ -531,6 +548,11 @@ export async function startRxStream(
 					state.pocsagDecoder.process(out);
 				} else if (!params.pocsag && state.pocsagDecoder) {
 					state.pocsagDecoder = null;
+				}
+
+				// Clean up RDS decoder when disabled
+				if ((!params.rds || params.mode !== 'wfm') && state.rdsDecoder) {
+					state.rdsDecoder = null;
 				}
 			}
 

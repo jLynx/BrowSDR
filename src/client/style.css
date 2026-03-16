@@ -1143,6 +1143,69 @@ canvas {
 	font-style: italic;
 }
 
+/* ────── RDS ────── */
+.rds-station {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 12px;
+	background: #1a1a2e;
+	border-bottom: 1px solid var(--border);
+	font-family: 'Roboto Mono', monospace;
+}
+
+.rds-ps {
+	font-size: 18px;
+	font-weight: 700;
+	color: #4fc3f7;
+	letter-spacing: 2px;
+}
+
+.rds-pi {
+	font-size: 11px;
+	color: #80cbc4;
+}
+
+.rds-pty {
+	font-size: 11px;
+	color: #ce93d8;
+	background: #4a148c;
+	padding: 1px 6px;
+	border-radius: 3px;
+}
+
+.rds-flags {
+	display: flex;
+	gap: 4px;
+}
+
+.rds-flag {
+	font-size: 9px;
+	font-weight: 700;
+	padding: 1px 4px;
+	border-radius: 3px;
+	background: #1b5e20;
+	color: #a5d6a7;
+	letter-spacing: 0.5px;
+}
+
+.rds-ta {
+	background: #b71c1c;
+	color: #ef9a9a;
+}
+
+.rds-rt {
+	padding: 6px 12px;
+	background: #111;
+	border-bottom: 1px solid var(--border);
+	font-family: 'Roboto Mono', monospace;
+	font-size: 12px;
+	color: #e0e0e0;
+	letter-spacing: 0.5px;
+	white-space: pre-wrap;
+	word-break: break-word;
+}
+
 /* ────── Bookmarks ────── */
 .bookmark-panel-header {
 	/* inherits standard panel-header styles only */
