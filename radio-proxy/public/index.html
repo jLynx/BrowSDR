@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>BrowSDR Radio Stream</title>
+	<style>
+		* { margin: 0; padding: 0; box-sizing: border-box; }
+		body {
+			font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+			background: #1a1a2e;
+			color: #e0e0e0;
+			min-height: 100vh;
+			display: flex;
+			align-items: center;
+			justify-content: center;
+		}
+		.container {
+			text-align: center;
+			padding: 2rem;
+			max-width: 480px;
+			width: 100%;
+		}
+		h1 {
+			font-size: 1.5rem;
+			margin-bottom: 0.5rem;
+			color: #4488ff;
+		}
+		.subtitle {
+			color: #888;
+			font-size: 0.9rem;
+			margin-bottom: 2rem;
+		}
+		.player-card {
+			background: #16213e;
+			border-radius: 12px;
+			padding: 2rem;
+			box-shadow: 0 4px 24px rgba(0,0,0,0.3);
+		}
+		.frequency {
+			font-size: 2.5rem;
+			font-weight: 700;
+			color: #4488ff;
+			font-family: 'Courier New', monospace;
+		}
+		.mode {
+			font-size: 1rem;
+			color: #888;
+			margin-bottom: 1.5rem;
+		}
+		.play-btn {
+			display: inline-flex;
+			align-items: center;
+			gap: 0.5rem;
+			padding: 0.75rem 2rem;
+			font-size: 1.1rem;
+			border: none;
+			border-radius: 8px;
+			background: #4488ff;
+			color: #fff;
+			cursor: pointer;
+			transition: background 0.2s;
+		}
+		.play-btn:hover { background: #3366dd; }
+		.play-btn:disabled {
+			background: #333;
+			cursor: not-allowed;
+		}
+		.play-btn svg {
+			width: 20px;
+			height: 20px;
+			fill: currentColor;
+		}
+		.status {
+			margin-top: 1.5rem;
+			font-size: 0.85rem;
+			color: #888;
+		}
+		.status .dot {
+			display: inline-block;
+			width: 8px;
+			height: 8px;
+			border-radius: 50%;
+			margin-right: 6px;
+			vertical-align: middle;
+		}
+		.dot.connected { background: #44cc44; }
+		.dot.disconnected { background: #ff4444; }
+		.listeners {
+			margin-top: 0.5rem;
+			font-size: 0.85rem;
+			color: #666;
+		}
+	</style>
+</head>
+<body>
+	<div class="container">
+		<h1>BrowSDR Radio Stream</h1>
+		<p class="subtitle">Software Defined Radio — Live Audio</p>
+		<div class="player-card">
+			<div class="frequency" id="freq">---.--- MHz</div>
+			<div class="mode" id="mode">---</div>
+			<button class="play-btn" id="playBtn" onclick="togglePlay()">
+				<svg id="playIcon" viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg>
+				<svg id="stopIcon" viewBox="0 0 24 24" style="display:none"><rect x="5" y="3" width="14" height="18" rx="2"/></svg>
+				<span id="btnText">Play</span>
+			</button>
+			<div class="status">
+				<span class="dot disconnected" id="dot"></span>
+				<span id="statusText">Checking...</span>
+			</div>
+			<div class="listeners" id="listeners"></div>
+		</div>
+	</div>
+
+	<audio id="audio" preload="none"></audio>
+
+	<script>
+		const audio = document.getElementById('audio');
+		let playing = false;
+
+		function togglePlay() {
+			if (playing) {
+				audio.pause();
+				audio.src = '';
+				playing = false;
+			} else {
+				// Add cache-buster to prevent stale cached stream
+				audio.src = '/stream?t=' + Date.now();
+				audio.play().catch(() => {});
+				playing = true;
+			}
+			document.getElementById('playIcon').style.display = playing ? 'none' : '';
+			document.getElementById('stopIcon').style.display = playing ? '' : 'none';
+			document.getElementById('btnText').textContent = playing ? 'Stop' : 'Play';
+		}
+
+		async function updateStatus() {
+			try {
+				const r = await fetch('/status');
+				const s = await r.json();
+				const dot = document.getElementById('dot');
+				const statusText = document.getElementById('statusText');
+
+				dot.className = 'dot ' + (s.connected ? 'connected' : 'disconnected');
+				statusText.textContent = s.connected ? 'Connected to SDR' : 'Disconnected';
+
+				if (s.frequency) {
+					document.getElementById('freq').textContent =
+						parseFloat(s.frequency).toFixed(3) + ' MHz';
+				}
+				if (s.mode) {
+					document.getElementById('mode').textContent = s.mode.toUpperCase();
+				}
+				document.getElementById('listeners').textContent =
+					s.listeners + ' listener' + (s.listeners !== 1 ? 's' : '');
+			} catch (_) {}
+		}
+
+		updateStatus();
+		setInterval(updateStatus, 5000);
+	</script>
+</body>
+</html>
