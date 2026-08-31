@@ -159,6 +159,13 @@
 							</div>
 						</div>
 						<div class="form-row">
+							<label>Freq Shift</label>
+							<div class="input-group">
+								<input type="number" v-model.number="radio.frequencyShift" step="0.001" title="Displayed frequency = SDR frequency + shift. Use -125 MHz for a typical 125 MHz upconverter." :disabled="remoteMode === 'client'">
+								<span>MHz</span>
+							</div>
+						</div>
+						<div class="form-row">
 							<label>Sample Rate</label>
 							<select v-model.number="radio.sampleRate" :disabled="remoteMode === 'client' && locks.sampleRate">
 								<template v-if="deviceCapabilities">

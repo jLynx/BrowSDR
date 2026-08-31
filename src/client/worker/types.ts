@@ -79,6 +79,7 @@ export interface PerfReport {
 
 export interface RxStreamOpts {
 	centerFreq: number;
+	frequencyShift?: number;
 	sampleRate: number;
 	fftSize: number;
 	gains?: Record<string, number>;

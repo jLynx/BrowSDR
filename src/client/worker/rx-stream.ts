@@ -25,6 +25,7 @@ import { POCSAGDecoder } from './pocsag';
 import type { RxStreamOpts, VfoParams, VfoState, PerfCounters } from './types';
 import { IF_RATES, AUDIO_RATE } from './types';
 import type { Backend } from './backend';
+import { displayToDeviceFrequencyHz } from '../frequency-shift';
 
 let _streamStarting = false;
 
@@ -43,10 +44,10 @@ export async function startRxStream(
 	try {
 		const { device } = backend;
 		if (!device) throw new Error('No device connected');
-		const { centerFreq, sampleRate, fftSize, gains } = opts;
+		const { centerFreq, frequencyShift = 0, sampleRate, fftSize, gains } = opts;
 
 		await device.setSampleRate(sampleRate);
-		await device.setFrequency(centerFreq * 1e6);
+		await device.setFrequency(displayToDeviceFrequencyHz(centerFreq, frequencyShift));
 
 		// ── Spectrum FFT setup ────────────────────────────────────────
 		const spectrumWindowFunc = (x: number): number => {

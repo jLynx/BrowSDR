@@ -48,6 +48,7 @@ import {
 } from './remote-clients';
 import { startRxStream } from './rx-stream';
 import type { VfoParams, VfoState, PerfCounters, RxStreamOpts, RemoteClientState, DeviceOpenOpts } from './types';
+import { displayToDeviceFrequencyHz } from '../frequency-shift';
 
 export class Backend {
 	// Hardware — generic SDR device
@@ -232,11 +233,11 @@ export class Backend {
 		await this.device.setSampleRate(rate);
 	}
 
-	async setFrequency(freqHz: number): Promise<void> {
+	async setFrequency(centerFreqMhz: number, frequencyShiftMhz = 0): Promise<void> {
 		if (!this.device) throw new Error('No device connected');
-		await this.device.setFrequency(freqHz);
+		await this.device.setFrequency(displayToDeviceFrequencyHz(centerFreqMhz, frequencyShiftMhz));
 		
-		this._centerFreq = freqHz / 1e6;
+		this._centerFreq = centerFreqMhz;
 
 		if (this.vfoParams && this.dspWorkers) {
 			for (let i = 0; i < this.vfoParams.length; i++) {
