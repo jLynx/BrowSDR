@@ -21,6 +21,7 @@ export interface Vfo {
 
 export interface RadioState {
 	centerFreq: number;
+	frequencyShift: number;
 	sampleRate: number;
 	fftSize: number;
 }

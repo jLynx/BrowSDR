@@ -195,6 +195,7 @@ export const connectionMethods = {
 
 		const opts = {
 			centerFreq: this.radio.centerFreq,
+			frequencyShift: this.radio.frequencyShift,
 			sampleRate: this.radio.sampleRate,
 			fftSize: this.radio.fftSize,
 			gains: { ...this.gains },
