@@ -540,7 +540,7 @@ export async function startRxStream(
 					state.audioQueueLen += out.length;
 
 					if (!params.pocsag && whisperCallback) {
-						whisperCallback(v, params.freq, out);
+						pushWhisper(v, params.freq, out);
 					}
 				}
 
@@ -609,7 +609,7 @@ export async function startRxStream(
 					else if (mixed[k] < -1.0) mixed[k] = -1.0;
 				}
 
-				if (audioCallback) audioCallback(mixed.subarray(0, minAvailable));
+			if (audioCallback) pushAudio(mixed.subarray(0, minAvailable));
 			}
 		};
 		// Expose for worker closure inside spawnWorker
