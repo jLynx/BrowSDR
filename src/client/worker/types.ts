@@ -100,6 +100,9 @@ export interface RxStreamOpts {
 }
 
 export interface RemoteClientState {
+	perf?: { audioCalls: number; audioSamplesOut: number; dspTimeSum: number; dspTimeMax: number; msgsSent: number };
+	channelization?: { bands: number; vfos: number; sampleRate: number };
+	sharedChannelization?: boolean;
 	workers: (Worker | null)[];
 	params: (VfoParams | null)[];
 	audioQueues: { queue: Float32Array; len: number }[];

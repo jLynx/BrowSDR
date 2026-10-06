@@ -436,15 +436,15 @@
 					</div>
 					<div class="panel-body" v-show="!collapsedPanels['display']">
 						<div class="form-row full-checkbox-row">
-							<label class="custom-checkbox" title="Share filtered sub-bands between local VFOs to reduce repeated high-rate DSP work. Disable to compare the direct pipeline.">
-								<input type="checkbox" v-model="display.sharedChannelization" :disabled="remoteMode === 'client'">
+							<label class="custom-checkbox" title="Share filtered sub-bands between VFOs to reduce repeated high-rate DSP work. On a remote connection, applies only to your VFOs on the host. Disable to compare direct DSP.">
+								<input type="checkbox" v-model="display.sharedChannelization">
 								<span class="checkmark"></span>
 								Shared VFO DSP
 							</label>
 						</div>
 						<div class="form-row">
 							<label for="spectrum-fps">Spectrum FPS</label>
-							<select id="spectrum-fps" v-model.number="display.spectrumFps" :disabled="remoteMode === 'client'" title="Spectrum and waterfall display update rate; does not change radio settings or audio. Higher rates use more CPU. Remote reception uses the host's rate.">
+							<select id="spectrum-fps" v-model.number="display.spectrumFps" title="Spectrum and waterfall display update rate; does not change radio settings or audio. Higher rates use more CPU. Remote reception is capped locally and cannot exceed the host's rate.">
 								<option :value="20">20 FPS</option>
 								<option :value="30">30 FPS</option>
 								<option :value="60">60 FPS</option>
@@ -478,16 +478,17 @@
 					<!-- DSP Performance Stats Overlay -->
 					<div v-if="showStats && dspStats" class="dsp-stats-overlay">
 						<div style="display: flex; justify-content: space-between;">
-							<b>DSP Stats</b>
+							<b>{{ remoteMode === 'client' ? 'Host DSP Stats' : 'DSP Stats' }}</b>
 							<span style="color: #0f0;">{{ fps }} FPS</span>
 						</div>
+						<div v-if="remoteMode === 'client'">DSP / audio: your VFOs | USB / drops: host source</div>
 						<div>USB: {{ dspStats.usbFps }} cb/s | Chunk: {{ dspStats.chunkSize }} B</div>
 						<div>DSP: {{ dspStats.dspAvgMs }}ms avg / {{ dspStats.dspMaxMs }}ms max</div>
 						<div>Audio: {{ dspStats.audioFps }} calls/s | {{ dspStats.audioRate }} samp/s</div>
 						<div>Msgs: {{ dspStats.msgRate }} /s | Input: {{ (dspStats.inputRate/1e6).toFixed(2) }} MSa/s</div>
 						<div>Dropped: {{ dspStats.dropped }}</div>
 						<div v-if="dspStats.channelization && dspStats.channelization.bands">Shared: {{ dspStats.channelization.vfos }} VFOs / {{ dspStats.channelization.bands }} bands @ {{ (dspStats.channelization.sampleRate / 1e6).toFixed(2) }} MSPS</div>
-						<div v-if="dspStats.channelization && dspStats.channelization.bands">Channelizer: {{ (dspStats.channelAvgMs || 0).toFixed(2) }}ms avg / {{ (dspStats.channelMaxMs || 0).toFixed(2) }}ms max | {{ (dspStats.channelCpuMs || 0).toFixed(0) }}ms CPU/s</div>
+						<div v-if="dspStats.channelization && dspStats.channelization.bands">{{ remoteMode === 'client' ? 'Host channelizer' : 'Channelizer' }}: {{ (dspStats.channelAvgMs || 0).toFixed(2) }}ms avg / {{ (dspStats.channelMaxMs || 0).toFixed(2) }}ms max | {{ (dspStats.channelCpuMs || 0).toFixed(0) }}ms CPU/s</div>
 					</div>
 				</div>
 				<!-- Active Audio VFOs Overlay -->

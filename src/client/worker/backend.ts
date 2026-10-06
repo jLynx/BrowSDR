@@ -33,12 +33,14 @@ import {
 	setRemoteHostCallback,
 	setRemoteHostFftCallback,
 	setRemoteHostAudioCallback,
+	setRemoteHostStatsCallback,
 	setRemoteHostPocsagCallback,
 	setRemoteHostRdsCallback,
 	setRemoteHostSquelchCallback,
 	_ensureRemoteClients,
 	_getOrCreateClientState,
 	addRemoteClient,
+	setRemoteSharedChannelization,
 	removeRemoteClient,
 	setRemoteVfoParams,
 	addRemoteVfo,
@@ -90,6 +92,7 @@ export class Backend {
 	_remoteHostCb?: any;
 	_remoteHostFftCb?: any;
 	_remoteHostAudioCb?: any;
+	_remoteHostStatsCb?: any;
 	_remoteClients?: Map<string, RemoteClientState>;
 	_remoteHostPocsagCb?: any;
 	_remoteHostRdsCb?: any;
@@ -155,12 +158,14 @@ export class Backend {
 	setRemoteHostCallback = setRemoteHostCallback.bind(this);
 	setRemoteHostFftCallback = setRemoteHostFftCallback.bind(this);
 	setRemoteHostAudioCallback = setRemoteHostAudioCallback.bind(this);
+	setRemoteHostStatsCallback = setRemoteHostStatsCallback.bind(this);
 	setRemoteHostPocsagCallback = setRemoteHostPocsagCallback.bind(this);
 	setRemoteHostRdsCallback = setRemoteHostRdsCallback.bind(this);
 	setRemoteHostSquelchCallback = setRemoteHostSquelchCallback.bind(this);
 	_ensureRemoteClients = _ensureRemoteClients.bind(this);
 	_getOrCreateClientState = _getOrCreateClientState.bind(this);
 	addRemoteClient = addRemoteClient.bind(this);
+	setRemoteSharedChannelization = setRemoteSharedChannelization.bind(this);
 	removeRemoteClient = removeRemoteClient.bind(this);
 	setRemoteVfoParams = setRemoteVfoParams.bind(this);
 	addRemoteVfo = addRemoteVfo.bind(this);

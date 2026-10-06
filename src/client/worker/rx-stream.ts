@@ -82,6 +82,7 @@ export async function startRxStream(
 		backend._sharedChannelization = opts.sharedChannelization !== false;
 		let channelWorker: Worker | undefined;
 		let latestPlan: ChannelPlan | undefined;
+		let latestTargets: { worker: Worker; params: VfoParams; shared: boolean }[] = [];
 		let pendingChannelSamples = 0;
 		let channelKey = '';
 		let channelTimeSum = 0;
@@ -205,6 +206,26 @@ export async function startRxStream(
 				channelMaxMs: channelTimeMax,
 				channelCpuMs: channelTimeSum / dt,
 			};
+			for (const [clientId, client] of backend._remoteClients ?? []) {
+				const counters = client.perf;
+				backend._remoteHostStatsCb?.(clientId, {
+					...perf.report,
+					source: 'host',
+					audioFps: Math.round((counters?.audioCalls ?? 0) / dt),
+					audioRate: Math.round((counters?.audioSamplesOut ?? 0) / dt),
+					dspAvgMs: counters?.audioCalls ? (counters.dspTimeSum / counters.audioCalls).toFixed(2) : '0',
+					dspMaxMs: (counters?.dspTimeMax ?? 0).toFixed(2),
+					msgRate: Math.round((counters?.msgsSent ?? 0) / dt),
+					channelization: client.channelization ?? { bands: 0, vfos: 0, sampleRate },
+				});
+				if (counters) {
+					counters.audioCalls = 0;
+					counters.audioSamplesOut = 0;
+					counters.dspTimeSum = 0;
+					counters.dspTimeMax = 0;
+					counters.msgsSent = 0;
+				}
+			}
 			channelTimeSum = 0;
 			channelTimeMax = 0;
 			channelCalls = 0;
@@ -710,11 +731,26 @@ export async function startRxStream(
 			}
 
 			// Broadcast to DSP workers
-			const plan = planSharedBands(sampleRate, backend._centerFreq ?? centerFreq, backend.vfoParams!, backend._sharedChannelization);
+			const targets = backend.dspWorkers!.map((worker, index) => ({ worker, params: backend.vfoParams![index], shared: backend._sharedChannelization }));
+			for (const client of backend._remoteClients?.values() ?? []) {
+				for (let index = 0; index < client.workers.length; index++) {
+					const worker = client.workers[index];
+					const params = client.params[index];
+					if (worker && params) targets.push({ worker, params, shared: client.sharedChannelization === true });
+				}
+			}
+			const plannedParams = targets.map(target => target.shared ? target.params : { ...target.params, enabled: false, pocsag: false, rds: false });
+			const plan = planSharedBands(sampleRate, backend._centerFreq ?? centerFreq, plannedParams, true);
 			const nextKey = JSON.stringify([backend._centerFreq ?? centerFreq, plan.ratio, plan.bands.map(band => band.centerBin)]);
 			latestPlan = plan;
+			latestTargets = targets;
 			channelKey = nextKey;
 			backend._sharedChannelStats = { bands: plan.bands.length, vfos: plan.bands.reduce((count, band) => count + band.vfos.length, 0), sampleRate: plan.sampleRate };
+			for (const client of backend._remoteClients?.values() ?? []) {
+				const workers = new Set(client.workers);
+				const bands = plan.bands.map(band => band.vfos.filter(index => workers.has(targets[index].worker))).filter(indices => indices.length);
+				client.channelization = { bands: bands.length, vfos: bands.reduce((count, indices) => count + indices.length, 0), sampleRate: plan.sampleRate };
+			}
 			if (plan.bands.length) {
 				if (!channelWorker) {
 					channelWorker = new globalThis.Worker(new URL('../dsp-worker.ts', import.meta.url), { type: 'module' });
@@ -724,13 +760,15 @@ export async function startRxStream(
 						channelCalls++;
 						channelTimeSum += message.dspTime;
 						channelTimeMax = Math.max(channelTimeMax, message.dspTime);
-						if (message.key !== channelKey || !backend._sharedChannelization) return;
+						if (message.key !== channelKey) return;
 						for (const result of message.bands) {
 							const band = latestPlan?.bands.find(value => value.centerBin === result.centerBin);
 							if (!band) continue;
 							for (const index of band.vfos) {
-								backend.dspWorkers![index]?.postMessage({ type: 'process', floatIq: true, chunk: result.buffer, chunkLen: result.length,
-									sampleRate: latestPlan!.sampleRate, centerFreq: band.centerFreq, params: backend.vfoParams![index], chunkId: message.chunkId });
+								const target = latestTargets[index];
+								if (!target) continue;
+								target.worker.postMessage({ type: 'process', floatIq: true, chunk: result.buffer, chunkLen: result.length,
+									sampleRate: latestPlan!.sampleRate, centerFreq: band.centerFreq, params: target.params, chunkId: message.chunkId });
 							}
 						}
 					};
@@ -744,33 +782,15 @@ export async function startRxStream(
 			} else if (channelWorker) {
 				backend._disposeChannelization?.();
 			}
-			for (let v = 0; v < backend.dspWorkers!.length; v++) {
-				if (!plan.direct.includes(v)) continue;
-				const worker = backend.dspWorkers![v];
-				if (!worker) continue;
-				const params = backend.vfoParams![v];
+			for (let index = 0; index < targets.length; index++) {
+				const { worker, params, shared } = targets[index];
+				if (shared && !plan.direct.includes(index)) continue;
+				if (!params.enabled && !params.pocsag && !(params.rds && params.mode === 'wfm')) continue;
 				if (typeof SharedArrayBuffer !== 'undefined') {
 					worker.postMessage({ type: 'process', params: params, sampleRate, centerFreq: backend._centerFreq ?? centerFreq, useSab: true, sabIndex: backend.sabPoolIndex, chunkLen: signed.length, chunkId: chunkCounter });
 				} else {
 					const cloneBuf = signed.slice().buffer;
 					worker.postMessage({ type: 'process', params: params, sampleRate, centerFreq: backend._centerFreq ?? centerFreq, useSab: false, chunk: cloneBuf, chunkLen: signed.length, chunkId: chunkCounter }, [cloneBuf]);
-				}
-			}
-
-			// Feed all remote-client VFO workers (independent from the host mixer)
-			if (backend._remoteClients) {
-				for (const [, clientState] of backend._remoteClients) {
-					for (let rv = 0; rv < clientState.workers.length; rv++) {
-						const rw = clientState.workers[rv];
-						if (!rw) continue;
-						const rp = clientState.params[rv];
-						if (typeof SharedArrayBuffer !== 'undefined') {
-							rw.postMessage({ type: 'process', params: rp, useSab: true, sabIndex: backend.sabPoolIndex, chunkLen: signed.length, chunkId: chunkCounter });
-						} else {
-							const rClone = signed.slice().buffer;
-							rw.postMessage({ type: 'process', params: rp, useSab: false, chunk: rClone, chunkLen: signed.length, chunkId: chunkCounter }, [rClone]);
-						}
-					}
 				}
 			}
 

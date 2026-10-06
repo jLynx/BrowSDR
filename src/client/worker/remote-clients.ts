@@ -44,6 +44,10 @@ export async function setRemoteHostAudioCallback(this: Backend, callback: any): 
 	this._remoteHostAudioCb = callback;
 }
 
+export async function setRemoteHostStatsCallback(this: Backend, callback: any): Promise<void> {
+	this._remoteHostStatsCb = callback;
+}
+
 export async function setRemoteHostPocsagCallback(this: Backend, callback: any): Promise<void> {
 	this._remoteHostPocsagCb = callback;
 }
@@ -82,6 +86,11 @@ export async function addRemoteClient(this: Backend, clientId: string): Promise<
 	this._getOrCreateClientState(clientId);
 }
 
+export function setRemoteSharedChannelization(this: Backend, clientId: string, enabled: boolean): void {
+	const state = this._remoteClients?.get(clientId);
+	if (state) state.sharedChannelization = enabled;
+}
+
 export async function removeRemoteClient(this: Backend, clientId: string): Promise<void> {
 	this._ensureRemoteClients();
 	const state = this._remoteClients!.get(clientId);
@@ -106,14 +115,27 @@ function bindRemoteWorker(backend: Backend, clientId: string, state: RemoteClien
 				backend._remoteHostRdsCb?.(clientId, index, params.freq, msg.msg);
 			}
 		} else if (msg.type === 'audio') {
+			const perf = state.perf ??= { audioCalls: 0, audioSamplesOut: 0, dspTimeSum: 0, dspTimeMax: 0, msgsSent: 0 };
+			const elapsed = Number.isFinite(msg.dspTime) ? msg.dspTime : 0;
+			const samples = msg.samples ? new Float32Array(msg.samples) : null;
+			perf.audioCalls++;
+			perf.dspTimeSum += elapsed;
+			perf.dspTimeMax = Math.max(perf.dspTimeMax, elapsed);
+			perf.audioSamplesOut += samples?.length ?? 0;
+			if (backend._perf) {
+				backend._perf.audioCalls++;
+				backend._perf.dspTimeSum += elapsed;
+				backend._perf.dspTimeMax = Math.max(backend._perf.dspTimeMax, elapsed);
+				backend._perf.audioSamplesOut += samples?.length ?? 0;
+			}
 			const prev = state.squelchOpen[index] || false;
 			const curr = !!msg.squelchOpen;
 			state.squelchOpen[index] = curr;
 			if (curr !== prev && backend._remoteHostSquelchCb) {
 				backend._remoteHostSquelchCb(clientId, state.squelchOpen.slice());
 			}
-			if (msg.samples) {
-				backend._queueRemoteAudio(clientId, index, new Float32Array(msg.samples));
+			if (samples) {
+				backend._queueRemoteAudio(clientId, index, samples);
 			}
 		}
 	};
@@ -243,6 +265,7 @@ export function _mixAndEmitRemoteAudio(this: Backend, clientId: string): void {
 		else if (mixed[k] < -1) mixed[k] = -1;
 	}
 	this._remoteHostAudioCb(clientId, mixed.slice(0, minAvailable));
+	if (state.perf) state.perf.msgsSent++;
 }
 
 export function _reinitRemoteClientWorkers(this: Backend): void {

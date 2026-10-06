@@ -41,6 +41,38 @@ async function createStream(rdsCallback = null) {
 }
 
 describe('shared VFO worker routing', () => {
+	it('shares remote-client bands independently of the host and other clients', async () => {
+		const { backend, workers, receive } = await createStream();
+		const createWorker = params => backend._spawnWorker(0, params);
+		const params = backend.vfoParams.map(value => ({ ...value }));
+		const alice = { sharedChannelization: true, params, workers: params.map(createWorker) };
+		const bob = { params: [params[0]], workers: [createWorker(params[0])] };
+		alice.perf = { audioCalls: 2, audioSamplesOut: 960, dspTimeSum: 4, dspTimeMax: 3, msgsSent: 1 };
+		const statsCallback = vi.fn();
+		backend._remoteHostStatsCb = statsCallback;
+		backend._remoteClients = new Map([['alice', alice], ['bob', bob]]);
+		backend._sharedChannelization = false;
+		receive();
+		const channelWorker = workers.at(-1);
+		const request = channelWorker.messages[0];
+		channelWorker.onmessage({ data: { type: 'bands', key: request.key, chunkId: request.chunkId, inputSamples: request.inputSamples, dspTime: 1,
+			bands: [{ centerBin: request.centers[0], buffer: new ArrayBuffer(128), length: 32 }] } });
+		alice.workers.forEach(worker => expect(worker.messages.at(-1)).toMatchObject({ floatIq: true, sampleRate: 1920000 }));
+		vi.advanceTimersByTime(500);
+		const report = statsCallback.mock.calls.find(([id]) => id === 'alice')[1];
+		expect(report).toMatchObject({ source: 'host', dspAvgMs: '2.00', dspMaxMs: '3.00', channelization: { bands: 1, vfos: 3, sampleRate: 1920000 } });
+		expect(report.audioRate).toBeGreaterThan(0);
+		expect(report.inputRate).toBeGreaterThan(0);
+		expect(alice.perf.audioCalls).toBe(0);
+		[...backend.dspWorkers, ...bob.workers].forEach(worker => {
+			expect(worker.messages.at(-1).sampleRate).toBe(61440000);
+			expect(worker.messages.at(-1).floatIq).toBeUndefined();
+		});
+		alice.sharedChannelization = false;
+		receive();
+		expect(channelWorker.terminate).toHaveBeenCalledOnce();
+		alice.workers.forEach(worker => expect(worker.messages.at(-1).sampleRate).toBe(61440000));
+	});
 	it.each([false, true])('routes muted RDS VFOs through shared DSP %s', async shared => {
 		const rdsCallback = vi.fn();
 		const { backend, workers, receive } = await createStream(rdsCallback);

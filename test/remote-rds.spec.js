@@ -6,6 +6,7 @@ vi.mock('../src/client/webrtc', () => ({
 	WebRTCHandler: class {
 		init = vi.fn();
 		sendCommandTo = vi.fn();
+		sendAudioChunkTo = vi.fn();
 	},
 }));
 
@@ -39,6 +40,50 @@ function makeClient(frequency = 106.2) {
 }
 
 describe('remote RDS delivery', () => {
+	it('records remote DSP time and audio output and forwards reports to the correct client', async () => {
+		vi.stubGlobal('window', { location: { origin: 'http://localhost:5173' } });
+		vi.stubGlobal('localStorage', { getItem: () => null });
+		const backend = makeBackend();
+		backend._perf = { audioCalls: 0, audioSamplesOut: 0, dspTimeSum: 0, dspTimeMax: 0 };
+		const host = { connected: true, running: true, remoteMode: 'none', locks: {}, backend, radio: {}, gains: {} };
+		await remoteMethods.startRemoteHost.call(host);
+		await backend.setRemoteVfoParams('alice', 0, { ...params, enabled: true });
+		const state = backend._remoteClients.get('alice');
+		state.workers[0].onmessage({ data: { type: 'audio', samples: new Float32Array(4800).buffer, dspTime: 2 } });
+		expect(state.perf).toMatchObject({ audioCalls: 1, audioSamplesOut: 4800, dspTimeSum: 2, dspTimeMax: 2, msgsSent: 1 });
+		expect(backend._perf).toMatchObject({ audioCalls: 1, audioSamplesOut: 4800, dspTimeSum: 2, dspTimeMax: 2 });
+		const client = { remoteMode: 'client', dspStats: null };
+		host._webrtc.sendCommandTo.mockImplementation((id, command) => {
+			expect(id).toBe('alice');
+			remoteMethods.handleRemoteCommand.call(client, JSON.parse(JSON.stringify(command)));
+		});
+		const stats = { source: 'host', dspAvgMs: '2.00', inputRate: 61440000, channelization: { bands: 1, vfos: 3, sampleRate: 1920000 } };
+		backend._remoteHostStatsCb('alice', stats);
+		expect(client.dspStats).toEqual(stats);
+		remoteMethods.handleRemoteCommand.call(host, 'alice', { type: 'dspStats', stats: { inputRate: 0 } });
+		expect(host.dspStats).toBeUndefined();
+	});
+	it('sends a remote DSP preference only for the requesting client and leaves host settings alone', async () => {
+		const backend = makeBackend();
+		await backend.addRemoteClient('alice');
+		await backend.addRemoteClient('bob');
+		backend._sharedChannelization = false;
+		const host = { remoteMode: 'host', backend, locks: { centerFreq: true }, display: { sharedChannelization: false } };
+		const client = { remoteMode: 'client', display: { sharedChannelization: true }, _webrtc: { sendCommand: vi.fn() } };
+		remoteMethods.applySharedChannelization.call(client);
+		const command = client._webrtc.sendCommand.mock.calls[0][0];
+		remoteMethods.handleRemoteCommand.call(host, 'alice', command);
+		expect(backend._remoteClients.get('alice').sharedChannelization).toBe(true);
+		expect(backend._remoteClients.get('bob').sharedChannelization).toBeUndefined();
+		expect(host.display.sharedChannelization).toBe(false);
+		expect(backend._sharedChannelization).toBe(false);
+		remoteMethods.handleRemoteCommand.call(host, 'alice', { ...command, sharedChannelization: false });
+		expect(backend._remoteClients.get('alice').sharedChannelization).toBe(false);
+		remoteMethods.handleRemoteCommand.call(host, 'alice', { ...command, sharedChannelization: 'false' });
+		expect(backend._remoteClients.get('alice').sharedChannelization).toBe(false);
+		remoteMethods.handleRemoteCommand.call(host, 'unknown', command);
+		expect(backend._remoteClients.size).toBe(2);
+	});
 	it('forwards decoded metadata through host callbacks and serialized commands to the correct muted client', async () => {
 		vi.stubGlobal('window', { location: { origin: 'http://localhost:5173' } });
 		vi.stubGlobal('localStorage', { getItem: () => null });

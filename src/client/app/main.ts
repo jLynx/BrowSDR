@@ -205,7 +205,7 @@ createApp({
 
 		this.$watch(() => this.display.sharedChannelization, (enabled: boolean) => {
 			this.saveSetting();
-			if (this.backend && this.remoteMode !== 'client') this.backend.setSharedChannelization(enabled).catch(console.error);
+			this.applySharedChannelization();
 		});
 
 		this.$watch('locks', () => {

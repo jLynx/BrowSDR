@@ -1,7 +1,7 @@
 import type { AppInstance } from './types';
 import { VFO_COLORS } from './constants';
 import { Waterfall, WaterfallGL } from '../utils';
-import { WaterfallClock } from '../spectrum-rate';
+import { SpectrumFrameLimiter, WaterfallClock } from '../spectrum-rate';
 
 export const canvasMethods = {
 	initCanvas(this: AppInstance) {
@@ -20,6 +20,7 @@ export const canvasMethods = {
 
 		this._waterfallEngine.setRange(this.display.minDB, this.display.maxDB);
 		this._waterfallClock = new WaterfallClock();
+		this._remoteSpectrumLimiter = new SpectrumFrameLimiter();
 
 		this.resizeFftCanvas();
 
@@ -55,6 +56,7 @@ export const canvasMethods = {
 
 		// FPS calculation
 		const now = performance.now();
+		if (this.remoteMode === 'client' && !this._zoomRepaint && !this._remoteSpectrumLimiter.shouldDraw(now, this.display.spectrumFps)) return;
 		if (!this._zoomRepaint && !this._lastFrameTime) {
 			this._lastFrameTime = now;
 			this._framesDrawn = 0;
