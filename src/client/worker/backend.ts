@@ -34,6 +34,7 @@ import {
 	setRemoteHostFftCallback,
 	setRemoteHostAudioCallback,
 	setRemoteHostPocsagCallback,
+	setRemoteHostRdsCallback,
 	setRemoteHostSquelchCallback,
 	_ensureRemoteClients,
 	_getOrCreateClientState,
@@ -91,6 +92,7 @@ export class Backend {
 	_remoteHostAudioCb?: any;
 	_remoteClients?: Map<string, RemoteClientState>;
 	_remoteHostPocsagCb?: any;
+	_remoteHostRdsCb?: any;
 	_remoteHostSquelchCb?: any;
 	_remoteClientCb?: any;
 	_remoteClientAudioCb?: any;
@@ -154,6 +156,7 @@ export class Backend {
 	setRemoteHostFftCallback = setRemoteHostFftCallback.bind(this);
 	setRemoteHostAudioCallback = setRemoteHostAudioCallback.bind(this);
 	setRemoteHostPocsagCallback = setRemoteHostPocsagCallback.bind(this);
+	setRemoteHostRdsCallback = setRemoteHostRdsCallback.bind(this);
 	setRemoteHostSquelchCallback = setRemoteHostSquelchCallback.bind(this);
 	_ensureRemoteClients = _ensureRemoteClients.bind(this);
 	_getOrCreateClientState = _getOrCreateClientState.bind(this);

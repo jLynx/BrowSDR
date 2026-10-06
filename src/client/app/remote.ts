@@ -105,6 +105,13 @@ export const remoteMethods = {
 				this._webrtc.sendCommandTo(clientId, { type: 'pocsag', vfoIndex, freq, msg });
 			}
 		}));
+		// RDS is decoded from MPX on the host; the client receives metadata
+		// over the command channel because streamed audio excludes 57 kHz RDS.
+		await this.backend.setRemoteHostRdsCallback(Comlink.proxy((clientId: string, vfoIndex: number, freq: number, msg: any) => {
+			if (this._webrtc) {
+				this._webrtc.sendCommandTo(clientId, { type: 'rds', vfoIndex, freq, msg });
+			}
+		}));
 		// Forward squelch state changes so remote clients can track frequency activity
 		await this.backend.setRemoteHostSquelchCallback(Comlink.proxy((clientId: string, squelchOpen: boolean[]) => {
 			if (this._webrtc) {
@@ -300,6 +307,13 @@ export const remoteMethods = {
 		} else if (cmd.type === 'pocsag') {
 			if (this.remoteMode === 'client') {
 				this._onPocsagMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
+			}
+		} else if (cmd.type === 'rds') {
+			if (this.remoteMode === 'client') {
+				const vfo = this.vfos[cmd.vfoIndex];
+				if (vfo?.rds && vfo.mode === 'wfm' && vfo.freq === cmd.freq) {
+					this._onRdsMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
+				}
 			}
 		} else if (cmd.type === 'squelchState') {
 			if (this.remoteMode === 'client') {

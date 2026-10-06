@@ -48,6 +48,10 @@ export async function setRemoteHostPocsagCallback(this: Backend, callback: any):
 	this._remoteHostPocsagCb = callback;
 }
 
+export async function setRemoteHostRdsCallback(this: Backend, callback: any): Promise<void> {
+	this._remoteHostRdsCb = callback;
+}
+
 export async function setRemoteHostSquelchCallback(this: Backend, callback: any): Promise<void> {
 	this._remoteHostSquelchCb = callback;
 }
@@ -88,6 +92,33 @@ export async function removeRemoteClient(this: Backend, clientId: string): Promi
 	this._remoteClients!.delete(clientId);
 }
 
+function bindRemoteWorker(backend: Backend, clientId: string, state: RemoteClientState, worker: Worker): void {
+	worker.onmessage = (e: MessageEvent) => {
+		// Removing a VFO shifts the indices; ignore messages from old workers
+		// after removal, stream restart, or client disconnection.
+		if (backend._remoteClients?.get(clientId) !== state) return;
+		const index = state.workers.indexOf(worker);
+		if (index === -1) return;
+		const msg = e.data;
+		if (msg.type === 'rds') {
+			const params = state.params[index];
+			if (params?.rds && params.mode === 'wfm') {
+				backend._remoteHostRdsCb?.(clientId, index, params.freq, msg.msg);
+			}
+		} else if (msg.type === 'audio') {
+			const prev = state.squelchOpen[index] || false;
+			const curr = !!msg.squelchOpen;
+			state.squelchOpen[index] = curr;
+			if (curr !== prev && backend._remoteHostSquelchCb) {
+				backend._remoteHostSquelchCb(clientId, state.squelchOpen.slice());
+			}
+			if (msg.samples) {
+				backend._queueRemoteAudio(clientId, index, new Float32Array(msg.samples));
+			}
+		}
+	};
+}
+
 export async function setRemoteVfoParams(this: Backend, clientId: string, index: number, params: VfoParams): Promise<void> {
 	const state = this._getOrCreateClientState(clientId);
 	const wasEnabled = state.params[index] && state.params[index]!.enabled;
@@ -100,20 +131,7 @@ export async function setRemoteVfoParams(this: Backend, clientId: string, index:
 	if (!state.workers[index]) {
 		if (!this._sampleRate || !this.sharedIqPools) return;
 		const worker = new globalThis.Worker(new URL('../dsp-worker.ts', import.meta.url), { type: 'module' });
-		worker.onmessage = (e: MessageEvent) => {
-			const msg = e.data;
-			if (msg.type === 'audio') {
-				const prev = state.squelchOpen[index] || false;
-				const curr = !!msg.squelchOpen;
-				state.squelchOpen[index] = curr;
-				if (curr !== prev && this._remoteHostSquelchCb) {
-					this._remoteHostSquelchCb(clientId, state.squelchOpen.slice());
-				}
-				if (msg.samples) {
-					this._queueRemoteAudio(clientId, index, new Float32Array(msg.samples));
-				}
-			}
-		};
+		bindRemoteWorker(this, clientId, state, worker);
 		worker.postMessage({
 			type: 'init',
 			sampleRate: this._sampleRate,
@@ -149,6 +167,8 @@ export async function removeRemoteVfo(this: Backend, clientId: string, index: nu
 	state.params.splice(index, 1);
 	state.audioQueues.splice(index, 1);
 	state.pocsagDecoders.splice(index, 1);
+	state.rdsDecoders.splice(index, 1);
+	state.squelchOpen.splice(index, 1);
 }
 
 export function _queueRemoteAudio(this: Backend, clientId: string, index: number, samples: Float32Array): void {
@@ -168,6 +188,12 @@ export function _queueRemoteAudio(this: Backend, clientId: string, index: number
 		state.pocsagDecoders[index].process(samples);
 	} else if (state.pocsagDecoders[index]) {
 		state.pocsagDecoders[index] = null;
+	}
+
+	// Muted VFOs still decode metadata, but their audio must not accumulate.
+	if (!params?.enabled) {
+		entry.len = 0;
+		return;
 	}
 
 	const needed = entry.len + samples.length;
@@ -231,20 +257,7 @@ export function _reinitRemoteClientWorkers(this: Backend): void {
 			if (!params) { state.workers[i] = null; continue; }
 
 			const worker = new globalThis.Worker(new URL('../dsp-worker.ts', import.meta.url), { type: 'module' });
-			worker.onmessage = (e: MessageEvent) => {
-				const msg = e.data;
-				if (msg.type === 'audio') {
-					const prev = state.squelchOpen[i] || false;
-					const curr = !!msg.squelchOpen;
-					state.squelchOpen[i] = curr;
-					if (curr !== prev && this._remoteHostSquelchCb) {
-						this._remoteHostSquelchCb(clientId, state.squelchOpen.slice());
-					}
-					if (msg.samples) {
-						this._queueRemoteAudio(clientId, i, new Float32Array(msg.samples));
-					}
-				}
-			};
+			bindRemoteWorker(this, clientId, state, worker);
 			worker.postMessage({
 				type: 'init',
 				sampleRate: this._sampleRate,
