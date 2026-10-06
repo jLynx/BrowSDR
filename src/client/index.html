@@ -749,10 +749,10 @@
 			</div>
 			<div class="activity-body">
 				<div v-if="sortedVfoActivity.length === 0" class="activity-empty">
-					Enable squelch on VFOs to track their activity here.
+					Use DSD mode or enable squelch on other VFOs to track their activity here.
 				</div>
 				<div v-else-if="!sortedVfoActivity.some(a => a.totalMs > 0 || a.isLive)" class="activity-empty">
-					Listening… activity will appear here when squelch opens.
+					Listening… activity will appear when DSD voice plays or squelch opens.
 				</div>
 				<div v-else class="activity-list">
 					<div
@@ -768,6 +768,7 @@
 						<span class="act-dot" :style="{ background: vfoColor(item.index) }"></span>
 						<span class="act-vfo">VFO {{ item.index + 1 }}</span>
 						<span class="act-freq">{{ item.vfo.freq.toFixed(4) }} MHz</span>
+						<span class="act-label" v-if="item.vfo.mode === 'dsd'" title="Tracks decoded voice playback; data bursts do not count">DSD voice</span>
 						<span class="act-label" v-if="vfoBookmarkLabel(item.index)">{{ vfoBookmarkLabel(item.index) }}</span>
 						<span class="act-spacer"></span>
 						<span class="act-live-badge" v-if="item.isLive">●&nbsp;LIVE</span>
@@ -1108,7 +1109,7 @@
 							</div>
 							<div class="about-feature-content">
 								<div class="about-feature-title">Frequency Activity Tracker</div>
-								<div class="about-feature-desc">Automatically tracks squelch-open time and transmission count per VFO. Ranks active frequencies and shows live transmission indicators.</div>
+								<div class="about-feature-desc">Tracks decoded DSD voice activity and squelch-open activity for other modes. Ranks frequencies by active time and shows live indicators.</div>
 							</div>
 						</div>
 

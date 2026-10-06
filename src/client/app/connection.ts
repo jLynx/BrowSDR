@@ -242,7 +242,7 @@ export const connectionMethods = {
 					}
 					this.vfoSquelchOpen = squelchStates;
 					// ── Frequency activity tracker ──
-					// Uses raw (pre-hang) states to count true squelch-open events
+					// Uses pre-hang squelch states for analog, decoded voice playback for DSD.
 					const rawOpen = this.dspStats.squelchOpen;
 					for (let i = 0; i < rawOpen.length; i++) {
 						if (!this.vfoActivityStats[i]) {
