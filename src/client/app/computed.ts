@@ -8,25 +8,26 @@ export const computedProperties = {
 	},
 	activeAudioVfos(this: AppInstance) {
 		const active: Array<{ index: number; vfo: any }> = [];
+		if (!this.running) return active;
 		for (let i = 0; i < this.vfos.length; i++) {
 			const vfo = this.vfos[i];
 			if (vfo.enabled) {
-				if (!vfo.squelchEnabled || this.vfoSquelchOpen[i]) {
+				if (vfo.mode === 'dsd' ? this.vfoSquelchOpen[i] : (!vfo.squelchEnabled || this.vfoSquelchOpen[i])) {
 					active.push({ index: i, vfo });
 				}
 			}
 		}
 		return active;
 	},
-	// VFOs with squelch enabled, sorted by total squelch-open time (most active first)
+	// Analog squelch activity and decoded DSD voice playback, most active first.
 	sortedVfoActivity(this: AppInstance) {
 		const now = this.activityNow || Date.now();
 		const items = this.vfos.map((vfo: any, i: number) => {
-			if (!vfo.squelchEnabled) return null;
+			if (vfo.mode !== 'dsd' && !vfo.squelchEnabled) return null;
 			const stat = this.vfoActivityStats[i] || { count: 0, totalMs: 0, squelchOpenSince: null };
-			const liveMs = stat.squelchOpenSince ? (now - stat.squelchOpenSince) : 0;
+			const liveMs = stat.squelchOpenSince !== null ? (now - stat.squelchOpenSince) : 0;
 			const totalMs = stat.totalMs + liveMs;
-			return { index: i, vfo, count: stat.count, totalMs, isLive: !!stat.squelchOpenSince };
+			return { index: i, vfo, count: stat.count, totalMs, isLive: stat.squelchOpenSince !== null };
 		}).filter(Boolean);
 		items.sort((a: any, b: any) => b.totalMs - a.totalMs);
 		// Compute pct relative to top entry

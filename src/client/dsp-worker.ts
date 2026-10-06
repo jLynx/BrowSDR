@@ -1,6 +1,19 @@
 import init, { DspProcessor, SharedChannelizer, set_panic_hook, alloc_iq_buffer, alloc_float_buffer, free_iq_buffer } from "/hackrf-web/pkg/hackrf_web.js";
 import { RationalResampler } from './worker/dsp-pipeline';
+import { DSDStream } from './worker/dsd/dsd-stream';
+import { DSD_IF_RATE } from './worker/dsd/types';
+import type { DSDStatus } from './worker/dsd/types';
 import { RDSDecoder } from './worker/rds';
+
+if (import.meta.env.DEV) {
+    for (const level of ['log', 'warn', 'error'] as const) {
+        const original = console[level].bind(console);
+        console[level] = (...values: unknown[]) => {
+            original(...values);
+            self.postMessage({ type: 'dsp_debug_log', level, message: values.map(String).join(' ') });
+        };
+    }
+}
 
 // --- Worker State ---
 let wasmInitPromise: Promise<void> | null = null;
@@ -27,6 +40,7 @@ const IF_RATES: Record<string, number> = {
     dsb: 24000,
     cw: 3000,
     raw: 48000,
+    dsd: DSD_IF_RATE,
 };
 const AUDIO_RATE = 48000;
 
@@ -49,6 +63,9 @@ async function startup(): Promise<void> {
 }
 
 let systemSampleRate = 2000000;
+
+// DSD decoder state (per-worker, one DSD decoder per VFO)
+let dsdStream: DSDStream | null = null;
 
 self.onmessage = async (e: MessageEvent) => {
     const msg = e.data;
@@ -78,6 +95,7 @@ self.onmessage = async (e: MessageEvent) => {
         }
     }
     else if (msg.type === "init") {
+        dsdStream?.reset();
         systemSampleRate = msg.sampleRate;
         inputCenterFreq = msg.centerFreq;
         // Initialize the DDC and VFO state
@@ -228,6 +246,24 @@ function configureDDC(params: any, systemCenterFreq: number): void {
         ddc.set_wfm_mode(false);
     }
 
+    // Initialize or destroy DSD decoder based on mode
+    if (params.mode === 'dsd') {
+        if (!dsdStream) {
+            dsdStream = new DSDStream(
+                (status: DSDStatus) => {
+                    // Post DSD status to main thread
+                    self.postMessage({ type: 'dsd_status', status });
+                }
+            );
+        }
+        dsdStream.configure(params.freq, params.bandwidth, params.enabled, systemSampleRate);
+    } else {
+        if (dsdStream) {
+            dsdStream.reset();
+            dsdStream = null;
+        }
+    }
+
     // Apply UI audio filters (High Pass 300Hz, Low Pass BW/2)
     ddc.set_audio_filters(params.lowPass || false, params.highPass || false);
 
@@ -329,6 +365,15 @@ function processVfoAudio(chunkLenBytes: number, params: any): Float32Array | nul
             vfoState.scratchBuf = new Float32Array(numDemodSamples + 128);
         }
         const audioDemodRateSamples = vfoState.scratchBuf.subarray(0, numDemodSamples);
+
+        if (mode === 'dsd') {
+            const squelched = params.squelchEnabled && squelchDb < params.squelchLevel;
+            const audio = dsdStream?.process(_ddcOut, squelched) ?? new Float32Array(numDemodSamples);
+            // DSD emits paced silence while scanning or receiving data. An open
+            // RF squelch alone is not evidence of decoded voice playback.
+            vfoState.squelchOpen = dsdStream?.audioActive ?? false;
+            return audio;
+        }
 
         if (params.squelchEnabled && squelchDb < params.squelchLevel) {
             vfoState.squelchOpen = false;

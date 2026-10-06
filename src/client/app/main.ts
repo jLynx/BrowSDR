@@ -11,6 +11,7 @@ import { settingsMethods } from './settings';
 import { bookmarkMethods } from './bookmarks';
 import { whisperMethods } from './whisper';
 import { pocsagMethods } from './pocsag';
+import { dsdMethods } from './dsd';
 import { rdsMethods } from './rds';
 import { zoomMethods } from './zoom';
 import { remoteMethods } from './remote';
@@ -46,6 +47,7 @@ createApp({
 		...bookmarkMethods,
 		...whisperMethods,
 		...pocsagMethods,
+		...dsdMethods,
 		...rdsMethods,
 		...zoomMethods,
 		...remoteMethods,

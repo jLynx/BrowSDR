@@ -39,7 +39,8 @@ export async function startRxStream(
 	audioCallback: any,
 	whisperCallback: any,
 	pocsagCallback: any,
-	rdsCallback: any
+	rdsCallback: any = null,
+	dsdStatusCallback: any = null
 ): Promise<void> {
 	if (_streamStarting) return;
 	_streamStarting = true;
@@ -147,6 +148,13 @@ export async function startRxStream(
 					// Forward decoded RDS using the worker's current VFO index.
 					const params = backend.vfoParams![currentIndex];
 					if (rdsCallback && params) rdsCallback(currentIndex, params.freq, msg.msg);
+				} else if (msg.type === "dsd_status") {
+					const currentIndex = backend.dspWorkers!.indexOf(worker);
+					if (currentIndex === -1) return;
+					if (dsdStatusCallback) dsdStatusCallback(currentIndex, msg.status);
+				} else if (msg.type === 'dsp_debug_log' && import.meta.env.DEV) {
+					const currentIndex = backend.dspWorkers!.indexOf(worker);
+					if (currentIndex !== -1) console[msg.level as 'log' | 'warn' | 'error'](`[DSP VFO ${currentIndex + 1}] ${msg.message}`);
 				} else if (msg.type === "error") {
 					const currentIndex = backend.dspWorkers!.indexOf(worker);
 					console.error(`[DSP Worker ${currentIndex}] Error:`, msg.error);

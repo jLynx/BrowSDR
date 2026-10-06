@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+# Downloaded upstream mbelib source (see mbelib-wasm/README.md)
+/mbelib-wasm/mbelib/
+
 # Rust build artifacts
 hackrf-web/target/
 
@@ -38,3 +41,4 @@ Thumbs.db
 *.tsbuildinfo
 *.tgz
 .claude
+.emsdk

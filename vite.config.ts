@@ -40,7 +40,7 @@ function postBuildPlugin(): Plugin {
 								fileName: () => jsName,
 							},
 							rollupOptions: {
-								external: [/\/hackrf-web\/pkg\//],
+								external: [/\/hackrf-web\/pkg\//, /\/lib\/mbelib\//],
 							},
 							minify: true,
 						},
@@ -133,6 +133,19 @@ function postBuildPlugin(): Plugin {
 					fs.copyFileSync(path.join(wasmSrc, file), path.join(wasmDest, file));
 				}
 			}
+
+			// --- Copy mbelib WASM files ---
+			const mbelibSrc = path.resolve(__dirname, 'public/lib/mbelib');
+			const mbelibDest = path.resolve(distDir, 'lib/mbelib');
+			for (const file of ['mbelib.js', 'mbelib.wasm', 'COPYRIGHT', 'NOTICE']) {
+				if (!fs.existsSync(path.join(mbelibSrc, file))) {
+					throw new Error(`Missing mbelib asset: ${file}. Restore the committed public/lib/mbelib files or run npm run build:mbelib with Emscripten installed.`);
+				}
+			}
+			fs.mkdirSync(mbelibDest, { recursive: true });
+			for (const file of fs.readdirSync(mbelibSrc)) {
+				fs.copyFileSync(path.join(mbelibSrc, file), path.join(mbelibDest, file));
+			}
 		},
 	};
 }
@@ -145,6 +158,7 @@ export default defineConfig({
 		rollupOptions: {
 			external: [
 				/\/hackrf-web\/pkg\//,
+				/\/lib\/mbelib\//,
 			],
 		},
 	},
@@ -153,6 +167,7 @@ export default defineConfig({
 		rollupOptions: {
 			external: [
 				/\/hackrf-web\/pkg\//,
+				/\/lib\/mbelib\//,
 			],
 		},
 	},

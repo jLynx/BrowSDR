@@ -1,4 +1,5 @@
 import { makeDefaultVfo, BOOKMARK_CATEGORIES } from './constants';
+import type { DSDStatus } from '../worker/dsd/types';
 
 export function createAppData() {
 	return {
@@ -79,6 +80,7 @@ export function createAppData() {
 			panelOpen: false,
 			log: [] as Array<{ time: string; freq: string; vfoIndex: number; capcode: string; type: string; text: string; baud: number }>,
 		},
+		dsdStatus: [] as Array<DSDStatus | null>,
 		rds: {
 			panelOpen: false,
 			stations: {} as Record<number, { ps: string; rt: string; pi: string; pty: number; ptyLabel: string; tp: boolean; ta: boolean; freq: string }>,

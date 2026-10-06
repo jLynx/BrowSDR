@@ -14,7 +14,7 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
-async function createStream(rdsCallback = null) {
+async function createStream(rdsCallback = null, dsdStatusCallback = null) {
 	vi.useFakeTimers();
 	const workers = [];
 	vi.stubGlobal('Worker', class {
@@ -29,7 +29,7 @@ async function createStream(rdsCallback = null) {
 		setSpectrumFps(value) { this._spectrumFps = value; },
 		_reinitRemoteClientWorkers: vi.fn(),
 	};
-	await startRxStream(backend, { centerFreq: 95, sampleRate: 61440000, fftSize: 65536 }, null, null, null, null, rdsCallback);
+	await startRxStream(backend, { centerFreq: 95, sampleRate: 61440000, fftSize: 65536 }, null, null, null, null, rdsCallback, dsdStatusCallback);
 	for (const freq of [95.1, 95.2]) {
 		const params = { ...backend.vfoParams[0], freq, enabled: true };
 		backend.vfoParams.push(params);
@@ -41,6 +41,22 @@ async function createStream(rdsCallback = null) {
 }
 
 describe('shared VFO worker routing', () => {
+	it('routes DSD status and RDS separately after an earlier VFO is removed', async () => {
+		const rdsCallback = vi.fn();
+		const dsdStatusCallback = vi.fn();
+		const { backend } = await createStream(rdsCallback, dsdStatusCallback);
+		const removed = backend.dspWorkers.shift();
+		backend.vfoParams.shift();
+		backend.vfoStates.shift();
+		const status = { mode: 'dmr', synced: true };
+		backend.dspWorkers[0].onmessage({ data: { type: 'dsd_status', status } });
+		expect(dsdStatusCallback).toHaveBeenCalledWith(0, status);
+		expect(rdsCallback).not.toHaveBeenCalled();
+		backend.dspWorkers[1].onmessage({ data: { type: 'rds', msg: { ps: 'STATION' } } });
+		expect(rdsCallback).toHaveBeenCalledWith(1, 95.2, { ps: 'STATION' });
+		removed.onmessage({ data: { type: 'dsd_status', status } });
+		expect(dsdStatusCallback).toHaveBeenCalledOnce();
+	});
 	it('shares remote-client bands independently of the host and other clients', async () => {
 		const { backend, workers, receive } = await createStream();
 		const createWorker = params => backend._spawnWorker(0, params);

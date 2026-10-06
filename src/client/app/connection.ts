@@ -211,7 +211,8 @@ export const connectionMethods = {
 				Comlink.proxy((audioSamples: any) => this.playAudio(audioSamples)),
 				Comlink.proxy((vfoIndex: number, freq: number, samples: any) => this._feedWhisperVfo(vfoIndex, freq, samples)),
 				Comlink.proxy((vfoIndex: number, freq: number, msg: any) => this._onPocsagMessage(vfoIndex, freq, msg)),
-				Comlink.proxy((vfoIndex: number, freq: number, msg: any) => this._onRdsMessage(vfoIndex, freq, msg))
+				Comlink.proxy((vfoIndex: number, freq: number, msg: any) => this._onRdsMessage(vfoIndex, freq, msg)),
+				Comlink.proxy((vfoIndex: number, status: any) => this._onDsdStatus(vfoIndex, status))
 			);
 		} catch (e: any) {
 			console.error('Error starting RX stream:', e);
@@ -241,7 +242,7 @@ export const connectionMethods = {
 					}
 					this.vfoSquelchOpen = squelchStates;
 					// ── Frequency activity tracker ──
-					// Uses raw (pre-hang) states to count true squelch-open events
+					// Uses pre-hang squelch states for analog, decoded voice playback for DSD.
 					const rawOpen = this.dspStats.squelchOpen;
 					for (let i = 0; i < rawOpen.length; i++) {
 						if (!this.vfoActivityStats[i]) {

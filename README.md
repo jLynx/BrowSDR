@@ -126,6 +126,7 @@ Choose **RX1** or **RX2** using **RX Channel** in the Radio panel, then select *
 |---------|-------------|
 | `npm run dev` | Start Vite dev server (http://localhost:5173) |
 | `npm run build` | Build client assets into `dist/` |
+| `npm run build:mbelib` | Rebuild the DSD voice codec (requires Emscripten; optional for normal builds) |
 | `npm run deploy` | Build and deploy to Cloudflare Workers |
 | `npm run typecheck` | Run TypeScript type checking |
 | `npm run test` | Run tests with Vitest |
