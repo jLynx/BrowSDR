@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeSpectrumFps, spectrumSmoothingAlpha, WaterfallClock } from '../src/client/spectrum-rate';
+import { normalizeSpectrumFps, spectrumSmoothingAlpha, SpectrumFrameLimiter, WaterfallClock } from '../src/client/spectrum-rate';
 import { settingsMethods } from '../src/client/app/settings';
 
 describe('spectrum update rate', () => {
@@ -26,6 +26,23 @@ describe('spectrum update rate', () => {
 });
 
 describe('time-based spectrum display', () => {
+	it.each([20, 30, 60])('locally caps sixty incoming remote frames to %i FPS', fps => {
+		const limiter = new SpectrumFrameLimiter();
+		let drawn = 0;
+		for (let frame = 0; frame < 600; frame++) if (limiter.shouldDraw(frame * 1000 / 60, fps)) drawn++;
+		expect(drawn).toBe(fps * 10);
+	});
+	it('does not invent frames when the remote host sends fewer than the selected target', () => {
+		const limiter = new SpectrumFrameLimiter();
+		for (let frame = 0; frame < 200; frame++) expect(limiter.shouldDraw(frame * 50, 60)).toBe(true);
+	});
+	it('applies live FPS changes and resets after suspension', () => {
+		const limiter = new SpectrumFrameLimiter();
+		expect(limiter.shouldDraw(0, 20)).toBe(true);
+		expect(limiter.shouldDraw(10, 20)).toBe(false);
+		expect(limiter.shouldDraw(10, 60)).toBe(true);
+		expect(limiter.shouldDraw(30000, 60)).toBe(true);
+	});
 	it.each([20, 30, 60])('advances 20 waterfall rows per second at %i FPS', fps => {
 		const clock = new WaterfallClock();
 		expect(clock.advance(0)).toEqual({ rows: 1, fraction: 0 });

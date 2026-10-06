@@ -5,6 +5,15 @@ const frequencies = [89.4, 88.6, 90.212, 91.018, 91.805, 92.593, 93.398, 89, 93.
 const params = frequencies.map(freq => ({ freq, enabled: true, mode: 'wfm', bandwidth: 150000, pocsag: false }));
 
 describe('shared VFO band planning', () => {
+	it.each([false, true])('keeps muted WFM RDS reception active with shared DSP %s', shared => {
+		const values = params.slice(0, 3).map(value => ({ ...value, enabled: false, rds: true }));
+		const plan = planSharedBands(61440000, 95, values, shared);
+		expect([...plan.direct, ...plan.bands.flatMap(band => band.vfos)].sort()).toEqual([0, 1, 2]);
+		values.forEach(value => { value.rds = false; });
+		expect(planSharedBands(61440000, 95, values, shared).direct).toEqual([]);
+		values.forEach(value => { value.rds = true; value.mode = 'nfm'; });
+		expect(planSharedBands(61440000, 95, values, shared).direct).toEqual([]);
+	});
 	it('routes all nineteen WFM VFOs into safe narrower bands', () => {
 		const plan = planSharedBands(61440000, 95, params, true);
 		expect(plan.ratio).toBe(32);

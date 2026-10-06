@@ -71,6 +71,7 @@ describe('RX audio delivery batching', () => {
 	it('does not forward a muted VFO into the mixer or transcription', async () => {
 		const { backend, audio, whisper, feed } = await createStream();
 		backend.vfoParams[0].enabled = false;
+		backend.vfoParams[0].rds = true;
 		feed(0, 4800);
 		expect(audio).not.toHaveBeenCalled();
 		expect(whisper).not.toHaveBeenCalled();

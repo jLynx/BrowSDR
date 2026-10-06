@@ -14,7 +14,7 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
-async function createStream() {
+async function createStream(rdsCallback = null) {
 	vi.useFakeTimers();
 	const workers = [];
 	vi.stubGlobal('Worker', class {
@@ -29,7 +29,7 @@ async function createStream() {
 		setSpectrumFps(value) { this._spectrumFps = value; },
 		_reinitRemoteClientWorkers: vi.fn(),
 	};
-	await startRxStream(backend, { centerFreq: 95, sampleRate: 61440000, fftSize: 65536 }, null, null, null, null);
+	await startRxStream(backend, { centerFreq: 95, sampleRate: 61440000, fftSize: 65536 }, null, null, null, null, rdsCallback);
 	for (const freq of [95.1, 95.2]) {
 		const params = { ...backend.vfoParams[0], freq, enabled: true };
 		backend.vfoParams.push(params);
@@ -41,6 +41,71 @@ async function createStream() {
 }
 
 describe('shared VFO worker routing', () => {
+	it('shares remote-client bands independently of the host and other clients', async () => {
+		const { backend, workers, receive } = await createStream();
+		const createWorker = params => backend._spawnWorker(0, params);
+		const params = backend.vfoParams.map(value => ({ ...value }));
+		const alice = { sharedChannelization: true, params, workers: params.map(createWorker) };
+		const bob = { params: [params[0]], workers: [createWorker(params[0])] };
+		alice.perf = { audioCalls: 2, audioSamplesOut: 960, dspTimeSum: 4, dspTimeMax: 3, msgsSent: 1 };
+		const statsCallback = vi.fn();
+		backend._remoteHostStatsCb = statsCallback;
+		backend._remoteClients = new Map([['alice', alice], ['bob', bob]]);
+		backend._sharedChannelization = false;
+		receive();
+		const channelWorker = workers.at(-1);
+		const request = channelWorker.messages[0];
+		channelWorker.onmessage({ data: { type: 'bands', key: request.key, chunkId: request.chunkId, inputSamples: request.inputSamples, dspTime: 1,
+			bands: [{ centerBin: request.centers[0], buffer: new ArrayBuffer(128), length: 32 }] } });
+		alice.workers.forEach(worker => expect(worker.messages.at(-1)).toMatchObject({ floatIq: true, sampleRate: 1920000 }));
+		vi.advanceTimersByTime(500);
+		const report = statsCallback.mock.calls.find(([id]) => id === 'alice')[1];
+		expect(report).toMatchObject({ source: 'host', dspAvgMs: '2.00', dspMaxMs: '3.00', channelization: { bands: 1, vfos: 3, sampleRate: 1920000 } });
+		expect(report.audioRate).toBeGreaterThan(0);
+		expect(report.inputRate).toBeGreaterThan(0);
+		expect(alice.perf.audioCalls).toBe(0);
+		[...backend.dspWorkers, ...bob.workers].forEach(worker => {
+			expect(worker.messages.at(-1).sampleRate).toBe(61440000);
+			expect(worker.messages.at(-1).floatIq).toBeUndefined();
+		});
+		alice.sharedChannelization = false;
+		receive();
+		expect(channelWorker.terminate).toHaveBeenCalledOnce();
+		alice.workers.forEach(worker => expect(worker.messages.at(-1).sampleRate).toBe(61440000));
+	});
+	it.each([false, true])('routes muted RDS VFOs through shared DSP %s', async shared => {
+		const rdsCallback = vi.fn();
+		const { backend, workers, receive } = await createStream(rdsCallback);
+		backend._sharedChannelization = shared;
+		backend.vfoParams.forEach(params => { params.enabled = false; params.rds = true; });
+		receive();
+		if (shared) {
+			const channelWorker = workers[3];
+			const request = channelWorker.messages[0];
+			channelWorker.onmessage({ data: { type: 'bands', key: request.key, chunkId: request.chunkId, inputSamples: request.inputSamples, dspTime: 1,
+				bands: [{ centerBin: request.centers[0], buffer: new ArrayBuffer(128), length: 32 }] } });
+		}
+		backend.dspWorkers.forEach(worker => {
+			const request = worker.messages.at(-1);
+			expect(request.type).toBe('process');
+			expect(request.params.enabled).toBe(false);
+			expect(request.params.rds).toBe(true);
+		});
+		backend.dspWorkers[0].onmessage({ data: { type: 'rds', msg: { rt: 'Muted station text' } } });
+		expect(rdsCallback).toHaveBeenCalledWith(0, 95, { rt: 'Muted station text' });
+	});
+	it('routes RDS to the current VFO after an earlier VFO is removed', async () => {
+		const rdsCallback = vi.fn();
+		const { backend } = await createStream(rdsCallback);
+		const removed = backend.dspWorkers.shift();
+		backend.vfoParams.shift();
+		backend.vfoStates.shift();
+		const message = { ps: 'STATION' };
+		backend.dspWorkers[0].onmessage({ data: { type: 'rds', msg: message } });
+		expect(rdsCallback).toHaveBeenCalledWith(0, 95.1, message);
+		removed.onmessage({ data: { type: 'rds', msg: message } });
+		expect(rdsCallback).toHaveBeenCalledOnce();
+	});
 	it('multicasts immutable narrow IQ while retaining independent VFO parameters', async () => {
 		const { backend, workers, receive } = await createStream();
 		receive();

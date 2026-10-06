@@ -33,11 +33,14 @@ import {
 	setRemoteHostCallback,
 	setRemoteHostFftCallback,
 	setRemoteHostAudioCallback,
+	setRemoteHostStatsCallback,
 	setRemoteHostPocsagCallback,
+	setRemoteHostRdsCallback,
 	setRemoteHostSquelchCallback,
 	_ensureRemoteClients,
 	_getOrCreateClientState,
 	addRemoteClient,
+	setRemoteSharedChannelization,
 	removeRemoteClient,
 	setRemoteVfoParams,
 	addRemoteVfo,
@@ -89,8 +92,10 @@ export class Backend {
 	_remoteHostCb?: any;
 	_remoteHostFftCb?: any;
 	_remoteHostAudioCb?: any;
+	_remoteHostStatsCb?: any;
 	_remoteClients?: Map<string, RemoteClientState>;
 	_remoteHostPocsagCb?: any;
+	_remoteHostRdsCb?: any;
 	_remoteHostSquelchCb?: any;
 	_remoteClientCb?: any;
 	_remoteClientAudioCb?: any;
@@ -153,11 +158,14 @@ export class Backend {
 	setRemoteHostCallback = setRemoteHostCallback.bind(this);
 	setRemoteHostFftCallback = setRemoteHostFftCallback.bind(this);
 	setRemoteHostAudioCallback = setRemoteHostAudioCallback.bind(this);
+	setRemoteHostStatsCallback = setRemoteHostStatsCallback.bind(this);
 	setRemoteHostPocsagCallback = setRemoteHostPocsagCallback.bind(this);
+	setRemoteHostRdsCallback = setRemoteHostRdsCallback.bind(this);
 	setRemoteHostSquelchCallback = setRemoteHostSquelchCallback.bind(this);
 	_ensureRemoteClients = _ensureRemoteClients.bind(this);
 	_getOrCreateClientState = _getOrCreateClientState.bind(this);
 	addRemoteClient = addRemoteClient.bind(this);
+	setRemoteSharedChannelization = setRemoteSharedChannelization.bind(this);
 	removeRemoteClient = removeRemoteClient.bind(this);
 	setRemoteVfoParams = setRemoteVfoParams.bind(this);
 	addRemoteVfo = addRemoteVfo.bind(this);
@@ -168,8 +176,8 @@ export class Backend {
 	initRemoteClient = initRemoteClient.bind(this);
 	feedRemoteAudioChunk = feedRemoteAudioChunk.bind(this);
 
-	async startRxStream(opts: RxStreamOpts, spectrumCallback: any, audioCallback: any, whisperCallback: any = null, pocsagCallback: any = null): Promise<void> {
-		return startRxStream(this, opts, spectrumCallback, audioCallback, whisperCallback, pocsagCallback);
+	async startRxStream(opts: RxStreamOpts, spectrumCallback: any, audioCallback: any, whisperCallback: any = null, pocsagCallback: any = null, rdsCallback: any = null): Promise<void> {
+		return startRxStream(this, opts, spectrumCallback, audioCallback, whisperCallback, pocsagCallback, rdsCallback);
 	}
 
 	getDspStats(): any {
@@ -212,13 +220,16 @@ export class Backend {
 		if (params.pocsag === false && this.vfoStates && this.vfoStates[index]) {
 			this.vfoStates[index].pocsagDecoder = null;
 		}
+		if (params.rds === false && this.vfoStates && this.vfoStates[index]) {
+			this.vfoStates[index].rdsDecoder = null;
+		}
 	}
 
 	addVfo(): number {
 		if (!this.vfoParams) return -1;
 		const centerFreq = this._centerFreq || 100.0;
 		const bw = 150000;
-		const params: VfoParams = { freq: centerFreq, mode: 'wfm', enabled: false, deEmphasis: '50us', squelchEnabled: false, squelchLevel: -100.0, lowPass: true, highPass: false, bandwidth: bw, volume: 50, pocsag: false };
+		const params: VfoParams = { freq: centerFreq, mode: 'wfm', enabled: false, deEmphasis: '50us', squelchEnabled: false, squelchLevel: -100.0, lowPass: true, highPass: false, bandwidth: bw, volume: 50, pocsag: false, rds: false, rdsRegion: 'eu' };
 		this.vfoParams.push(params);
 
 		const index = this.vfoParams.length - 1;

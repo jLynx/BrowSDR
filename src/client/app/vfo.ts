@@ -60,7 +60,7 @@ export const vfoMethods = {
 				stereo: vfo.stereo,
 				lowPass: vfo.lowPass,
 				highPass: vfo.highPass,
-				rds: vfo.rds,
+				rds: vfo.rds && inBandwidth,
 				rdsRegion: vfo.rdsRegion,
 				volume: vfo.volume,
 				pocsag: vfo.pocsag,

@@ -30,12 +30,15 @@ export interface VfoParams {
 	bandwidth: number;
 	volume: number;
 	pocsag: boolean;
+	rds: boolean;
+	rdsRegion: string;
 }
 
 export interface VfoState {
 	squelchOpen: boolean;
 	squelchDb: number;
 	pocsagDecoder: any;
+	rdsDecoder: any;
 	audioQueue: Float32Array;
 	audioQueueLen: number;
 	lastMode?: string;
@@ -97,12 +100,26 @@ export interface RxStreamOpts {
 }
 
 export interface RemoteClientState {
+	perf?: { audioCalls: number; audioSamplesOut: number; dspTimeSum: number; dspTimeMax: number; msgsSent: number };
+	channelization?: { bands: number; vfos: number; sampleRate: number };
+	sharedChannelization?: boolean;
 	workers: (Worker | null)[];
 	params: (VfoParams | null)[];
 	audioQueues: { queue: Float32Array; len: number }[];
 	mixBuf: Float32Array | null;
 	pocsagDecoders: any[];
+	rdsDecoders: any[];
 	squelchOpen: boolean[];
+}
+
+export interface RDSMessage {
+	ps?: string;
+	rt?: string;
+	pi?: string;
+	pty?: number;
+	ptyLabel?: string;
+	tp?: boolean;
+	ta?: boolean;
 }
 
 export interface POCSAGMessage {

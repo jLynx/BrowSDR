@@ -3,6 +3,13 @@ import * as Comlink from 'comlink';
 import { WebRTCHandler, PEER_ID_PREFIX } from '../webrtc';
 
 export const remoteMethods = {
+	applySharedChannelization(this: AppInstance) {
+		if (this.remoteMode === 'client') {
+			this._webrtc?.sendCommand({ type: 'clientDisplay', sharedChannelization: this.display.sharedChannelization });
+		} else if (this.backend) {
+			this.backend.setSharedChannelization(this.display.sharedChannelization).catch(console.error);
+		}
+	},
 	async startRemoteHost(this: AppInstance) {
 		console.log("[WebRTC] startRemoteHost clicked");
 		if (!this.connected || !this.running) {
@@ -99,10 +106,20 @@ export const remoteMethods = {
 				this._webrtc.sendAudioChunkTo(clientId, chunk);
 			}
 		}));
+		await this.backend.setRemoteHostStatsCallback(Comlink.proxy((clientId: string, stats: any) => {
+			this._webrtc?.sendCommandTo(clientId, { type: 'dspStats', stats });
+		}));
 		// Setup POCSAG message callback — forward decoded messages to the specific remote client
 		await this.backend.setRemoteHostPocsagCallback(Comlink.proxy((clientId: string, vfoIndex: number, freq: number, msg: any) => {
 			if (this._webrtc) {
 				this._webrtc.sendCommandTo(clientId, { type: 'pocsag', vfoIndex, freq, msg });
+			}
+		}));
+		// RDS is decoded from MPX on the host; the client receives metadata
+		// over the command channel because streamed audio excludes 57 kHz RDS.
+		await this.backend.setRemoteHostRdsCallback(Comlink.proxy((clientId: string, vfoIndex: number, freq: number, msg: any) => {
+			if (this._webrtc) {
+				this._webrtc.sendCommandTo(clientId, { type: 'rds', vfoIndex, freq, msg });
 			}
 		}));
 		// Forward squelch state changes so remote clients can track frequency activity
@@ -115,6 +132,7 @@ export const remoteMethods = {
 	async connectRemoteClient(this: AppInstance, hostId: string) {
 		this._initAudioCtx(); // create AudioContext within user gesture before any await
 		this.remoteMode = 'client';
+		this.dspStats = null;
 		this.remoteStatus = 'Connecting...';
 		this.showMsg("Connecting to remote host...");
 
@@ -129,6 +147,7 @@ export const remoteMethods = {
 			} else if (status.status === 'connected') {
 				this.remoteStatus = 'Connected to Host';
 				this.connected = true;
+				this.applySharedChannelization();
 				this.info.boardName = "Remote SDR";
 				this.showMsg("Connected to remote host.");
 				
@@ -277,6 +296,12 @@ export const remoteMethods = {
 					}
 				}
 			}
+		} else if (cmd.type === 'dspStats') {
+			if (this.remoteMode === 'client' && cmd.stats && typeof cmd.stats === 'object') this.dspStats = cmd.stats;
+		} else if (cmd.type === 'clientDisplay') {
+			if (this.remoteMode === 'host' && clientId && typeof cmd.sharedChannelization === 'boolean') {
+				this.backend.setRemoteSharedChannelization(clientId, cmd.sharedChannelization);
+			}
 		} else if (cmd.type === 'vfoUpdate') {
 			if (this.remoteMode === 'host' && clientId) {
 				this.backend.setRemoteVfoParams(clientId, cmd.index, cmd.params);
@@ -300,6 +325,13 @@ export const remoteMethods = {
 		} else if (cmd.type === 'pocsag') {
 			if (this.remoteMode === 'client') {
 				this._onPocsagMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
+			}
+		} else if (cmd.type === 'rds') {
+			if (this.remoteMode === 'client') {
+				const vfo = this.vfos[cmd.vfoIndex];
+				if (vfo?.rds && vfo.mode === 'wfm' && vfo.freq === cmd.freq) {
+					this._onRdsMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
+				}
 			}
 		} else if (cmd.type === 'squelchState') {
 			if (this.remoteMode === 'client') {

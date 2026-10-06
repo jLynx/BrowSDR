@@ -1,5 +1,6 @@
 import init, { DspProcessor, SharedChannelizer, set_panic_hook, alloc_iq_buffer, alloc_float_buffer, free_iq_buffer } from "/hackrf-web/pkg/hackrf_web.js";
 import { RationalResampler } from './worker/dsp-pipeline';
+import { RDSDecoder } from './worker/rds';
 
 // --- Worker State ---
 let wasmInitPromise: Promise<void> | null = null;
@@ -8,6 +9,9 @@ let ddc: any;
 let vfoState: any;
 let sharedIqPtr = 0;
 let sharedSabViews: Int8Array[] | null = null;
+let rdsDdc: any = null;
+let rdsPrevPhase = 0;
+let rdsDecoder: InstanceType<typeof RDSDecoder> | null = null;
 let sharedFloatPtr = 0;
 let inputIsFloat = false;
 let inputCenterFreq = 100;
@@ -115,6 +119,8 @@ self.onmessage = async (e: MessageEvent) => {
         const nextCenter = msg.centerFreq ?? inputCenterFreq;
         if (nextRate !== systemSampleRate) {
             ddc.free();
+            if (rdsDdc) { rdsDdc.free(); rdsDdc = null; }
+            rdsDecoder = null;
             systemSampleRate = nextRate;
             inputCenterFreq = nextCenter;
             ddc = new DspProcessor(nextRate, 0, msg.params.bandwidth || 150000);
@@ -127,9 +133,11 @@ self.onmessage = async (e: MessageEvent) => {
         } else if (nextCenter !== inputCenterFreq) {
             inputCenterFreq = nextCenter;
             ddc.set_shift(nextRate, (msg.params.freq - nextCenter) * 1e6);
+            rdsDdc?.set_shift(nextRate, (msg.params.freq - nextCenter) * 1e6);
         }
         inputIsFloat = msg.floatIq === true;
-        if (!msg.params.enabled && !msg.params.pocsag) return;
+        // Audio mute does not stop independent RDS or pager decoding.
+        if (!msg.params.enabled && !msg.params.pocsag && !(msg.params.rds && msg.params.mode === 'wfm')) return;
         // Copy payload into WASM memory
         const wasmMemView = new Int8Array(_wasm.memory.buffer);
 
@@ -166,6 +174,32 @@ self.onmessage = async (e: MessageEvent) => {
             } else {
                 self.postMessage({ type: "audio", samples: null, chunkId: msg.chunkId, squelchOpen: vfoState.squelchOpen, squelchDb: vfoState.squelchDb ?? -120, dspTime: dspTime });
             }
+
+            // RDS: extract MPX and decode in-worker (avoids blocking the audio mixer thread)
+            if (rdsDdc && rdsDecoder && msg.params.rds && msg.params.mode === 'wfm') {
+                const chunkLen = msg.chunkLen;
+                if (chunkLen > 0) {
+                    const iqPtr = inputIsFloat
+                        ? rdsDdc.process_iq_only_f32_ptr(sharedFloatPtr, chunkLen)
+                        : rdsDdc.process_iq_only_ptr(sharedIqPtr, chunkLen);
+                    const iqLen = rdsDdc.get_iq_output_len();
+                    if (iqLen > 0) {
+                        const iqView = new Float32Array(_wasm.memory.buffer, iqPtr, iqLen);
+                        const numSamples = iqLen / 2;
+                        const mpxOut = new Float32Array(numSamples);
+                        for (let i = 0; i < numSamples; i++) {
+                            const ph = Math.atan2(iqView[i * 2 + 1], iqView[i * 2]);
+                            let diff = ph - rdsPrevPhase;
+                            if (diff > Math.PI) diff -= 2 * Math.PI;
+                            else if (diff < -Math.PI) diff += 2 * Math.PI;
+                            mpxOut[i] = diff;
+                            rdsPrevPhase = ph;
+                        }
+                        // Decode RDS in this worker thread — decoded messages sent via callback
+                        rdsDecoder.process(mpxOut);
+                    }
+                }
+            }
         } catch (err: any) {
             self.postMessage({ type: "error", error: err.message });
         }
@@ -196,6 +230,25 @@ function configureDDC(params: any, systemCenterFreq: number): void {
 
     // Apply UI audio filters (High Pass 300Hz, Low Pass BW/2)
     ddc.set_audio_filters(params.lowPass || false, params.highPass || false);
+
+    // RDS: second DspProcessor for MPX extraction + in-worker RDS decoder
+    if (params.rds && params.mode === 'wfm') {
+        if (!rdsDdc) {
+            rdsDdc = new DspProcessor(systemSampleRate, 0.0, 250000);
+            rdsDdc.set_if_sample_rate(250000);
+            rdsPrevPhase = 0;
+        }
+        if (!rdsDecoder) {
+            rdsDecoder = new RDSDecoder(250000, (rmsg: any) => {
+                (self as any).postMessage({ type: "rds", msg: rmsg });
+            }, params.rdsRegion || 'eu');
+        }
+        rdsDecoder.setRegion(params.rdsRegion || 'eu');
+        rdsDdc.set_shift(systemSampleRate, offsetFreq);
+    } else {
+        if (rdsDdc) { rdsDdc.free(); rdsDdc = null; }
+        rdsDecoder = null;
+    }
 }
 
 function processVfoAudio(chunkLenBytes: number, params: any): Float32Array | null {

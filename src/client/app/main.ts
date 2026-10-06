@@ -11,6 +11,7 @@ import { settingsMethods } from './settings';
 import { bookmarkMethods } from './bookmarks';
 import { whisperMethods } from './whisper';
 import { pocsagMethods } from './pocsag';
+import { rdsMethods } from './rds';
 import { zoomMethods } from './zoom';
 import { remoteMethods } from './remote';
 
@@ -45,6 +46,7 @@ createApp({
 		...bookmarkMethods,
 		...whisperMethods,
 		...pocsagMethods,
+		...rdsMethods,
 		...zoomMethods,
 		...remoteMethods,
 	},
@@ -203,7 +205,7 @@ createApp({
 
 		this.$watch(() => this.display.sharedChannelization, (enabled: boolean) => {
 			this.saveSetting();
-			if (this.backend && this.remoteMode !== 'client') this.backend.setSharedChannelization(enabled).catch(console.error);
+			this.applySharedChannelization();
 		});
 
 		this.$watch('locks', () => {

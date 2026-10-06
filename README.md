@@ -26,7 +26,6 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
   Save, organize, and quickly recall your favorite frequencies. Group your bookmarks into custom categories to effortlessly manage airbands, ham frequencies, repeaters, or emergency services.
 * **🌊 Real-time WebGL Waterfall & Spectrum**
   Monitor the entire RF band visually with an ultra-responsive, GPU-accelerated waterfall and spectrum analyzer.
-  Choose **20, 30, or 60 FPS** using **Spectrum FPS** in the Display panel. Changes apply live without restarting reception and are saved locally. Higher targets use more CPU; actual FPS depends on USB delivery and processing capacity. Remote viewers use the host's update rate.
   Waterfall scrolling and spectrum smoothing are time-based: higher FPS makes animation smoother without speeding up the history. The 512-row waterfall retains approximately 25.6 seconds of continuous reception at every target.
 * **📻 Wide Demodulation Support**
   Supports WFM, NFM, AM, USB, LSB, DSB, CW, and raw IQ modes.
