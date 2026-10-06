@@ -14,7 +14,16 @@ import { pocsagMethods } from './pocsag';
 import { zoomMethods } from './zoom';
 import { remoteMethods } from './remote';
 
-const Backend = Comlink.wrap<any>(new Worker(new URL('../worker/main.ts', import.meta.url), { type: 'module' }));
+const backendWorker = new Worker(new URL('../worker/main.ts', import.meta.url), { type: 'module' });
+if (import.meta.env.DEV) {
+	backendWorker.addEventListener('message', event => {
+		if (event.data?.type === 'sdr-debug-log') {
+			const level = event.data.level as 'log' | 'warn' | 'error';
+			console[level](event.data.message);
+		}
+	});
+}
+const Backend = Comlink.wrap<any>(backendWorker);
 
 // When a new service worker takes control (after update), reload to get fresh assets
 if ('serviceWorker' in navigator) {

@@ -77,6 +77,7 @@ interface USBInTransferResult {
 
 interface USBOutTransferResult {
 	status: 'ok' | 'stall';
+	bytesWritten: number;
 }
 
 interface USB {

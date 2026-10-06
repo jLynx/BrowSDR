@@ -27,8 +27,16 @@ const CMD_GET_INFO     = 0x00;
 const CMD_LMS7002_RST  = 0x20;
 const CMD_LMS7002_WR   = 0x21;
 const CMD_LMS7002_RD   = 0x22;
+const CMD_USB_FIFO_RST = 0x40;
 const CMD_BRDSPI_WR    = 0x55;
 const CMD_BRDSPI_RD    = 0x56;
+const STATUS_UNKNOWN_CMD = 2;
+
+class LimeSDRCommandError extends Error {
+	constructor(readonly command: number, readonly status: number) {
+		super(`LimeSDR: command 0x${command.toString(16)} failed (device status=${status})`);
+	}
+}
 
 // USB bulk endpoints
 const EP_CTRL_OUT = 0x0F;       // Control command output
@@ -41,6 +49,8 @@ const STREAM_PKT_SIZE = 4096;   // FPGA packet size
 const STREAM_HDR_SIZE = 16;     // Packet header bytes
 const STREAM_PAYLOAD = STREAM_PKT_SIZE - STREAM_HDR_SIZE; // 4080 bytes of IQ data
 const NUM_TRANSFERS = 8;        // Concurrent USB transfers
+const STREAM_START_TIMEOUT_MS = 3000;
+const STREAM_STOP_TIMEOUT_MS = 1000;
 
 // Reference clock
 const REF_CLK = 30.72e6;        // LimeSDR-USB VCTCXO
@@ -144,6 +154,7 @@ function lnaGainToReg(gainDb: number): number {
 
 class LimeSDR {
 	private dev!: USBDevice;
+	private commandQueue: Promise<void> = Promise.resolve();
 	private rxRunning: Promise<void>[] | null = null;
 	private regCache = new Map<number, number>();
 	private currentSampleRate = 10e6;
@@ -153,9 +164,21 @@ class LimeSDR {
 
 	async open(device: USBDevice): Promise<void> {
 		this.dev = device;
-		await this.dev.open();
-		await this.dev.selectConfiguration(1);
-		await this.dev.claimInterface(0);
+		try {
+			await this.dev.open();
+			await this.dev.selectConfiguration(1);
+			await this.dev.claimInterface(0);
+		} catch (error) {
+			await this.close();
+			if (error instanceof Error && /access denied/i.test(error.message)) {
+				throw new Error(
+					'LimeSDR: USB access denied. On Windows, this device must use WinUSB, not the Cypress CYUSB3 driver. ' +
+					'Close other SDR applications or browser connections, check the device driver, then reconnect.',
+					{ cause: error },
+				);
+			}
+			throw error;
+		}
 
 		// Log available endpoints for debugging
 		const iface = this.dev.configuration?.interfaces[0];
@@ -173,30 +196,52 @@ class LimeSDR {
 		try { await this.dev.close(); } catch (_) { /* ignore */ }
 	}
 
-	private async sendCommand(cmd: number, payload?: Uint8Array): Promise<Uint8Array> {
+	private sendCommand(cmd: number, payload?: Uint8Array): Promise<Uint8Array> {
 		const pkt = new Uint8Array(64);
 		pkt[0] = cmd;
 		if (payload) {
-			pkt[2] = Math.ceil(payload.length / 4); // blockCount
+			const blockSize = cmd === CMD_LMS7002_WR || cmd === CMD_BRDSPI_WR
+				? 4 : cmd === CMD_LMS7002_RD || cmd === CMD_BRDSPI_RD ? 2 : 1;
+			const maxPayloadSize = cmd === CMD_LMS7002_RD || cmd === CMD_BRDSPI_RD ? 28 : 56;
+			if (payload.length > maxPayloadSize || payload.length % blockSize !== 0) {
+				return Promise.reject(new Error(`LimeSDR: invalid payload for command 0x${cmd.toString(16)}`));
+			}
+			pkt[2] = payload.length / blockSize;
 			pkt.set(payload, 8);
 		}
 
-		await this.dev.transferOut(EP_CTRL_OUT, pkt);
-		const result = await this.dev.transferIn(EP_CTRL_IN_NUM, 64);
-		if (result.status !== 'ok') throw new Error(`LimeSDR: USB transfer failed (status=${result.status})`);
-		return new Uint8Array(result.data!.buffer, result.data!.byteOffset, result.data!.byteLength);
+		const command = this.commandQueue.then(async () => {
+			const sent = await this.dev.transferOut(EP_CTRL_OUT, pkt);
+			if (sent.status !== 'ok' || sent.bytesWritten !== pkt.length) {
+				throw new Error(`LimeSDR: USB command write failed (status=${sent.status}, bytes=${sent.bytesWritten})`);
+			}
+			const result = await this.dev.transferIn(EP_CTRL_IN_NUM, 64);
+			if (result.status !== 'ok' || result.data?.byteLength !== 64) {
+				throw new Error(`LimeSDR: USB command response failed (status=${result.status}, bytes=${result.data?.byteLength ?? 0})`);
+			}
+			const response = new Uint8Array(result.data.buffer, result.data.byteOffset, result.data.byteLength);
+			if (response[0] !== cmd) {
+				throw new Error(`LimeSDR: unexpected command response 0x${response[0].toString(16)} (expected 0x${cmd.toString(16)})`);
+			}
+			if (response[1] !== 1) {
+				throw new LimeSDRCommandError(cmd, response[1]);
+			}
+			return response;
+		});
+		this.commandQueue = command.then(() => {}, () => {});
+		return command;
 	}
 
 	// ── LMS7002M SPI Registers ──────────────────────────────────
 
 	async writeLMS7002(addr: number, value: number): Promise<void> {
 		const data = new Uint8Array(4);
-		data[0] = (addr >> 8) | 0x80;  // MSB with write flag
+		data[0] = (addr >> 8) & 0x7F;
 		data[1] = addr & 0xFF;
 		data[2] = (value >> 8) & 0xFF;
 		data[3] = value & 0xFF;
 		await this.sendCommand(CMD_LMS7002_WR, data);
-		this.regCache.set(addr, value);
+		this.cacheRegister(addr, value);
 	}
 
 	async readLMS7002(addr: number): Promise<number> {
@@ -205,7 +250,7 @@ class LimeSDR {
 		data[1] = addr & 0xFF;
 		const resp = await this.sendCommand(CMD_LMS7002_RD, data);
 		const value = (resp[8 + 2] << 8) | resp[8 + 3];
-		this.regCache.set(addr, value);
+		this.cacheRegister(addr, value);
 		return value;
 	}
 
@@ -216,14 +261,23 @@ class LimeSDR {
 			const data = new Uint8Array(chunk.length * 4);
 			for (let i = 0; i < chunk.length; i++) {
 				const [addr, value] = chunk[i];
-				data[i * 4] = (addr >> 8) | 0x80;
+				data[i * 4] = (addr >> 8) & 0x7F;
 				data[i * 4 + 1] = addr & 0xFF;
 				data[i * 4 + 2] = (value >> 8) & 0xFF;
 				data[i * 4 + 3] = value & 0xFF;
-				this.regCache.set(addr, value);
 			}
 			await this.sendCommand(CMD_LMS7002_WR, data);
+			for (const [addr, value] of chunk) this.cacheRegister(addr, value);
 		}
+	}
+
+	private cacheRegister(addr: number, value: number): void {
+		if (addr === REG_RESET && ((this.regCache.get(addr) ?? 0) & 3) !== (value & 3)) {
+			for (const cachedAddress of this.regCache.keys()) {
+				if (cachedAddress >= 0x0100) this.regCache.delete(cachedAddress);
+			}
+		}
+		this.regCache.set(addr, value);
 	}
 
 	private async modifyReg(addr: number, msb: number, lsb: number, value: number): Promise<void> {
@@ -233,11 +287,28 @@ class LimeSDR {
 		if (updated !== reg) await this.writeLMS7002(addr, updated);
 	}
 
+	private async resetLogicRegisters(): Promise<void> {
+		const reset = await this.readLMS7002(REG_RESET);
+		await this.writeLMS7002(REG_RESET, reset & 0x55FF);
+		await this.writeLMS7002(REG_RESET, reset | 0xFF00);
+	}
+
+	private async resetStreamBuffers(): Promise<void> {
+		try {
+			await this.sendCommand(CMD_USB_FIFO_RST, new Uint8Array([0]));
+		} catch (error) {
+			if (!(error instanceof LimeSDRCommandError) || error.command !== CMD_USB_FIFO_RST || error.status !== STATUS_UNKNOWN_CMD) {
+				throw error;
+			}
+			console.warn('LimeSDR: firmware does not support USB FIFO reset; continuing with FPGA stream reset');
+		}
+	}
+
 	// ── FPGA SPI Registers ──────────────────────────────────────
 
 	async writeFPGA(addr: number, value: number): Promise<void> {
 		const data = new Uint8Array(4);
-		data[0] = ((addr >> 8) & 0x7F) | 0x80;  // Address MSB with WRITE flag (bit 7)
+		data[0] = (addr >> 8) & 0xFF;
 		data[1] = addr & 0xFF;
 		data[2] = (value >> 8) & 0xFF;
 		data[3] = value & 0xFF;
@@ -246,7 +317,7 @@ class LimeSDR {
 
 	async readFPGA(addr: number): Promise<number> {
 		const data = new Uint8Array(2);
-		data[0] = (addr >> 8) & 0x7F;   // No write flag for reads
+		data[0] = (addr >> 8) & 0xFF;
 		data[1] = addr & 0xFF;
 		const resp = await this.sendCommand(CMD_BRDSPI_RD, data);
 		return (resp[8 + 2] << 8) | resp[8 + 3];
@@ -264,6 +335,7 @@ class LimeSDR {
 		const serial = Array.from(serialBytes).map(b => b.toString(16).padStart(2, '0')).join('');
 
 		const deviceNames: Record<number, string> = {
+			15: 'LimeSDR-USB',
 			4: 'LimeSDR-USB',
 			5: 'LimeSDR-PCIe',
 			10: 'LimeSDR Mini',
@@ -281,9 +353,10 @@ class LimeSDR {
 		console.log('LimeSDR: starting initialization...');
 
 		// 1. Hardware reset via LMS64C command
-		const rstData = new Uint8Array(2);
+		const rstData = new Uint8Array(1);
 		rstData[0] = 2; // pulse reset
 		await this.sendCommand(CMD_LMS7002_RST, rstData);
+		this.regCache.clear();
 		await delay(50);
 
 		// 2. Software reset sequence (LimeSuite ResetChip pattern)
@@ -294,24 +367,23 @@ class LimeSDR {
 		await this.writeLMS7002(REG_RESET, 0xFFFF);
 		await delay(10);
 
-		// 3. Clear FIFO soft resets (SRST bits are active-HIGH: 0 = normal operation)
-		// Set MAC=01 (Channel A), RXEN_A=1, TXEN_A=1 (TX needed for clock routing)
-		// LRST/MRST all = 1 (released), SRST = 0 (released)
-		// 0xFF35 = 1111_1111_0011_0101: all LRST/MRST released, SRST cleared,
-		//          RXEN_A=1, TXEN_A=1, RXEN_B=0, TXEN_B=0, MAC=01
-		await this.writeLMS7002(REG_RESET, 0xFF35);
 		await delay(5);
 		console.log('LimeSDR: chip reset complete');
 
-		// 4. Enable AFE (ADC/DAC analog front-end)
-		// EN_G_AFE=1 (bit 0), PD_RX_AFE1=0 (bit 5 clear = RX on), PD_TX_AFE1=1 (bit 3)
-		await this.writeLMS7002(REG_AFE_CFG, 0x8001);  // Power on RX ADC, TX DAC off
+		await this.writeLMS7002(REG_AFE_CFG, 0x8001);
+		await this.modifyReg(0x0081, 0, 0, 1);
+		await this.writeLMS7002Batch([
+			[0x002D, 0x0641], [0x00A6, 0x000F],
+			[0x010C, 0x8865], [0x010D, 0x011A], [0x010E, 0x0000], [0x010F, 0x3142],
+			[0x0110, 0x2B14], [0x0111, 0x0000], [0x0112, 0x000C], [0x0113, 0x03C2],
+			[0x0114, 0x01F0], [0x0115, 0x000D], [0x0118, 0x418C], [0x0119, 0x5292],
+			[0x011A, 0x3001], [0x0400, 0x8081], [0x0404, 0x0006], [0x040B, 0x1020],
+		]);
+		await this.modifyReg(0x0124, 4, 2, 7);
 
 		// 5. Enable CGEN and configure for default sample rate
 		await this.modifyReg(REG_CGEN_CFG, 0, 0, 1);  // EN_G_CGEN = 1
 		console.log(`LimeSDR: setting CGEN for ${(this.currentSampleRate / 1e6).toFixed(2)} MS/s...`);
-		// MIMO mode: interface alternates chA/chB each clock, so per-channel rate = FCLK/2
-		// Need CGEN = rate * 8 (vs rate * 4 for SISO DDR)
 		await this.setCGENFrequency(this.currentSampleRate * 8);
 
 		// Set analog bandwidth
@@ -323,18 +395,17 @@ class LimeSDR {
 		// PD_LNA[7]=0, PD_RLOOPB_1[6]=0, PD_RLOOPB_2[5]=0,
 		// PD_MXLOBUF[4]=0, PD_QGEN[3]=0, PD_RSSI[2]=0, PD_TIA_RFE[1]=0
 		await this.modifyReg(REG_RFE_EN, 7, 1, 0);
+		await this.modifyReg(REG_RFE_EN, 6, 5, 3);
 		// Set antenna path
 		await this.setAntennaPath(1);                   // LNAL default
 
 		// 7. Set default gains
-		await this.setLNAGain(14);   // ~29 dB
+		await this.setLNAGain(14);
 		await this.setTIAGain(2);    // 12 dB
 		await this.setPGAGain(16);   // +4 dB
 
-		// 8. Enable RBB (RX baseband)
 		await this.modifyReg(REG_RBB_EN, 0, 0, 1);    // EN_G_RBB = 1
-		// Power on RBB blocks: PD_LPFH=0(bit3), PD_LPFL=0(bit2), PD_PGA=0(bit4)
-		await this.modifyReg(REG_RBB_EN, 4, 2, 0);
+		await this.modifyReg(REG_RBB_EN, 1, 1, 0);
 
 		// 8b. Configure RxTSP
 		await this.configureRxTSP();
@@ -366,9 +437,12 @@ class LimeSDR {
 			['DIQ_PAD (0x0022)', 0x0022],
 			['LML_CONF (0x0023)', REG_LML_CONF1],
 			['LML1_MAP (0x0024)', REG_LML1_MAP],
+			['LML2_MAP (0x0027)', 0x0027],
 			['CLK_MUX (0x002A)', REG_CLK_MUX],
 			['CLK_SRC (0x002B)', REG_CLK_SRC],
 			['AFE_CFG (0x0082)', REG_AFE_CFG],
+			['CGEN_CFG (0x0086)', REG_CGEN_CFG],
+			['CGEN_DIV (0x0089)', REG_CGEN_DIV],
 			['RXTSP_CFG (0x0400)', REG_RXTSP_CFG],
 			['RXTSP_DEC (0x0403)', REG_RXTSP_DEC],
 			['RXTSP_BYP (0x040C)', REG_RXTSP_BYP],
@@ -382,6 +456,11 @@ class LimeSDR {
 
 		// FPGA registers
 		const fpgaRegs: [string, number][] = [
+			['BOARD', 0x0000],
+			['VERSION', 0x0001],
+			['REVISION', 0x0002],
+			['PLL_CTRL', 0x0003],
+			['DIRECT_CLK', FPGA_REG_DIRECT_CLK],
 			['IFACE (0x0008)', FPGA_REG_IFACE],
 			['CH_EN (0x0007)', FPGA_REG_CH_EN],
 			['CTRL (0x000A)', FPGA_REG_CTRL],
@@ -397,6 +476,9 @@ class LimeSDR {
 	// ── CGEN PLL (Clock Generator) ──────────────────────────────
 
 	async setCGENFrequency(freq_Hz: number): Promise<void> {
+		await this.modifyReg(REG_CGEN_CFG, 11, 11, 0);
+		await this.modifyReg(REG_CGEN_DIV, 12, 11, 2);
+
 		// Calculate output divider so VCO lands in valid range
 		const iHdiv_high = Math.floor(CGEN_VCO_MAX / 2 / freq_Hz) - 1;
 		const iHdiv_low = Math.ceil(CGEN_VCO_MIN / 2 / freq_Hz);
@@ -427,7 +509,7 @@ class LimeSDR {
 		if (locked) {
 			console.log(`LimeSDR: CGEN locked, VCO=${(vcoFreq / 1e6).toFixed(1)} MHz, DIV=${iHdiv}, INT=${gINT}, FRAC=${gFRAC}`);
 		} else {
-			console.warn('LimeSDR: CGEN VCO failed to lock!');
+			throw new Error('LimeSDR: CGEN VCO failed to lock');
 		}
 	}
 
@@ -512,10 +594,7 @@ class LimeSDR {
 			}
 		}
 
-		if (bestVCO < 0) {
-			console.warn(`LimeSDR: SX VCO failed to lock at ${(freq_Hz / 1e6).toFixed(3)} MHz`);
-			return;
-		}
+		if (bestVCO < 0) throw new Error(`LimeSDR: SX VCO failed to lock at ${(freq_Hz / 1e6).toFixed(3)} MHz`);
 		// Readback and verify actual programmed frequency
 		const rbInt = getBits(await this.readLMS7002(REG_SX_INT), 13, 4);
 		const rbFracL = await this.readLMS7002(REG_SX_FRAC_L);
@@ -589,9 +668,8 @@ class LimeSDR {
 		// Enable RxTSP
 		await this.modifyReg(REG_RXTSP_CFG, 0, 0, 1);
 
-		// HBD_OVR_RXTSP = 7 → bypass decimation
-		// In SISO DDR bypass mode: CGEN = sampleRate × 4, no decimation needed
-		await this.modifyReg(REG_RXTSP_DEC, 14, 12, 7);
+		await this.modifyReg(REG_RXTSP_DEC, 14, 12, 0);
+		await this.modifyReg(0x0203, 14, 12, 0);
 
 		// AGC bypass
 		await this.modifyReg(REG_RXTSP_AGC, 13, 12, 2);
@@ -624,9 +702,6 @@ class LimeSDR {
 		// 0x0021: Pad pull-ups and SPI mode (4-wire)
 		await this.writeLMS7002(0x0021, 0x0E9F);
 
-		// 0x0022: DIQ pad control — MIMO mode (SISODDR disabled)
-		// SISO DDR (bits 14,12=1) was causing Q data loss due to FPGA DDR edge selection
-		// MIMO mode properly captures I on one DDR edge, Q on the other
 		await this.writeLMS7002(0x0022, 0x0FFF);
 
 		// 0x0023: LML direction/mode/routing (LimeSuite Init default)
@@ -636,15 +711,9 @@ class LimeSDR {
 		await this.writeLMS7002(REG_LML1_MAP, 0xE4E4);
 		await this.writeLMS7002(0x0027, 0xE4E4);
 
-		// 0x002C: No TSP clock dividers (bypass mode)
 		await this.writeLMS7002(0x002C, 0x0000);
 
-		// 0x002A: FIFO clock mux routing for MIMO bypass (decimation=7, siso=0)
-		// Per LimeSuite SetInterfaceFrequency:
-		//   RXRDCLK_MUX[3:2]=3, RXWRCLK_MUX[1:0]=1 (mimoBypass RX path)
-		//   TXRDCLK_MUX[7:6]=0, TXWRCLK_MUX[5:4]=0 (mimoBypass TX path)
-		// = (0<<6) | (0<<4) | (3<<2) | (1<<0) = 0x000D
-		await this.writeLMS7002(REG_CLK_MUX, 0x000D);
+		await this.writeLMS7002(REG_CLK_MUX, 0x0086);
 
 		// 0x002B: MCLK sources (LimeSuite Init default)
 		// MCLK1SRC[3:2]=2 (TXTSPCLKA_DIV), MCLK2SRC[5:4]=3 (RXTSPCLKA_DIV)
@@ -660,9 +729,6 @@ class LimeSDR {
 		// Stop any existing streaming
 		await this.writeFPGA(FPGA_REG_CTRL, 0x0000);
 
-		// Set stream mode: MIMO (0x0100), 16-bit samples
-		// MIMO mode captures I and Q from separate DDR edges correctly
-		// (SISO DDR 0x0040 was losing Q data due to FPGA edge selection)
 		await this.writeFPGA(FPGA_REG_IFACE, 0x0100);
 
 		// Channel A only — LimeSuite uses ch_en=1 with MIMO for single-channel RX
@@ -676,21 +742,61 @@ class LimeSDR {
 	}
 
 	private async configureFPGAPLL(): Promise<void> {
-		// FPGA PLL input = MCLK2 = GetReferenceClk_TSP(Rx) = CGEN/4 = rate*2 (MIMO mode)
 		const pllInputFreq = this.currentSampleRate * 2;
-		// In MIMO bypass (CLK_MUX & 0x0F == 0x0D), output clocks = 2 * input
-		// per LimeSuite: clocks[0].outFrequency = bypassRx ? 2*rxRate_Hz : rxRate_Hz
-		const pllOutputFreq = pllInputFreq * 2;
+		const pllOutputFreq = pllInputFreq;
 
-		const rxPhase = 89.46 + 1.24e-6 * this.currentSampleRate;
-		const txPhase = 89.61 + 2.71e-7 * this.currentSampleRate;
+		const rxPhase = 89.46 + 1.24e-6 * pllInputFreq;
+		const txPhase = 89.61 + 2.71e-7 * pllInputFreq;
 
 		// Configure TX PLL (index 0) then RX PLL (index 1)
 		await this.programFPGAPLL(0, pllInputFreq, [pllOutputFreq, pllOutputFreq], [0, txPhase]);
 		await this.programFPGAPLL(1, pllInputFreq, [pllOutputFreq, pllOutputFreq], [0, rxPhase]);
+		if (pllInputFreq >= 5e6) {
+			const board = await this.readFPGA(0x0000);
+			const version = (await this.readFPGA(0x0001) << 8) | await this.readFPGA(0x0002);
+			if (board === 0x000E && version > 0x020E) await this.alignRXClock(pllInputFreq, pllOutputFreq);
+		}
+		await this.resetLogicRegisters();
 	}
 
-	private async programFPGAPLL(pllIndex: number, inputFreq: number, clockFreqs: number[], clockPhases: number[] = []): Promise<void> {
+	private async alignRXClock(inputFreq: number, outputFreq: number): Promise<void> {
+		const addresses = [0x0021, 0x0022, 0x0023, 0x0024, 0x0027, 0x002A, 0x0082, 0x0400, 0x040C, 0x040B];
+		const backup: [number, number][] = [];
+		const backupB: [number, number][] = [];
+		const originalReset = await this.readLMS7002(REG_RESET);
+		try {
+			await this.writeLMS7002(REG_RESET, 0xFFFD);
+			for (const address of addresses) backup.push([address, await this.readLMS7002(address)]);
+			await this.writeLMS7002(REG_RESET, 0xFFFE);
+			for (const address of addresses.filter(address => address >= 0x0100)) backupB.push([address, await this.readLMS7002(address)]);
+			await this.writeLMS7002(REG_RESET, 0xFFFF);
+			await this.writeLMS7002Batch([
+				[0x0021, 0x0E9F], [0x0022, 0x0FFF], [0x0023, 0x5550],
+				[0x0024, 0xE4E4], [0x0027, 0xE4E4], [0x002A, 0x0086], [0x0082, 0x8001],
+				[0x0400, 0x028D], [0x040C, 0x00FF], [0x040B, 0x5555],
+				[0x0400, 0x02CD], [0x040B, 0xAAAA], [0x0400, 0x02ED],
+			]);
+			await this.programFPGAPLL(1, inputFreq, [outputFreq, outputFreq], [], true);
+			console.log('LimeSDR: RX interface phase search passed');
+		} finally {
+			try {
+				await this.writeLMS7002(REG_RESET, 0xFFFE);
+				await this.writeLMS7002Batch(backupB);
+				await this.writeLMS7002(REG_RESET, 0xFFFD);
+				await this.writeLMS7002Batch(backup);
+			} finally {
+				await this.writeLMS7002(REG_RESET, originalReset);
+			}
+		}
+	}
+
+	private async programFPGAPLL(pllIndex: number, inputFreq: number, clockFreqs: number[], clockPhases: number[] = [], findPhase = false): Promise<void> {
+		if (inputFreq < 5e6) {
+			const directClk = await this.readFPGA(FPGA_REG_DIRECT_CLK);
+			await this.writeFPGA(FPGA_REG_DIRECT_CLK, directClk | (1 << pllIndex));
+			return;
+		}
+
 		const VCO_MIN = 600e6;
 		const VCO_MAX = 1300e6;
 		const PLL_READ_ADDR = 0x0003;
@@ -712,10 +818,12 @@ class LimeSDR {
 		await this.writeFPGA(PLL_WRITE_ADDR, reg23val);
 
 		// Reset PLL
-		await this.writeFPGA(PLL_WRITE_ADDR, reg23val | 0x04);
-		await delay(10);
-		await this.writeFPGA(PLL_WRITE_ADDR, reg23val & ~0x04);
-		await delay(10);
+		if (!findPhase) {
+			await this.writeFPGA(PLL_WRITE_ADDR, reg23val | 0x04);
+			await delay(10);
+			await this.writeFPGA(PLL_WRITE_ADDR, reg23val & ~0x04);
+			await delay(10);
+		}
 
 		// Find best M, N for VCO
 		let bestM = 1, bestN = 1, bestDev = 1e18;
@@ -767,6 +875,27 @@ class LimeSDR {
 		await this.writeFPGA(PLL_WRITE_ADDR, reg23val | 0x01);
 		await delay(20);
 		await this.writeFPGA(PLL_WRITE_ADDR, reg23val & ~0x01);
+		if (findPhase) {
+			const divider = Math.round(Fvco / clockFreqs[1]);
+			const phaseControl = (reg23val & ~0x4707) | 0x6300;
+			await this.writeFPGA(PLL_WRITE_ADDR, phaseControl);
+			await this.writeFPGA(0x0024, 8 * divider - 1);
+			await this.writeFPGA(PLL_WRITE_ADDR, phaseControl | 0x02);
+			try {
+				const deadline = Date.now() + 3000;
+				while (Date.now() < deadline) {
+					const status = await this.readFPGA(0x0021);
+					if (status & 0x04) {
+						if (status & 0x08) throw new Error('LimeSDR: RX interface phase search failed');
+						return;
+					}
+					await delay(10);
+				}
+				throw new Error('LimeSDR: RX interface phase search timed out');
+			} finally {
+				await this.writeFPGA(PLL_WRITE_ADDR, phaseControl & ~0x02);
+			}
+		}
 
 		// Phase shifts for clock outputs
 		for (let i = 0; i < clockPhases.length; i++) {
@@ -798,33 +927,35 @@ class LimeSDR {
 
 	async setAnalogBandwidth(bwHz: number): Promise<void> {
 		const bw = Math.max(0.5e6, Math.min(bwHz, 40e6));
-
-		// TIA feedback capacitor (0x0112 bits [11:0]): controls TIA bandwidth
-		const cfbTia = Math.max(1, Math.min(4095, Math.round(1680e6 / bw - 10)));
-		await this.modifyReg(0x0112, 11, 0, cfbTia);
-
-		// LPFL capacitor (0x0116 bits [10:0]): controls LPFL cutoff frequency
-		const cCtlLpfl = Math.max(0, Math.min(2047, Math.round(2160e6 / bw - 103)));
-		await this.modifyReg(0x0116, 10, 0, cCtlLpfl);
-
-		// LPFL resistance (0x0118 bits [4:0]): lookup table from LimeSuite
-		let rccCtlLpfl: number;
-		if (cCtlLpfl < 8) rccCtlLpfl = 7;
-		else if (cCtlLpfl < 13) rccCtlLpfl = 6;
-		else if (cCtlLpfl < 21) rccCtlLpfl = 5;
-		else if (cCtlLpfl < 37) rccCtlLpfl = 4;
-		else if (cCtlLpfl < 76) rccCtlLpfl = 3;
-		else if (cCtlLpfl < 156) rccCtlLpfl = 2;
-		else if (cCtlLpfl < 336) rccCtlLpfl = 1;
-		else rccCtlLpfl = 0;
-		await this.modifyReg(0x0118, 4, 0, rccCtlLpfl);
-
-		// PGA resistance (0x0119 bits [12:8])
-		const bwMHz = bw / 1e6;
-		const rccCtlPga = Math.max(0, Math.min(31, Math.round(23 - 1.73 * bwMHz)));
-		await this.modifyReg(0x0119, 12, 8, rccCtlPga);
+		const filterIF = bw / 2;
+		const adjustedIF = filterIF * 1.3;
+		await this.configureTIAFilter(filterIF);
+		if (filterIF < 18e6) {
+			await this.modifyReg(REG_RBB_EN, 3, 2, 2);
+			await this.modifyReg(0x0118, 15, 13, 0);
+			const capacitor = Math.max(0, Math.min(2047, Math.trunc(2160e6 / adjustedIF - 103)));
+			const resistance = adjustedIF < 1.4e6 ? 0 : adjustedIF < 3e6 ? 1 : adjustedIF < 5e6 ? 2
+				: adjustedIF < 10e6 ? 3 : adjustedIF < 15e6 ? 4 : 5;
+			await this.modifyReg(0x0117, 13, 0, (resistance << 11) | capacitor);
+		} else {
+			await this.modifyReg(REG_RBB_EN, 3, 2, 1);
+			await this.modifyReg(0x0118, 15, 13, 1);
+			const capacitor = Math.max(0, Math.min(255, Math.trunc(6000e6 / adjustedIF - 50)));
+			const resistance = Math.max(0, Math.min(7, Math.trunc(adjustedIF / 10e6 - 3)));
+			await this.modifyReg(0x0116, 10, 0, (resistance << 8) | capacitor);
+		}
 
 		console.log(`LimeSDR: analog BW=${(bw / 1e6).toFixed(1)} MHz`);
+	}
+
+	private async configureTIAFilter(filterIF: number): Promise<void> {
+		const tiaGain = getBits(await this.readLMS7002(REG_RFE_GAIN), 1, 0);
+		const capacitor = Math.max(0, Math.min(4095, Math.trunc(
+			(tiaGain === 1 ? 5400e6 : 1680e6) / (filterIF * 0.72) - (tiaGain === 1 ? 15 : 10),
+		)));
+		const compensation = Math.min(15, Math.trunc(capacitor / 100) + (tiaGain === 1 ? 1 : 0));
+		await this.modifyReg(0x0112, 15, 0, (compensation << 12) | capacitor);
+		await this.modifyReg(0x0114, 8, 5, Math.max(0, 15 - Math.trunc(capacitor / 100)));
 	}
 
 	// ── Gain Control ────────────────────────────────────────────
@@ -838,12 +969,17 @@ class LimeSDR {
 		// index: 0=0dB(reg=1), 1=9dB(reg=2), 2=12dB(reg=3)
 		const regVal = Math.max(1, Math.min(3, index + 1));
 		await this.modifyReg(REG_RFE_GAIN, 1, 0, regVal);
+		await this.configureTIAFilter(this.currentSampleRate / 2);
 	}
 
 	async setPGAGain(value: number): Promise<void> {
 		// value: 0-31, gain = value - 12 dB
 		const clamped = Math.max(0, Math.min(31, value));
 		await this.modifyReg(REG_RBB_PGA, 4, 0, clamped);
+		const resistance = Math.max(0, Math.min(31, Math.trunc((430 * Math.pow(0.65, clamped / 10) - 110.35) / 20.45 + 16)));
+		const capacitor = clamped < 8 ? 3 : clamped < 13 ? 2 : clamped < 21 ? 1 : 0;
+		await this.modifyReg(0x011A, 13, 9, resistance);
+		await this.modifyReg(0x011A, 6, 0, capacitor);
 	}
 
 	async setAntennaPath(index: number): Promise<void> {
@@ -864,11 +1000,15 @@ class LimeSDR {
 	// ── Sample Rate ─────────────────────────────────────────────
 
 	async setSampleRate(rate: number): Promise<void> {
+		if (!Number.isFinite(rate) || rate < 1e6 || rate > 30.72e6) {
+			throw new Error(`LimeSDR: unsupported sample rate ${rate}`);
+		}
 		this.currentSampleRate = rate;
-		// MIMO mode: need rate * 8 (interface alternates chA/chB each clock)
 		await this.setCGENFrequency(rate * 8);
 		await this.setAnalogBandwidth(rate);
+		await this.modifyReg(REG_RESET, 1, 0, 3);
 		await this.configureRxTSP();
+		await this.modifyReg(REG_RESET, 1, 0, 1);
 		await this.configureLML();
 		await this.configureFPGAPLL();
 	}
@@ -876,6 +1016,8 @@ class LimeSDR {
 	// ── Streaming ───────────────────────────────────────────────
 
 	async startStreaming(callback: (data: ArrayBufferView) => void): Promise<void> {
+		if (this.rxRunning) return;
+
 		// Follow exact LimeSuite Streamer::Start() sequence:
 
 		// 1. Select FPGA chip
@@ -893,7 +1035,7 @@ class LimeSDR {
 		await this.writeFPGA(FPGA_REG_TSTAMP, reg9 & ~0x03);
 
 		// 4. Reset USB streaming FIFOs (0x00 = stream buffer reset)
-		await this.sendCommand(0x40, new Uint8Array([0x00]));
+		await this.resetStreamBuffers();
 
 		// 5. Configure interface mode: MIMO (0x0100)
 		// MIMO mode properly captures I/Q from separate DDR edges
@@ -909,17 +1051,25 @@ class LimeSDR {
 		await this.writeFPGA(FPGA_REG_TSTAMP, reg9 | (5 << 1));
 		await this.writeFPGA(FPGA_REG_TSTAMP, reg9 & ~(5 << 1));
 
-		// 8. Reset LMS7002M logic registers (pulse bits [15:6] of 0x0020)
-		const reg20 = await this.readLMS7002(REG_RESET);
-		await this.writeLMS7002(REG_RESET, reg20 & ~0xFFC0);  // Assert resets
-		await this.writeLMS7002(REG_RESET, reg20 | 0xFFC0);   // Release resets
+		await this.resetLogicRegisters();
+		await this.dumpRegisters();
 
-		// 9. Re-enable RXTSP after logic reset (reset may revert registers)
-		await this.configureRxTSP();
-
-		console.log(`LimeSDR: streaming started (${NUM_TRANSFERS} transfers, ${TRANSFER_SIZE} bytes each)`);
+		console.log(`LimeSDR: RX enabled; waiting for USB samples (${NUM_TRANSFERS} transfers, ${TRANSFER_SIZE} bytes each)`);
 
 		let firstPacketLogged = false;
+		let resolveStarted!: () => void;
+		let rejectStarted!: (error: Error) => void;
+		const started = new Promise<void>((resolve, reject) => {
+			resolveStarted = resolve;
+			rejectStarted = reject;
+		});
+		const startTimer = setTimeout(() => {
+			rejectStarted(new Error(
+				'LimeSDR: no USB IQ samples received within 3 seconds; check the LML clocks, FPGA interface, and USB connection',
+			));
+		}, STREAM_START_TIMEOUT_MS);
+		const transfers: Promise<void>[] = [];
+		this.rxRunning = transfers;
 
 		const transfer = async (): Promise<void> => {
 			// Each concurrent transfer gets its own output buffer (avoids race condition)
@@ -928,12 +1078,16 @@ class LimeSDR {
 			const outBuf = new Int8Array(samplesPerTransfer * 2);
 
 			await Promise.resolve(); // Yield to event loop
-			while (this.rxRunning) {
+			while (this.rxRunning === transfers) {
 				try {
 					const result = await this.dev.transferIn(EP_STREAM_IN_NUM, TRANSFER_SIZE);
-					if (result.status !== 'ok' || !this.rxRunning) break;
+					if (this.rxRunning !== transfers) break;
+					if (result.status !== 'ok' || !result.data) {
+						throw new Error(`USB IQ transfer failed (status=${result.status})`);
+					}
 
 					const raw = new Uint8Array(result.data!.buffer, result.data!.byteOffset, result.data!.byteLength);
+					if (raw.length < STREAM_PKT_SIZE) continue;
 
 					// Log first packet for diagnostics
 					if (!firstPacketLogged) {
@@ -962,27 +1116,9 @@ class LimeSDR {
 						console.log(`LimeSDR IQ diag: corr=${corr.toFixed(4)}, I_rms=${iRms.toFixed(0)}, Q_rms=${qRms.toFixed(0)}`);
 						console.log(`LimeSDR first IQ (word[0]=I, word[1]=Q): ${pairs.join(' ')}`);
 
-						// Auto-calibrate IQ gain balance via RxTSP gain corrector
 						const ratio = iRms > 0 && qRms > 0 ? iRms / qRms : 1;
 						if (ratio > 1.5 || ratio < 0.67) {
-							let gcorrI = 2047, gcorrQ = 2047;
-							if (ratio > 1) {
-								// I is stronger — reduce I to match Q
-								gcorrI = Math.max(1, Math.round(2047 / ratio));
-							} else {
-								// Q is stronger — reduce Q to match I
-								gcorrQ = Math.max(1, Math.round(2047 * ratio));
-							}
-							try {
-								await this.writeLMS7002(0x0402, gcorrI);  // GCORRI
-								await this.writeLMS7002(0x0401, gcorrQ);  // GCORRQ
-								// Enable gain corrector: clear GC_BYP (bit 1) in 0x040C
-								const bypReg = await this.readLMS7002(0x040C);
-								await this.writeLMS7002(0x040C, bypReg & ~0x0002);
-								console.log(`LimeSDR: IQ auto-cal: GCORRI=${gcorrI}, GCORRQ=${gcorrQ}, ratio=${ratio.toFixed(2)}`);
-							} catch (e) {
-								console.warn('LimeSDR: IQ auto-cal failed:', e);
-							}
+							console.warn(`LimeSDR: IQ amplitude imbalance (I/Q=${ratio.toFixed(2)}); check interface timing before calibration`);
 						}
 					}
 
@@ -1001,18 +1137,29 @@ class LimeSDR {
 
 					if (outPos > 0) {
 						callback(outBuf.subarray(0, outPos));
+						resolveStarted();
 					}
 				} catch (e: unknown) {
-					if (this.rxRunning) {
+					if (this.rxRunning === transfers) {
 						const msg = e instanceof Error ? e.message : String(e);
 						console.error('LimeSDR stream error:', msg);
+						rejectStarted(new Error(`LimeSDR: ${msg}`));
 					}
 					break;
 				}
 			}
 		};
 
-		this.rxRunning = Array.from({ length: NUM_TRANSFERS }, transfer);
+		for (let index = 0; index < NUM_TRANSFERS; index++) transfers.push(transfer());
+		try {
+			await started;
+			console.log('LimeSDR: USB IQ stream active');
+		} catch (error) {
+			await this.stopStreaming();
+			throw error;
+		} finally {
+			clearTimeout(startTimer);
+		}
 	}
 
 	async stopStreaming(): Promise<void> {
@@ -1024,9 +1171,26 @@ class LimeSDR {
 			await this.writeFPGA(FPGA_REG_CTRL, 0x0000);
 		} catch (_) { /* may fail if USB disconnected */ }
 
-		// Wait for all transfers to complete
 		if (transfers) {
-			await Promise.allSettled(transfers);
+			let stopTimer: ReturnType<typeof setTimeout> | undefined;
+			try {
+				const settled = await Promise.race([
+					Promise.allSettled(transfers).then(() => true),
+					new Promise<false>(resolve => {
+						stopTimer = setTimeout(() => resolve(false), STREAM_STOP_TIMEOUT_MS);
+					}),
+				]);
+				if (!settled) {
+					console.warn('LimeSDR: cancelling pending IQ transfers before restarting');
+					await this.dev.close();
+					await Promise.allSettled(transfers);
+					await this.dev.open();
+					await this.dev.selectConfiguration(1);
+					await this.dev.claimInterface(0);
+				}
+			} finally {
+				clearTimeout(stopTimer);
+			}
 		}
 	}
 }
@@ -1050,7 +1214,12 @@ export class LimeSDRDevice implements SdrDevice {
 
 	async open(device: USBDevice): Promise<void> {
 		await this.lime.open(device);
-		await this.lime.initialize();
+		try {
+			await this.lime.initialize();
+		} catch (error) {
+			await this.lime.close();
+			throw error;
+		}
 	}
 
 	async close(): Promise<void> {

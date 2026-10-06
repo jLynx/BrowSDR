@@ -58,7 +58,9 @@ export const connectionMethods = {
 					// Initialize gains from device defaults
 					const newGains: Record<string, number> = {};
 					for (const gc of caps.gainControls) {
-						newGains[gc.name] = gc.default;
+						const saved = this.gains[gc.name];
+						newGains[gc.name] = caps.deviceType === 'limesdr' && gc.name === 'Antenna'
+							&& Number.isInteger(saved) && saved >= gc.min && saved <= gc.max ? saved : gc.default;
 					}
 					this.gains = newGains;
 
@@ -210,7 +212,7 @@ export const connectionMethods = {
 			);
 		} catch (e: any) {
 			console.error('Error starting RX stream:', e);
-			this.showMsg("Error starting stream.");
+			this.showMsg("Error starting stream: " + e.message);
 			this.running = false;
 			return;
 		}
