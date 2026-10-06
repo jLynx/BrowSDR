@@ -23,6 +23,7 @@ import { FFT } from './wasm-init';
 import { planSharedBands } from './channel-plan';
 import type { ChannelPlan } from './channel-plan';
 import { RationalResampler } from './dsp-pipeline';
+import { demodulateSideband, sidebandOffsetHz } from './ssb';
 import { POCSAGDecoder } from './pocsag';
 import type { RxStreamOpts, VfoParams, VfoState, PerfCounters } from './types';
 import { IF_RATES, AUDIO_RATE } from './types';
@@ -318,7 +319,7 @@ export async function startRxStream(
 			if (!params.enabled && !params.pocsag) return null;
 
 			// Shift freq: The tuned freq relative to the center freq
-			const shiftHz = (params.freq - centerFreq) * 1e6;
+			const shiftHz = (params.freq - centerFreq) * 1e6 + sidebandOffsetHz(params.mode, params.bandwidth);
 			ddc.set_shift(sampleRate, shiftHz);
 
 			const mode = params.mode;
@@ -485,31 +486,7 @@ export async function startRxStream(
 					}
 				}
 				else if (mode === 'usb' || mode === 'lsb' || mode === 'dsb') {
-					for (let i = 0; i < numDemodSamples; i++) {
-						const dI = _ddcOut[i * 2];
-						const dQ = _ddcOut[i * 2 + 1];
-						let shiftFreq = 0;
-						if (mode === 'usb') shiftFreq = bw / 2.0;
-						else if (mode === 'lsb') shiftFreq = -bw / 2.0;
-						const phaseInc = (shiftFreq / ifRate) * 2 * Math.PI;
-						vfoState.ssbPhase! += phaseInc;
-						if (vfoState.ssbPhase! > Math.PI) vfoState.ssbPhase! -= 2 * Math.PI;
-						if (vfoState.ssbPhase! < -Math.PI) vfoState.ssbPhase! += 2 * Math.PI;
-						const cosP = Math.cos(vfoState.ssbPhase!);
-						const sinP = Math.sin(vfoState.ssbPhase!);
-						const rI = dI * cosP - dQ * sinP;
-						let demodSample = rI;
-						const agcAttack = 50.0 / ifRate;
-						const agcDecay = 5.0 / ifRate;
-						const absSample = Math.abs(demodSample);
-						if (absSample > vfoState.agcGain!) {
-							vfoState.agcGain = vfoState.agcGain! * (1 - agcAttack) + absSample * agcAttack;
-						} else {
-							vfoState.agcGain = vfoState.agcGain! * (1 - agcDecay) + absSample * agcDecay;
-						}
-						const agcScale = vfoState.agcGain! > 1e-6 ? (0.5 / vfoState.agcGain!) : 1.0;
-						audioDemodRateSamples[i] = demodSample * agcScale;
-					}
+					demodulateSideband(_ddcOut, audioDemodRateSamples, mode, bw, ifRate, vfoState);
 				}
 				else if (mode === 'cw') {
 					for (let i = 0; i < numDemodSamples; i++) {

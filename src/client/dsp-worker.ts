@@ -1,5 +1,6 @@
 import init, { DspProcessor, SharedChannelizer, set_panic_hook, alloc_iq_buffer, alloc_float_buffer, free_iq_buffer } from "/hackrf-web/pkg/hackrf_web.js";
 import { RationalResampler } from './worker/dsp-pipeline';
+import { demodulateSideband, sidebandOffsetHz } from './worker/ssb';
 import { DSDStream } from './worker/dsd/dsd-stream';
 import { DSD_IF_RATE } from './worker/dsd/types';
 import type { DSDStatus } from './worker/dsd/types';
@@ -150,7 +151,7 @@ self.onmessage = async (e: MessageEvent) => {
             configureDDC(msg.params, nextCenter);
         } else if (nextCenter !== inputCenterFreq) {
             inputCenterFreq = nextCenter;
-            ddc.set_shift(nextRate, (msg.params.freq - nextCenter) * 1e6);
+            ddc.set_shift(nextRate, (msg.params.freq - nextCenter) * 1e6 + sidebandOffsetHz(msg.params.mode, msg.params.bandwidth));
             rdsDdc?.set_shift(nextRate, (msg.params.freq - nextCenter) * 1e6);
         }
         inputIsFloat = msg.floatIq === true;
@@ -230,14 +231,23 @@ function configureDDC(params: any, systemCenterFreq: number): void {
         console.error(`[DSP Worker] Unknown mode "${params.mode}" — no IF rate defined. Skipping DDC config.`);
         return;
     }
-    if (vfoState.currentIfRate !== ifRate) {
+    const modeChanged = vfoState.lastMode !== params.mode;
+    if (vfoState.currentIfRate !== ifRate || modeChanged) {
         vfoState.audioResampler = new RationalResampler(ifRate, AUDIO_RATE);
+        if (vfoState.currentIfRate === ifRate) ddc.reset();
         vfoState.currentIfRate = ifRate;
         ddc.set_if_sample_rate(ifRate);
+        vfoState.lastMode = params.mode;
+        vfoState.ssbPhase = 0;
+        vfoState.dcAvg = 0;
+        vfoState.deemphPrev = 0;
+        vfoState.agcGain = 1;
     }
 
     const offsetFreq = (params.freq - systemCenterFreq) * 1e6;
-    ddc.set_shift(systemSampleRate, offsetFreq);
+    // The UI frequency is the suppressed carrier; the channel FIR must be
+    // centered half a bandwidth above it for USB, or below it for LSB.
+    ddc.set_shift(systemSampleRate, offsetFreq + sidebandOffsetHz(params.mode, params.bandwidth));
     ddc.set_bandwidth(params.bandwidth);
     ddc.set_squelch(params.squelchLevel, params.squelchEnabled);
     if (params.mode === 'wfm') {
@@ -406,31 +416,7 @@ function processVfoAudio(chunkLenBytes: number, params: any): Float32Array | nul
             }
         }
         else if (mode === 'usb' || mode === 'lsb' || mode === 'dsb') {
-            for (let i = 0; i < numDemodSamples; i++) {
-                const dI = _ddcOut[i * 2];
-                const dQ = _ddcOut[i * 2 + 1];
-                let shiftFreq = 0;
-                if (mode === 'usb') shiftFreq = bw / 2.0;
-                else if (mode === 'lsb') shiftFreq = -bw / 2.0;
-                const phaseInc = (shiftFreq / ifRate) * 2 * Math.PI;
-                vfoState.ssbPhase += phaseInc;
-                if (vfoState.ssbPhase > Math.PI) vfoState.ssbPhase -= 2 * Math.PI;
-                if (vfoState.ssbPhase < -Math.PI) vfoState.ssbPhase += 2 * Math.PI;
-                const cosP = Math.cos(vfoState.ssbPhase);
-                const sinP = Math.sin(vfoState.ssbPhase);
-                const rI = dI * cosP - dQ * sinP;
-                const demodSample = rI;
-                const agcAttack = 50.0 / ifRate;
-                const agcDecay = 5.0 / ifRate;
-                const absSample = Math.abs(demodSample);
-                if (absSample > vfoState.agcGain) {
-                    vfoState.agcGain = vfoState.agcGain * (1 - agcAttack) + absSample * agcAttack;
-                } else {
-                    vfoState.agcGain = vfoState.agcGain * (1 - agcDecay) + absSample * agcDecay;
-                }
-                const agcScale = vfoState.agcGain > 1e-6 ? (0.5 / vfoState.agcGain) : 1.0;
-                audioDemodRateSamples[i] = demodSample * agcScale;
-            }
+            demodulateSideband(_ddcOut, audioDemodRateSamples, mode, bw, ifRate, vfoState);
         }
         else if (mode === 'cw') {
             for (let i = 0; i < numDemodSamples; i++) {
