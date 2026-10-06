@@ -430,10 +430,11 @@ describe('LimeSDR receive configuration', () => {
 		expect(write.mock.calls).toEqual([[0x0005, 3]]);
 	});
 
-	it('waits for samples, preserves I/Q order, and does not calibrate from one live packet', async () => {
+	it.each([0, 1])('waits for RX channel %i samples and preserves I/Q order without live-packet calibration', async channel => {
 		const { driver, usb } = await createDriver();
+		driver.rxChannel = channel;
 		vi.spyOn(driver, 'readFPGA').mockResolvedValue(0);
-		vi.spyOn(driver, 'writeFPGA').mockResolvedValue(undefined);
+		const fpgaWrite = vi.spyOn(driver, 'writeFPGA').mockResolvedValue(undefined);
 		vi.spyOn(driver, 'readLMS7002').mockResolvedValue(0xff15);
 		const lmsWrite = vi.spyOn(driver, 'writeLMS7002').mockResolvedValue(undefined);
 		const readResolvers = [];
@@ -458,6 +459,7 @@ describe('LimeSDR receive configuration', () => {
 		}
 		readResolvers.shift()({ status: 'ok', data: packet });
 		await starting;
+		expect(fpgaWrite).toHaveBeenCalledWith(0x0007, 1 << channel);
 		expect(active).toBe(true);
 		expect(callback).toHaveBeenCalledOnce();
 		expect(callback.mock.calls[0][0]).toHaveLength(2040);
@@ -503,5 +505,128 @@ describe('LimeSDR receive configuration', () => {
 		expect(usb.claimInterface).toHaveBeenLastCalledWith(0);
 		expect(callback).not.toHaveBeenCalled();
 		expect(driver.rxRunning).toBeNull();
+	});
+});
+
+describe('LimeSDR RX channel selection', () => {
+	afterEach(() => vi.restoreAllMocks());
+
+	it('advertises RX1 and RX2 with RX1 as the default', () => {
+		expect(new LimeSDRDevice().gainControls[0]).toMatchObject({
+			name: 'RX Channel', min: 0, max: 1, default: 0, labels: ['RX1', 'RX2'], type: 'select',
+		});
+	});
+
+	it.each([0, 1])('routes LO from bank A before selecting RX channel %i and its FPGA mask', async channel => {
+		const { driver } = await createDriver();
+		const modify = vi.spyOn(driver, 'modifyReg').mockResolvedValue(undefined);
+		const bandwidth = vi.spyOn(driver, 'setAnalogBandwidth').mockResolvedValue(undefined);
+		const fpga = vi.spyOn(driver, 'writeFPGA').mockResolvedValue(undefined);
+		await driver.setRxChannel(channel);
+		expect(modify.mock.calls).toEqual([[0x0020, 1, 0, 1], [0x010d, 0, 0, channel], [0x0020, 1, 0, channel + 1]]);
+		expect(bandwidth).toHaveBeenCalledWith(10e6);
+		expect(fpga).toHaveBeenCalledWith(0x0007, 1 << channel);
+		expect(driver.rxChannel).toBe(channel);
+	});
+
+	it.each([-1, 2, NaN, 0.5])('rejects invalid RX channel %s before USB writes', async channel => {
+		const { driver, usb } = await createDriver();
+		await expect(driver.setRxChannel(channel)).rejects.toThrow('unsupported RX channel');
+		expect(usb.transferOut).not.toHaveBeenCalled();
+	});
+
+	it.each([false, true])('tunes the shared RX LO in bank A and restores RX2 (failure=%s)', async failure => {
+		const { driver } = await createDriver();
+		driver.rxChannel = 1;
+		const modify = vi.spyOn(driver, 'modifyReg').mockResolvedValue(undefined);
+		vi.spyOn(driver, 'readLMS7002').mockResolvedValue(0);
+		vi.spyOn(driver, 'writeLMS7002').mockResolvedValue(undefined);
+		vi.spyOn(driver, 'tuneVCO').mockResolvedValue(!failure);
+		if (failure) await expect(driver.setFrequencySXR(106.4e6)).rejects.toThrow('SX VCO failed to lock');
+		else await driver.setFrequencySXR(106.4e6);
+		expect(modify.mock.calls[0]).toEqual([0x0020, 1, 0, 1]);
+		expect(modify).toHaveBeenLastCalledWith(0x0020, 1, 0, 2);
+	});
+
+	it.each([false, true])('restores RX2 after sample-rate configuration (failure=%s)', async failure => {
+		const { driver } = await createDriver();
+		driver.rxChannel = 1;
+		const modify = vi.spyOn(driver, 'modifyReg').mockResolvedValue(undefined);
+		vi.spyOn(driver, 'setCGENFrequency').mockResolvedValue(undefined);
+		vi.spyOn(driver, 'setAnalogBandwidth').mockResolvedValue(undefined);
+		vi.spyOn(driver, 'configureRxTSP').mockResolvedValue(undefined);
+		vi.spyOn(driver, 'configureLML').mockResolvedValue(undefined);
+		const pll = vi.spyOn(driver, 'configureFPGAPLL').mockResolvedValue(undefined);
+		if (failure) pll.mockRejectedValue(new Error('PLL failure'));
+		if (failure) await expect(driver.setSampleRate(61.44e6)).rejects.toThrow('PLL failure');
+		else await driver.setSampleRate(61.44e6);
+		expect(modify).toHaveBeenCalledWith(0x0020, 1, 0, 3);
+		expect(modify).toHaveBeenLastCalledWith(0x0020, 1, 0, 2);
+	});
+
+	function createWrapper() {
+		const device = new LimeSDRDevice();
+		const events = [];
+		for (const method of ['startStreaming', 'stopStreaming', 'setRxChannel', 'setLNAGain', 'setTIAGain', 'setPGAGain', 'setAntennaPath', 'setFrequencySXR']) {
+			vi.spyOn(device.lime, method).mockImplementation(async value => { events.push([method, value]); });
+		}
+		return { device, events };
+	}
+
+	it('stops reception, applies retained gains and path to RX2, then restarts the same callback', async () => {
+		const { device, events } = createWrapper();
+		const callback = vi.fn();
+		await device.setGains({ LNA: 20, TIA: 1, PGA: 18, Antenna: 2 });
+		await device.startRx(callback);
+		events.length = 0;
+		await device.setGain('RX Channel', 1);
+		expect(events).toEqual([
+			['stopStreaming', undefined], ['setRxChannel', 1], ['setLNAGain', 20],
+			['setTIAGain', 1], ['setPGAGain', 18], ['setAntennaPath', 2], ['startStreaming', callback],
+		]);
+	});
+
+	it('selects the receiver before initial gains regardless of dictionary order and does not start streaming', async () => {
+		const { device, events } = createWrapper();
+		await device.setGains({ Antenna: 2, LNA: 25, 'RX Channel': 1 });
+		expect(events[0]).toEqual(['setRxChannel', 1]);
+		expect(device.lime.setLNAGain).toHaveBeenCalledWith(25);
+		expect(device.lime.setAntennaPath).toHaveBeenCalledWith(2);
+		expect(device.lime.startStreaming).not.toHaveBeenCalled();
+	});
+
+	it('does not restart reception when the selected receiver has not changed', async () => {
+		const { device, events } = createWrapper();
+		await device.startRx(vi.fn());
+		events.length = 0;
+		await device.setGains({ 'RX Channel': 0, Antenna: 2 });
+		expect(events).toEqual([['setAntennaPath', 2]]);
+	});
+
+	it('serializes switching, retuning, and stopping so a switch cannot restart a stopped stream', async () => {
+		const { device, events } = createWrapper();
+		await device.startRx(vi.fn());
+		events.length = 0;
+		await Promise.all([device.setGain('RX Channel', 1), device.setFrequency(106.4e6), device.stopRx()]);
+		expect(events.slice(-3)).toEqual([
+			['startStreaming', expect.any(Function)], ['setFrequencySXR', 106.4e6], ['stopStreaming', undefined],
+		]);
+		await device.setGain('RX Channel', 0);
+		expect(device.lime.startStreaming).toHaveBeenCalledTimes(2);
+	});
+
+	it('restores the old receiver and stream after a failed switch and allows retry', async () => {
+		const { device } = createWrapper();
+		const callback = vi.fn();
+		await device.setGain('Antenna', 2);
+		await device.startRx(callback);
+		device.lime.setRxChannel.mockRejectedValueOnce(new Error('Channel switch failed'));
+		await expect(device.setGain('RX Channel', 1)).rejects.toThrow('Channel switch failed');
+		expect(device.lime.setRxChannel).toHaveBeenLastCalledWith(0);
+		expect(device.lime.setAntennaPath).toHaveBeenLastCalledWith(2);
+		expect(device.lime.startStreaming).toHaveBeenLastCalledWith(callback);
+		expect(device.gains['RX Channel']).toBe(0);
+		await device.setGain('RX Channel', 1);
+		expect(device.gains['RX Channel']).toBe(1);
 	});
 });

@@ -190,6 +190,13 @@ createApp({
 			this.saveSetting();
 		}, { deep: true });
 
+		this.$watch(() => this.display.spectrumFps, (value: number) => {
+			this.saveSetting();
+			if (this.backend && this.remoteMode !== 'client') {
+				this.backend.setSpectrumFps(value).catch(console.error);
+			}
+		});
+
 		this.$watch('collapsedPanels', () => {
 			this.saveSetting();
 		}, { deep: true });

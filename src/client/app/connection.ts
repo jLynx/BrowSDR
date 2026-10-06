@@ -59,7 +59,7 @@ export const connectionMethods = {
 					const newGains: Record<string, number> = {};
 					for (const gc of caps.gainControls) {
 						const saved = this.gains[gc.name];
-						newGains[gc.name] = caps.deviceType === 'limesdr' && gc.name === 'Antenna'
+						newGains[gc.name] = caps.deviceType === 'limesdr' && (gc.name === 'Antenna' || gc.name === 'RX Channel')
 							&& Number.isInteger(saved) && saved >= gc.min && saved <= gc.max ? saved : gc.default;
 					}
 					this.gains = newGains;
@@ -200,6 +200,7 @@ export const connectionMethods = {
 			frequencyShift: this.radio.frequencyShift,
 			sampleRate: this.radio.sampleRate,
 			fftSize: this.radio.fftSize,
+			spectrumFps: this.display.spectrumFps,
 			gains: { ...this.gains },
 		};
 

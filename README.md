@@ -26,6 +26,8 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
   Save, organize, and quickly recall your favorite frequencies. Group your bookmarks into custom categories to effortlessly manage airbands, ham frequencies, repeaters, or emergency services.
 * **🌊 Real-time WebGL Waterfall & Spectrum**
   Monitor the entire RF band visually with an ultra-responsive, GPU-accelerated waterfall and spectrum analyzer.
+  Choose **20, 30, or 60 FPS** using **Spectrum FPS** in the Display panel. Changes apply live without restarting reception and are saved locally. Higher targets use more CPU; actual FPS depends on USB delivery and processing capacity. Remote viewers use the host's update rate.
+  Waterfall scrolling and spectrum smoothing are time-based: higher FPS makes animation smoother without speeding up the history. The 512-row waterfall retains approximately 25.6 seconds of continuous reception at every target.
 * **📻 Wide Demodulation Support**
   Supports WFM, NFM, AM, USB, LSB, DSB, CW, and raw IQ modes.
 * **📡 RDS Decoding on the Fly**
@@ -114,6 +116,8 @@ Use Device Manager to select an already-installed WinUSB driver, or install one 
 Changing to WinUSB can affect native SDR applications that require CYUSB3; switch back to the previous driver when those applications need it. See [Chrome's Windows WebUSB requirements](https://developer.chrome.com/docs/capabilities/build-for-webusb#windows).
 
 LimeSDR-USB reception supports sample rates up to **61.44 MSPS**. Higher rates require a USB 3 connection and enough CPU capacity for the selected VFOs; reduce the sample rate if audio breaks up or the browser cannot keep up. The driver uses 2× internal oversampling and adjusts the analog receive filter to match the selected rate.
+
+Choose **RX1** or **RX2** using **RX Channel** in the Radio panel, then select **LNAH**, **LNAL**, or **LNAW** under **Antenna** to match the H, L, or W connector in that receiver's antenna group. One receiver is streamed at a time; switching briefly restarts reception while retaining the current frequency, gains, and antenna path. The receiver and antenna selections are saved locally.
 
 ---
 

@@ -26,6 +26,7 @@ import type { RxStreamOpts, VfoParams, VfoState, PerfCounters } from './types';
 import { IF_RATES, AUDIO_RATE } from './types';
 import type { Backend } from './backend';
 import { displayToDeviceFrequencyHz } from '../frequency-shift';
+import { spectrumSmoothingAlpha } from '../spectrum-rate';
 
 let _streamStarting = false;
 
@@ -74,8 +75,7 @@ export async function startRxStream(
 
 		const iqBuffer = new Int8Array(fftSize * 2);
 		let iqBufferPos = 0;
-		const targetFftFps = 20;
-		const spectrumIntervalMs = 1000 / targetFftFps;  // 50ms for 20fps
+		backend.setSpectrumFps(opts.spectrumFps ?? 20);
 		let lastSpectrumTime = 0;
 
 		// ── Audio DDC setup ───────────────────────────────────────────
@@ -619,8 +619,12 @@ export async function startRxStream(
 		// control transfer conflicts with in-flight bulk transfers.
 		// Matches librtlsdr / SDR++ which configure everything before streaming.
 		if (gains) {
-			for (const [name, value] of Object.entries(gains)) {
-				await device.setGain(name, value);
+			if (device.setGains) {
+				await device.setGains(gains);
+			} else {
+				for (const [name, value] of Object.entries(gains)) {
+					await device.setGain(name, value);
+				}
 			}
 		}
 
@@ -647,7 +651,8 @@ export async function startRxStream(
 					if (iqBufferPos >= iqBuffer.length) {
 						iqBufferPos = 0;
 						const now = performance.now();
-						if (now - lastSpectrumTime >= spectrumIntervalMs) {
+						if (now - lastSpectrumTime >= 1000 / backend._spectrumFps) {
+							spectrumFft.set_smoothing_speed(spectrumSmoothingAlpha(lastSpectrumTime === 0 ? 50 : now - lastSpectrumTime));
 							lastSpectrumTime = now;
 							// Revert back to copy-based FFT for the spectrum waterfall
 							// because `iqBuffer` batches data across USB chunk boundaries.

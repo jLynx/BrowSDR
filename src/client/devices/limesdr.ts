@@ -160,6 +160,7 @@ class LimeSDR {
 	private regCache = new Map<number, number>();
 	private currentSampleRate = 10e6;
 	private currentFrequency = 100e6;
+	private rxChannel = 0;
 
 	// ── USB Communication ───────────────────────────────────────
 
@@ -517,7 +518,14 @@ class LimeSDR {
 	// ── SX PLL (LO Synthesizer) ─────────────────────────────────
 
 	async setFrequencySXR(freq_Hz: number): Promise<void> {
-		// Select SXR channel (MAC=1 for ChA)
+		try {
+			await this.programFrequencySXR(freq_Hz);
+		} finally {
+			await this.modifyReg(REG_RESET, 1, 0, this.rxChannel + 1);
+		}
+	}
+
+	private async programFrequencySXR(freq_Hz: number): Promise<void> {
 		await this.modifyReg(REG_RESET, 1, 0, 1);
 
 		// Find output divider
@@ -732,14 +740,12 @@ class LimeSDR {
 
 		await this.writeFPGA(FPGA_REG_IFACE, 0x0100);
 
-		// Channel A only — LimeSuite uses ch_en=1 with MIMO for single-channel RX
-		// Data format is non-interleaved: [I, Q, I, Q, ...]
-		await this.writeFPGA(FPGA_REG_CH_EN, 0x0001);
+		await this.writeFPGA(FPGA_REG_CH_EN, 1 << this.rxChannel);
 
 		// Configure FPGA PLL for RX
 		await this.configureFPGAPLL();
 
-		console.log('LimeSDR: FPGA configured (MIMO mode, ch A)');
+		console.log(`LimeSDR: FPGA configured (MIMO mode, RX${this.rxChannel + 1})`);
 	}
 
 	private async configureFPGAPLL(): Promise<void> {
@@ -1000,18 +1006,32 @@ class LimeSDR {
 
 	// ── Sample Rate ─────────────────────────────────────────────
 
+	async setRxChannel(channel: number): Promise<void> {
+		if (channel !== 0 && channel !== 1) throw new Error(`LimeSDR: unsupported RX channel ${channel}`);
+		await this.modifyReg(REG_RESET, 1, 0, 1);
+		await this.modifyReg(REG_RFE_PATH, 0, 0, channel);
+		await this.modifyReg(REG_RESET, 1, 0, channel + 1);
+		await this.setAnalogBandwidth(this.currentSampleRate);
+		await this.writeFPGA(FPGA_REG_CH_EN, 1 << channel);
+		this.rxChannel = channel;
+		console.log(`LimeSDR: selected RX${channel + 1}`);
+	}
+
 	async setSampleRate(rate: number): Promise<void> {
 		if (!Number.isFinite(rate) || rate < 1e6 || rate > MAX_SAMPLE_RATE) {
 			throw new Error(`LimeSDR: unsupported sample rate ${rate}`);
 		}
 		this.currentSampleRate = rate;
-		await this.setCGENFrequency(rate * 8);
-		await this.setAnalogBandwidth(rate);
-		await this.modifyReg(REG_RESET, 1, 0, 3);
-		await this.configureRxTSP();
-		await this.modifyReg(REG_RESET, 1, 0, 1);
-		await this.configureLML();
-		await this.configureFPGAPLL();
+		try {
+			await this.setCGENFrequency(rate * 8);
+			await this.setAnalogBandwidth(rate);
+			await this.modifyReg(REG_RESET, 1, 0, 3);
+			await this.configureRxTSP();
+			await this.configureLML();
+			await this.configureFPGAPLL();
+		} finally {
+			await this.modifyReg(REG_RESET, 1, 0, this.rxChannel + 1);
+		}
 	}
 
 	// ── Streaming ───────────────────────────────────────────────
@@ -1041,7 +1061,7 @@ class LimeSDR {
 		// 5. Configure interface mode: MIMO (0x0100)
 		// MIMO mode properly captures I/Q from separate DDR edges
 		await this.writeFPGA(FPGA_REG_IFACE, 0x0100);
-		await this.writeFPGA(FPGA_REG_CH_EN, 0x0001);  // Channel A only
+		await this.writeFPGA(FPGA_REG_CH_EN, 1 << this.rxChannel);
 
 		// 6. Enable RX streaming only (per LimeSuite StartStreaming — TX_EN not needed)
 		const ctrl2 = await this.readFPGA(FPGA_REG_CTRL);
@@ -1074,7 +1094,6 @@ class LimeSDR {
 
 		const transfer = async (): Promise<void> => {
 			// Each concurrent transfer gets its own output buffer (avoids race condition)
-			// ch_en=1 MIMO: non-interleaved [I,Q,I,Q,...], 4 bytes per sample
 			const samplesPerTransfer = Math.floor(TRANSFER_SIZE / STREAM_PKT_SIZE) * (STREAM_PAYLOAD / 4);
 			const outBuf = new Int8Array(samplesPerTransfer * 2);
 
@@ -1129,7 +1148,6 @@ class LimeSDR {
 					let outPos = 0;
 					for (let pkt = 0; pkt < numPackets; pkt++) {
 						const base = pkt * STREAM_PKT_SIZE + STREAM_HDR_SIZE;
-						// ch_en=1 MIMO: non-interleaved [I16, Q16, I16, Q16, ...]
 						for (let j = 0; j < STREAM_PAYLOAD; j += 4) {
 							outBuf[outPos++] = dv.getInt16(base + j,     true) >> 8; // I
 							outBuf[outPos++] = dv.getInt16(base + j + 2, true) >> 8; // Q
@@ -1203,6 +1221,8 @@ export class LimeSDRDevice implements SdrDevice {
 	readonly sampleRates = [1e6, 2e6, 5e6, 10e6, 20e6, 30.72e6, 40e6, 50e6, MAX_SAMPLE_RATE];
 	readonly sampleFormat = 'int8' as const;
 	readonly gainControls: GainControl[] = [
+		{ name: 'RX Channel', min: 0, max: 1, step: 1, default: 0,
+			labels: ['RX1', 'RX2'], type: 'select' },
 		{ name: 'LNA', min: 0, max: 30, step: 1, default: 14, type: 'slider' },
 		{ name: 'TIA', min: 0, max: 2, step: 1, default: 2,
 			labels: ['0 dB', '9 dB', '12 dB'], type: 'select' },
@@ -1212,6 +1232,15 @@ export class LimeSDRDevice implements SdrDevice {
 	];
 
 	private lime = new LimeSDR();
+	private operationQueue: Promise<void> = Promise.resolve();
+	private rxCallback: ((data: ArrayBufferView) => void) | null = null;
+	private gains: Record<string, number> = { 'RX Channel': 0, LNA: 14, TIA: 2, PGA: 16, Antenna: 1 };
+
+	private runExclusive<Result>(operation: () => Promise<Result>): Promise<Result> {
+		const result = this.operationQueue.then(operation);
+		this.operationQueue = result.then(() => undefined, () => undefined);
+		return result;
+	}
 
 	async open(device: USBDevice): Promise<void> {
 		await this.lime.open(device);
@@ -1224,7 +1253,10 @@ export class LimeSDRDevice implements SdrDevice {
 	}
 
 	async close(): Promise<void> {
-		await this.lime.close();
+		await this.runExclusive(async () => {
+			this.rxCallback = null;
+			await this.lime.close();
+		});
 	}
 
 	async getInfo(): Promise<SdrDeviceInfo> {
@@ -1232,14 +1264,18 @@ export class LimeSDRDevice implements SdrDevice {
 	}
 
 	async setSampleRate(rate: number): Promise<void> {
-		await this.lime.setSampleRate(rate);
+		await this.runExclusive(() => this.lime.setSampleRate(rate));
 	}
 
 	async setFrequency(freqHz: number): Promise<void> {
-		await this.lime.setFrequencySXR(freqHz);
+		await this.runExclusive(() => this.lime.setFrequencySXR(freqHz));
 	}
 
 	async setGain(name: string, value: number): Promise<void> {
+		await this.setGains({ [name]: value });
+	}
+
+	private async applyGain(name: string, value: number): Promise<void> {
 		switch (name) {
 			case 'LNA': await this.lime.setLNAGain(value); break;
 			case 'TIA': await this.lime.setTIAGain(value); break;
@@ -1249,12 +1285,51 @@ export class LimeSDRDevice implements SdrDevice {
 		}
 	}
 
+	async setGains(gains: Record<string, number>): Promise<void> {
+		await this.runExclusive(async () => {
+			const previous = this.gains;
+			const next = { ...previous, ...gains };
+			const channel = next['RX Channel'];
+			if (channel !== 0 && channel !== 1) throw new Error(`LimeSDR: unsupported RX channel ${channel}`);
+			const switching = channel !== previous['RX Channel'];
+			const callback = switching ? this.rxCallback : null;
+			try {
+				if (callback) await this.lime.stopStreaming();
+				if (switching) await this.lime.setRxChannel(channel);
+				for (const [name, value] of Object.entries(switching ? next : gains)) {
+					if (name !== 'RX Channel') await this.applyGain(name, value);
+				}
+				if (callback) await this.lime.startStreaming(callback);
+				this.gains = next;
+			} catch (error) {
+				if (switching) {
+					try {
+						await this.lime.setRxChannel(previous['RX Channel']);
+						for (const [name, value] of Object.entries(previous)) {
+							if (name !== 'RX Channel') await this.applyGain(name, value);
+						}
+						if (callback) await this.lime.startStreaming(callback);
+					} catch (recoveryError) {
+						console.error('LimeSDR: failed to restore previous receiver', recoveryError);
+					}
+				}
+				throw error;
+			}
+		});
+	}
+
 	async startRx(callback: (data: ArrayBufferView) => void): Promise<void> {
-		await this.lime.startStreaming(callback);
+		await this.runExclusive(async () => {
+			await this.lime.startStreaming(callback);
+			this.rxCallback = callback;
+		});
 	}
 
 	async stopRx(): Promise<void> {
-		await this.lime.stopStreaming();
+		await this.runExclusive(async () => {
+			this.rxCallback = null;
+			await this.lime.stopStreaming();
+		});
 	}
 }
 
