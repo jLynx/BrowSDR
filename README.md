@@ -142,19 +142,6 @@ cargo make build       # Build for web (output: hackrf-web/pkg/)
 
 > **Note:** The WASM build outputs in `hackrf-web/pkg/` are committed to the repo, so `npm run deploy` works seamlessly even without Rust installed on the CI/deployment machine.
 
-### Building the DSD Voice Codec
-
-The compiled mbelib JavaScript and WebAssembly files in `public/lib/mbelib/` are
-committed with their upstream licence and notices. Normal development and Cloudflare
-deployment use these files without installing Emscripten or downloading mbelib source.
-Vite copies them into `dist/lib/mbelib/`, which Wrangler uploads as static assets.
-Voice decoding runs in the user's browser.
-
-To change or rebuild the codec, use `npm run build:mbelib` in a Bash shell with
-Emscripten 4.0.7 activated. The script downloads a pinned, checksum-verified upstream
-source archive into the ignored `mbelib-wasm/mbelib/` directory when needed.
-See [the mbelib build instructions](mbelib-wasm/README.md) for setup and version details.
-
 ---
 
 ## 🎧 Running the App
