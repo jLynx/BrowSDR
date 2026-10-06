@@ -33,12 +33,14 @@ export class DspProcessor {
      * Output: f32 mono audio at 48 kHz
      */
     process(input: Int8Array, output: Float32Array): number;
+    process_f32_ptr(pointer: number, count: number): number;
     /**
      * Process raw i8 IQ samples through NCO + decimation only.
      * Returns interleaved complex f32 IQ pairs at IF sample rate (50 kHz).
      * Used for non-FM modes (AM, SSB, CW, RAW) where JS handles demodulation.
      */
     process_iq_only(input: Int8Array, output: Float32Array): number;
+    process_iq_only_f32_ptr(pointer: number, count: number): number;
     /**
      * Zero-copy process for IQ only using a raw pointer for input.
      */
@@ -115,6 +117,18 @@ export class FFT {
     set_smoothing_speed(val: number): void;
 }
 
+export class SharedChannelizer {
+    free(): void;
+    [Symbol.dispose](): void;
+    constructor(ratio: number, centers: Int32Array);
+    output_len(band: number): number;
+    output_ptr(band: number): number;
+    process(input: Int8Array): void;
+    set_batch_samples(count: number): void;
+}
+
+export function alloc_float_buffer(capacity: number): number;
+
 export function alloc_iq_buffer(capacity: number): number;
 
 export function free_iq_buffer(ptr: number, capacity: number): void;
@@ -127,12 +141,16 @@ export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly __wbg_dspprocessor_free: (a: number, b: number) => void;
     readonly __wbg_fft_free: (a: number, b: number) => void;
+    readonly __wbg_sharedchannelizer_free: (a: number, b: number) => void;
+    readonly alloc_float_buffer: (a: number) => number;
     readonly alloc_iq_buffer: (a: number) => number;
     readonly dspprocessor_get_iq_output_len: (a: number) => number;
     readonly dspprocessor_get_squelch_db: (a: number) => number;
     readonly dspprocessor_new: (a: number, b: number, c: number) => number;
     readonly dspprocessor_process: (a: number, b: number, c: number, d: number, e: number, f: any) => number;
+    readonly dspprocessor_process_f32_ptr: (a: number, b: number, c: number) => number;
     readonly dspprocessor_process_iq_only: (a: number, b: number, c: number, d: number, e: number, f: any) => number;
+    readonly dspprocessor_process_iq_only_f32_ptr: (a: number, b: number, c: number) => number;
     readonly dspprocessor_process_iq_only_ptr: (a: number, b: number, c: number) => number;
     readonly dspprocessor_process_ptr: (a: number, b: number, c: number) => number;
     readonly dspprocessor_reset: (a: number) => void;
@@ -147,6 +165,11 @@ export interface InitOutput {
     readonly fft_new: (a: number, b: number, c: number) => number;
     readonly fft_set_smoothing_speed: (a: number, b: number) => void;
     readonly free_iq_buffer: (a: number, b: number) => void;
+    readonly sharedchannelizer_new: (a: number, b: number, c: number) => number;
+    readonly sharedchannelizer_output_len: (a: number, b: number) => number;
+    readonly sharedchannelizer_output_ptr: (a: number, b: number) => number;
+    readonly sharedchannelizer_process: (a: number, b: number, c: number) => void;
+    readonly sharedchannelizer_set_batch_samples: (a: number, b: number) => void;
     readonly set_panic_hook: () => void;
     readonly dspprocessor_get_output_len: (a: number) => number;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;

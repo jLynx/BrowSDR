@@ -75,6 +75,9 @@ export interface PerfReport {
 	dropped: number;
 	chunkSize: number;
 	msgRate?: number;
+	channelAvgMs?: number;
+	channelMaxMs?: number;
+	channelCpuMs?: number;
 }
 
 export interface RxStreamOpts {
@@ -83,6 +86,7 @@ export interface RxStreamOpts {
 	sampleRate: number;
 	fftSize: number;
 	spectrumFps?: number;
+	sharedChannelization?: boolean;
 	gains?: Record<string, number>;
 	/** @deprecated Use gains instead */
 	lnaGain?: number;

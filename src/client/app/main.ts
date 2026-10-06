@@ -201,6 +201,11 @@ createApp({
 			this.saveSetting();
 		}, { deep: true });
 
+		this.$watch(() => this.display.sharedChannelization, (enabled: boolean) => {
+			this.saveSetting();
+			if (this.backend && this.remoteMode !== 'client') this.backend.setSharedChannelization(enabled).catch(console.error);
+		});
+
 		this.$watch('locks', () => {
 			if (this.remoteMode === 'host' && this._webrtc) {
 				this._webrtc.sendCommand({ type: 'sync', locks: this.locks });

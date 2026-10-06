@@ -28,6 +28,7 @@ export interface RadioState {
 
 export interface DisplayState {
 	spectrumFps: number;
+	sharedChannelization: boolean;
 	minDB: number;
 	maxDB: number;
 }

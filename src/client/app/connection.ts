@@ -201,6 +201,7 @@ export const connectionMethods = {
 			sampleRate: this.radio.sampleRate,
 			fftSize: this.radio.fftSize,
 			spectrumFps: this.display.spectrumFps,
+			sharedChannelization: this.display.sharedChannelization,
 			gains: { ...this.gains },
 		};
 

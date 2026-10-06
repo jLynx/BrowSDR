@@ -71,6 +71,15 @@ export class DspProcessor {
         return ret >>> 0;
     }
     /**
+     * @param {number} pointer
+     * @param {number} count
+     * @returns {number}
+     */
+    process_f32_ptr(pointer, count) {
+        const ret = wasm.dspprocessor_process_f32_ptr(this.__wbg_ptr, pointer, count);
+        return ret >>> 0;
+    }
+    /**
      * Process raw i8 IQ samples through NCO + decimation only.
      * Returns interleaved complex f32 IQ pairs at IF sample rate (50 kHz).
      * Used for non-FM modes (AM, SSB, CW, RAW) where JS handles demodulation.
@@ -84,6 +93,15 @@ export class DspProcessor {
         var ptr1 = passArrayF32ToWasm0(output, wasm.__wbindgen_malloc);
         var len1 = WASM_VECTOR_LEN;
         const ret = wasm.dspprocessor_process_iq_only(this.__wbg_ptr, ptr0, len0, ptr1, len1, output);
+        return ret >>> 0;
+    }
+    /**
+     * @param {number} pointer
+     * @param {number} count
+     * @returns {number}
+     */
+    process_iq_only_f32_ptr(pointer, count) {
+        const ret = wasm.dspprocessor_process_iq_only_f32_ptr(this.__wbg_ptr, pointer, count);
         return ret >>> 0;
     }
     /**
@@ -233,6 +251,71 @@ export class FFT {
 }
 if (Symbol.dispose) FFT.prototype[Symbol.dispose] = FFT.prototype.free;
 
+export class SharedChannelizer {
+    __destroy_into_raw() {
+        const ptr = this.__wbg_ptr;
+        this.__wbg_ptr = 0;
+        SharedChannelizerFinalization.unregister(this);
+        return ptr;
+    }
+    free() {
+        const ptr = this.__destroy_into_raw();
+        wasm.__wbg_sharedchannelizer_free(ptr, 0);
+    }
+    /**
+     * @param {number} ratio
+     * @param {Int32Array} centers
+     */
+    constructor(ratio, centers) {
+        const ptr0 = passArray32ToWasm0(centers, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ret = wasm.sharedchannelizer_new(ratio, ptr0, len0);
+        this.__wbg_ptr = ret >>> 0;
+        SharedChannelizerFinalization.register(this, this.__wbg_ptr, this);
+        return this;
+    }
+    /**
+     * @param {number} band
+     * @returns {number}
+     */
+    output_len(band) {
+        const ret = wasm.sharedchannelizer_output_len(this.__wbg_ptr, band);
+        return ret >>> 0;
+    }
+    /**
+     * @param {number} band
+     * @returns {number}
+     */
+    output_ptr(band) {
+        const ret = wasm.sharedchannelizer_output_ptr(this.__wbg_ptr, band);
+        return ret >>> 0;
+    }
+    /**
+     * @param {Int8Array} input
+     */
+    process(input) {
+        const ptr0 = passArray8ToWasm0(input, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.sharedchannelizer_process(this.__wbg_ptr, ptr0, len0);
+    }
+    /**
+     * @param {number} count
+     */
+    set_batch_samples(count) {
+        wasm.sharedchannelizer_set_batch_samples(this.__wbg_ptr, count);
+    }
+}
+if (Symbol.dispose) SharedChannelizer.prototype[Symbol.dispose] = SharedChannelizer.prototype.free;
+
+/**
+ * @param {number} capacity
+ * @returns {number}
+ */
+export function alloc_float_buffer(capacity) {
+    const ret = wasm.alloc_float_buffer(capacity);
+    return ret >>> 0;
+}
+
 /**
  * @param {number} capacity
  * @returns {number}
@@ -307,6 +390,9 @@ const DspProcessorFinalization = (typeof FinalizationRegistry === 'undefined')
 const FFTFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
     : new FinalizationRegistry(ptr => wasm.__wbg_fft_free(ptr >>> 0, 1));
+const SharedChannelizerFinalization = (typeof FinalizationRegistry === 'undefined')
+    ? { register: () => {}, unregister: () => {} }
+    : new FinalizationRegistry(ptr => wasm.__wbg_sharedchannelizer_free(ptr >>> 0, 1));
 
 function getArrayU8FromWasm0(ptr, len) {
     ptr = ptr >>> 0;
@@ -334,12 +420,27 @@ function getStringFromWasm0(ptr, len) {
     return decodeText(ptr, len);
 }
 
+let cachedUint32ArrayMemory0 = null;
+function getUint32ArrayMemory0() {
+    if (cachedUint32ArrayMemory0 === null || cachedUint32ArrayMemory0.byteLength === 0) {
+        cachedUint32ArrayMemory0 = new Uint32Array(wasm.memory.buffer);
+    }
+    return cachedUint32ArrayMemory0;
+}
+
 let cachedUint8ArrayMemory0 = null;
 function getUint8ArrayMemory0() {
     if (cachedUint8ArrayMemory0 === null || cachedUint8ArrayMemory0.byteLength === 0) {
         cachedUint8ArrayMemory0 = new Uint8Array(wasm.memory.buffer);
     }
     return cachedUint8ArrayMemory0;
+}
+
+function passArray32ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 4, 4) >>> 0;
+    getUint32ArrayMemory0().set(arg, ptr / 4);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
 }
 
 function passArray8ToWasm0(arg, malloc) {
@@ -428,6 +529,7 @@ function __wbg_finalize_init(instance, module) {
     wasmModule = module;
     cachedDataViewMemory0 = null;
     cachedFloat32ArrayMemory0 = null;
+    cachedUint32ArrayMemory0 = null;
     cachedUint8ArrayMemory0 = null;
     wasm.__wbindgen_start();
     return wasm;
