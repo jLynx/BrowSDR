@@ -90,22 +90,25 @@ export class FIRFilter {
 	}
 }
 
-// ── Mueller-Muller Clock Recovery ────────────────────────────────────
+// ── Gardner Clock Recovery ──────────────────────────────────────────
 
 /**
- * Clock recovery using a Mueller-Muller timing error detector.
+ * Clock recovery using a Gardner timing error detector.
  * Extracts one symbol per symbol period from the input stream.
  *
- * Operates on RRC-filtered samples at IF_RATE (9600 Hz) to extract
- * symbols at SYMBOL_RATE (4800 sym/s) → 2 samples per symbol.
+ * Operates on RRC-filtered samples at 48 kHz to extract 4800 symbols/s.
  */
 export class ClockRecovery {
 	private omega: number;      // nominal samples per symbol
-	private mu: number;         // fractional sample offset
+	private nextSymbolTime = 0;
+	private sampleIndex = 0;
+	private previousInput = 0;
 	private omegaGain: number;  // loop filter gain for omega
 	private muGain: number;     // loop filter gain for mu
 	private prevSample: number;
-	private prevDecision: number; // hard decision of previous symbol (sign-based)
+	private history = new Float32Array(128);
+	private previousSymbolTime = 0;
+	private power = 0;
 	private omegaRel: number;   // relative omega limit
 	private omegaMid: number;   // nominal omega (for limiting)
 
@@ -116,17 +119,13 @@ export class ClockRecovery {
 	constructor(sampleRate: number = DSD_IF_RATE, symbolRate: number = DSD_SYMBOL_RATE) {
 		this.omega = sampleRate / symbolRate;
 		this.omegaMid = this.omega;
-		this.mu = 0;
 		this.prevSample = 0;
-		this.prevDecision = 0;
 		this.omegaRel = 0.005; // relative limit on omega adjustment
 
-		// Loop filter parameters (2nd order, BW=0.01, damping=1.0)
-		const bw = 2 * Math.PI * 0.01; // loop bandwidth
-		const damp = 1.0;
-		const denom = 1 + 2 * damp * bw + bw * bw;
-		this.muGain = 4 * damp * bw / denom;
-		this.omegaGain = 4 * bw * bw / denom;
+		// Phase acquisition is faster than frequency tracking: repetitive AMBE
+		// payloads must not pull the symbol rate away from 4800 symbols/s.
+		this.muGain = 0.05;
+		this.omegaGain = 0.00001;
 
 		this.symbolBuf = new Float32Array(4096);
 		this.symbolCount = 0;
@@ -139,42 +138,45 @@ export class ClockRecovery {
 	 */
 	process(input: Float32Array): void {
 		this.symbolCount = 0;
-		let idx = 0;
-		const len = input.length;
+		for (const sample of input) {
+			this.history[this.sampleIndex % this.history.length] = sample;
+			this.power += 0.001 * (sample * sample - this.power);
+			if (this.sampleIndex < this.nextSymbolTime) {
+				this.previousInput = sample;
+				this.sampleIndex++;
+				continue;
+			}
 
-		while (idx < len) {
-			// Advance to next symbol position
-			const skip = Math.floor(this.mu);
-			idx += skip;
-			this.mu -= skip;
+			// Keep the interpolation sample and absolute symbol position across
+			// blocks. Discarding a skip past a block's end changes symbol timing.
+			const fraction = this.nextSymbolTime - (this.sampleIndex - 1);
+			const curSample = this.sampleIndex === 0 ? sample
+				: this.previousInput * (1 - fraction) + sample * fraction;
 
-			if (idx >= len) break;
-
-			// Interpolate using linear interpolation
-			const curSample = idx > 0
-				? input[idx - 1] * (1 - this.mu) + input[idx] * this.mu
-				: input[idx];
-
-			// Hard decision: sign of sample (works for any M-FSK with zero mean)
-			const curDecision = curSample > 0 ? 1.0 : -1.0;
-
-			// Mueller-Muller timing error: prevDecision * curSample - curDecision * prevSample
-			// Uses hard decisions to avoid the prevSymbol==prevSample degeneracy
-			const mmError = this.prevDecision * curSample - curDecision * this.prevSample;
+			// Gardner timing error uses the midpoint between adjacent symbols.
+			// Sign-only M&M decisions mistake DMR's inner and outer levels for
+			// the same amplitude and drift on repeating AMBE payloads.
+			const midpointTime = (this.previousSymbolTime + this.nextSymbolTime) / 2;
+			const midpointIndex = Math.floor(midpointTime);
+			const midpointFraction = midpointTime - midpointIndex;
+			const midpoint = this.history[midpointIndex % this.history.length] * (1 - midpointFraction)
+				+ this.history[(midpointIndex + 1) % this.history.length] * midpointFraction;
+			const timingError = this.sampleIndex === 0 ? 0 : Math.max(-1, Math.min(1,
+				(this.prevSample - curSample) * midpoint / Math.max(this.power, 1e-8)));
 
 			// Update loop
-			this.omega += this.omegaGain * mmError;
+			this.omega += this.omegaGain * timingError;
 			// Clamp omega
 			const omegaMin = this.omegaMid * (1 - this.omegaRel);
 			const omegaMax = this.omegaMid * (1 + this.omegaRel);
 			if (this.omega < omegaMin) this.omega = omegaMin;
 			if (this.omega > omegaMax) this.omega = omegaMax;
 
-			this.mu += this.omega + this.muGain * mmError;
+			this.previousSymbolTime = this.nextSymbolTime;
+			this.nextSymbolTime += this.omega + this.muGain * timingError;
 
 			// Store state for next iteration
 			this.prevSample = curSample;
-			this.prevDecision = curDecision;
 
 			if (this.symbolCount >= this.symbolBuf.length) {
 				const newBuf = new Float32Array(this.symbolBuf.length * 2);
@@ -182,14 +184,20 @@ export class ClockRecovery {
 				this.symbolBuf = newBuf;
 			}
 			this.symbolBuf[this.symbolCount++] = curSample;
+			this.previousInput = sample;
+			this.sampleIndex++;
 		}
 	}
 
 	reset(): void {
 		this.omega = this.omegaMid;
-		this.mu = 0;
+		this.nextSymbolTime = 0;
+		this.sampleIndex = 0;
+		this.previousInput = 0;
 		this.prevSample = 0;
-		this.prevDecision = 0;
+		this.history.fill(0);
+		this.previousSymbolTime = 0;
+		this.power = 0;
 		this.symbolCount = 0;
 	}
 }
@@ -201,8 +209,8 @@ export class ClockRecovery {
  * Converts float symbols to 2-bit dibits.
  *
  * Symbol mapping (following SDR++ Brown / DSD convention):
- *   >= umid → 01 (+1)
- *   >= center → 00 (+3)
+ *   >= umid → 01 (+3)
+ *   >= center → 00 (+1)
  *   >= lmid → 10 (-1)
  *   < lmid → 11 (-3)
  */
@@ -214,41 +222,22 @@ export class FourFSKSlicer {
 	lmid = -0.625; // lower mid threshold
 	mid = SLICER_MID_FACTOR;
 
-	// Adaptive level tracking with exponential moving average
-	private maxTrack = 0.0;
-	private minTrack = 0.0;
-	private trackCount = 0;
-	private readonly TRACK_ALPHA = 0.01; // EMA smoothing factor
-	private readonly TRACK_WARMUP = 100; // samples before using tracked levels
+	// Estimate outer levels from a short symbol window. Averaging all positive
+	// symbols treats +1 as +3 and moves the threshold into the inner cluster.
+	private levels = new Float32Array(144);
+	private levelCount = 0;
+	private levelPosition = 0;
 
 	/** Slice a single symbol to a 2-bit dibit value (0-3). */
 	slice(sym: number): number {
-		// Track actual min/max levels from the signal
-		this.trackCount++;
-		if (this.trackCount <= this.TRACK_WARMUP) {
-			// During warmup, find initial min/max
-			if (sym > this.maxTrack || this.trackCount === 1) this.maxTrack = sym;
-			if (sym < this.minTrack || this.trackCount === 1) this.minTrack = sym;
-			if (this.trackCount === this.TRACK_WARMUP) {
-				this.max = this.maxTrack;
-				this.min = this.minTrack;
-			}
-		} else {
-			// After warmup, use EMA tracking of outer symbol levels
-			if (sym > this.center) {
-				this.maxTrack = this.maxTrack * (1 - this.TRACK_ALPHA) + sym * this.TRACK_ALPHA;
-			} else {
-				this.minTrack = this.minTrack * (1 - this.TRACK_ALPHA) + sym * this.TRACK_ALPHA;
-			}
-			this.max = this.maxTrack;
-			this.min = this.minTrack;
+		this.levels[this.levelPosition++ % this.levels.length] = sym;
+		this.levelCount = Math.min(this.levelCount + 1, this.levels.length);
+		if (this.levelPosition % 24 === 0) {
+			const sorted = this.levels.slice(0, this.levelCount).sort();
+			// Percentiles reject isolated spikes without averaging inner symbols.
+			this.min = sorted[Math.floor((this.levelCount - 1) * 0.1)];
+			this.max = sorted[Math.floor((this.levelCount - 1) * 0.9)];
 		}
-
-		// Clamp to reasonable range
-		if (this.max > 3.0) this.max = 3.0;
-		if (this.max < 0.1) this.max = 0.1;
-		if (this.min < -3.0) this.min = -3.0;
-		if (this.min > -0.1) this.min = -0.1;
 
 		this.center = (this.max + this.min) * 0.5;
 		this.umid = ((this.max - this.center) * this.mid) + this.center;
@@ -278,9 +267,9 @@ export class FourFSKSlicer {
 		this.center = 0.0;
 		this.umid = 0.625;
 		this.lmid = -0.625;
-		this.maxTrack = 0.0;
-		this.minTrack = 0.0;
-		this.trackCount = 0;
+		this.levels.fill(0);
+		this.levelCount = 0;
+		this.levelPosition = 0;
 	}
 }
 

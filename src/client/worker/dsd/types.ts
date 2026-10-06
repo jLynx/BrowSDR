@@ -18,12 +18,17 @@ export interface DSDStatus {
 	// ── mbelib state ──
 	/** Whether mbelib WASM is loaded and ready */
 	mbelibLoaded?: boolean;
+	/** Voice codec assets failed to load or initialize. */
+	mbelibError?: string;
 	/** Whether MBE decoder is actively producing audio */
 	mbeDecoding?: boolean;
 	/** MBE error bar string (e.g. "======R") — one char per voice frame */
 	mbeErrors?: string;
 	/** Total voice frames decoded this session */
 	voiceFrameCount?: number;
+	/** Confirmed syncs and the most recent protocol, retained between bursts. */
+	syncCount?: number;
+	lastSyncName?: string;
 
 	// ── DMR ──
 	/** DMR color code (0-15) */
@@ -58,7 +63,7 @@ export interface DSDStatus {
 	nxdnType?: string;
 }
 
-// ── Sync word patterns (dibit strings: 0=+3, 1=+1, 2=-1, 3=-3) ─────
+// ── Sync word patterns (dibit strings: 0=+1, 1=+3, 2=-1, 3=-3) ─────
 // Each character is a dibit value: '0','1','2','3'
 export const SYNC_WORDS = {
 	// P25 Phase 1

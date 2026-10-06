@@ -5,14 +5,14 @@
  */
 
 import { FIRFilter, ClockRecovery, FourFSKSlicer, FMDiscriminator, rrcTaps } from './dsd-dsp';
-import { SYNC_WORDS, DSD_IF_RATE, DSD_SYMBOL_RATE, DSD_AUDIO_RATE, MBE_SAMPLES_PER_FRAME, RRC_ALPHA, RRC_NUM_TAPS, SyncType, syncTypeToMode, syncTypeLabel, isVoiceSync } from './types';
+import { SYNC_WORDS, DSD_IF_RATE, DSD_SYMBOL_RATE, RRC_ALPHA, RRC_NUM_TAPS, SyncType, syncTypeToMode, syncTypeLabel, isVoiceSync } from './types';
 import type { DSDMode, DSDStatus } from './types';
 import { processDMRSingleBurst, DMR_BURST_DIBITS } from './dsd-dmr';
 import { checkDMRBurstSync } from './dsd-dmr';
 import { processNXDNVoice, NXDN_VOICE_DIBITS } from './dsd-nxdn';
 import { processDSTARVoice, DSTAR_VOICE_DIBITS, DSTAR_FRAME_DIBITS } from './dsd-dstar';
 import { parseP25NID, extractP25IMBE, processP25LDU1, processP25LDU2, processP25HDU, processP25TDU, processP25TDULC, P25_NID_DIBITS, P25_LDU_BODY_DIBITS, DUID_LDU1, DUID_LDU2, DUID_HDU, DUID_TDU, DUID_TDULC } from './dsd-p25';
-import { decodeAmbe, decodeImbe, ensureMbelibInitialized, isMbelibReady, resetMbe } from '../mbelib-init';
+import { decodeAmbe, decodeImbe, ensureMbelibInitialized, getMbeErrors, resetMbe } from '../mbelib-init';
 
 // ── Sync word matching ───────────────────────────────────────────────
 
@@ -52,9 +52,9 @@ const SYNC_PATTERNS: SyncPattern[] = [
 ];
 
 /** Maximum bit errors allowed when matching sync words. */
-const SYNC_TOLERANCE_24 = 2; // For 24-dibit syncs (DMR, P25, D-STAR)
-const SYNC_TOLERANCE_24_VOICE = 2; // Same tolerance for voice — TDMA validation catches false positives
-const SYNC_TOLERANCE_18 = 1; // Stricter for 18-dibit syncs (NXDN) — fewer bits = more false positives
+const SYNC_TOLERANCE_24 = 0; // Acquire only exact syncs; noise otherwise looks like digital traffic.
+const SYNC_TOLERANCE_24_VOICE = 0;
+const SYNC_TOLERANCE_18 = 0;
 
 /**
  * Collapse a dibit character to its polarity, matching SDR++ Brown's
@@ -142,10 +142,11 @@ export class DSDDecoder {
 	private dibitBuf: Uint8Array;
 	private dibitBufPos = 0;
 	private currentSync: SyncType = SyncType.NONE;
-	private lastSyncType: SyncType = SyncType.NONE;
-	private frameSyncLost = 0;
 	private synced = false;
 	private mbelibReady = false;
+	private samplesSinceSync = 0;
+	private candidateMode: DSDMode = 'unknown';
+	private candidatePosition = -1;
 
 	/** Count of consecutive syncs for the current mode — used for mode locking */
 	private modeLockCount = 0;
@@ -190,7 +191,7 @@ export class DSDDecoder {
 		const taps = rrcTaps(RRC_NUM_TAPS, DSD_IF_RATE, DSD_SYMBOL_RATE, RRC_ALPHA);
 		this.rrcFilter = new FIRFilter(taps);
 
-		// Clock recovery: 9600 Hz → 4800 sym/s
+		// Clock recovery: 48000 Hz → 4800 sym/s
 		this.clockRecovery = new ClockRecovery(DSD_IF_RATE, DSD_SYMBOL_RATE);
 
 		// 4-FSK slicer
@@ -206,15 +207,18 @@ export class DSDDecoder {
 		this.mbeInitPromise = ensureMbelibInitialized().then(() => {
 			this.mbelibReady = true;
 			this.status.mbelibLoaded = true;
+			this.onStatus({ ...this.status });
 			console.log('DSD: mbelib WASM loaded — voice decoding enabled');
 		}).catch(err => {
 			this.status.mbelibLoaded = false;
+			this.status.mbelibError = 'Voice decoder unavailable';
+			this.onStatus({ ...this.status });
 			console.warn('DSD: mbelib WASM not available — run mbelib-wasm/build.sh to enable voice decoding. Error:', err);
 		});
 	}
 
 	/**
-	 * Process a chunk of FM-demodulated audio at DSD_IF_RATE (9600 Hz).
+	 * Process a chunk of FM-demodulated audio at DSD_IF_RATE (48000 Hz).
 	 * Decoded voice audio (8 kHz) is emitted via the onAudio callback.
 	 */
 	private _dbgProcessCalls = 0;
@@ -225,6 +229,25 @@ export class DSDDecoder {
 
 	process(fmAudio: Float32Array): void {
 		this._dbgProcessCalls++;
+		this.samplesSinceSync += fmAudio.length;
+		if (this.status.synced && this.samplesSinceSync > DSD_IF_RATE) {
+			this.synced = false;
+			this.lockedMode = 'unknown';
+			this.modeLockCount = 0;
+			this.dmrLastDataSyncPos = -1;
+			this.dmrFirstVoiceFrame = true;
+			this.candidateMode = 'unknown';
+			this.candidatePosition = -1;
+			this.frameDataRemaining = 0;
+			this.audioAccumLen = 0;
+			this.status = { mode: 'unknown', synced: false, mbelibLoaded: this.mbelibReady,
+				mbelibError: this.status.mbelibError,
+				voiceFrameCount: this.status.voiceFrameCount, mbeDecoding: false };
+			this.status.syncCount = this._dbgSyncCount;
+			this.status.lastSyncName = this.lastSyncName;
+			if (this.mbelibReady) resetMbe();
+			this.onStatus({ ...this.status });
+		}
 
 		// Step 1: RRC filter
 		const filtered = new Float32Array(fmAudio.length);
@@ -240,7 +263,6 @@ export class DSDDecoder {
 		this.slicer.process(this.clockRecovery.symbolBuf, dibits, numSymbols);
 
 		// Step 4: Feed dibits to frame sync + decoder
-		const framesBefore = this._dbgFrameCount;
 		for (let i = 0; i < numSymbols; i++) {
 			this.feedDibit(dibits[i]);
 		}
@@ -248,17 +270,14 @@ export class DSDDecoder {
 		// Emit accumulated audio
 		if (this.audioAccumLen > 0) {
 			this._dbgAudioEmits++;
-			const emitLen = this.audioAccumLen;
 			this.onAudio(this.audioAccum.subarray(0, this.audioAccumLen).slice());
 			this.audioAccumLen = 0;
 
-			// Log every audio emit
-			console.log(`[DSD-dec] audio emit: ${emitLen} samples @8kHz (${(emitLen/8000*1000).toFixed(0)}ms), frames decoded this chunk: ${this._dbgFrameCount - framesBefore}, total emits: ${this._dbgAudioEmits}`);
 		}
 
 		// Periodic debug summary every 2 seconds
 		const now = performance.now();
-		if (now - this._dbgLastLog > 2000) {
+		if (import.meta.env.DEV && now - this._dbgLastLog > 2000) {
 			console.log(`[DSD-dec] stats: process() calls=${this._dbgProcessCalls}, syncs=${this._dbgSyncCount}, frames=${this._dbgFrameCount}, audioEmits=${this._dbgAudioEmits}, synced=${this.synced}, mode=${this.status.mode}, mbelib=${this.mbelibReady}, fmIn=${fmAudio.length}, symbols=${numSymbols}`);
 			this._dbgLastLog = now;
 		}
@@ -293,6 +312,7 @@ export class DSDDecoder {
 	 * Search for frame sync pattern in recent dibit history.
 	 */
 	private _lastSyncTime = 0;
+	private lastSyncName: string | undefined;
 
 	private searchFrameSync(): void {
 		if (this.dibitHistory.length < 18) return; // Need at least NXDN sync length
@@ -314,6 +334,23 @@ export class DSDDecoder {
 		const syncType = matchSync(this.dibitHistory, effectiveMode);
 		if (syncType !== SyncType.NONE) {
 			const mode = syncTypeToMode(syncType);
+
+			// A single polarity match in noise is insufficient for acquisition.
+			// Confirm DMR on its TDMA grid (including the 6-burst voice cycle),
+			// and NXDN on its 192-dibit frame grid before decoding any speech.
+			if (!this.status.synced && (mode === 'dmr' || mode === 'nxdn')) {
+				const spacing = mode === 'dmr' ? 144 : 192;
+				const distance = this.dibitBufPos - this.candidatePosition;
+				const frames = Math.round(distance / spacing);
+				const confirmed = this.candidateMode === mode && frames >= 1 &&
+					frames <= (mode === 'dmr' ? 12 : 2) &&
+					Math.abs(distance - frames * spacing) <= 2;
+				if (!confirmed) {
+					this.candidateMode = mode;
+					this.candidatePosition = this.dibitBufPos;
+					return;
+				}
+			}
 
 			// Mode locking: if we've locked to a mode, reject syncs from other protocols
 			if (this.lockedMode !== 'unknown' && mode !== this.lockedMode) {
@@ -351,11 +388,10 @@ export class DSDDecoder {
 			}
 
 			this.currentSync = syncType;
-			this.lastSyncType = syncType;
 			this.synced = true;
-			this.frameSyncLost = 0;
 			this._dbgSyncCount++;
 			this._lastSyncTime = performance.now();
+			this.samplesSinceSync = 0;
 
 			// Update mode lock counter
 			if (mode === this.status.mode) {
@@ -376,7 +412,20 @@ export class DSDDecoder {
 			this.status.mode = mode;
 			this.status.synced = true;
 			this.status.syncName = syncTypeLabel(syncType);
+			this.lastSyncName = this.status.syncName;
+			this.status.lastSyncName = this.lastSyncName;
+			this.status.syncCount = this._dbgSyncCount;
 			this.status.mbelibLoaded = this.mbelibReady;
+			this.status.mbeDecoding = false;
+			this.status.mbeErrors = undefined;
+			if (mode === 'dmr') {
+				this.status.slot = syncType === SyncType.DMR_DM_TS1_DATA || syncType === SyncType.DMR_DM_TS1_VOICE ? 0
+					: syncType === SyncType.DMR_DM_TS2_DATA || syncType === SyncType.DMR_DM_TS2_VOICE ? 1
+					: (this.dibitBuf[(this.dibitBufPos - 88) & 0xFFFF] >> 1) & 1;
+				const burst = isVoiceSync(syncType) ? 'VOICE' : 'DATA';
+				if (this.status.slot === 0) this.status.slot0Burst = burst;
+				else this.status.slot1Burst = burst;
+			}
 			this.onStatus({ ...this.status });
 
 			// Reset dibit position for frame processing
@@ -384,7 +433,6 @@ export class DSDDecoder {
 			this.frameDataRead = 0;
 			this.frameStart = this.dibitBufPos;
 
-			console.log(`[DSD-dec] SYNC #${this._dbgSyncCount}: ${syncTypeLabel(syncType)} (${mode}), pos=${this.dibitBufPos}, frameStart=${this.frameStart}, frameLen=${this.frameDataRemaining}, histLen=${this.dibitHistory.length}, lock=${this.lockedMode}/${this.modeLockCount}, errors=${_lastMatchErrors}`);
 			this.dibitHistory = '';
 		}
 	}
@@ -401,7 +449,6 @@ export class DSDDecoder {
 		this.frameDataRemaining--;
 
 		if (this.frameDataRemaining <= 0) {
-			const endPos = this.dibitBufPos;
 			// Frame complete - process it
 			this.processCompleteFrame();
 
@@ -409,12 +456,6 @@ export class DSDDecoder {
 			this.synced = false;
 			this.dibitHistory = '';
 
-			// DEBUG: log the next few dibits to see if a sync word is right there
-			const peek: number[] = [];
-			for (let k = 0; k < 30; k++) {
-				peek.push(this.dibitBuf[(endPos + k) & 0xFFFF]);
-			}
-			console.log(`[DSD-dec] frame end at pos=${endPos}, frameStart was=${this.frameStart}, consumed=${this.frameDataRead}, next30dibits=[${peek.join('')}]`);
 		}
 	}
 
@@ -426,7 +467,6 @@ export class DSDDecoder {
 		const syncType = this.currentSync;
 		const mode = syncTypeToMode(syncType);
 		const startPos = this.frameStart & 0xFFFF;
-		const audioLenBefore = this.audioAccumLen;
 
 		switch (mode) {
 			case 'dmr':
@@ -443,8 +483,6 @@ export class DSDDecoder {
 				break;
 		}
 
-		const audioProduced = this.audioAccumLen - audioLenBefore;
-		console.log(`[DSD-dec] frame #${this._dbgFrameCount}: ${mode}/${syncTypeLabel(syncType)}, startPos=${startPos}, audioProduced=${audioProduced} samples (${(audioProduced/8000*1000).toFixed(0)}ms), accumTotal=${this.audioAccumLen}`);
 
 		this.onStatus({ ...this.status });
 	}
@@ -453,14 +491,6 @@ export class DSDDecoder {
 
 	private processDMRFrame(syncType: SyncType, startPos: number): void {
 		const isVoice = isVoiceSync(syncType);
-
-		// Update slot info based on sync type
-		if (syncType === SyncType.DMR_BS_VOICE || syncType === SyncType.DMR_MS_VOICE ||
-			syncType === SyncType.DMR_DM_TS1_VOICE || syncType === SyncType.DMR_DM_TS2_VOICE) {
-			this.status.slot0Burst = 'VOICE';
-		} else {
-			this.status.slot0Burst = 'DATA';
-		}
 
 		if (!isVoice) {
 			this.status.mbeDecoding = false;
@@ -499,10 +529,9 @@ export class DSDDecoder {
 		const mask = 0xFFFF;
 		this.status.mbeDecoding = true;
 		let errBar = '';
-		let totalFrames = 0;
 
 		// Helper: extract 108 voice dibits from a burst and decode 3 AMBE frames
-		const decodeBurst = (v1Start: number, v2Start: number, burstIdx: number, skipFrames12: boolean) => {
+		const decodeBurst = (v1Start: number, v2Start: number, skipFrames12: boolean) => {
 			const voiceBuf = new Uint8Array(108);
 			for (let i = 0; i < 54; i++) {
 				voiceBuf[i] = this.dibitBuf[(v1Start + i) & mask];
@@ -521,8 +550,7 @@ export class DSDDecoder {
 					const audio = decodeAmbe(ambeFrames[fi]);
 					this.appendAudio(audio);
 					this.status.voiceFrameCount = (this.status.voiceFrameCount || 0) + 1;
-					totalFrames++;
-					errBar += '=';
+					errBar += getMbeErrors() > 0 ? 'E' : '=';
 				} catch (e) {
 					errBar += 'X';
 				}
@@ -536,7 +564,7 @@ export class DSDDecoder {
 		// to skip on the actual first frame after acquisition.
 		const skipBurst0 = this.dmrFirstVoiceFrame;
 		this.dmrFirstVoiceFrame = false;
-		decodeBurst(startPos - 78, startPos, 0, skipBurst0);
+		decodeBurst(startPos - 78, startPos, skipBurst0);
 
 		// Bursts 1-5: at known offsets after burst 0
 		for (let n = 1; n <= 5; n++) {
@@ -553,10 +581,9 @@ export class DSDDecoder {
 				continue;
 			}
 
-			decodeBurst(v1Start, v2Start, n, /* skipFrames12 */ false);
+			decodeBurst(v1Start, v2Start, /* skipFrames12 */ false);
 		}
 
-		console.log(`[DSD-dec] DMR superframe: ${totalFrames} AMBE frames decoded (${(totalFrames * 160 / 8000 * 1000).toFixed(0)}ms), errBar=${errBar}`);
 		this.status.mbeErrors = errBar;
 	}
 
@@ -581,7 +608,7 @@ export class DSDDecoder {
 					const audio = decodeImbe(frame);
 					this.appendAudio(audio);
 					this.status.voiceFrameCount = (this.status.voiceFrameCount || 0) + 1;
-					errBar += '=';
+					errBar += getMbeErrors() > 0 ? 'E' : '=';
 				} catch (e) {
 					errBar += 'X';
 				}
@@ -641,7 +668,7 @@ export class DSDDecoder {
 				const audio = decodeAmbe(frame);
 				this.appendAudio(audio);
 				this.status.voiceFrameCount = (this.status.voiceFrameCount || 0) + 1;
-				errBar += '=';
+				errBar += getMbeErrors() > 0 ? 'E' : '=';
 			} catch (e) {
 				errBar += 'X';
 			}
@@ -670,7 +697,7 @@ export class DSDDecoder {
 				const audio = decodeAmbe(frame);
 				this.appendAudio(audio);
 				this.status.voiceFrameCount = (this.status.voiceFrameCount || 0) + 1;
-				errBar += '=';
+				errBar += getMbeErrors() > 0 ? 'E' : '=';
 			} catch (e) {
 				errBar += 'X';
 			}
@@ -736,12 +763,20 @@ export class DSDDecoder {
 		this.slicer.reset();
 		this.dibitHistory = '';
 		this.dibitBufPos = 0;
+		this.dibitBuf.fill(0);
 		this.synced = false;
+		this.candidateMode = 'unknown';
+		this.candidatePosition = -1;
+		this.samplesSinceSync = 0;
 		this.currentSync = SyncType.NONE;
 		this.frameDataRemaining = 0;
 		this.frameDataRead = 0;
 		this.audioAccumLen = 0;
-		this.status = { mode: 'unknown', synced: false, mbelibLoaded: this.mbelibReady, voiceFrameCount: 0 };
+		this.status = { mode: 'unknown', synced: false, mbelibLoaded: this.mbelibReady, mbelibError: this.status.mbelibError, voiceFrameCount: 0 };
+		this._dbgSyncCount = 0;
+		this._dbgFrameCount = 0;
+		this._dbgAudioEmits = 0;
+		this.lastSyncName = undefined;
 		this.lockedMode = 'unknown';
 		this.modeLockCount = 0;
 		this._lastSyncTime = 0;

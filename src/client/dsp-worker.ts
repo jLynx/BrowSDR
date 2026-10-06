@@ -1,10 +1,19 @@
 import init, { DspProcessor, SharedChannelizer, set_panic_hook, alloc_iq_buffer, alloc_float_buffer, free_iq_buffer } from "/hackrf-web/pkg/hackrf_web.js";
 import { RationalResampler } from './worker/dsp-pipeline';
-import { DSDDecoder } from './worker/dsd/dsd-decoder';
-import { FMDiscriminator } from './worker/dsd/dsd-dsp';
-import { DSD_IF_RATE, DSD_AUDIO_RATE } from './worker/dsd/types';
+import { DSDStream } from './worker/dsd/dsd-stream';
+import { DSD_IF_RATE } from './worker/dsd/types';
 import type { DSDStatus } from './worker/dsd/types';
 import { RDSDecoder } from './worker/rds';
+
+if (import.meta.env.DEV) {
+    for (const level of ['log', 'warn', 'error'] as const) {
+        const original = console[level].bind(console);
+        console[level] = (...values: unknown[]) => {
+            original(...values);
+            self.postMessage({ type: 'dsp_debug_log', level, message: values.map(String).join(' ') });
+        };
+    }
+}
 
 // --- Worker State ---
 let wasmInitPromise: Promise<void> | null = null;
@@ -56,11 +65,7 @@ async function startup(): Promise<void> {
 let systemSampleRate = 2000000;
 
 // DSD decoder state (per-worker, one DSD decoder per VFO)
-let dsdDecoder: DSDDecoder | null = null;
-let dsdFmDemod: FMDiscriminator | null = null;
-let dsdAudioResampler: RationalResampler | null = null;
-let dsdAudioAccum: Float32Array = new Float32Array(0);
-let dsdAudioAccumLen = 0;
+let dsdStream: DSDStream | null = null;
 
 self.onmessage = async (e: MessageEvent) => {
     const msg = e.data;
@@ -90,6 +95,7 @@ self.onmessage = async (e: MessageEvent) => {
         }
     }
     else if (msg.type === "init") {
+        dsdStream?.reset();
         systemSampleRate = msg.sampleRate;
         inputCenterFreq = msg.centerFreq;
         // Initialize the DDC and VFO state
@@ -242,35 +248,19 @@ function configureDDC(params: any, systemCenterFreq: number): void {
 
     // Initialize or destroy DSD decoder based on mode
     if (params.mode === 'dsd') {
-        if (!dsdDecoder) {
-            dsdAudioAccum = new Float32Array(16000);
-            dsdAudioAccumLen = 0;
-            dsdFmDemod = new FMDiscriminator();
-            dsdAudioResampler = new RationalResampler(DSD_AUDIO_RATE, AUDIO_RATE);
-            dsdDecoder = new DSDDecoder(
-                (audio: Float32Array) => {
-                    // Accumulate 8 kHz DSD audio
-                    if (dsdAudioAccumLen + audio.length > dsdAudioAccum.length) {
-                        const newBuf = new Float32Array(dsdAudioAccum.length * 2);
-                        newBuf.set(dsdAudioAccum.subarray(0, dsdAudioAccumLen));
-                        dsdAudioAccum = newBuf;
-                    }
-                    dsdAudioAccum.set(audio, dsdAudioAccumLen);
-                    dsdAudioAccumLen += audio.length;
-                },
+        if (!dsdStream) {
+            dsdStream = new DSDStream(
                 (status: DSDStatus) => {
                     // Post DSD status to main thread
                     self.postMessage({ type: 'dsd_status', status });
                 }
             );
         }
+        dsdStream.configure(params.freq, params.bandwidth, params.enabled, systemSampleRate);
     } else {
-        if (dsdDecoder) {
-            dsdDecoder.reset();
-            dsdDecoder = null;
-            dsdFmDemod = null;
-            dsdAudioResampler = null;
-            dsdAudioAccumLen = 0;
+        if (dsdStream) {
+            dsdStream.reset();
+            dsdStream = null;
         }
     }
 
@@ -376,6 +366,15 @@ function processVfoAudio(chunkLenBytes: number, params: any): Float32Array | nul
         }
         const audioDemodRateSamples = vfoState.scratchBuf.subarray(0, numDemodSamples);
 
+        if (mode === 'dsd') {
+            const squelched = params.squelchEnabled && squelchDb < params.squelchLevel;
+            const audio = dsdStream?.process(_ddcOut, squelched) ?? new Float32Array(numDemodSamples);
+            // DSD emits paced silence while scanning or receiving data. An open
+            // RF squelch alone is not evidence of decoded voice playback.
+            vfoState.squelchOpen = dsdStream?.audioActive ?? false;
+            return audio;
+        }
+
         if (params.squelchEnabled && squelchDb < params.squelchLevel) {
             vfoState.squelchOpen = false;
             audioDemodRateSamples.fill(0);
@@ -457,44 +456,6 @@ function processVfoAudio(chunkLenBytes: number, params: any): Float32Array | nul
                 const agcScale = vfoState.agcGain > 1e-6 ? (0.5 / vfoState.agcGain) : 1.0;
                 audioDemodRateSamples[i] = demodSample * agcScale;
             }
-        }
-        else if (mode === 'dsd') {
-            // DSD mode: FM demod the IQ at 48 kHz, then feed to DSD decoder.
-            // Voice audio arrives in bursty chunks (one DMR superframe = 320ms).
-            // The main thread's ring buffer handles variable-size chunks, so we
-            // return decoded audio directly when available, silence otherwise.
-            if (dsdDecoder && dsdFmDemod && dsdAudioResampler) {
-                // FM discriminator on IQ at IF rate (48 kHz)
-                const fmAudio = new Float32Array(numDemodSamples);
-                dsdFmDemod.process(_ddcOut.subarray(0, numOutValues), fmAudio);
-
-                // Reset accumulator before feeding decoder
-                dsdAudioAccumLen = 0;
-
-                // Feed FM audio to DSD decoder (emits 8 kHz audio via callback)
-                dsdDecoder.process(fmAudio);
-
-                // Resample DSD output: 8 kHz → 48 kHz
-                if (dsdAudioAccumLen > 0) {
-                    const dsdAudio8k = dsdAudioAccum.subarray(0, dsdAudioAccumLen);
-                    const resampled = dsdAudioResampler.process(dsdAudio8k);
-
-                    if (resampled.length > 0) {
-                        for (let i = 0; i < resampled.length; i++) {
-                            if (resampled[i] > 1.0) resampled[i] = 1.0;
-                            else if (resampled[i] < -1.0) resampled[i] = -1.0;
-                        }
-                        return resampled.slice();
-                    }
-                }
-
-                // No decoded voice this chunk — return silence (not null!) to keep
-                // the audio stream continuous. Returning null would cause the main
-                // thread's nextPlayTime to fall behind, breaking audio scheduling.
-                const expectedOut = numDemodSamples; // 48kHz IF → 48kHz output = 1:1
-                return new Float32Array(expectedOut);
-            }
-            return null;
         }
         else if (mode === 'raw') {
             for (let i = 0; i < numDemodSamples; i++) {

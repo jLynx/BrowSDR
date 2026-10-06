@@ -152,6 +152,9 @@ export async function startRxStream(
 					const currentIndex = backend.dspWorkers!.indexOf(worker);
 					if (currentIndex === -1) return;
 					if (dsdStatusCallback) dsdStatusCallback(currentIndex, msg.status);
+				} else if (msg.type === 'dsp_debug_log' && import.meta.env.DEV) {
+					const currentIndex = backend.dspWorkers!.indexOf(worker);
+					if (currentIndex !== -1) console[msg.level as 'log' | 'warn' | 'error'](`[DSP VFO ${currentIndex + 1}] ${msg.message}`);
 				} else if (msg.type === "error") {
 					const currentIndex = backend.dspWorkers!.indexOf(worker);
 					console.error(`[DSP Worker ${currentIndex}] Error:`, msg.error);

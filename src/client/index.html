@@ -223,6 +223,7 @@
 						<div style="display: flex; align-items: center; gap: 6px;">
 							<span class="vfo-dot" :style="{ background: vfoColor(i) }"></span>
 							VFO {{ i + 1 }}
+							<span v-if="vfo.mode === 'dsd' && dsdStatus[i]?.syncCount" :style="{fontSize:'9px',color:dsdStatus[i]?.synced ? '#44cc44' : '#aaa'}">{{ dsdStatus[i]?.synced ? dsdStatus[i].mode.toUpperCase() : 'LAST' }} · {{ dsdStatus[i]?.syncCount }} bursts</span>
 							<span v-if="!isFreqInBandwidth(vfo.freq)" class="vfo-oob-badge" style="font-size:8px;padding:1px 3px">OOB</span>
 							<svg class="panel-chevron" :class="{ 'panel-chevron-collapsed': collapsedPanels['vfo-' + i] }" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
 						</div>
@@ -328,7 +329,7 @@
 							<!-- Mode line -->
 							<div style="display:flex;align-items:center;gap:6px;">
 								<span :style="{ width:'8px',height:'8px',borderRadius:'50%',display:'inline-block',flexShrink:0,background: dsdStatus[i]?.synced ? '#44cc44' : '#666' }"></span>
-								<span style="font-weight:700;color:#fff;">Mode: {{ dsdStatus[i]?.mode?.toUpperCase() || 'SCANNING...' }}</span>
+								<span style="font-weight:700;color:#fff;">Mode: {{ dsdStatus[i]?.synced ? dsdStatus[i].mode.toUpperCase() : 'SCANNING...' }}</span>
 								<span v-if="dsdStatus[i]?.syncName" style="opacity:0.5;font-size:10px;">{{ dsdStatus[i].syncName }}</span>
 							</div>
 							<!-- DMR details -->
@@ -357,14 +358,15 @@
 							<!-- MBE status -->
 							<div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
 								<span :style="{ color: dsdStatus[i]?.mbeDecoding ? '#44cc44' : '#ff6644' }">
-									{{ dsdStatus[i]?.mbeDecoding ? 'VOICE' : (dsdStatus[i]?.synced ? 'NO AUDIO' : 'IDLE') }}
+									{{ dsdStatus[i]?.mbeDecoding ? 'VOICE' : (dsdStatus[i]?.synced ? (dsdStatus[i]?.syncName?.includes('DATA') ? 'DATA · NO VOICE' : (dsdStatus[i]?.syncName?.includes('VOICE') ? 'VOICE · BUFFERING' : 'NO AUDIO')) : 'IDLE') }}
 								</span>
 								<span v-if="dsdStatus[i]?.mbeErrors" style="color:#88aacc;letter-spacing:1px;">{{ dsdStatus[i].mbeErrors }}</span>
 							</div>
-							<div v-if="dsdStatus[i]?.voiceFrameCount" style="color:#666;font-size:10px;">Frames: {{ dsdStatus[i].voiceFrameCount }}</div>
+							<div v-if="dsdStatus[i]?.syncCount" style="color:#aaa;font-size:10px;">Detected bursts: {{ dsdStatus[i].syncCount }} · Voice frames: {{ dsdStatus[i].voiceFrameCount || 0 }}</div>
+							<div v-if="!dsdStatus[i]?.synced && dsdStatus[i]?.lastSyncName" style="color:#aaa;font-size:10px;">Last: {{ dsdStatus[i].lastSyncName }}</div>
 							<!-- mbelib warning -->
-							<div v-if="dsdStatus[i]?.mbelibLoaded === false && dsdStatus[i]?.synced" style="color:#ff8844;font-size:10px;margin-top:2px;">
-								mbelib WASM not loaded — voice decoding disabled
+							<div v-if="dsdStatus[i]?.mbelibLoaded != null" :style="{color: dsdStatus[i]?.mbelibLoaded ? '#888' : '#ff8844',fontSize:'10px',marginTop:'2px'}">
+								{{ dsdStatus[i]?.mbelibError || (dsdStatus[i]?.mbelibLoaded ? 'Voice decoder ready' : 'Loading voice decoder...') }}
 							</div>
 						</div>
 

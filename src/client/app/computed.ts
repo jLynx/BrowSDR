@@ -8,10 +8,11 @@ export const computedProperties = {
 	},
 	activeAudioVfos(this: AppInstance) {
 		const active: Array<{ index: number; vfo: any }> = [];
+		if (!this.running) return active;
 		for (let i = 0; i < this.vfos.length; i++) {
 			const vfo = this.vfos[i];
 			if (vfo.enabled) {
-				if (!vfo.squelchEnabled || this.vfoSquelchOpen[i]) {
+				if (vfo.mode === 'dsd' ? this.vfoSquelchOpen[i] : (!vfo.squelchEnabled || this.vfoSquelchOpen[i])) {
 					active.push({ index: i, vfo });
 				}
 			}
