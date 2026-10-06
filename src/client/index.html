@@ -345,7 +345,7 @@
 									<span v-if="dsdStatus[i]?.duid" style="margin-left:8px;">DUID: {{ dsdStatus[i].duid }}</span>
 								</div>
 								<div v-if="dsdStatus[i]?.tg" style="color:#aaa;">TG: {{ dsdStatus[i].tg }} <span v-if="dsdStatus[i]?.src" style="margin-left:8px;">SRC: {{ dsdStatus[i].src }}</span></div>
-								<div v-if="dsdStatus[i]?.algid != null" style="color:#aaa;">ALGID: 0x{{ dsdStatus[i].algid.toString(16).toUpperCase().padStart(2,'0') }}</div>
+								<div v-if="dsdStatus[i]?.algid != null" style="color:#aaa;">ALGID: 0x{{ dsdStatus[i].algid.toString(16).toUpperCase().padStart(2,'0') }} <span v-if="dsdStatus[i]?.kid != null" style="margin-left:8px;">KID: 0x{{ dsdStatus[i].kid.toString(16).toUpperCase().padStart(4,'0') }}</span></div>
 							</template>
 							<!-- D-STAR details -->
 							<template v-if="dsdStatus[i]?.mode === 'dstar'">
@@ -358,7 +358,7 @@
 							<!-- MBE status -->
 							<div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
 								<span :style="{ color: dsdStatus[i]?.mbeDecoding ? '#44cc44' : '#ff6644' }">
-									{{ dsdStatus[i]?.mbeDecoding ? 'VOICE' : (dsdStatus[i]?.synced ? (dsdStatus[i]?.syncName?.includes('DATA') ? 'DATA · NO VOICE' : (dsdStatus[i]?.syncName?.includes('VOICE') ? 'VOICE · BUFFERING' : 'NO AUDIO')) : 'IDLE') }}
+									{{ dsdStatus[i]?.mbeDecoding ? 'VOICE' : (dsdStatus[i]?.synced ? (dsdStatus[i]?.mode === 'p25' ? (dsdStatus[i]?.encrypted ? 'ENCRYPTED · NO AUDIO' : (['LDU1','LDU2'].includes(dsdStatus[i]?.duid) ? 'VOICE · BUFFERING' : 'DATA · NO VOICE')) : (dsdStatus[i]?.syncName?.includes('DATA') ? 'DATA · NO VOICE' : (dsdStatus[i]?.syncName?.includes('VOICE') ? 'VOICE · BUFFERING' : 'NO AUDIO'))) : 'IDLE') }}
 								</span>
 								<span v-if="dsdStatus[i]?.mbeErrors" style="color:#88aacc;letter-spacing:1px;">{{ dsdStatus[i].mbeErrors }}</span>
 							</div>

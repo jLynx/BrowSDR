@@ -11,7 +11,7 @@ import { processDMRSingleBurst, DMR_BURST_DIBITS } from './dsd-dmr';
 import { checkDMRBurstSync } from './dsd-dmr';
 import { processNXDNVoice, NXDN_VOICE_DIBITS } from './dsd-nxdn';
 import { processDSTARVoice, DSTAR_VOICE_DIBITS, DSTAR_FRAME_DIBITS } from './dsd-dstar';
-import { parseP25NID, extractP25IMBE, processP25LDU1, processP25LDU2, processP25HDU, processP25TDU, processP25TDULC, P25_NID_DIBITS, P25_LDU_BODY_DIBITS, DUID_LDU1, DUID_LDU2, DUID_HDU, DUID_TDU, DUID_TDULC } from './dsd-p25';
+import { parseP25NID, p25FrameDibits, processP25LDU1, processP25LDU2, processP25HDU, processP25TDU, processP25TDULC, P25_NID_DIBITS, DUID_LDU1, DUID_LDU2, DUID_HDU, DUID_TDU, DUID_TDULC } from './dsd-p25';
 import { decodeAmbe, decodeImbe, ensureMbelibInitialized, getMbeErrors, resetMbe } from '../mbelib-init';
 
 // ── Sync word matching ───────────────────────────────────────────────
@@ -102,6 +102,15 @@ function matchSync(dibitHistory: string, lastMode: DSDMode): SyncType {
 		if (matched) { _lastMatchErrors = mismatches; return sp.type; }
 	}
 
+	// P25 has a BCH-protected NID immediately after sync. A small sync-error
+	// tolerance is followed by a stricter NID check during acquisition.
+	// Keep exact matches for all protocols ahead of this pass.
+	if (len >= 24) for (const sp of SYNC_PATTERNS.slice(0, 2)) {
+		let mismatches = 0;
+		for (let i = 0; i < 24; i++) if (collapsePolarity(dibitHistory[len - 24 + i]) !== sp.pattern[i]) mismatches++;
+		if (mismatches <= 2) { _lastMatchErrors = mismatches; return sp.type; }
+	}
+
 	// Second pass: try 18-dibit syncs (NXDN) — only if we're not already locked to DMR/P25/D-STAR
 	// When the decoder is idle or already in NXDN mode, allow NXDN detection.
 	// This prevents false NXDN matches on DMR idle channels.
@@ -147,6 +156,7 @@ export class DSDDecoder {
 	private samplesSinceSync = 0;
 	private candidateMode: DSDMode = 'unknown';
 	private candidatePosition = -1;
+	private p25CallEnded = false;
 
 	/** Count of consecutive syncs for the current mode — used for mode locking */
 	private modeLockCount = 0;
@@ -387,6 +397,18 @@ export class DSDDecoder {
 				}
 			}
 
+			// P25 sync alone cannot identify voice or a valid network. Read and
+			// BCH-validate its NID before reporting a lock or choosing frame length.
+			if (mode === 'p25') {
+				this.currentSync = syncType;
+				this.synced = true;
+				this.frameDataRemaining = P25_NID_DIBITS;
+				this.frameDataRead = 0;
+				this.frameStart = this.dibitBufPos;
+				this.dibitHistory = '';
+				return;
+			}
+
 			this.currentSync = syncType;
 			this.synced = true;
 			this._dbgSyncCount++;
@@ -447,6 +469,36 @@ export class DSDDecoder {
 	private processFrameData(): void {
 		this.frameDataRead++;
 		this.frameDataRemaining--;
+		if (syncTypeToMode(this.currentSync) === 'p25' && this.frameDataRead === P25_NID_DIBITS) {
+			const nid = parseP25NID(this.p25FrameBuffer(P25_NID_DIBITS), 0);
+			// A random 64-bit word can fall within BCH's eleven-bit correction
+			// radius. Require a cleaner NID to acquire; allow full correction
+			// once repeated valid P25 units have established a protocol lock.
+			if (!nid.valid || (this.lockedMode !== 'p25' && (nid.errors ?? 64) > 5)) {
+				this.synced = false;
+				this.dibitHistory = '';
+				return;
+			}
+			this.frameDataRemaining = p25FrameDibits(nid.duid) - P25_NID_DIBITS;
+			this._dbgSyncCount++;
+			this._lastSyncTime = performance.now();
+			this.samplesSinceSync = 0;
+			this.modeLockCount = this.status.mode === 'p25' ? this.modeLockCount + 1 : 1;
+			if (this.modeLockCount >= 3) this.lockedMode = 'p25';
+			if (this.status.mode !== 'p25' || this.status.nac !== nid.nac ||
+				nid.duid === DUID_HDU || (this.p25CallEnded && (nid.duid === DUID_LDU1 || nid.duid === DUID_LDU2))) {
+				this.status.tg = this.status.src = this.status.algid = this.status.kid = undefined;
+				this.status.encrypted = this.status.emr = undefined;
+				if (this.mbelibReady) resetMbe();
+			}
+			if (nid.duid === DUID_HDU || nid.duid === DUID_LDU1 || nid.duid === DUID_LDU2) this.p25CallEnded = false;
+			Object.assign(this.status, { mode: 'p25', synced: true, nac: nid.nac,
+				duid: nid.duidName, nidErrors: nid.errors, mbeDecoding: false, mbeErrors: undefined,
+				syncName: syncTypeLabel(this.currentSync), syncCount: this._dbgSyncCount });
+			this.lastSyncName = this.status.syncName;
+			this.status.lastSyncName = this.lastSyncName;
+			this.onStatus({ ...this.status });
+		}
 
 		if (this.frameDataRemaining <= 0) {
 			// Frame complete - process it
@@ -587,15 +639,29 @@ export class DSDDecoder {
 		this.status.mbeErrors = errBar;
 	}
 
-	private processP25Frame(syncType: SyncType, startPos: number): void {
+	/** Make a contiguous, polarity-normalized P25 frame even across ring wrap. */
+	private p25FrameBuffer(length: number): Uint8Array {
+		const inverted = this.currentSync === SyncType.INV_P25P1;
+		return Uint8Array.from({ length }, (_, i) =>
+			this.dibitBuf[(this.frameStart + i) & 0xffff] ^ (inverted ? 2 : 0));
+	}
+
+	private processP25Frame(_syncType: SyncType, _startPos: number): void {
+		const frameBuffer = this.p25FrameBuffer(this.frameDataRead);
 		// Parse NID to get DUID
-		const nid = parseP25NID(this.dibitBuf, startPos);
+		const nid = parseP25NID(frameBuffer, 0);
+		if (!nid.valid) return;
 		this.status.nac = nid.nac;
 		this.status.duid = nid.duidName;
 
-		const afterNid = startPos + P25_NID_DIBITS;
+		const afterNid = P25_NID_DIBITS;
 
-		const decodeImbeFrames = (frames: Int8Array[], label: string) => {
+		const decodeImbeFrames = (frames: Int8Array[]) => {
+			if (this.status.encrypted) {
+				this.status.mbeDecoding = false;
+				this.status.mbeErrors = undefined;
+				return;
+			}
 			if (!this.mbelibReady) {
 				this.status.mbeDecoding = false;
 				this.status.mbeErrors = '(mbelib not loaded)';
@@ -618,26 +684,28 @@ export class DSDDecoder {
 
 		switch (nid.duid) {
 			case DUID_LDU1: {
-				const imbeFrames = processP25LDU1(this.dibitBuf, afterNid, this.status);
-				decodeImbeFrames(imbeFrames, 'LDU1');
+				const imbeFrames = processP25LDU1(frameBuffer, afterNid, this.status);
+				decodeImbeFrames(imbeFrames);
 				break;
 			}
 			case DUID_LDU2: {
-				const imbeFrames = processP25LDU2(this.dibitBuf, afterNid, this.status);
-				decodeImbeFrames(imbeFrames, 'LDU2');
+				const imbeFrames = processP25LDU2(frameBuffer, afterNid, this.status);
+				decodeImbeFrames(imbeFrames);
 				break;
 			}
 			case DUID_HDU:
-				processP25HDU(this.dibitBuf, afterNid, this.status);
+				processP25HDU(frameBuffer, afterNid, this.status);
 				this.status.mbeDecoding = false;
 				break;
 			case DUID_TDU:
-				processP25TDU(this.dibitBuf, afterNid, this.status);
+				processP25TDU(frameBuffer, afterNid, this.status);
+				this.p25CallEnded = true;
 				this.status.mbeDecoding = false;
 				if (this.mbelibReady) resetMbe();
 				break;
 			case DUID_TDULC:
-				processP25TDULC(this.dibitBuf, afterNid, this.status);
+				processP25TDULC(frameBuffer, afterNid, this.status);
+				this.p25CallEnded = true;
 				this.status.mbeDecoding = false;
 				if (this.mbelibReady) resetMbe();
 				break;
@@ -742,7 +810,7 @@ export class DSDDecoder {
 				// Matches SDR++ Brown's skipDibit(120) after data — avoids false syncs in other slot's data
 				return 120;
 			case 'p25':
-				return P25_NID_DIBITS + P25_LDU_BODY_DIBITS; // ~752 dibits
+				return P25_NID_DIBITS; // Choose body length after BCH-validated DUID.
 			case 'dstar':
 				return isVoiceSync(syncType)
 					? DSTAR_FRAME_DIBITS  // 75 dibits
@@ -769,6 +837,7 @@ export class DSDDecoder {
 		this.candidatePosition = -1;
 		this.samplesSinceSync = 0;
 		this.currentSync = SyncType.NONE;
+		this.p25CallEnded = false;
 		this.frameDataRemaining = 0;
 		this.frameDataRead = 0;
 		this.audioAccumLen = 0;

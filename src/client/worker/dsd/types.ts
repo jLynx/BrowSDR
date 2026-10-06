@@ -53,6 +53,12 @@ export interface DSDStatus {
 	emr?: boolean;
 	/** P25 Algorithm ID (encryption) */
 	algid?: number;
+	/** P25 key identifier, decoded from HDU/LDU2 */
+	kid?: number;
+	/** True when validated call metadata identifies encrypted voice */
+	encrypted?: boolean;
+	/** Number of corrected bits in the last validated P25 NID */
+	nidErrors?: number;
 
 	// ── D-STAR ──
 	/** D-STAR callsign (if decoded from header) */
