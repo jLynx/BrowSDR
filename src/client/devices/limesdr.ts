@@ -51,6 +51,7 @@ const STREAM_PAYLOAD = STREAM_PKT_SIZE - STREAM_HDR_SIZE; // 4080 bytes of IQ da
 const NUM_TRANSFERS = 8;        // Concurrent USB transfers
 const STREAM_START_TIMEOUT_MS = 3000;
 const STREAM_STOP_TIMEOUT_MS = 1000;
+const MAX_SAMPLE_RATE = 61.44e6;
 
 // Reference clock
 const REF_CLK = 30.72e6;        // LimeSDR-USB VCTCXO
@@ -926,7 +927,7 @@ class LimeSDR {
 	// ── Analog Filter Bandwidth ─────────────────────────────────
 
 	async setAnalogBandwidth(bwHz: number): Promise<void> {
-		const bw = Math.max(0.5e6, Math.min(bwHz, 40e6));
+		const bw = Math.max(0.5e6, Math.min(bwHz, MAX_SAMPLE_RATE));
 		const filterIF = bw / 2;
 		const adjustedIF = filterIF * 1.3;
 		await this.configureTIAFilter(filterIF);
@@ -1000,7 +1001,7 @@ class LimeSDR {
 	// ── Sample Rate ─────────────────────────────────────────────
 
 	async setSampleRate(rate: number): Promise<void> {
-		if (!Number.isFinite(rate) || rate < 1e6 || rate > 30.72e6) {
+		if (!Number.isFinite(rate) || rate < 1e6 || rate > MAX_SAMPLE_RATE) {
 			throw new Error(`LimeSDR: unsupported sample rate ${rate}`);
 		}
 		this.currentSampleRate = rate;
@@ -1199,7 +1200,7 @@ class LimeSDR {
 
 export class LimeSDRDevice implements SdrDevice {
 	readonly deviceType = 'limesdr';
-	readonly sampleRates = [1e6, 2e6, 5e6, 10e6, 20e6, 30.72e6];
+	readonly sampleRates = [1e6, 2e6, 5e6, 10e6, 20e6, 30.72e6, 40e6, 50e6, MAX_SAMPLE_RATE];
 	readonly sampleFormat = 'int8' as const;
 	readonly gainControls: GainControl[] = [
 		{ name: 'LNA', min: 0, max: 30, step: 1, default: 14, type: 'slider' },

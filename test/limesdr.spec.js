@@ -236,6 +236,58 @@ describe('LimeSDR receive configuration', () => {
 		expect(cgen).toHaveBeenCalledTimes(1);
 	});
 
+	it.each([30.72e6, 40e6, 50e6, 61.44e6])('configures the full receive rate with two-times oversampling (%i)', async rate => {
+		const { driver } = await createDriver();
+		const cgen = vi.spyOn(driver, 'setCGENFrequency').mockResolvedValue(undefined);
+		const bandwidth = vi.spyOn(driver, 'setAnalogBandwidth').mockResolvedValue(undefined);
+		const modify = vi.spyOn(driver, 'modifyReg').mockResolvedValue(undefined);
+		vi.spyOn(driver, 'configureLML').mockResolvedValue(undefined);
+		vi.spyOn(driver, 'configureFPGAPLL').mockResolvedValue(undefined);
+		await driver.setSampleRate(rate);
+		expect(cgen).toHaveBeenCalledWith(rate * 8);
+		expect(bandwidth).toHaveBeenCalledWith(rate);
+		expect(modify).toHaveBeenCalledWith(0x403, 14, 12, 0);
+		expect(driver.currentSampleRate).toBe(rate);
+		await expect(driver.setSampleRate(61.44e6 + 1)).rejects.toThrow('unsupported sample rate');
+	});
+
+	it('advertises receive rates up to 61.44 MSPS', () => {
+		expect(new LimeSDRDevice().sampleRates).toEqual([1e6, 2e6, 5e6, 10e6, 20e6, 30.72e6, 40e6, 50e6, 61.44e6]);
+	});
+
+	it.each([40e6, 50e6, 61.44e6])('keeps the high-rate CGEN VCO within its operating range (%i)', async rate => {
+		const { driver } = await createDriver();
+		vi.spyOn(driver, 'modifyReg').mockResolvedValue(undefined);
+		vi.spyOn(driver, 'readLMS7002').mockResolvedValue(0x1000);
+		const batch = vi.spyOn(driver, 'writeLMS7002Batch').mockResolvedValue(undefined);
+		vi.spyOn(driver, 'tuneVCO').mockResolvedValue(true);
+		await driver.setCGENFrequency(rate * 8);
+		const divider = (batch.mock.calls[0][0][2][1] >> 3) & 255;
+		const vco = 2 * (divider + 1) * rate * 8;
+		expect(vco).toBeGreaterThanOrEqual(1930e6);
+		expect(vco).toBeLessThanOrEqual(2940e6);
+	});
+
+	it('uses the 122.88 MHz interface clock at the maximum receive rate', async () => {
+		const { driver } = await createDriver();
+		driver.currentSampleRate = 61.44e6;
+		const pll = vi.spyOn(driver, 'programFPGAPLL').mockResolvedValue(undefined);
+		vi.spyOn(driver, 'resetLogicRegisters').mockResolvedValue(undefined);
+		await driver.configureFPGAPLL();
+		expect(pll).toHaveBeenCalledWith(1, 122.88e6, [122.88e6, 122.88e6], [0, expect.closeTo(241.8312)]);
+	});
+
+	it('does not clamp the maximum-rate analog filter to 40 MHz', async () => {
+		const { driver } = await createDriver();
+		const modify = vi.spyOn(driver, 'modifyReg').mockResolvedValue(undefined);
+		const tia = vi.spyOn(driver, 'configureTIAFilter').mockResolvedValue(undefined);
+		await driver.setAnalogBandwidth(61.44e6);
+		expect(tia).toHaveBeenCalledWith(30.72e6);
+		expect(modify).toHaveBeenCalledWith(0x115, 3, 2, 1);
+		expect(modify).toHaveBeenCalledWith(0x118, 15, 13, 1);
+		expect(modify).toHaveBeenCalledWith(0x116, 10, 0, 100);
+	});
+
 	it('configures PLL clocks and phase using the oversampled interface rate', async () => {
 		const { driver } = await createDriver();
 		const pll = vi.spyOn(driver, 'programFPGAPLL').mockResolvedValue(undefined);
