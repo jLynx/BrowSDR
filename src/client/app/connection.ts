@@ -195,6 +195,7 @@ export const connectionMethods = {
 
 		const opts = {
 			centerFreq: this.radio.centerFreq,
+			frequencyShift: this.radio.frequencyShift,
 			sampleRate: this.radio.sampleRate,
 			fftSize: this.radio.fftSize,
 			gains: { ...this.gains },
@@ -257,6 +258,14 @@ export const connectionMethods = {
 					}
 					// Bump reactive tick so sortedVfoActivity recomputes
 					this.activityNow = now;
+				}
+				// ── Auto-squelch sample collection ──
+				if (this.dspStats && this.dspStats.squelchDb) {
+					for (let i = 0; i < this.dspStats.squelchDb.length; i++) {
+						if (this.autoSquelchActive[i] && this.autoSquelchSamples[i]) {
+							this.autoSquelchSamples[i].push(this.dspStats.squelchDb[i]);
+						}
+					}
 				}
 			}
 		}, 500);

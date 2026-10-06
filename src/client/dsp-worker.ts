@@ -107,10 +107,11 @@ self.onmessage = async (e: MessageEvent) => {
                     samples: cloneOut.buffer,
                     chunkId: msg.chunkId,
                     squelchOpen: vfoState.squelchOpen,
+                    squelchDb: vfoState.squelchDb ?? -120,
                     dspTime: dspTime
                 }, [cloneOut.buffer]);
             } else {
-                self.postMessage({ type: "audio", samples: null, chunkId: msg.chunkId, squelchOpen: vfoState.squelchOpen, dspTime: dspTime });
+                self.postMessage({ type: "audio", samples: null, chunkId: msg.chunkId, squelchOpen: vfoState.squelchOpen, squelchDb: vfoState.squelchDb ?? -120, dspTime: dspTime });
             }
         } catch (err: any) {
             self.postMessage({ type: "error", error: err.message });
@@ -119,10 +120,15 @@ self.onmessage = async (e: MessageEvent) => {
 };
 
 function configureDDC(params: any, systemCenterFreq: number): void {
-    if (vfoState.currentIfRate !== IF_RATES[params.mode]) {
-        vfoState.audioResampler = new RationalResampler(IF_RATES[params.mode], AUDIO_RATE);
-        vfoState.currentIfRate = IF_RATES[params.mode];
-        ddc.set_if_sample_rate(IF_RATES[params.mode]);
+    const ifRate = IF_RATES[params.mode];
+    if (ifRate === undefined) {
+        console.error(`[DSP Worker] Unknown mode "${params.mode}" — no IF rate defined. Skipping DDC config.`);
+        return;
+    }
+    if (vfoState.currentIfRate !== ifRate) {
+        vfoState.audioResampler = new RationalResampler(ifRate, AUDIO_RATE);
+        vfoState.currentIfRate = ifRate;
+        ddc.set_if_sample_rate(ifRate);
     }
 
     const offsetFreq = (params.freq - systemCenterFreq) * 1e6;
@@ -159,6 +165,7 @@ function processVfoAudio(chunkLenBytes: number, params: any): Float32Array | nul
             isSquelched = (ddc.get_output_len() > 0 && new Float32Array(_wasm.memory.buffer, outPtr, numAudioSamples)[Math.floor(numAudioSamples / 2)] === 0.0);
         }
         vfoState.squelchOpen = !isSquelched;
+        vfoState.squelchDb = ddc.get_squelch_db();
 
         if (numAudioSamples === 0) return null;
 
@@ -210,6 +217,7 @@ function processVfoAudio(chunkLenBytes: number, params: any): Float32Array | nul
         }
         squelchMag /= numDemodSamples;
         const squelchDb = 10 * Math.log10(squelchMag + 1e-12);
+        vfoState.squelchDb = squelchDb;
 
         if (numDemodSamples > vfoState.scratchBuf.length) {
             vfoState.scratchBuf = new Float32Array(numDemodSamples + 128);

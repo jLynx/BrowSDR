@@ -21,6 +21,7 @@ export interface Vfo {
 
 export interface RadioState {
 	centerFreq: number;
+	frequencyShift: number;
 	sampleRate: number;
 	fftSize: number;
 }
@@ -136,6 +137,15 @@ export interface Bookmark {
 	sampleRate?: number;
 	vfos?: Vfo[];
 	activeVfoIndex?: number;
+}
+
+export interface VfoConflictDialog {
+	show: boolean;
+	vfoIndex: number;
+	requestedFreq: number;
+	previousFreq: number;
+	optionA: { centerFreq: number; description: string } | null;
+	optionB: { centerFreq: number; description: string; excludedVfos: number[] } | null;
 }
 
 // Use `any` for the full AppInstance type since it's complex with Vue internals

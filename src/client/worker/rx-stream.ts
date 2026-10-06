@@ -25,6 +25,7 @@ import { POCSAGDecoder } from './pocsag';
 import type { RxStreamOpts, VfoParams, VfoState, PerfCounters } from './types';
 import { IF_RATES, AUDIO_RATE } from './types';
 import type { Backend } from './backend';
+import { displayToDeviceFrequencyHz } from '../frequency-shift';
 
 let _streamStarting = false;
 
@@ -43,10 +44,10 @@ export async function startRxStream(
 	try {
 		const { device } = backend;
 		if (!device) throw new Error('No device connected');
-		const { centerFreq, sampleRate, fftSize, gains } = opts;
+		const { centerFreq, frequencyShift = 0, sampleRate, fftSize, gains } = opts;
 
 		await device.setSampleRate(sampleRate);
-		await device.setFrequency(centerFreq * 1e6);
+		await device.setFrequency(displayToDeviceFrequencyHz(centerFreq, frequencyShift));
 
 		// ── Spectrum FFT setup ────────────────────────────────────────
 		const spectrumWindowFunc = (x: number): number => {
@@ -107,6 +108,7 @@ export async function startRxStream(
 
 		const makeVfoState = (): VfoState => ({
 			squelchOpen: false,
+			squelchDb: -120,
 			pocsagDecoder: null,
 			audioQueue: new Float32Array(32768),
 			audioQueueLen: 0,
@@ -119,9 +121,14 @@ export async function startRxStream(
 			worker.onmessage = (e: MessageEvent) => {
 				const msg = e.data;
 				if (msg.type === "audio") {
-					backend._handleWorkerAudio!(index, msg);
+					// Look up current index dynamically — splice() in removeVfo
+					// shifts the array, so the captured `index` goes stale.
+					const currentIndex = backend.dspWorkers!.indexOf(worker);
+					if (currentIndex === -1) return; // worker was removed
+					backend._handleWorkerAudio!(currentIndex, msg);
 				} else if (msg.type === "error") {
-					console.error(`[DSP Worker ${index}] Error:`, msg.error);
+					const currentIndex = backend.dspWorkers!.indexOf(worker);
+					console.error(`[DSP Worker ${currentIndex}] Error:`, msg.error);
 				}
 			};
 			worker.postMessage({
@@ -307,6 +314,9 @@ export async function startRxStream(
 				if (numAudioSamples === 0) { perf.droppedChunks++; vfoState.squelchOpen = false; return null; }
 				perf.audioSamplesOut += numAudioSamples;
 
+				// Read signal level from Rust (for auto-squelch calibration)
+				vfoState.squelchDb = ddc.get_squelch_db();
+
 				// Create float32 view of the returned pointer
 				const result = new Float32Array(backend.wasm.memory.buffer, outPtr, numAudioSamples);
 
@@ -379,6 +389,7 @@ export async function startRxStream(
 				}
 				squelchMag /= numDemodSamples;
 				const squelchDb = 10 * Math.log10(squelchMag + 1e-12);
+				vfoState.squelchDb = squelchDb;
 
 				// Grow the shared scratch buffer if this block is larger than expected
 				if (numDemodSamples > vfoState.scratchBuf!.length) {
@@ -493,12 +504,19 @@ export async function startRxStream(
 
 		let chunkCounter = 0;
 
+		let _audioDebugCounter = 0;
 		const handleWorkerAudio = (v: number, msg: any): void => {
 			const state = backend.vfoStates![v];
 			const params = backend.vfoParams![v];
-			if (!state || !params) return;
+			if (!state || !params) {
+				if (_audioDebugCounter++ % 200 === 0) {
+					console.warn(`[handleWorkerAudio] VFO ${v} has no state/params (vfoParams.length=${backend.vfoParams?.length}, vfoStates.length=${backend.vfoStates?.length})`);
+				}
+				return;
+			}
 
 			state.squelchOpen = msg.squelchOpen;
+			state.squelchDb = msg.squelchDb ?? -120;
 			if (!backend._latchedSquelchOpen) backend._latchedSquelchOpen = [];
 			if (msg.squelchOpen) backend._latchedSquelchOpen[v] = true;
 			if (msg.dspTime) {

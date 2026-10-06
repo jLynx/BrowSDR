@@ -82,7 +82,7 @@ createApp({
 				freqDebounce = null;
 
 				if (this.running && this.backend) {
-					this.backend.setFrequency(newVal * 1e6).catch(console.error);
+					this.backend.setFrequency(newVal, this.radio.frequencyShift).catch(console.error);
 				}
 
 				if (this.remoteMode === 'host' && this._webrtc) {
@@ -115,6 +115,27 @@ createApp({
 				this._webrtc.sendCommand({ type: 'sync', radio: this.radio, gains: this.gains, locks: this.locks });
 			}
 		}, { deep: true });
+
+		let frequencyShiftDebounce: ReturnType<typeof setTimeout> | null = null;
+		this.$watch(() => this.radio.frequencyShift, (newVal: any) => {
+			this.saveSetting();
+
+			// The converter belongs to the host's hardware. Remote clients receive
+			// the host's shift through radio sync and cannot change it themselves.
+			if (this.remoteMode === 'client') return;
+
+			if (frequencyShiftDebounce) clearTimeout(frequencyShiftDebounce);
+			frequencyShiftDebounce = setTimeout(() => {
+				frequencyShiftDebounce = null;
+				if (this.running && this.backend) {
+					this.backend.setFrequency(this.radio.centerFreq, newVal).catch(console.error);
+				}
+
+				if (this.remoteMode === 'host' && this._webrtc) {
+					this._webrtc.sendCommand({ type: 'sync', radio: this.radio, gains: this.gains, locks: this.locks });
+				}
+			}, 200);
+		});
 
 		let gainDebounce: ReturnType<typeof setTimeout> | null = null;
 		this.$watch('gains', () => {
