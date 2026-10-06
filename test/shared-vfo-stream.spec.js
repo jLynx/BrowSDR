@@ -41,6 +41,27 @@ async function createStream(rdsCallback = null) {
 }
 
 describe('shared VFO worker routing', () => {
+	it.each([false, true])('routes muted RDS VFOs through shared DSP %s', async shared => {
+		const rdsCallback = vi.fn();
+		const { backend, workers, receive } = await createStream(rdsCallback);
+		backend._sharedChannelization = shared;
+		backend.vfoParams.forEach(params => { params.enabled = false; params.rds = true; });
+		receive();
+		if (shared) {
+			const channelWorker = workers[3];
+			const request = channelWorker.messages[0];
+			channelWorker.onmessage({ data: { type: 'bands', key: request.key, chunkId: request.chunkId, inputSamples: request.inputSamples, dspTime: 1,
+				bands: [{ centerBin: request.centers[0], buffer: new ArrayBuffer(128), length: 32 }] } });
+		}
+		backend.dspWorkers.forEach(worker => {
+			const request = worker.messages.at(-1);
+			expect(request.type).toBe('process');
+			expect(request.params.enabled).toBe(false);
+			expect(request.params.rds).toBe(true);
+		});
+		backend.dspWorkers[0].onmessage({ data: { type: 'rds', msg: { rt: 'Muted station text' } } });
+		expect(rdsCallback).toHaveBeenCalledWith(0, 95, { rt: 'Muted station text' });
+	});
 	it('routes RDS to the current VFO after an earlier VFO is removed', async () => {
 		const rdsCallback = vi.fn();
 		const { backend } = await createStream(rdsCallback);

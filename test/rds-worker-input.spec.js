@@ -31,6 +31,7 @@ vi.mock('/hackrf-web/pkg/hackrf_web.js', () => ({
 vi.mock('../src/client/worker/rds', () => ({
 	RDSDecoder: class {
 		process = vi.fn();
+		setRegion = vi.fn();
 		constructor() { mocks.decoders.push(this); }
 	},
 }));
@@ -53,6 +54,9 @@ describe('RDS worker input routing', () => {
 		await send({ type: 'process', sampleRate: 2000000, centerFreq: 95, params, chunkLen: 8, chunk: new Int8Array(8).buffer });
 		expect(byteRds.process_iq_only_ptr).toHaveBeenCalledWith(0, 8);
 		expect(mocks.decoders[0].process).toHaveBeenCalledOnce();
+		await send({ type: 'configure', centerFreq: 95, params: { ...params, rdsRegion: 'na' } });
+		expect(mocks.decoders).toHaveLength(1);
+		expect(mocks.decoders[0].setRegion).toHaveBeenLastCalledWith('na');
 
 		await send({ type: 'process', sampleRate: 1920000, centerFreq: 95, params, floatIq: true, chunkLen: 8, chunk: new Float32Array(8).buffer });
 		const floatRds = mocks.processors[3];
@@ -64,5 +68,15 @@ describe('RDS worker input routing', () => {
 
 		await send({ type: 'process', sampleRate: 1920000, centerFreq: 95.2, params, floatIq: true, chunkLen: 8, chunk: new Float32Array(8).buffer });
 		expect(floatRds.set_shift).toHaveBeenLastCalledWith(1920000, (params.freq - 95.2) * 1e6);
+		const muted = { ...params, enabled: false };
+		await send({ type: 'configure', centerFreq: 95.2, params: muted });
+		const previousCalls = mocks.decoders[1].process.mock.calls.length;
+		await send({ type: 'process', sampleRate: 1920000, centerFreq: 95.2, params: muted, floatIq: true, chunkLen: 8, chunk: new Float32Array(8).buffer });
+		expect(mocks.decoders).toHaveLength(2);
+		expect(mocks.decoders[1].process).toHaveBeenCalledTimes(previousCalls + 1);
+		await send({ type: 'configure', centerFreq: 95.2, params: { ...muted, rds: false } });
+		expect(floatRds.free).toHaveBeenCalledOnce();
+		await send({ type: 'process', sampleRate: 1920000, centerFreq: 95.2, params: { ...muted, rds: false }, floatIq: true, chunkLen: 8, chunk: new Float32Array(8).buffer });
+		expect(mocks.decoders[1].process).toHaveBeenCalledTimes(previousCalls + 1);
 	});
 });

@@ -174,10 +174,19 @@ export class RDSDecoder {
 	private bqI: BiquadSection[];
 	private bqQ: BiquadSection[];
 
-	// Clock recovery (1187.5 bps)
+	// RDS uses two opposite-phase symbols per bit (2375 symbols/s).
 	private samplesPerBit: number;
 	private clockPhase: number = 0;
 	private prevBpskI: number = 0;
+	private prevBpskQ: number = 0;
+	private clockPowerI = 0;
+	private clockPowerQ = 0;
+	private clockUsesQ = false;
+	private symbolIndex = 0;
+	private pairEnergy = [0, 0];
+	private pairParity = -1;
+	private prevHalfI = 0;
+	private prevHalfQ = 0;
 
 	// Differential decode using complex conjugate product
 	private prevSymI: number = 0;
@@ -203,6 +212,7 @@ export class RDSDecoder {
 	private psChars: (number | null)[] = new Array(8).fill(null);
 	private rtChars: (number | null)[] = new Array(64).fill(null);
 	private rtAbFlag: number = -1;
+	private rtVersion: number = -1;
 	private lastPs: string = '';
 	private lastRt: string = '';
 
@@ -220,9 +230,18 @@ export class RDSDecoder {
 		this.pilotMixAlpha = 1 - Math.exp(-2 * Math.PI * 30 / sampleRate); // 30 Hz LPF limits noise
 		this.samplesPerBit = sampleRate / RDS_BITRATE;
 
-		// 4th-order Butterworth LPF at 1.5 kHz for RDS baseband
-		this.bqI = makeButterworthLpf4(1500, sampleRate);
-		this.bqQ = makeButterworthLpf4(1500, sampleRate);
+		// Preserve the 2375-symbol/s biphase waveform for clock recovery.
+		this.bqI = makeButterworthLpf4(2400, sampleRate);
+		this.bqQ = makeButterworthLpf4(2400, sampleRate);
+	}
+
+	setRegion(region: string): void {
+		if (region === this.region) return;
+		this.region = region;
+		if (this.pty >= 0) {
+			const labels = region === 'na' ? PTY_LABELS_NA : PTY_LABELS_EU;
+			this.callback({ pty: this.pty, ptyLabel: labels[this.pty] || '' });
+		}
 	}
 
 	process(samples: Float32Array): void {
@@ -277,23 +296,51 @@ export class RDSDecoder {
 			let filtQ = rawQ;
 			for (let k = 0; k < this.bqQ.length; k++) filtQ = this.bqQ[k].process(filtQ);
 
-			// Clock recovery
-			this.clockPhase += 1.0;
-			if ((filtI > 0) !== (this.prevBpskI > 0)) {
-				const error = this.clockPhase - this.samplesPerBit / 2;
-				this.clockPhase -= error * 0.1;
+			// Either quadrature may carry most of the RDS signal. Recover timing
+			// from the stronger one rather than noise on a near-zero I channel.
+			this.clockPowerI += 0.001 * (filtI * filtI - this.clockPowerI);
+			this.clockPowerQ += 0.001 * (filtQ * filtQ - this.clockPowerQ);
+			if (this.clockPowerQ > this.clockPowerI * 2) this.clockUsesQ = true;
+			else if (this.clockPowerI > this.clockPowerQ * 2) this.clockUsesQ = false;
+			const timing = this.clockUsesQ ? filtQ : filtI;
+			const previous = this.clockUsesQ ? this.prevBpskQ : this.prevBpskI;
+			const symbolPeriod = this.samplesPerBit / 2;
+			const previousClockPhase = this.clockPhase;
+			this.clockPhase += 1;
+			if ((timing > 0) !== (previous > 0)) {
+				const error = this.clockPhase > symbolPeriod / 2 ? this.clockPhase - symbolPeriod : this.clockPhase;
+				this.clockPhase -= error * 0.05;
 			}
 			this.prevBpskI = filtI;
-
-			// Sample at bit boundary
-			if (this.clockPhase >= this.samplesPerBit) {
-				this.clockPhase -= this.samplesPerBit;
-				const diffProd = filtI * this.prevSymI + filtQ * this.prevSymQ;
-				const decodedBit = diffProd < 0 ? 1 : 0;
-				this.prevSymI = filtI;
-				this.prevSymQ = filtQ;
-				this.processBit(decodedBit);
+			this.prevBpskQ = filtQ;
+			if (this.clockPhase >= symbolPeriod / 2 && previousClockPhase < symbolPeriod / 2) {
+				const symI = this.prevHalfI - filtI;
+				const symQ = this.prevHalfQ - filtQ;
+				const parity = this.symbolIndex & 1;
+				this.pairEnergy[parity] += symI * symI + symQ * symQ;
+				if ((this.symbolIndex & 127) === 127) {
+					const nextParity = this.pairEnergy[0] > this.pairEnergy[1] ? 0 : 1;
+					if (nextParity !== this.pairParity) {
+						this.pairParity = nextParity;
+						this.prevSymI = 0;
+						this.prevSymQ = 0;
+						this.synced = false;
+						this.bitCount = 0;
+						this.blockValid.fill(false);
+					}
+					this.pairEnergy.fill(0);
+				}
+				if (parity === this.pairParity) {
+					const diffProd = symI * this.prevSymI + symQ * this.prevSymQ;
+					this.processBit(diffProd < 0 ? 1 : 0);
+					this.prevSymI = symI;
+					this.prevSymQ = symQ;
+				}
+				this.prevHalfI = filtI;
+				this.prevHalfQ = filtQ;
+				this.symbolIndex++;
 			}
+			if (this.clockPhase >= symbolPeriod) this.clockPhase -= symbolPeriod;
 		}
 	}
 
@@ -306,29 +353,16 @@ export class RDSDecoder {
 			// Try to find sync by checking syndrome against all offset words
 			if (this.bitCount >= 26) {
 				const syn = computeSyndrome(this.shiftReg);
-				if (syn === SYNDROME_A) {
+				const index = [SYNDROME_A, SYNDROME_B, SYNDROME_C, SYNDROME_D].indexOf(syn);
+				const position = syn === SYNDROME_CP ? 2 : index;
+				if (position !== -1) {
 					this.synced = true;
 					this.goodBlocks = 1;
-					this.blocks[0] = (this.shiftReg >> 10) & 0xFFFF;
-					this.blockIndex = 1;
-					this.bitCount = 0;
-				} else if (syn === SYNDROME_B) {
-					this.synced = true;
-					this.goodBlocks = 0;
-					this.blocks[1] = (this.shiftReg >> 10) & 0xFFFF;
-					this.blockIndex = 2;
-					this.bitCount = 0;
-				} else if (syn === SYNDROME_C || syn === SYNDROME_CP) {
-					this.synced = true;
-					this.goodBlocks = 0;
-					this.blocks[2] = (this.shiftReg >> 10) & 0xFFFF;
-					this.blockIndex = 3;
-					this.bitCount = 0;
-				} else if (syn === SYNDROME_D) {
-					this.synced = true;
-					this.goodBlocks = 0;
-					this.blocks[3] = (this.shiftReg >> 10) & 0xFFFF;
-					this.blockIndex = 0;
+					this.blockErrors = 0;
+					this.blockValid.fill(false);
+					this.blocks[position] = (this.shiftReg >> 10) & 0xFFFF;
+					this.blockValid[position] = true;
+					this.blockIndex = (position + 1) & 3;
 					this.bitCount = 0;
 				}
 			}
@@ -338,6 +372,10 @@ export class RDSDecoder {
 		// Synced: wait for 26 bits per block
 		if (this.bitCount < 26) return;
 		this.bitCount = 0;
+		if (this.blockIndex === 0) {
+			this.goodBlocks = 0;
+			this.blockValid.fill(false);
+		}
 
 		const syn = computeSyndrome(this.shiftReg);
 		const expectedSyndromes = [SYNDROME_A, SYNDROME_B, SYNDROME_C, SYNDROME_D];
@@ -354,7 +392,7 @@ export class RDSDecoder {
 		} else {
 			this.blockValid[this.blockIndex] = false;
 			this.blockErrors++;
-			if (this.blockErrors > 30) {
+			if (this.blockErrors >= 8) {
 				// Lost sync
 				this.synced = false;
 				this.goodBlocks = 0;
@@ -376,10 +414,10 @@ export class RDSDecoder {
 		}
 	}
 
-	/** Accept a printable character at a given position.
+	/** Accept a printable character or RadioText terminator at a given position.
 	 *  CRC + block-validity checks upstream ensure data integrity. */
 	private acceptChar(pos: number, char: number, chars: (number | null)[]): void {
-		if (char >= 0x20 && char < 0x7F) chars[pos] = char;
+		if ((char === 0x0D && chars === this.rtChars) || (char >= 0x20 && char < 0x7F)) chars[pos] = char;
 	}
 
 	private decodeGroup(): void {
@@ -389,6 +427,12 @@ export class RDSDecoder {
 		if (bv[0]) {
 			const pi = this.blocks[0];
 			if (pi !== this.pi && pi !== 0) {
+				this.psChars.fill(null);
+				this.rtChars.fill(null);
+				this.lastPs = '';
+				this.lastRt = '';
+				this.rtAbFlag = -1;
+				this.rtVersion = -1;
 				this.pi = pi;
 				const piHex = pi.toString(16).toUpperCase().padStart(4, '0');
 				this.callback({ pi: piHex });
@@ -447,14 +491,16 @@ export class RDSDecoder {
 			const abFlag = (blockB >> 4) & 1;
 
 			// A/B flag change means new RT message — clear buffer
-			if (this.rtAbFlag !== -1 && abFlag !== this.rtAbFlag) {
+			if (abFlag !== this.rtAbFlag || groupVersion !== this.rtVersion) {
 				this.rtChars.fill(null);
+				this.lastRt = '';
 			}
 			this.rtAbFlag = abFlag;
+			this.rtVersion = groupVersion;
 
 			const segment = blockB & 0x0F;
 
-			if (groupVersion === 0 && bv[2] && bv[3]) {
+			if (groupVersion === 0) {
 				// 2A: 4 chars per segment (from blocks C and D)
 				const blockC = this.blocks[2];
 				const blockD = this.blocks[3];
@@ -463,18 +509,14 @@ export class RDSDecoder {
 				const c3 = (blockD >> 8) & 0xFF;
 				const c4 = blockD & 0xFF;
 				const base = segment * 4;
-				this.acceptChar(base, c1, this.rtChars);
-				this.acceptChar(base + 1, c2, this.rtChars);
-				this.acceptChar(base + 2, c3, this.rtChars);
-				this.acceptChar(base + 3, c4, this.rtChars);
-
-				// Check for end-of-message marker (0x0D)
-				if (c1 === 0x0D || c2 === 0x0D || c3 === 0x0D || c4 === 0x0D) {
-					const rt = this.buildRT();
-					if (rt && rt !== this.lastRt) {
-						this.lastRt = rt;
-						this.callback({ rt });
-					}
+				// C and D have independent checksums: keep either valid pair.
+				if (bv[2]) {
+					this.acceptChar(base, c1, this.rtChars);
+					this.acceptChar(base + 1, c2, this.rtChars);
+				}
+				if (bv[3]) {
+					this.acceptChar(base + 2, c3, this.rtChars);
+					this.acceptChar(base + 3, c4, this.rtChars);
 				}
 			} else if (groupVersion === 1 && bv[3]) {
 				// 2B: 2 chars per segment (from block D only)
@@ -486,7 +528,7 @@ export class RDSDecoder {
 				this.acceptChar(base + 1, c2, this.rtChars);
 			}
 
-			// Periodically emit partial RT
+			// Emit the received prefix, without substituting spaces for lost data.
 			const rt = this.buildRT();
 			if (rt && rt.length >= 4 && rt !== this.lastRt) {
 				this.lastRt = rt;
@@ -501,17 +543,12 @@ export class RDSDecoder {
 	}
 
 	private buildRT(): string | null {
-		let end = 0;
-		for (let i = 0; i < 64; i++) {
-			if (this.rtChars[i] !== null) end = i + 1;
-		}
-		if (end === 0) return null;
-
 		let s = '';
-		for (let i = 0; i < end; i++) {
-			s += this.rtChars[i] !== null ? String.fromCharCode(this.rtChars[i]!) : ' ';
+		for (const char of this.rtChars) {
+			if (char === null || char === 0x0D) break;
+			s += String.fromCharCode(char);
 		}
-		return s.trimEnd();
+		return s.trimEnd() || null;
 	}
 
 	reset(): void {
@@ -529,6 +566,7 @@ export class RDSDecoder {
 		this.psChars.fill(null);
 		this.rtChars.fill(null);
 		this.rtAbFlag = -1;
+		this.rtVersion = -1;
 		this.lastPs = '';
 		this.lastRt = '';
 		this.phasorRe = 1;
@@ -539,6 +577,15 @@ export class RDSDecoder {
 		this.pilotBpf.reset();
 		this.clockPhase = 0;
 		this.prevBpskI = 0;
+		this.prevBpskQ = 0;
+		this.clockPowerI = 0;
+		this.clockPowerQ = 0;
+		this.clockUsesQ = false;
+		this.symbolIndex = 0;
+		this.pairEnergy.fill(0);
+		this.pairParity = -1;
+		this.prevHalfI = 0;
+		this.prevHalfQ = 0;
 		this.prevSymI = 0;
 		this.prevSymQ = 0;
 		for (const bq of this.bqI) bq.reset();

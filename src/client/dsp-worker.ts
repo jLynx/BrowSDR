@@ -136,7 +136,8 @@ self.onmessage = async (e: MessageEvent) => {
             rdsDdc?.set_shift(nextRate, (msg.params.freq - nextCenter) * 1e6);
         }
         inputIsFloat = msg.floatIq === true;
-        if (!msg.params.enabled && !msg.params.pocsag) return;
+        // Audio mute does not stop independent RDS or pager decoding.
+        if (!msg.params.enabled && !msg.params.pocsag && !(msg.params.rds && msg.params.mode === 'wfm')) return;
         // Copy payload into WASM memory
         const wasmMemView = new Int8Array(_wasm.memory.buffer);
 
@@ -242,6 +243,7 @@ function configureDDC(params: any, systemCenterFreq: number): void {
                 (self as any).postMessage({ type: "rds", msg: rmsg });
             }, params.rdsRegion || 'eu');
         }
+        rdsDecoder.setRegion(params.rdsRegion || 'eu');
         rdsDdc.set_shift(systemSampleRate, offsetFreq);
     } else {
         if (rdsDdc) { rdsDdc.free(); rdsDdc = null; }
