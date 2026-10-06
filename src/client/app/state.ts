@@ -21,10 +21,13 @@ export function createAppData() {
 		audioUnlockPendingId: null as string | null,
 		radio: {
 			centerFreq: 100.0,
+			frequencyShift: 0.0,
 			sampleRate: 20000000,
 			fftSize: 65536,
 		},
 		display: {
+			spectrumFps: 20,
+			sharedChannelization: true,
 			minDB: -70.0,
 			maxDB: 0.0,
 		},
@@ -44,6 +47,8 @@ export function createAppData() {
 		vfoSquelchOpen: [] as boolean[],
 		vfoSquelchHangUntil: [] as number[],
 		vfoActivityStats: [] as Array<{ count: number; totalMs: number; squelchOpenSince: number | null }>,
+		autoSquelchSamples: [] as Array<number[]>,
+		autoSquelchActive: [] as boolean[],
 		activityNow: 0,
 		showActivity: false,
 		view: {
@@ -119,5 +124,13 @@ export function createAppData() {
 		sidebarOpen: false,
 		showAbout: false,
 		collapsedPanels: {} as Record<string, boolean>,
+		vfoConflictDialog: {
+			show: false,
+			vfoIndex: -1,
+			requestedFreq: 0,
+			previousFreq: 0,
+			optionA: null as { centerFreq: number; description: string } | null,
+			optionB: null as { centerFreq: number; description: string; excludedVfos: number[] } | null,
+		},
 	};
 }

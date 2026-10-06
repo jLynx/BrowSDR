@@ -65,6 +65,7 @@ pub struct DspProcessor {
     // Squelch state
     squelch_level: f32,   // dB threshold (-100 = disabled)
     squelch_enabled: bool,
+    last_squelch_db: f32, // last measured signal level in dB
 
     // DC Blocker state (matches SDR++ dc_block.h)
     dc_avg_i: f32,
@@ -169,6 +170,7 @@ impl DspProcessor {
             audio_resampler,
             squelch_level: -100.0,
             squelch_enabled: false,
+            last_squelch_db: -120.0,
             dc_avg_i: 0.0,
             dc_avg_q: 0.0,
             dc_alpha,
@@ -266,6 +268,11 @@ impl DspProcessor {
     pub fn set_squelch(&mut self, level: f32, enabled: bool) {
         self.squelch_level = level;
         self.squelch_enabled = enabled;
+    }
+
+    /// Returns the last measured signal level in dB (for auto-squelch calibration).
+    pub fn get_squelch_db(&self) -> f32 {
+        self.last_squelch_db
     }
 
     /// Enable or disable audio filters (LowPass, HighPass) for NFM.
@@ -379,7 +386,18 @@ impl DspProcessor {
     /// Input: i8 IQ pairs [I0, Q0, I1, Q1, ...]
     /// Output: f32 mono audio at 48 kHz
     pub fn process(&mut self, input: &[i8], output: &mut [f32]) -> usize {
-        let num_iq = input.len() / 2;
+        self.process_values(input.len() / 2, |index| input[index] as f32 / 128.0, output)
+    }
+
+    pub fn process_f32_ptr(&mut self, pointer: *const f32, count: usize) -> *const f32 {
+        let input = unsafe { slice::from_raw_parts(pointer, count) };
+        self.process_values(count / 2, |index| input[index], &mut []);
+        self.scratch_audio.as_ptr()
+    }
+}
+
+impl DspProcessor {
+    fn process_values(&mut self, num_iq: usize, sample: impl Fn(usize) -> f32, output: &mut [f32]) -> usize {
         if num_iq == 0 {
             return 0;
         }
@@ -399,11 +417,9 @@ impl DspProcessor {
         let mut dc_i = self.dc_avg_i;
         let mut dc_q = self.dc_avg_q;
 
-        let inv_128 = 1.0 / 128.0;
-
         for i in 0..num_iq {
-            let mut i_val = input[i * 2] as f32 * inv_128;
-            let mut q_val = input[i * 2 + 1] as f32 * inv_128;
+            let mut i_val = sample(i * 2);
+            let mut q_val = sample(i * 2 + 1);
 
             // DC Blocker (matches SDR++ genDCBlockRate)
             dc_i = dc_i * alpha + i_val * (1.0 - alpha);
@@ -460,21 +476,22 @@ impl DspProcessor {
         }
 
         // ── Stage 4: Squelch (SDR++ noise_reduction/squelch.h) ──────
-        if self.squelch_enabled {
-            let mut mag_sum = 0.0f32;
+        // Always measure signal level so auto-squelch can sample the noise floor
+        let mut mag_sum = 0.0f32;
+        for k in 0..if_count {
+            let i_val = self.scratch_i[k];
+            let q_val = self.scratch_q[k];
+            mag_sum += (i_val * i_val + q_val * q_val).sqrt();
+        }
+        let avg_mag = mag_sum / if_count as f32;
+        let db = 10.0 * (avg_mag + 1e-12).log10();
+        self.last_squelch_db = db;
+
+        if self.squelch_enabled && db < self.squelch_level {
+            // Mute: zero the IQ data (SDR++ memset to 0)
             for k in 0..if_count {
-                let i_val = self.scratch_i[k];
-                let q_val = self.scratch_q[k];
-                mag_sum += (i_val * i_val + q_val * q_val).sqrt();
-            }
-            let avg_mag = mag_sum / if_count as f32;
-            let db = 10.0 * (avg_mag + 1e-12).log10();
-            if db < self.squelch_level {
-                // Mute: zero the IQ data (SDR++ memset to 0)
-                for k in 0..if_count {
-                    self.scratch_i[k] = 0.0;
-                    self.scratch_q[k] = 0.0;
-                }
+                self.scratch_i[k] = 0.0;
+                self.scratch_q[k] = 0.0;
             }
         }
 
@@ -540,6 +557,10 @@ impl DspProcessor {
         out_count
     }
 
+}
+
+#[wasm_bindgen]
+impl DspProcessor {
     /// Zero-copy process using a raw pointer for IQ input and returning a raw pointer.
     pub fn process_ptr(&mut self, iq_ptr: *const i8, num_iq_bytes: usize) -> *const f32 {
         let input_slice = unsafe { slice::from_raw_parts(iq_ptr, num_iq_bytes) };
@@ -565,7 +586,18 @@ impl DspProcessor {
     /// Returns interleaved complex f32 IQ pairs at IF sample rate (50 kHz).
     /// Used for non-FM modes (AM, SSB, CW, RAW) where JS handles demodulation.
     pub fn process_iq_only(&mut self, input: &[i8], output: &mut [f32]) -> usize {
-        let num_iq = input.len() / 2;
+        self.process_iq_values(input.len() / 2, |index| input[index] as f32 / 128.0, output)
+    }
+
+    pub fn process_iq_only_f32_ptr(&mut self, pointer: *const f32, count: usize) -> *const f32 {
+        let input = unsafe { slice::from_raw_parts(pointer, count) };
+        self.process_iq_values(count / 2, |index| input[index], &mut []);
+        self.scratch_audio.as_ptr()
+    }
+}
+
+impl DspProcessor {
+    fn process_iq_values(&mut self, num_iq: usize, sample: impl Fn(usize) -> f32, output: &mut [f32]) -> usize {
         if num_iq == 0 {
             return 0;
         }
@@ -585,11 +617,9 @@ impl DspProcessor {
         let mut dc_i = self.dc_avg_i;
         let mut dc_q = self.dc_avg_q;
 
-        let inv_128 = 1.0 / 128.0;
-
         for i in 0..num_iq {
-            let mut i_val = input[i * 2] as f32 * inv_128;
-            let mut q_val = input[i * 2 + 1] as f32 * inv_128;
+            let mut i_val = sample(i * 2);
+            let mut q_val = sample(i * 2 + 1);
 
             // DC Blocker
             dc_i = dc_i * alpha + i_val * (1.0 - alpha);
@@ -651,6 +681,10 @@ impl DspProcessor {
         out_count
     }
 
+}
+
+#[wasm_bindgen]
+impl DspProcessor {
     /// Zero-copy process for IQ only using a raw pointer for input.
     pub fn process_iq_only_ptr(&mut self, iq_ptr: *const i8, num_iq_bytes: usize) -> *const f32 {
         let input_slice = unsafe { slice::from_raw_parts(iq_ptr, num_iq_bytes) };
@@ -661,5 +695,30 @@ impl DspProcessor {
     /// Returns the number of f32 samples generated by the last `process_iq_only_ptr` call.
     pub fn get_iq_output_len(&self) -> usize {
         self.scratch_audio.len()
+    }
+}
+
+#[cfg(test)]
+mod float_input_tests {
+    use super::*;
+
+    #[test]
+    fn float_and_byte_inputs_produce_identical_audio_and_iq() {
+        let input: Vec<i8> = (0..65536).map(|index| ((index * 37) % 255 - 127) as i8).collect();
+        let floats: Vec<f32> = input.iter().map(|value| *value as f32 / 128.0).collect();
+        for fm in [true, false] {
+            let mut bytes_processor = DspProcessor::new(1920000.0, 123000.0, 150000.0);
+            let mut float_processor = DspProcessor::new(1920000.0, 123000.0, 150000.0);
+            for (bytes, values) in input.chunks(1024).zip(floats.chunks(1024)) {
+                if fm {
+                    bytes_processor.process_ptr(bytes.as_ptr(), bytes.len());
+                    float_processor.process_f32_ptr(values.as_ptr(), values.len());
+                } else {
+                    bytes_processor.process_iq_only_ptr(bytes.as_ptr(), bytes.len());
+                    float_processor.process_iq_only_f32_ptr(values.as_ptr(), values.len());
+                }
+                assert_eq!(bytes_processor.scratch_audio, float_processor.scratch_audio);
+            }
+        }
     }
 }

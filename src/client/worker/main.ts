@@ -21,4 +21,14 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 import * as Comlink from 'comlink';
 import { Backend } from './backend';
 
+if (import.meta.env.DEV) {
+	for (const level of ['log', 'warn', 'error'] as const) {
+		const original = console[level].bind(console);
+		console[level] = (...values: unknown[]) => {
+			original(...values);
+			self.postMessage({ type: 'sdr-debug-log', level, message: values.map(String).join(' ') });
+		};
+	}
+}
+
 Comlink.expose(Backend);

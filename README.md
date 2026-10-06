@@ -4,7 +4,7 @@
 [![Rust](https://img.shields.io/badge/Rust-High%20Performance-orange?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 [![WebAssembly](https://img.shields.io/badge/Wasm-Powered-blue?style=for-the-badge&logo=webassembly)](https://webassembly.org/)
 
-A blazing fast, next-generation browser-based Software Defined Radio (SDR) receiver for [HackRF](https://greatscottgadgets.com/hackrf/). Connect a HackRF device directly to your browser via WebUSB and tune into FM, AM, SSB, CW, and more — **no drivers, no native software, no hassle.**
+A blazing fast, next-generation browser-based Software Defined Radio (SDR) receiver for HackRF, HackRF Pro, RTL-SDR, Airspy, and LimeSDR devices. Connect a compatible SDR directly to your browser via WebUSB and tune into FM, AM, SSB, CW, and more — **no drivers, no native software, no hassle.**
 
 ---
 
@@ -26,6 +26,8 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
   Save, organize, and quickly recall your favorite frequencies. Group your bookmarks into custom categories to effortlessly manage airbands, ham frequencies, repeaters, or emergency services.
 * **🌊 Real-time WebGL Waterfall & Spectrum**
   Monitor the entire RF band visually with an ultra-responsive, GPU-accelerated waterfall and spectrum analyzer.
+  Choose **20, 30, or 60 FPS** using **Spectrum FPS** in the Display panel. Changes apply live without restarting reception and are saved locally. Higher targets use more CPU; actual FPS depends on USB delivery and processing capacity. Remote viewers use the host's update rate.
+  Waterfall scrolling and spectrum smoothing are time-based: higher FPS makes animation smoother without speeding up the history. The 512-row waterfall retains approximately 25.6 seconds of continuous reception at every target.
 * **📻 Wide Demodulation Support**
   Supports WFM, NFM, AM, USB, LSB, DSB, CW, and raw IQ modes.
 * **📡 RDS Decoding on the Fly**
@@ -39,7 +41,7 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
 
 ## 🚀 How It Works
 
-1. **WebUSB** — Communicates directly with your HackRF device from Google Chrome or Edge.
+1. **WebUSB** — Communicates directly with your supported SDR device from Google Chrome or Edge.
 2. **WebAssembly** — Signal processing (FFT, filtering, decimation, mixer, demodulation) is handled by [RustFFT](https://github.com/awelkie/RustFFT) and highly optimized Rust code compiled to WASM.
 3. **Web Workers** — Multi-threaded DSP via [Comlink](https://github.com/GoogleChromeLabs/comlink) keeps the event loop entirely free of blocking tasks.
 4. **WebGL** — Hardware-accelerated FFT rendering.
@@ -47,6 +49,22 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
 6. **Cloudflare Workers** — Fast edge-deployed static assets and API proxy.
 
 *(Note: WebUSB requires a secure context — HTTPS or `localhost`)*
+
+---
+
+## 📡 Supported Devices
+
+BrowSDR includes receive drivers for the following device families. Driver availability does not mean every model, firmware version, or feature has been hardware-tested.
+
+| Device family | Models / variants | Notes |
+|---------------|-------------------|-------|
+| **HackRF** | HackRF One, HackRF Pro | Uses the HackRF WebUSB driver; compatible devices using the same protocol and recognized USB IDs may also work. |
+| **RTL-SDR** | RTL-SDR Blog V3 and V4, compatible Nooelec and generic RTL2832U dongles | Supports R820T, R820T2, R828D, E4000, FC0012, FC0013, and FC2580 tuners. Includes Blog V4-specific tuner configuration. Compatibility depends on the tuner and recognized USB ID, not just the brand. |
+| **Airspy** | Airspy One, R2, Mini | Includes an Airspy receive driver with device-reported sample rates. |
+| **Airspy HF+** | Airspy HF+ family | Includes a separate HF+ receive driver; individual variants still require hardware verification. |
+| **LimeSDR** | LimeSDR-USB | Uses the LimeSDR WebUSB receive driver with gain and antenna controls. See the Windows setup below. |
+
+Use a WebUSB-capable browser such as Chrome or Edge, over HTTPS or `localhost`. On Windows, the SDR's USB interface may need **WinUSB** instead of a vendor or DVB-T driver. Close other applications using the device before connecting.
 
 ---
 
@@ -89,6 +107,18 @@ npm run dev
 
 Then open **[http://localhost:5173](http://localhost:5173)** in Google Chrome or any WebUSB-supported browser.
 
+### LimeSDR-USB on Windows
+
+WebUSB requires the LimeSDR-USB to use **WinUSB**, rather than the native Cypress **CYUSB3** driver. If connecting fails with **Access denied**, check the driver for the LimeSDR in Device Manager and close other SDR applications or browser tabs using it.
+
+Use Device Manager to select an already-installed WinUSB driver, or install one for **LimeSDR-USB only** using [Zadig](https://zadig.akeo.ie/). Do not replace drivers for USB hubs or unrelated devices. Reconnect the device and select it again in Chrome or Edge after changing the driver.
+
+Changing to WinUSB can affect native SDR applications that require CYUSB3; switch back to the previous driver when those applications need it. See [Chrome's Windows WebUSB requirements](https://developer.chrome.com/docs/capabilities/build-for-webusb#windows).
+
+LimeSDR-USB reception supports sample rates up to **61.44 MSPS**. Higher rates require a USB 3 connection and enough CPU capacity for the selected VFOs; reduce the sample rate if audio breaks up or the browser cannot keep up. The driver uses 2× internal oversampling and adjusts the analog receive filter to match the selected rate.
+
+Choose **RX1** or **RX2** using **RX Channel** in the Radio panel, then select **LNAH**, **LNAL**, or **LNAW** under **Antenna** to match the H, L, or W connector in that receiver's antenna group. One receiver is streamed at a time; switching briefly restarts reception while retaining the current frequency, gains, and antenna path. The receiver and antenna selections are saved locally.
+
 ---
 
 ## 💻 Build Commands
@@ -116,13 +146,13 @@ cargo make build       # Build for web (output: hackrf-web/pkg/)
 
 ## 🎧 Running the App
 
-1. Connect your HackRF to a USB port.
+1. Connect a supported SDR to a USB port and complete any required USB driver setup.
 2. Open the application and click **Connect Device**.
-3. Select your HackRF from the browser's USB device prompt.
+3. Select your SDR from the device picker; pair a new device through the browser's USB prompt if needed.
 4. Set your desired **Center Frequency** and hit **Play**.
 5. Click anywhere on the spectrum or waterfall to instantly tune a new VFO, or manually add as many VFOs as you want!
 6. Customize the demodulation mode (WFM, NFM, AM, USB, etc.) and DSP settings for each VFO.
-7. Adjust gains (LNA, VGA, AMP) for optimal signal reception.
+7. Adjust the device-specific gain and antenna controls for optimal signal reception.
 
 ---
 

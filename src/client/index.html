@@ -47,7 +47,7 @@
 			<div class="vfo-displays">
 				<div class="vfo-display"
 					v-for="(vfo, i) in vfos" :key="'vfo-disp-' + i"
-					:class="{ 'vfo-active': activeVfoIndex === i, 'vfo-squelch-open': vfo.squelchEnabled && vfoSquelchOpen[i], 'vfo-audio-off': !vfo.enabled }"
+					:class="{ 'vfo-active': activeVfoIndex === i, 'vfo-squelch-open': vfo.squelchEnabled && vfoSquelchOpen[i], 'vfo-audio-off': !vfo.enabled, 'vfo-oob': !isFreqInBandwidth(vfo.freq) }"
 					@click="activeVfoIndex = i"
 					:style="Object.assign(
 						(activeVfoIndex === i || (vfo.squelchEnabled && vfoSquelchOpen[i])) ? { borderColor: vfoColor(i) } : {},
@@ -62,6 +62,7 @@
 						@focus="focusVfoFreq(i)">
 					<div class="vfo-unit">MHz</div>
 					<span class="vfo-rx-badge" v-if="vfo.squelchEnabled && vfoSquelchOpen[i]" :style="{ background: vfoColor(i) }" title="Squelch open – receiving">RX</span>
+					<span class="vfo-oob-badge" v-if="!isFreqInBandwidth(vfo.freq)" title="Outside bandwidth – no audio">OOB</span>
 					<span class="vfo-mute-badge" v-if="!vfo.enabled" title="Audio disabled"><svg viewBox="0 0 24 24" width="12" height="12"><path fill="currentColor" d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg></span>
 					<span class="vfo-bookmark-label" v-if="vfoBookmarkLabel(i)" :title="vfoBookmarkLabel(i)">{{ vfoBookmarkLabel(i) }}</span>
 				</div>
@@ -161,6 +162,13 @@
 							</div>
 						</div>
 						<div class="form-row">
+							<label>Freq Shift</label>
+							<div class="input-group">
+								<input type="number" v-model.number="radio.frequencyShift" step="0.001" title="Displayed frequency = SDR frequency + shift. Use -125 MHz for a typical 125 MHz upconverter." :disabled="remoteMode === 'client'">
+								<span>MHz</span>
+							</div>
+						</div>
+						<div class="form-row">
 							<label>Sample Rate</label>
 							<select v-model.number="radio.sampleRate" :disabled="remoteMode === 'client' && locks.sampleRate">
 								<template v-if="deviceCapabilities">
@@ -183,11 +191,17 @@
 						<!-- Dynamic gain controls based on connected device -->
 						<template v-if="deviceCapabilities">
 							<div class="form-row" v-for="gc in deviceCapabilities.gainControls" :key="gc.name">
-								<template v-if="gc.type === 'slider'">
+								<template v-if="gc.type === 'select'">
+									<label>{{ gc.name }}</label>
+									<select v-model.number="gains[gc.name]" :aria-label="gc.name" :disabled="remoteMode === 'client' && locks[gc.name]" style="flex:1; background:#1a1a2e; color:#e0e0e0; border:1px solid #333; border-radius:4px; padding:4px 8px;">
+										<option v-for="(lbl, idx) in gc.labels" :key="idx" :value="idx">{{ lbl }}</option>
+									</select>
+								</template>
+								<template v-else-if="gc.type === 'slider'">
 									<label>{{ gc.name }} Gain</label>
 									<div class="slider-group">
 										<input type="range" v-model.number="gains[gc.name]" :min="gc.min" :max="gc.max" :step="gc.step" :disabled="remoteMode === 'client' && locks[gc.name]">
-										<span class="val">{{ gains[gc.name] }}dB</span>
+										<span class="val">{{ gc.options ? (gc.options[gains[gc.name]] / 10).toFixed(1) : gains[gc.name] }} dB</span>
 									</div>
 								</template>
 								<template v-else>
@@ -204,17 +218,18 @@
 					</div>
 				</div>
 
-				<div class="panel" v-for="(vfo, i) in vfos" :key="'vfo-panel-' + i" :class="{ disabled: !connected }">
+				<div class="panel" v-for="(vfo, i) in vfos" :key="'vfo-panel-' + i" :class="{ disabled: !connected, 'panel-oob': !isFreqInBandwidth(vfo.freq) }">
 					<div class="panel-header panel-header-collapsible" style="display: flex; justify-content: space-between; align-items: center;" @click="togglePanel('vfo-' + i)">
 						<div style="display: flex; align-items: center; gap: 6px;">
 							<span class="vfo-dot" :style="{ background: vfoColor(i) }"></span>
 							VFO {{ i + 1 }}
+							<span v-if="!isFreqInBandwidth(vfo.freq)" class="vfo-oob-badge" style="font-size:8px;padding:1px 3px">OOB</span>
 							<svg class="panel-chevron" :class="{ 'panel-chevron-collapsed': collapsedPanels['vfo-' + i] }" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
 						</div>
 						<div style="display: flex; align-items: center; gap: 4px;" @click.stop>
 							<button v-if="vfos.length > 1" class="vfo-remove-btn" @click="removeVfo(i)" title="Remove VFO">&times;</button>
-							<button class="vfo-mute-btn" :class="{ muted: !vfo.enabled }" @click="vfo.enabled = !vfo.enabled; toggleVfoCheckbox(i)" :disabled="!running" :title="vfo.enabled ? 'Mute VFO' : 'Unmute VFO'">
-								<svg v-if="vfo.enabled" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+							<button class="vfo-mute-btn" :class="{ muted: !vfo.enabled || !isFreqInBandwidth(vfo.freq) }" @click="vfo.enabled = !vfo.enabled; toggleVfoCheckbox(i)" :disabled="!running || !isFreqInBandwidth(vfo.freq)" :title="!isFreqInBandwidth(vfo.freq) ? 'Outside bandwidth' : vfo.enabled ? 'Mute VFO' : 'Unmute VFO'">
+								<svg v-if="vfo.enabled && isFreqInBandwidth(vfo.freq)" viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
 								<svg v-else viewBox="0 0 24 24" width="16" height="16"><path fill="currentColor" d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg>
 							</button>
 						</div>
@@ -265,6 +280,7 @@
 								<input type="range" v-model.number="vfo.squelchLevel" min="-100" max="0" step="0.1" :disabled="!vfo.squelchEnabled">
 								<span class="val">{{ vfo.squelchLevel.toFixed(3) }}dB</span>
 							</div>
+							<button class="btn-auto-squelch" @click="autoSquelch(i)" :disabled="!running || autoSquelchActive[i]" title="Sample noise floor and set squelch level automatically">Auto</button>
 						</div>
 
 						<div class="form-row full-checkbox-row" v-if="vfo.mode === 'nfm' || vfo.mode === 'wfm'">
@@ -412,6 +428,30 @@
 						</template>
 					</div>
 				</div>
+
+				<div class="panel" id="display-panel">
+					<div class="panel-header panel-header-collapsible" @click="togglePanel('display')">
+						<span>Display</span>
+						<svg class="panel-chevron" :class="{ 'panel-chevron-collapsed': collapsedPanels['display'] }" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
+					</div>
+					<div class="panel-body" v-show="!collapsedPanels['display']">
+						<div class="form-row full-checkbox-row">
+							<label class="custom-checkbox" title="Share filtered sub-bands between local VFOs to reduce repeated high-rate DSP work. Disable to compare the direct pipeline.">
+								<input type="checkbox" v-model="display.sharedChannelization" :disabled="remoteMode === 'client'">
+								<span class="checkmark"></span>
+								Shared VFO DSP
+							</label>
+						</div>
+						<div class="form-row">
+							<label for="spectrum-fps">Spectrum FPS</label>
+							<select id="spectrum-fps" v-model.number="display.spectrumFps" :disabled="remoteMode === 'client'" title="Spectrum and waterfall display update rate; does not change radio settings or audio. Higher rates use more CPU. Remote reception uses the host's rate.">
+								<option :value="20">20 FPS</option>
+								<option :value="30">30 FPS</option>
+								<option :value="60">60 FPS</option>
+							</select>
+						</div>
+					</div>
+				</div>
 				</div>
 			<!-- Sidebar Footer -->
 			<div class="sidebar-footer">
@@ -446,6 +486,8 @@
 						<div>Audio: {{ dspStats.audioFps }} calls/s | {{ dspStats.audioRate }} samp/s</div>
 						<div>Msgs: {{ dspStats.msgRate }} /s | Input: {{ (dspStats.inputRate/1e6).toFixed(2) }} MSa/s</div>
 						<div>Dropped: {{ dspStats.dropped }}</div>
+						<div v-if="dspStats.channelization && dspStats.channelization.bands">Shared: {{ dspStats.channelization.vfos }} VFOs / {{ dspStats.channelization.bands }} bands @ {{ (dspStats.channelization.sampleRate / 1e6).toFixed(2) }} MSPS</div>
+						<div v-if="dspStats.channelization && dspStats.channelization.bands">Channelizer: {{ (dspStats.channelAvgMs || 0).toFixed(2) }}ms avg / {{ (dspStats.channelMaxMs || 0).toFixed(2) }}ms max | {{ (dspStats.channelCpuMs || 0).toFixed(0) }}ms CPU/s</div>
 					</div>
 				</div>
 				<!-- Active Audio VFOs Overlay -->
@@ -473,7 +515,7 @@
 		<div class="vfo-bottom-strip">
 			<div class="vfo-bottom-tab"
 				v-for="(vfo, i) in vfos" :key="'vfo-mob-' + i"
-				:class="{ 'vfo-active': activeVfoIndex === i, 'vfo-squelch-open': vfo.squelchEnabled && vfoSquelchOpen[i], 'vfo-audio-off': !vfo.enabled }"
+				:class="{ 'vfo-active': activeVfoIndex === i, 'vfo-squelch-open': vfo.squelchEnabled && vfoSquelchOpen[i], 'vfo-audio-off': !vfo.enabled, 'vfo-oob': !isFreqInBandwidth(vfo.freq) }"
 				@click="activeVfoIndex = i"
 				:style="Object.assign(
 					(activeVfoIndex === i || (vfo.squelchEnabled && vfoSquelchOpen[i])) ? { borderColor: vfoColor(i) } : {},
@@ -487,6 +529,7 @@
 					@focus="focusVfoFreq(i)"
 					@click.stop>
 				<span class="vfo-rx-badge" v-if="vfo.squelchEnabled && vfoSquelchOpen[i]" :style="{ background: vfoColor(i) }">RX</span>
+				<span class="vfo-oob-badge" v-if="!isFreqInBandwidth(vfo.freq)" title="Outside bandwidth">OOB</span>
 				<span class="vfo-mute-badge" v-if="!vfo.enabled"><svg viewBox="0 0 24 24" width="10" height="10"><path fill="currentColor" d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z"/></svg></span>
 			</div>
 		</div>
@@ -1082,6 +1125,35 @@
 				</div>
 				<div class="bookmark-dialog-footer">
 					<button class="btn btn-primary" @click="showAbout = false">Got it</button>
+				</div>
+			</div>
+		</div>
+
+		<!-- VFO conflict resolution dialog -->
+		<div v-if="vfoConflictDialog.show" class="bookmark-overlay">
+			<div class="bookmark-dialog">
+				<div class="bookmark-dialog-title">VFO Outside Bandwidth</div>
+				<div class="bookmark-dialog-body">
+					<p style="margin:0 0 12px">The requested frequency does not fit within the current bandwidth with all existing VFOs.</p>
+
+					<div v-if="vfoConflictDialog.optionA" style="margin-bottom:8px">
+						<button class="btn btn-primary" style="width:100%;text-align:left;white-space:normal"
+							@click="resolveVfoConflict('a')">
+							Re-center to {{ formatFreq(vfoConflictDialog.optionA.centerFreq) }} MHz
+							<br><small>{{ vfoConflictDialog.optionA.description }}</small>
+						</button>
+					</div>
+
+					<div v-if="vfoConflictDialog.optionB" style="margin-bottom:8px">
+						<button class="btn" style="width:100%;text-align:left;white-space:normal"
+							@click="resolveVfoConflict('b')">
+							Re-center to {{ formatFreq(vfoConflictDialog.optionB.centerFreq) }} MHz
+							<br><small>Only includes VFO {{ vfoConflictDialog.vfoIndex + 1 }}; VFO{{ vfoConflictDialog.optionB.excludedVfos.length > 1 ? 's' : '' }} {{ vfoConflictDialog.optionB.excludedVfos.map(i => i + 1).join(', ') }} will be outside bandwidth</small>
+						</button>
+					</div>
+				</div>
+				<div class="bookmark-dialog-footer">
+					<button class="btn" @click="resolveVfoConflict('cancel')">Cancel</button>
 				</div>
 			</div>
 		</div>

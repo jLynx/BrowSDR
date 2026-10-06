@@ -1,6 +1,7 @@
 import type { AppInstance } from './types';
 import { VFO_COLORS } from './constants';
 import { Waterfall, WaterfallGL } from '../utils';
+import { WaterfallClock } from '../spectrum-rate';
 
 export const canvasMethods = {
 	initCanvas(this: AppInstance) {
@@ -18,6 +19,7 @@ export const canvasMethods = {
 			new Waterfall(waterfall, renderSize, 512);
 
 		this._waterfallEngine.setRange(this.display.minDB, this.display.maxDB);
+		this._waterfallClock = new WaterfallClock();
 
 		this.resizeFftCanvas();
 
@@ -53,10 +55,10 @@ export const canvasMethods = {
 
 		// FPS calculation
 		const now = performance.now();
-		if (!this._lastFrameTime) {
+		if (!this._zoomRepaint && !this._lastFrameTime) {
 			this._lastFrameTime = now;
 			this._framesDrawn = 0;
-		} else {
+		} else if (!this._zoomRepaint) {
 			this._framesDrawn++;
 			if (now - this._lastFrameTime >= 1000) {
 				this.fps = Math.round((this._framesDrawn * 1000) / (now - this._lastFrameTime));
@@ -97,7 +99,8 @@ export const canvasMethods = {
 
 		// Waterfall drawing — skip adding a new history row when this is just a zoom repaint
 		if (!this._zoomRepaint) {
-			this._waterfallEngine.renderLine(wfData);
+			const step = this._waterfallClock.advance(now);
+			this._waterfallEngine.renderLine(wfData, step.rows, step.fraction);
 		} else if (this._waterfallEngine.render) {
 			// For a zoom-only repaint, just redraw the existing texture at the new zoom
 			this._waterfallEngine.render();
@@ -225,6 +228,7 @@ export function mountCanvas(this: AppInstance) {
 	let isDraggingVFO = false;
 	let isPanning = false;
 	let lastPanX = 0;
+	let dragPrevFreq = 0;
 
 	const getFreqFromEvent = (e: MouseEvent) => {
 		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -275,6 +279,14 @@ export function mountCanvas(this: AppInstance) {
 
 	const leaveListener = () => {
 		this.$refs.hoverTick.style.display = "none";
+		if (isDraggingVFO) {
+			const idx = this.activeVfoIndex;
+			if (idx >= 0 && idx < this.vfos.length) {
+				const finalFreq = this.vfos[idx].freq;
+				this.vfos[idx].freq = dragPrevFreq;
+				this.validateAndApplyVfoFreq(idx, finalFreq);
+			}
+		}
 		isDraggingVFO = false;
 		isPanning = false;
 	};
@@ -286,6 +298,7 @@ export function mountCanvas(this: AppInstance) {
 			const f = getFreqFromEvent(e);
 			const idx = this.activeVfoIndex;
 			if (idx >= 0 && idx < this.vfos.length) {
+				dragPrevFreq = this.vfos[idx].freq;
 				this.vfos[idx].freq = parseFloat(f.toFixed(3));
 				this.updateBackendVfoParams(idx);
 			}
@@ -297,6 +310,15 @@ export function mountCanvas(this: AppInstance) {
 	};
 
 	const handleMouseUp = (e: MouseEvent) => {
+		if (isDraggingVFO) {
+			const idx = this.activeVfoIndex;
+			if (idx >= 0 && idx < this.vfos.length) {
+				const finalFreq = this.vfos[idx].freq;
+				// Revert to pre-drag freq, then validate the final position
+				this.vfos[idx].freq = dragPrevFreq;
+				this.validateAndApplyVfoFreq(idx, finalFreq);
+			}
+		}
 		isDraggingVFO = false;
 		isPanning = false;
 	};
@@ -396,8 +418,7 @@ export function mountCanvas(this: AppInstance) {
 				const f = this.minFreq + p * (this.maxFreq - this.minFreq);
 				const idx = this.activeVfoIndex;
 				if (idx >= 0 && idx < this.vfos.length) {
-					this.vfos[idx].freq = parseFloat(f.toFixed(3));
-					this.updateBackendVfoParams(idx);
+					this.validateAndApplyVfoFreq(idx, parseFloat(f.toFixed(3)));
 				}
 			}
 		}

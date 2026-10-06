@@ -19,6 +19,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 */
 
 import { ensureWasmInitialized, init } from './wasm-init';
+import { normalizeSpectrumFps } from '../spectrum-rate';
 import { MockHackRF } from './mock-hackrf';
 import type { SdrDevice, SdrDeviceInfo, DeviceCapabilities } from '../sdr-device';
 import { detectDevice } from '../sdr-device';
@@ -27,6 +28,7 @@ import '../devices/hackrf';
 import '../devices/rtlsdr';
 import '../devices/airspy';
 import '../devices/airspyhf';
+import '../devices/limesdr';
 import {
 	setRemoteHostCallback,
 	setRemoteHostFftCallback,
@@ -48,6 +50,7 @@ import {
 } from './remote-clients';
 import { startRxStream } from './rx-stream';
 import type { VfoParams, VfoState, PerfCounters, RxStreamOpts, RemoteClientState, DeviceOpenOpts } from './types';
+import { displayToDeviceFrequencyHz } from '../frequency-shift';
 
 export class Backend {
 	// Hardware — generic SDR device
@@ -68,6 +71,10 @@ export class Backend {
 	// DSP perf
 	_perf?: PerfCounters;
 	_perfInterval?: any;
+	_spectrumFps = 20;
+	_sharedChannelization = true;
+	_disposeChannelization?: () => void;
+	_sharedChannelStats = { bands: 0, vfos: 0, sampleRate: 0 };
 
 	// Internal state
 	_sampleRate?: number;
@@ -176,8 +183,18 @@ export class Backend {
 
 		return {
 			...this._perf.report,
+			channelization: this._sharedChannelStats,
 			squelchOpen: combinedSquelch,
+			squelchDb: this.vfoStates ? this.vfoStates.map(s => s.squelchDb ?? -120) : [],
 		};
+	}
+
+	setSpectrumFps(value: number): void {
+		this._spectrumFps = normalizeSpectrumFps(value);
+	}
+
+	setSharedChannelization(enabled: boolean): void {
+		this._sharedChannelization = enabled;
 	}
 
 	setVfoParams(index: number, params: Partial<VfoParams>): void {
@@ -234,14 +251,55 @@ export class Backend {
 		await this.device.setSampleRate(rate);
 	}
 
-	async setFrequency(freqHz: number): Promise<void> {
+	async setFrequency(centerFreqMhz: number, frequencyShiftMhz = 0): Promise<void> {
 		if (!this.device) throw new Error('No device connected');
-		await this.device.setFrequency(freqHz);
+		await this.device.setFrequency(displayToDeviceFrequencyHz(centerFreqMhz, frequencyShiftMhz));
+		
+		this._centerFreq = centerFreqMhz;
+
+		if (this.vfoParams && this.dspWorkers) {
+			for (let i = 0; i < this.vfoParams.length; i++) {
+				if (this.dspWorkers[i]) {
+					this.dspWorkers[i].postMessage({
+						type: 'configure',
+						params: this.vfoParams[i],
+						centerFreq: this._centerFreq
+					});
+				}
+			}
+		}
+
+		if (this._remoteClients) {
+			for (const rc of this._remoteClients.values()) {
+				if (rc.workers && rc.params) {
+					for (let i = 0; i < rc.workers.length; i++) {
+						if (rc.workers[i]) {
+							rc.workers[i]!.postMessage({
+								type: 'configure',
+								params: rc.params[i],
+								centerFreq: this._centerFreq
+							});
+						}
+					}
+				}
+			}
+		}
 	}
 
 	async setGain(name: string, value: number): Promise<void> {
 		if (!this.device) throw new Error('No device connected');
 		await this.device.setGain(name, value);
+	}
+
+	async setGains(gains: Record<string, number>): Promise<void> {
+		if (!this.device) throw new Error('No device connected');
+		if (this.device.setGains) {
+			await this.device.setGains(gains);
+		} else {
+			for (const [name, value] of Object.entries(gains)) {
+				await this.device.setGain(name, value);
+			}
+		}
 	}
 
 	async startRx(callback: any): Promise<void> {
@@ -252,11 +310,13 @@ export class Backend {
 	async stopRx(): Promise<void> {
 		if (!this.device) throw new Error('No device connected');
 		await this.device.stopRx();
+		this._disposeChannelization?.();
 	}
 
 	async close(): Promise<void> {
 		if (!this.device) return;
 		await this.device.close();
+		this._disposeChannelization?.();
 		this.device = null;
 	}
 }

@@ -58,7 +58,9 @@ export const connectionMethods = {
 					// Initialize gains from device defaults
 					const newGains: Record<string, number> = {};
 					for (const gc of caps.gainControls) {
-						newGains[gc.name] = gc.default;
+						const saved = this.gains[gc.name];
+						newGains[gc.name] = caps.deviceType === 'limesdr' && (gc.name === 'Antenna' || gc.name === 'RX Channel')
+							&& Number.isInteger(saved) && saved >= gc.min && saved <= gc.max ? saved : gc.default;
 					}
 					this.gains = newGains;
 
@@ -195,8 +197,11 @@ export const connectionMethods = {
 
 		const opts = {
 			centerFreq: this.radio.centerFreq,
+			frequencyShift: this.radio.frequencyShift,
 			sampleRate: this.radio.sampleRate,
 			fftSize: this.radio.fftSize,
+			spectrumFps: this.display.spectrumFps,
+			sharedChannelization: this.display.sharedChannelization,
 			gains: { ...this.gains },
 		};
 
@@ -210,7 +215,7 @@ export const connectionMethods = {
 			);
 		} catch (e: any) {
 			console.error('Error starting RX stream:', e);
-			this.showMsg("Error starting stream.");
+			this.showMsg("Error starting stream: " + e.message);
 			this.running = false;
 			return;
 		}
@@ -258,6 +263,14 @@ export const connectionMethods = {
 					}
 					// Bump reactive tick so sortedVfoActivity recomputes
 					this.activityNow = now;
+				}
+				// ── Auto-squelch sample collection ──
+				if (this.dspStats && this.dspStats.squelchDb) {
+					for (let i = 0; i < this.dspStats.squelchDb.length; i++) {
+						if (this.autoSquelchActive[i] && this.autoSquelchSamples[i]) {
+							this.autoSquelchSamples[i].push(this.dspStats.squelchDb[i]);
+						}
+					}
 				}
 			}
 		}, 500);

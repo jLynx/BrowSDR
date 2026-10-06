@@ -36,6 +36,7 @@ export interface VfoParams {
 
 export interface VfoState {
 	squelchOpen: boolean;
+	squelchDb: number;
 	pocsagDecoder: any;
 	rdsDecoder: any;
 	audioQueue: Float32Array;
@@ -77,12 +78,18 @@ export interface PerfReport {
 	dropped: number;
 	chunkSize: number;
 	msgRate?: number;
+	channelAvgMs?: number;
+	channelMaxMs?: number;
+	channelCpuMs?: number;
 }
 
 export interface RxStreamOpts {
 	centerFreq: number;
+	frequencyShift?: number;
 	sampleRate: number;
 	fftSize: number;
+	spectrumFps?: number;
+	sharedChannelization?: boolean;
 	gains?: Record<string, number>;
 	/** @deprecated Use gains instead */
 	lnaGain?: number;
