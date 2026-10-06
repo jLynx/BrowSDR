@@ -107,6 +107,7 @@ export class WaterfallGL {
 	uZoomOffsetLocation!: WebGLUniformLocation | null;
 	uZoomScaleLocation!: WebGLUniformLocation | null;
 	_current!: number;
+	private scrollFraction = 0;
 
 	constructor(canvas: HTMLCanvasElement, bandSize: number, historySize: number) {
 		this.bandSize = bandSize;
@@ -290,12 +291,12 @@ export class WaterfallGL {
 	render(): void {
 		const gl = this.gl;
 
-		gl.uniform1f(gl.getUniformLocation(this.shaderProgram, 'uOffsetY'), this._current);
+		gl.uniform1f(gl.getUniformLocation(this.shaderProgram, 'uOffsetY'), this._current + this.scrollFraction);
 
 		gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 	}
 
-	renderLine(array: Float32Array | number[]): void {
+	renderLine(array: Float32Array | number[], rows: number = 1, fraction: number = 0): void {
 		const gl = this.gl;
 		const data = this.data;
 
@@ -309,26 +310,29 @@ export class WaterfallGL {
 			data[n + 3] = 255;
 		}
 
-		const xoffset = 0, yoffset = this._current, width = this.bandSize, height = 1;
-		gl.texSubImage2D(gl.TEXTURE_2D, 0, xoffset, yoffset, width, height, gl.RGBA, gl.UNSIGNED_BYTE, data);
+		for (let row = 0; row < rows; row++) {
+			gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, this._current, this.bandSize, 1, gl.RGBA, gl.UNSIGNED_BYTE, data);
 
-		this._current++;
+			this._current++;
 
-		if (this._current >= this.historySize) {
-			// When the texture is full, rotate it
-			// [A, B] -> [B, A]: A (the full texture) becomes the "old data" texture
-			this._current = 0;
-			this.textures.push(this.textures.shift()!);
+			if (this._current >= this.historySize) {
+				// When the texture is full, rotate it
+				// [A, B] -> [B, A]: A (the full texture) becomes the "old data" texture
+				this._current = 0;
+				this.textures.push(this.textures.shift()!);
 
-			gl.activeTexture(gl.TEXTURE1);
-			gl.bindTexture(gl.TEXTURE_2D, this.textures[1]);
-			gl.uniform1i(gl.getUniformLocation(this.shaderProgram, "uTexture1"), 1);
+				gl.activeTexture(gl.TEXTURE1);
+				gl.bindTexture(gl.TEXTURE_2D, this.textures[1]);
+				gl.uniform1i(gl.getUniformLocation(this.shaderProgram, "uTexture1"), 1);
 
-			gl.activeTexture(gl.TEXTURE0);
-			gl.bindTexture(gl.TEXTURE_2D, this.textures[0]);
-			gl.uniform1i(gl.getUniformLocation(this.shaderProgram, "uTexture0"), 0);
+				gl.activeTexture(gl.TEXTURE0);
+				gl.bindTexture(gl.TEXTURE_2D, this.textures[0]);
+				gl.uniform1i(gl.getUniformLocation(this.shaderProgram, "uTexture0"), 0);
 
+			}
 		}
+		gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, this._current, this.bandSize, 1, gl.RGBA, gl.UNSIGNED_BYTE, data);
+		this.scrollFraction = fraction;
 
 		this.render();
 	}
@@ -346,6 +350,8 @@ export class Waterfall {
 	offCtx: CanvasRenderingContext2D;
 	zoomOffset: number;
 	zoomScale: number;
+	private scrollFraction = 0;
+	private preview: HTMLCanvasElement;
 
 	constructor(canvas: HTMLCanvasElement, bandSize: number, historySize: number) {
 		this.bandSize = bandSize;
@@ -365,6 +371,9 @@ export class Waterfall {
 		this.offscreen.width = this.bandSize;
 		this.offscreen.height = this.historySize;
 		this.offCtx = this.offscreen.getContext('2d')!;
+		this.preview = document.createElement('canvas');
+		this.preview.width = this.bandSize;
+		this.preview.height = 1;
 
 		this.zoomOffset = 0.0;
 		this.zoomScale = 1.0;
@@ -382,9 +391,12 @@ export class Waterfall {
 		const sourceX = this.zoomOffset * offscreen.width;
 		const sourceWidth = offscreen.width / this.zoomScale;
 		ctx.drawImage(offscreen,
-			sourceX, 0, sourceWidth, offscreen.height,
-			0, 0, canvas.width, canvas.height
+			sourceX, 0, sourceWidth, offscreen.height - this.scrollFraction,
+			0, this.scrollFraction, canvas.width, canvas.height - this.scrollFraction
 		);
+		if (this.scrollFraction > 0) {
+			ctx.drawImage(this.preview, sourceX, 0, sourceWidth, 1, 0, 0, canvas.width, this.scrollFraction);
+		}
 	}
 
 	setRange(minDB: number, maxDB: number): void {
@@ -392,14 +404,14 @@ export class Waterfall {
 		this.maxDB = maxDB;
 	}
 
-	renderLine(array: Float32Array | number[]): void {
-		const { canvas, ctx, offCtx, offscreen } = this;
+	renderLine(array: Float32Array | number[], rows: number = 1, fraction: number = 0): void {
+		const { offCtx, offscreen } = this;
 
 		// shift data to down on offscreen
-		offCtx.drawImage(
+		if (rows > 0) offCtx.drawImage(
 			offscreen,
-			0, 0, offscreen.width, offscreen.height - 1,
-			0, 1, offscreen.width, offscreen.height - 1
+			0, 0, offscreen.width, offscreen.height - rows,
+			0, rows, offscreen.width, offscreen.height - rows
 		);
 
 		var imageData = offCtx.getImageData(0, 0, offscreen.width, 1);
@@ -415,18 +427,11 @@ export class Waterfall {
 			data[n + 3] = 255;
 		}
 
-		offCtx.putImageData(imageData, 0, 0);
+		for (let row = 0; row < rows; row++) offCtx.putImageData(imageData, 0, row);
+		this.preview.getContext('2d')!.putImageData(imageData, 0, 0);
+		this.scrollFraction = fraction;
 
 		// Now draw from offscreen to main canvas with zoom applied
-		ctx.fillStyle = 'black';
-		ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-		const sourceX = this.zoomOffset * offscreen.width;
-		const sourceWidth = offscreen.width / this.zoomScale;
-
-		ctx.drawImage(offscreen,
-			sourceX, 0, sourceWidth, offscreen.height,
-			0, 0, canvas.width, canvas.height
-		);
+		this.render();
 	}
 }

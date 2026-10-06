@@ -82,6 +82,7 @@ export interface RxStreamOpts {
 	frequencyShift?: number;
 	sampleRate: number;
 	fftSize: number;
+	spectrumFps?: number;
 	gains?: Record<string, number>;
 	/** @deprecated Use gains instead */
 	lnaGain?: number;

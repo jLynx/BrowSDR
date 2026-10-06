@@ -26,6 +26,7 @@ export function createAppData() {
 			fftSize: 65536,
 		},
 		display: {
+			spectrumFps: 20,
 			minDB: -70.0,
 			maxDB: 0.0,
 		},

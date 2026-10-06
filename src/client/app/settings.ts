@@ -1,5 +1,6 @@
 import type { AppInstance } from './types';
 import { makeDefaultVfo } from './constants';
+import { normalizeSpectrumFps } from '../spectrum-rate';
 
 export const settingsMethods = {
 	saveSetting(this: AppInstance) {
@@ -28,6 +29,7 @@ export const settingsMethods = {
 					}
 				}
 				if (setting.display) Object.assign(this.display, setting.display);
+				this.display.spectrumFps = normalizeSpectrumFps(this.display.spectrumFps);
 				if (setting.gains) Object.assign(this.gains, setting.gains);
 				if (setting.locks) Object.assign(this.locks, setting.locks);
 				// Handle new format (vfos array) or legacy format (audio/audio2)

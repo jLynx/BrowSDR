@@ -19,6 +19,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 */
 
 import { ensureWasmInitialized, init } from './wasm-init';
+import { normalizeSpectrumFps } from '../spectrum-rate';
 import { MockHackRF } from './mock-hackrf';
 import type { SdrDevice, SdrDeviceInfo, DeviceCapabilities } from '../sdr-device';
 import { detectDevice } from '../sdr-device';
@@ -27,6 +28,7 @@ import '../devices/hackrf';
 import '../devices/rtlsdr';
 import '../devices/airspy';
 import '../devices/airspyhf';
+import '../devices/limesdr';
 import {
 	setRemoteHostCallback,
 	setRemoteHostFftCallback,
@@ -69,6 +71,7 @@ export class Backend {
 	// DSP perf
 	_perf?: PerfCounters;
 	_perfInterval?: any;
+	_spectrumFps = 20;
 
 	// Internal state
 	_sampleRate?: number;
@@ -180,6 +183,10 @@ export class Backend {
 			squelchOpen: combinedSquelch,
 			squelchDb: this.vfoStates ? this.vfoStates.map(s => s.squelchDb ?? -120) : [],
 		};
+	}
+
+	setSpectrumFps(value: number): void {
+		this._spectrumFps = normalizeSpectrumFps(value);
 	}
 
 	setVfoParams(index: number, params: Partial<VfoParams>): void {

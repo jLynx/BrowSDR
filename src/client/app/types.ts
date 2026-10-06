@@ -27,6 +27,7 @@ export interface RadioState {
 }
 
 export interface DisplayState {
+	spectrumFps: number;
 	minDB: number;
 	maxDB: number;
 }
