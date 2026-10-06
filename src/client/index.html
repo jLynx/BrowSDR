@@ -432,6 +432,13 @@
 						<svg class="panel-chevron" :class="{ 'panel-chevron-collapsed': collapsedPanels['display'] }" viewBox="0 0 24 24" width="14" height="14"><path fill="currentColor" d="M7 10l5 5 5-5z"/></svg>
 					</div>
 					<div class="panel-body" v-show="!collapsedPanels['display']">
+						<div class="form-row full-checkbox-row">
+							<label class="custom-checkbox" title="Share filtered sub-bands between local VFOs to reduce repeated high-rate DSP work. Disable to compare the direct pipeline.">
+								<input type="checkbox" v-model="display.sharedChannelization" :disabled="remoteMode === 'client'">
+								<span class="checkmark"></span>
+								Shared VFO DSP
+							</label>
+						</div>
 						<div class="form-row">
 							<label for="spectrum-fps">Spectrum FPS</label>
 							<select id="spectrum-fps" v-model.number="display.spectrumFps" :disabled="remoteMode === 'client'" title="Spectrum and waterfall display update rate; does not change radio settings or audio. Higher rates use more CPU. Remote reception uses the host's rate.">
@@ -476,6 +483,8 @@
 						<div>Audio: {{ dspStats.audioFps }} calls/s | {{ dspStats.audioRate }} samp/s</div>
 						<div>Msgs: {{ dspStats.msgRate }} /s | Input: {{ (dspStats.inputRate/1e6).toFixed(2) }} MSa/s</div>
 						<div>Dropped: {{ dspStats.dropped }}</div>
+						<div v-if="dspStats.channelization && dspStats.channelization.bands">Shared: {{ dspStats.channelization.vfos }} VFOs / {{ dspStats.channelization.bands }} bands @ {{ (dspStats.channelization.sampleRate / 1e6).toFixed(2) }} MSPS</div>
+						<div v-if="dspStats.channelization && dspStats.channelization.bands">Channelizer: {{ (dspStats.channelAvgMs || 0).toFixed(2) }}ms avg / {{ (dspStats.channelMaxMs || 0).toFixed(2) }}ms max | {{ (dspStats.channelCpuMs || 0).toFixed(0) }}ms CPU/s</div>
 					</div>
 				</div>
 				<!-- Active Audio VFOs Overlay -->

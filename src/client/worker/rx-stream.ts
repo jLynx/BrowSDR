@@ -20,6 +20,8 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 
 import * as Comlink from 'comlink';
 import { FFT } from './wasm-init';
+import { planSharedBands } from './channel-plan';
+import type { ChannelPlan } from './channel-plan';
 import { RationalResampler } from './dsp-pipeline';
 import { POCSAGDecoder } from './pocsag';
 import type { RxStreamOpts, VfoParams, VfoState, PerfCounters } from './types';
@@ -76,6 +78,16 @@ export async function startRxStream(
 		const iqBuffer = new Int8Array(fftSize * 2);
 		let iqBufferPos = 0;
 		backend.setSpectrumFps(opts.spectrumFps ?? 20);
+		backend._sharedChannelization = opts.sharedChannelization !== false;
+		let channelWorker: Worker | undefined;
+		let latestPlan: ChannelPlan | undefined;
+		let pendingChannelSamples = 0;
+		let channelKey = '';
+		let channelTimeSum = 0;
+		let channelTimeMax = 0;
+		let channelCalls = 0;
+		backend._disposeChannelization?.();
+		backend._disposeChannelization = () => { channelWorker?.terminate(); channelWorker = undefined; pendingChannelSamples = 0; };
 		let lastSpectrumTime = 0;
 
 		// ── Audio DDC setup ───────────────────────────────────────────
@@ -181,7 +193,13 @@ export async function startRxStream(
 				dropped: perf.droppedChunks,
 				chunkSize: perf.lastChunkSize || 0,
 				msgRate: Math.round(perf.msgsSent / dt),
+				channelAvgMs: channelCalls ? channelTimeSum / channelCalls : 0,
+				channelMaxMs: channelTimeMax,
+				channelCpuMs: channelTimeSum / dt,
 			};
+			channelTimeSum = 0;
+			channelTimeMax = 0;
+			channelCalls = 0;
 			perf.usbCallbacks = 0;
 			perf.audioCalls = 0;
 			perf.audioSamplesOut = 0;
@@ -679,15 +697,50 @@ export async function startRxStream(
 			}
 
 			// Broadcast to DSP workers
+			const plan = planSharedBands(sampleRate, backend._centerFreq ?? centerFreq, backend.vfoParams!, backend._sharedChannelization);
+			const nextKey = JSON.stringify([backend._centerFreq ?? centerFreq, plan.ratio, plan.bands.map(band => band.centerBin)]);
+			latestPlan = plan;
+			channelKey = nextKey;
+			backend._sharedChannelStats = { bands: plan.bands.length, vfos: plan.bands.reduce((count, band) => count + band.vfos.length, 0), sampleRate: plan.sampleRate };
+			if (plan.bands.length) {
+				if (!channelWorker) {
+					channelWorker = new globalThis.Worker(new URL('../dsp-worker.ts', import.meta.url), { type: 'module' });
+					channelWorker.onmessage = ({ data: message }: MessageEvent) => {
+						pendingChannelSamples -= message.inputSamples || 0;
+						if (message.type === 'channel_error') { console.error('Shared channelizer:', message.error); perf.droppedChunks++; return; }
+						channelCalls++;
+						channelTimeSum += message.dspTime;
+						channelTimeMax = Math.max(channelTimeMax, message.dspTime);
+						if (message.key !== channelKey || !backend._sharedChannelization) return;
+						for (const result of message.bands) {
+							const band = latestPlan?.bands.find(value => value.centerBin === result.centerBin);
+							if (!band) continue;
+							for (const index of band.vfos) {
+								backend.dspWorkers![index]?.postMessage({ type: 'process', floatIq: true, chunk: result.buffer, chunkLen: result.length,
+									sampleRate: latestPlan!.sampleRate, centerFreq: band.centerFreq, params: backend.vfoParams![index], chunkId: message.chunkId });
+							}
+						}
+					};
+				}
+				if (pendingChannelSamples < sampleRate * 0.1) {
+					const buffer = signed.slice().buffer;
+					pendingChannelSamples += signed.length / 2;
+					channelWorker.postMessage({ type: 'channelize', key: channelKey, ratio: plan.ratio, centers: plan.bands.map(band => band.centerBin),
+						sampleRate: plan.sampleRate, chunk: buffer, inputSamples: signed.length / 2, chunkId: chunkCounter }, [buffer]);
+				} else perf.droppedChunks++;
+			} else if (channelWorker) {
+				backend._disposeChannelization?.();
+			}
 			for (let v = 0; v < backend.dspWorkers!.length; v++) {
+				if (!plan.direct.includes(v)) continue;
 				const worker = backend.dspWorkers![v];
 				if (!worker) continue;
 				const params = backend.vfoParams![v];
 				if (typeof SharedArrayBuffer !== 'undefined') {
-					worker.postMessage({ type: 'process', params: params, useSab: true, sabIndex: backend.sabPoolIndex, chunkLen: signed.length, chunkId: chunkCounter });
+					worker.postMessage({ type: 'process', params: params, sampleRate, centerFreq: backend._centerFreq ?? centerFreq, useSab: true, sabIndex: backend.sabPoolIndex, chunkLen: signed.length, chunkId: chunkCounter });
 				} else {
 					const cloneBuf = signed.slice().buffer;
-					worker.postMessage({ type: 'process', params: params, useSab: false, chunk: cloneBuf, chunkLen: signed.length, chunkId: chunkCounter }, [cloneBuf]);
+					worker.postMessage({ type: 'process', params: params, sampleRate, centerFreq: backend._centerFreq ?? centerFreq, useSab: false, chunk: cloneBuf, chunkLen: signed.length, chunkId: chunkCounter }, [cloneBuf]);
 				}
 			}
 

@@ -1,6 +1,7 @@
 mod dsp;
 mod fft;
 mod processor;
+mod channelizer;
 
 #[cfg(test)]
 mod tests;
@@ -44,6 +45,15 @@ pub fn free_iq_buffer(ptr: *mut i8, capacity: usize) {
 // Re-export WASM-bound types at crate root so wasm-bindgen finds them
 pub use fft::FFT;
 pub use processor::DspProcessor;
+pub use channelizer::SharedChannelizer;
+
+#[wasm_bindgen]
+pub fn alloc_float_buffer(capacity: usize) -> *mut f32 {
+    let mut buffer = vec![0.0f32; capacity];
+    let pointer = buffer.as_mut_ptr();
+    std::mem::forget(buffer);
+    pointer
+}
 
 // ============================================================================
 // Wasm Tests (wasm-bindgen-test)

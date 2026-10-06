@@ -72,6 +72,9 @@ export class Backend {
 	_perf?: PerfCounters;
 	_perfInterval?: any;
 	_spectrumFps = 20;
+	_sharedChannelization = true;
+	_disposeChannelization?: () => void;
+	_sharedChannelStats = { bands: 0, vfos: 0, sampleRate: 0 };
 
 	// Internal state
 	_sampleRate?: number;
@@ -180,6 +183,7 @@ export class Backend {
 
 		return {
 			...this._perf.report,
+			channelization: this._sharedChannelStats,
 			squelchOpen: combinedSquelch,
 			squelchDb: this.vfoStates ? this.vfoStates.map(s => s.squelchDb ?? -120) : [],
 		};
@@ -187,6 +191,10 @@ export class Backend {
 
 	setSpectrumFps(value: number): void {
 		this._spectrumFps = normalizeSpectrumFps(value);
+	}
+
+	setSharedChannelization(enabled: boolean): void {
+		this._sharedChannelization = enabled;
 	}
 
 	setVfoParams(index: number, params: Partial<VfoParams>): void {
@@ -299,11 +307,13 @@ export class Backend {
 	async stopRx(): Promise<void> {
 		if (!this.device) throw new Error('No device connected');
 		await this.device.stopRx();
+		this._disposeChannelization?.();
 	}
 
 	async close(): Promise<void> {
 		if (!this.device) return;
 		await this.device.close();
+		this._disposeChannelization?.();
 		this.device = null;
 	}
 }

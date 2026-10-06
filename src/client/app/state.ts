@@ -27,6 +27,7 @@ export function createAppData() {
 		},
 		display: {
 			spectrumFps: 20,
+			sharedChannelization: true,
 			minDB: -70.0,
 			maxDB: 0.0,
 		},
