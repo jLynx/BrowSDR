@@ -154,6 +154,7 @@ export const connectionMethods = {
 	},
 	async togglePlay(this: AppInstance, isRestart = false) {
 		if (this.running) {
+			this.stopFt8();
 			await this.backend.stopRx();
 			this.running = false;
 			if (this._statsTimer) { clearInterval(this._statsTimer); this._statsTimer = null; }
@@ -212,7 +213,8 @@ export const connectionMethods = {
 				Comlink.proxy((vfoIndex: number, freq: number, samples: any) => this._feedWhisperVfo(vfoIndex, freq, samples)),
 				Comlink.proxy((vfoIndex: number, freq: number, msg: any) => this._onPocsagMessage(vfoIndex, freq, msg)),
 				Comlink.proxy((vfoIndex: number, freq: number, msg: any) => this._onRdsMessage(vfoIndex, freq, msg)),
-				Comlink.proxy((vfoIndex: number, status: any) => this._onDsdStatus(vfoIndex, status))
+				Comlink.proxy((vfoIndex: number, status: any) => this._onDsdStatus(vfoIndex, status)),
+				Comlink.proxy((vfoIndex: number, freq: number, samples: Float32Array, endTime: number) => this._feedFt8(vfoIndex, freq, samples, endTime))
 			);
 		} catch (e: any) {
 			console.error('Error starting RX stream:', e);

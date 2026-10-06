@@ -19,6 +19,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 */
 
 export interface VfoParams {
+	ft8?: boolean;
 	freq: number;
 	mode: string;
 	enabled: boolean;

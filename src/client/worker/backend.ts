@@ -176,8 +176,8 @@ export class Backend {
 	initRemoteClient = initRemoteClient.bind(this);
 	feedRemoteAudioChunk = feedRemoteAudioChunk.bind(this);
 
-	async startRxStream(opts: RxStreamOpts, spectrumCallback: any, audioCallback: any, whisperCallback: any = null, pocsagCallback: any = null, rdsCallback: any = null, dsdStatusCallback: any = null): Promise<void> {
-		return startRxStream(this, opts, spectrumCallback, audioCallback, whisperCallback, pocsagCallback, rdsCallback, dsdStatusCallback);
+	async startRxStream(opts: RxStreamOpts, spectrumCallback: any, audioCallback: any, whisperCallback: any = null, pocsagCallback: any = null, rdsCallback: any = null, dsdStatusCallback: any = null, ft8Callback: any = null): Promise<void> {
+		return startRxStream(this, opts, spectrumCallback, audioCallback, whisperCallback, pocsagCallback, rdsCallback, dsdStatusCallback, ft8Callback);
 	}
 
 	getDspStats(): any {

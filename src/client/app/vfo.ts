@@ -62,6 +62,7 @@ export const vfoMethods = {
 				highPass: vfo.highPass,
 				rds: vfo.rds && inBandwidth,
 				rdsRegion: vfo.rdsRegion,
+				ft8: this.ft8.active && this.ft8.vfoIndex === index && vfo.mode === 'usb' && inBandwidth,
 				volume: vfo.volume,
 				pocsag: vfo.pocsag,
 			};
@@ -277,6 +278,10 @@ export const vfoMethods = {
 
 	async removeVfo(this: AppInstance, index: number) {
 		if (this.vfos.length <= 1) return;
+		if (index <= this.ft8.vfoIndex) {
+			this.stopFt8();
+			this.ft8.vfoIndex = Math.max(0, this.ft8.vfoIndex - 1);
+		}
 		this.vfos.splice(index, 1);
 		if (this.backend && this.running) {
 			if (this.remoteMode === 'client' && this._webrtc) {

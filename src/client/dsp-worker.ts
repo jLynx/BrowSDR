@@ -156,7 +156,7 @@ self.onmessage = async (e: MessageEvent) => {
         }
         inputIsFloat = msg.floatIq === true;
         // Audio mute does not stop independent RDS or pager decoding.
-        if (!msg.params.enabled && !msg.params.pocsag && !(msg.params.rds && msg.params.mode === 'wfm')) return;
+        if (!msg.params.enabled && !msg.params.pocsag && !msg.params.ft8 && !(msg.params.rds && msg.params.mode === 'wfm')) return;
         // Copy payload into WASM memory
         const wasmMemView = new Int8Array(_wasm.memory.buffer);
 

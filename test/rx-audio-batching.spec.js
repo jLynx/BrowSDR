@@ -20,12 +20,13 @@ async function createStream(vfoCount = 1) {
 	});
 	const audio = vi.fn();
 	const whisper = vi.fn();
+	const ft8 = vi.fn();
 	const backend = {
 		device: { setSampleRate: vi.fn(), setFrequency: vi.fn(), startRx: vi.fn() },
 		setSpectrumFps: vi.fn(),
 		_reinitRemoteClientWorkers: vi.fn(),
 	};
-	await startRxStream(backend, { centerFreq: 95, sampleRate: 61440000, fftSize: 65536 }, null, audio, whisper, null);
+	await startRxStream(backend, { centerFreq: 95, sampleRate: 61440000, fftSize: 65536 }, null, audio, whisper, null, null, null, ft8);
 	for (let index = 1; index < vfoCount; index++) {
 		backend.vfoParams.push({ ...backend.vfoParams[0], freq: 89 + index / 10 });
 		backend.vfoStates.push(backend._makeVfoState());
@@ -35,10 +36,22 @@ async function createStream(vfoCount = 1) {
 		samples: new Float32Array(size).fill(0.01).buffer,
 		squelchOpen: false, squelchDb: -50, dspTime: 0.5,
 	});
-	return { backend, audio, whisper, feed };
+	return { backend, audio, whisper, ft8, feed };
 }
 
 describe('RX audio delivery batching', () => {
+	it('feeds isolated FT8 audio at zero speaker volume and while muted', async () => {
+		const { backend, ft8, audio, whisper, feed } = await createStream();
+		Object.assign(backend.vfoParams[0], { ft8: true, mode: 'usb', enabled: false, volume: 0 });
+		feed(0, 4800);
+		expect(ft8).toHaveBeenCalledTimes(1);
+		expect(ft8.mock.calls[0][2][0]).toBeCloseTo(0.01);
+		expect(audio).not.toHaveBeenCalled();
+		expect(whisper).not.toHaveBeenCalled();
+		backend.vfoParams[0].ft8 = false;
+		feed(0, 4800);
+		expect(ft8).toHaveBeenCalledTimes(1);
+	});
 	it('batches small mixer outputs into a 50 ms delivery', async () => {
 		const { backend, audio, feed } = await createStream();
 		for (let chunk = 0; chunk < 47; chunk++) feed(0, 51);

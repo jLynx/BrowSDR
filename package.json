@@ -6,6 +6,8 @@
 	"scripts": {
 		"build": "vite build",
 		"build:mbelib": "bash mbelib-wasm/build.sh",
+		"build:ft8": "bash ft8-wasm/build.sh",
+		"test:ft8": "node scripts/validate-ft8.mjs && vitest run test/ft8-stream.spec.js test/ft8-receiver.spec.js test/rx-audio-batching.spec.js",
 		"deploy": "vite build && wrangler deploy",
 		"dev": "vite",
 		"start": "vite",

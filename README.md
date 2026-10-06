@@ -20,6 +20,9 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
   Built-in AI-powered live transcription of demodulated audio right in your browser.
 * **📟 POCSAG Decoder**
   Instantly decode paging networks straight from the UI.
+* **FT8 Reception**
+  Decode FT8 from a local SDR in your browser, with UTC receive slots, band presets,
+  an isolated USB VFO audio source, and CSV export. Receive only; no transmitter.
 * **📊 Frequency Activity**
   Visually spot active signals and quickly jump to transmissions using the dynamic frequency activity scanner and interactive waterfall display.
 * **🔖 Advanced Bookmarking System**

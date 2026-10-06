@@ -17,7 +17,7 @@ export interface ChannelPlan {
 
 export function planSharedBands(sampleRate: number, centerFreq: number, params: VfoParams[], enabled: boolean): ChannelPlan {
 	const active = params.map((value, index) => ({ value, index })).filter(({ value }) =>
-		value.enabled || value.pocsag || (value.rds && value.mode === 'wfm'));
+		value.enabled || value.pocsag || value.ft8 || (value.rds && value.mode === 'wfm'));
 	const direct = active.map(({ index }) => index);
 	const fallback = { ratio: 1, sampleRate, bands: [], direct };
 	if (!enabled || active.length < 3 || sampleRate < 4000000) return fallback;

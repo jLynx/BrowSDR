@@ -1,5 +1,7 @@
 import { makeDefaultVfo, BOOKMARK_CATEGORIES } from './constants';
 import type { DSDStatus } from '../worker/dsd/types';
+import { FT8_BANDS } from './ft8';
+import type { FT8Message } from '../ft8/decoder';
 
 export function createAppData() {
 	return {
@@ -80,6 +82,12 @@ export function createAppData() {
 			panelOpen: false,
 			log: [] as Array<{ time: string; freq: string; vfoIndex: number; capcode: string; type: string; text: string; baud: number }>,
 		},
+		ft8: {
+			panelOpen: false, active: false, vfoIndex: 0, band: 28.074,
+			status: 'Stopped', progress: 0, slots: 0, lastDecode: '',
+			log: [] as Array<FT8Message & { slot: number; freq: number; vfoIndex: number }>,
+		},
+		ft8Bands: FT8_BANDS,
 		dsdStatus: [] as Array<DSDStatus | null>,
 		rds: {
 			panelOpen: false,

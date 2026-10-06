@@ -41,7 +41,8 @@ export async function startRxStream(
 	whisperCallback: any,
 	pocsagCallback: any,
 	rdsCallback: any = null,
-	dsdStatusCallback: any = null
+	dsdStatusCallback: any = null,
+	ft8Callback: any = null
 ): Promise<void> {
 	if (_streamStarting) return;
 	_streamStarting = true;
@@ -560,6 +561,10 @@ export async function startRxStream(
 			if (msg.samples) {
 				const out = new Float32Array(msg.samples);
 				perf.audioSamplesOut += out.length;
+				if (ft8Callback && params.ft8 && params.mode === 'usb') {
+					const copy = out.slice();
+					ft8Callback(v, params.freq, Comlink.transfer(copy, [copy.buffer]), Date.now());
+				}
 
 				if (params.enabled) {
 					const qLen = state.audioQueueLen;
@@ -724,7 +729,7 @@ export async function startRxStream(
 					if (worker && params) targets.push({ worker, params, shared: client.sharedChannelization === true });
 				}
 			}
-			const plannedParams = targets.map(target => target.shared ? target.params : { ...target.params, enabled: false, pocsag: false, rds: false });
+			const plannedParams = targets.map(target => target.shared ? target.params : { ...target.params, enabled: false, pocsag: false, rds: false, ft8: false });
 			const plan = planSharedBands(sampleRate, backend._centerFreq ?? centerFreq, plannedParams, true);
 			const nextKey = JSON.stringify([backend._centerFreq ?? centerFreq, plan.ratio, plan.bands.map(band => band.centerBin)]);
 			latestPlan = plan;
@@ -770,7 +775,7 @@ export async function startRxStream(
 			for (let index = 0; index < targets.length; index++) {
 				const { worker, params, shared } = targets[index];
 				if (shared && !plan.direct.includes(index)) continue;
-				if (!params.enabled && !params.pocsag && !(params.rds && params.mode === 'wfm')) continue;
+				if (!params.enabled && !params.pocsag && !params.ft8 && !(params.rds && params.mode === 'wfm')) continue;
 				if (typeof SharedArrayBuffer !== 'undefined') {
 					worker.postMessage({ type: 'process', params: params, sampleRate, centerFreq: backend._centerFreq ?? centerFreq, useSab: true, sabIndex: backend.sabPoolIndex, chunkLen: signed.length, chunkId: chunkCounter });
 				} else {

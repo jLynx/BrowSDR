@@ -85,6 +85,7 @@
 				<button class="icon-btn" @click="togglePocsagPanel" :class="{ active: pocsag.panelOpen }" title="POCSAG Pager Decoder">
 					<svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-3 12H7v-2h10v2zm0-3H7V9h10v2zm0-3H7V6h10v2z"/></svg>
 				</button>
+				<button class="icon-btn" @click="toggleFt8Panel" :class="{ active: ft8.panelOpen }" title="FT8 Receive Decoder" aria-label="FT8 Receive Decoder"><span style="font-size:12px;font-weight:700">FT8</span></button>
 				<button class="icon-btn" @click="toggleRdsPanel" :class="{ active: rds.panelOpen }" title="FM RDS Decoder">
 					<svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M20 6H4c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 10H4V8h16v8zM6 10h2v4H6zm3 0h5v4H9z"/></svg>
 				</button>
@@ -647,6 +648,37 @@
 					<span class="transcript-duration" v-if="entry.transcribeTime" title="Transcription inference time">⏱ {{ entry.transcribeTime }}</span>
 					<span class="transcript-text">{{ entry.text }}</span>
 				</div>
+			</div>
+		</div>
+
+		<!-- FT8 receive-only panel -->
+		<div class="pocsag-panel ft8-panel" v-if="ft8.panelOpen">
+			<div class="pocsag-header">
+				<div class="pocsag-title">FT8 <span class="pocsag-count">RX only</span> <span class="pocsag-count">{{ ft8.log.length }} messages</span></div>
+				<div class="pocsag-controls">
+					<button class="btn transcript-btn" @click="clearFt8" :disabled="!ft8.log.length">Clear</button>
+					<button class="btn transcript-btn" @click="exportFt8" :disabled="!ft8.log.length">Export CSV</button>
+					<button class="btn transcript-btn" @click="toggleFt8Panel" aria-label="Close FT8 panel">×</button>
+				</div>
+			</div>
+			<div class="ft8-toolbar">
+				<label>Source <select v-model.number="ft8.vfoIndex" aria-label="FT8 source VFO" :disabled="ft8.active"><option v-for="(vfo, i) in vfos" :value="i">VFO {{ i + 1 }} · {{ formatFreq(vfo.freq) }} MHz · {{ vfo.mode.toUpperCase() }}</option></select></label>
+				<label>Band <select v-model.number="ft8.band" aria-label="FT8 band"><option v-for="band in ft8Bands" :value="band.mhz">{{ band.name }} · {{ band.mhz.toFixed(3) }} MHz</option></select></label>
+				<button class="btn transcript-btn" @click="tuneFt8Band" :disabled="remoteMode === 'client'">Tune USB</button>
+				<button class="btn transcript-btn" v-if="!ft8.active" @click="startFt8" :disabled="!running || remoteMode === 'client' || vfos[ft8.vfoIndex]?.mode !== 'usb'">Start decoding</button>
+				<button class="btn transcript-btn" v-else @click="stopFt8">Stop decoding</button>
+			</div>
+			<div class="ft8-status" role="status">
+				<span>{{ ft8.status }}</span><progress v-if="ft8.active" :value="ft8.progress" max="1" aria-label="FT8 receive slot progress"></progress>
+				<span v-if="ft8.slots">{{ ft8.slots }} slots · Last decode: {{ ft8.lastDecode }}</span>
+			</div>
+			<p class="ft8-help">Select a band, tune USB, then start decoding. Receives 200–3000 Hz in UTC 15-second slots; keep your computer clock synchronized. Speakers may be muted. Sync is a signal synchronization score, not SNR.</p>
+			<p class="ft8-help" v-if="remoteMode === 'client'">FT8 currently requires a locally connected SDR.</p>
+			<div class="ft8-body" ref="ft8Body">
+				<div v-if="!ft8.log.length" class="pocsag-empty">No FT8 messages yet. Allow at least one full receive slot. Reception depends on band conditions and antenna coverage.</div>
+				<table v-else class="ft8-table"><thead><tr><th>UTC</th><th>Dial MHz</th><th>VFO</th><th title="Synchronization score, not SNR">Sync</th><th title="Offset from nominal FT8 start, seconds">DT (s)</th><th>Audio Hz</th><th>Message</th></tr></thead>
+					<tbody><tr v-for="(entry, i) in ft8.log" :key="i"><td>{{ ft8Utc(entry.slot) }}</td><td>{{ entry.freq.toFixed(6) }}</td><td :style="{color: vfoColor(entry.vfoIndex)}">{{ entry.vfoIndex + 1 }}</td><td>{{ entry.sync }}</td><td>{{ entry.dt.toFixed(2) }}</td><td>{{ Math.round(entry.hz) }}</td><td class="ft8-message">{{ entry.text }}</td></tr></tbody>
+				</table>
 			</div>
 		</div>
 

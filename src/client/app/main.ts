@@ -15,6 +15,7 @@ import { dsdMethods } from './dsd';
 import { rdsMethods } from './rds';
 import { zoomMethods } from './zoom';
 import { remoteMethods } from './remote';
+import { ft8Methods } from './ft8';
 
 const backendWorker = new Worker(new URL('../worker/main.ts', import.meta.url), { type: 'module' });
 if (import.meta.env.DEV) {
@@ -51,10 +52,19 @@ createApp({
 		...rdsMethods,
 		...zoomMethods,
 		...remoteMethods,
+		...ft8Methods,
 	},
 	created: async function () {
 		this.loadSetting();
 		this.loadBookmarks();
+		this.$watch(() => JSON.stringify([
+			this.running, this.remoteMode, this.ft8.vfoIndex, this.radio.centerFreq,
+			this.radio.frequencyShift, this.radio.sampleRate,
+			this.vfos[this.ft8.vfoIndex]?.freq, this.vfos[this.ft8.vfoIndex]?.mode,
+			this.vfos[this.ft8.vfoIndex]?.bandwidth, this.vfos[this.ft8.vfoIndex]?.squelchEnabled,
+			this.vfos[this.ft8.vfoIndex]?.lowPass, this.vfos[this.ft8.vfoIndex]?.highPass,
+			this.gains['RX Channel'], this.gains.Antenna,
+		]), () => this._ft8ConfigChanged());
 
 		// Track online/offline status for PWA — disables internet-dependent features when offline
 		window.addEventListener('online', () => { this.isOnline = true; });
@@ -220,4 +230,5 @@ createApp({
 	mounted() {
 		mountCanvas.call(this);
 	},
+	beforeUnmount() { this.stopFt8(); },
 }).mount('#app');
