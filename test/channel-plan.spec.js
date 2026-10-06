@@ -36,6 +36,17 @@ describe('shared VFO band planning', () => {
 		const values = [...params, { ...params[0], mode: 'raw', bandwidth: 4000000 }, { ...params[0], freq: 125.6 }];
 		expect(planSharedBands(61440000, 95, values, true).direct).toEqual([19, 20]);
 	});
+	it.each(['usb', 'lsb'])('routes %s by its filter center when the carrier is between shared bands', mode => {
+		// Carrier frequencies straddle the midpoint between adjacent bands.
+		// The selected sideband determines which shared band is nearest.
+		const values = [...params.slice(0, 3),
+			{ ...params[0], freq: 95.478, mode, bandwidth: 10000 },
+			{ ...params[0], freq: 94.522, mode, bandwidth: 10000 }];
+		const plan = planSharedBands(61440000, 95, values, true);
+		expect(plan.direct).toEqual([]);
+		expect(plan.bands.find(band => band.vfos.includes(3)).centerBin).toBe(mode === 'usb' ? 128 : 0);
+		expect(plan.bands.find(band => band.vfos.includes(4)).centerBin).toBeCloseTo(mode === 'lsb' ? -128 : 0);
+	});
 	it('updates routes for tuning, muting, and independent pager reception', () => {
 		const values = params.map(value => ({ ...value }));
 		values[0].enabled = false;

@@ -1,5 +1,6 @@
 import { IF_RATES } from './types';
 import type { VfoParams } from './types';
+import { sidebandOffsetHz } from './ssb';
 
 export interface SharedBand {
 	centerBin: number;
@@ -28,7 +29,7 @@ export function planSharedBands(sampleRate: number, centerFreq: number, params: 
 	const remaining: number[] = [];
 	for (const { value, index } of active) {
 		const width = Math.max(value.bandwidth || 150000, IF_RATES[value.mode] || sampleRate);
-		const offset = (value.freq - centerFreq) * 1000000;
+		const offset = (value.freq - centerFreq) * 1000000 + sidebandOffsetHz(value.mode, value.bandwidth);
 		const centerBin = Math.round(offset / (bandRate / 2)) * (8192 / (ratio * 2));
 		const bandOffset = centerBin * sampleRate / 8192;
 		if (!Number.isFinite(offset) || Math.abs(offset) + width / 2 > sampleRate / 2 ||

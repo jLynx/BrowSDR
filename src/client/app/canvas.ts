@@ -2,6 +2,7 @@ import type { AppInstance } from './types';
 import { VFO_COLORS } from './constants';
 import { Waterfall, WaterfallGL } from '../utils';
 import { SpectrumFrameLimiter, WaterfallClock } from '../spectrum-rate';
+import { sidebandOffsetHz } from '../worker/ssb';
 
 export const canvasMethods = {
 	initCanvas(this: AppInstance) {
@@ -195,7 +196,8 @@ export const canvasMethods = {
 
 			// Tint block
 			ctx.fillStyle = this.vfoTint(vi);
-			ctx.fillRect(centerPixel - pixelWidth / 2, 0, Math.max(pixelWidth, 2), h);
+			const sidebandPixels = sidebandOffsetHz(vfo.mode, bandwidthHz) / currentSpanHz * w;
+			ctx.fillRect(centerPixel + sidebandPixels - pixelWidth / 2, 0, Math.max(pixelWidth, 2), h);
 
 			// Center line — dashed when muted to reinforce the mute state
 			ctx.strokeStyle = color;
