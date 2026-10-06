@@ -137,11 +137,14 @@ function postBuildPlugin(): Plugin {
 			// --- Copy mbelib WASM files ---
 			const mbelibSrc = path.resolve(__dirname, 'public/lib/mbelib');
 			const mbelibDest = path.resolve(distDir, 'lib/mbelib');
-			if (fs.existsSync(mbelibSrc)) {
-				fs.mkdirSync(mbelibDest, { recursive: true });
-				for (const file of fs.readdirSync(mbelibSrc)) {
-					fs.copyFileSync(path.join(mbelibSrc, file), path.join(mbelibDest, file));
+			for (const file of ['mbelib.js', 'mbelib.wasm', 'COPYRIGHT', 'NOTICE']) {
+				if (!fs.existsSync(path.join(mbelibSrc, file))) {
+					throw new Error(`Missing mbelib asset: ${file}. Restore the committed public/lib/mbelib files or run npm run build:mbelib with Emscripten installed.`);
 				}
+			}
+			fs.mkdirSync(mbelibDest, { recursive: true });
+			for (const file of fs.readdirSync(mbelibSrc)) {
+				fs.copyFileSync(path.join(mbelibSrc, file), path.join(mbelibDest, file));
 			}
 		},
 	};

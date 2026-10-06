@@ -5,6 +5,7 @@
 	"type": "module",
 	"scripts": {
 		"build": "vite build",
+		"build:mbelib": "bash mbelib-wasm/build.sh",
 		"deploy": "vite build && wrangler deploy",
 		"dev": "vite",
 		"start": "vite",
