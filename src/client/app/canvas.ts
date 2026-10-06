@@ -1,6 +1,7 @@
 import type { AppInstance } from './types';
 import { VFO_COLORS } from './constants';
 import { Waterfall, WaterfallGL } from '../utils';
+import { SpectrumFrameLimiter, WaterfallClock } from '../spectrum-rate';
 
 export const canvasMethods = {
 	initCanvas(this: AppInstance) {
@@ -18,6 +19,8 @@ export const canvasMethods = {
 			new Waterfall(waterfall, renderSize, 512);
 
 		this._waterfallEngine.setRange(this.display.minDB, this.display.maxDB);
+		this._waterfallClock = new WaterfallClock();
+		this._remoteSpectrumLimiter = new SpectrumFrameLimiter();
 
 		this.resizeFftCanvas();
 
@@ -53,10 +56,11 @@ export const canvasMethods = {
 
 		// FPS calculation
 		const now = performance.now();
-		if (!this._lastFrameTime) {
+		if (this.remoteMode === 'client' && !this._zoomRepaint && !this._remoteSpectrumLimiter.shouldDraw(now, this.display.spectrumFps)) return;
+		if (!this._zoomRepaint && !this._lastFrameTime) {
 			this._lastFrameTime = now;
 			this._framesDrawn = 0;
-		} else {
+		} else if (!this._zoomRepaint) {
 			this._framesDrawn++;
 			if (now - this._lastFrameTime >= 1000) {
 				this.fps = Math.round((this._framesDrawn * 1000) / (now - this._lastFrameTime));
@@ -97,7 +101,8 @@ export const canvasMethods = {
 
 		// Waterfall drawing — skip adding a new history row when this is just a zoom repaint
 		if (!this._zoomRepaint) {
-			this._waterfallEngine.renderLine(wfData);
+			const step = this._waterfallClock.advance(now);
+			this._waterfallEngine.renderLine(wfData, step.rows, step.fraction);
 		} else if (this._waterfallEngine.render) {
 			// For a zoom-only repaint, just redraw the existing texture at the new zoom
 			this._waterfallEngine.render();

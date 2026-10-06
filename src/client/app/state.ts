@@ -21,10 +21,13 @@ export function createAppData() {
 		audioUnlockPendingId: null as string | null,
 		radio: {
 			centerFreq: 100.0,
+			frequencyShift: 0.0,
 			sampleRate: 20000000,
 			fftSize: 65536,
 		},
 		display: {
+			spectrumFps: 20,
+			sharedChannelization: true,
 			minDB: -70.0,
 			maxDB: 0.0,
 		},
@@ -44,6 +47,8 @@ export function createAppData() {
 		vfoSquelchOpen: [] as boolean[],
 		vfoSquelchHangUntil: [] as number[],
 		vfoActivityStats: [] as Array<{ count: number; totalMs: number; squelchOpenSince: number | null }>,
+		autoSquelchSamples: [] as Array<number[]>,
+		autoSquelchActive: [] as boolean[],
 		activityNow: 0,
 		showActivity: false,
 		view: {
@@ -75,6 +80,11 @@ export function createAppData() {
 			log: [] as Array<{ time: string; freq: string; vfoIndex: number; capcode: string; type: string; text: string; baud: number }>,
 		},
 		dsdStatus: [] as Array<{ mode: string; synced: boolean; syncName?: string; mbelibLoaded?: boolean; mbeDecoding?: boolean; mbeErrors?: string; voiceFrameCount?: number; colorCode?: number; slot?: number; slot0Burst?: string; slot1Burst?: string; nac?: number; duid?: string; src?: number; tg?: number; emr?: boolean; algid?: number; callsign?: string; nxdnType?: string } | null>,
+		rds: {
+			panelOpen: false,
+			stations: {} as Record<number, { ps: string; rt: string; pi: string; pty: number; ptyLabel: string; tp: boolean; ta: boolean; freq: string }>,
+			log: [] as Array<{ time: string; field: string; value: string; freq: string; vfoIndex: number }>,
+		},
 		bookmarkCategories: BOOKMARK_CATEGORIES,
 		bookmarkCategoryFilter: '',
 		bookmarkSearch: '',

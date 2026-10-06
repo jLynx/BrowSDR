@@ -20,11 +20,15 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 
 import * as Comlink from 'comlink';
 import { FFT } from './wasm-init';
+import { planSharedBands } from './channel-plan';
+import type { ChannelPlan } from './channel-plan';
 import { RationalResampler } from './dsp-pipeline';
 import { POCSAGDecoder } from './pocsag';
 import type { RxStreamOpts, VfoParams, VfoState, PerfCounters } from './types';
 import { IF_RATES, AUDIO_RATE } from './types';
 import type { Backend } from './backend';
+import { displayToDeviceFrequencyHz } from '../frequency-shift';
+import { spectrumSmoothingAlpha } from '../spectrum-rate';
 
 let _streamStarting = false;
 
@@ -35,7 +39,8 @@ export async function startRxStream(
 	audioCallback: any,
 	whisperCallback: any,
 	pocsagCallback: any,
-	dsdStatusCallback?: any
+	rdsCallback: any = null,
+	dsdStatusCallback: any = null
 ): Promise<void> {
 	if (_streamStarting) return;
 	_streamStarting = true;
@@ -44,10 +49,10 @@ export async function startRxStream(
 	try {
 		const { device } = backend;
 		if (!device) throw new Error('No device connected');
-		const { centerFreq, sampleRate, fftSize, gains } = opts;
+		const { centerFreq, frequencyShift = 0, sampleRate, fftSize, gains } = opts;
 
 		await device.setSampleRate(sampleRate);
-		await device.setFrequency(centerFreq * 1e6);
+		await device.setFrequency(displayToDeviceFrequencyHz(centerFreq, frequencyShift));
 
 		// ── Spectrum FFT setup ────────────────────────────────────────
 		const spectrumWindowFunc = (x: number): number => {
@@ -74,21 +79,31 @@ export async function startRxStream(
 
 		const iqBuffer = new Int8Array(fftSize * 2);
 		let iqBufferPos = 0;
-		let spectrumThrottle = 0;
-		const targetFftFps = 20;
-		const possibleFftFps = sampleRate / fftSize;
-		const fftSkipFrames = Math.max(1, Math.round(possibleFftFps / targetFftFps));
+		backend.setSpectrumFps(opts.spectrumFps ?? 20);
+		backend._sharedChannelization = opts.sharedChannelization !== false;
+		let channelWorker: Worker | undefined;
+		let latestPlan: ChannelPlan | undefined;
+		let latestTargets: { worker: Worker; params: VfoParams; shared: boolean }[] = [];
+		let pendingChannelSamples = 0;
+		let channelKey = '';
+		let channelTimeSum = 0;
+		let channelTimeMax = 0;
+		let channelCalls = 0;
+		backend._disposeChannelization?.();
+		backend._disposeChannelization = () => { channelWorker?.terminate(); channelWorker = undefined; pendingChannelSamples = 0; };
+		let lastSpectrumTime = 0;
 
 		// ── Audio DDC setup ───────────────────────────────────────────
 		// Full SDR++ pipeline in Rust: NCO → polyphase resampler (→50kHz)
 		// → channel FIR → squelch → FM demod → post-demod FIR → audio resampler (→48kHz)
 		const initialBandwidth = 150000;
 
-		// Free any existing DDCs
+		// Free any existing DDCs and timers
 		if (backend.ddcs) backend.ddcs.forEach((d: any) => { try { d.free(); } catch (_) { } });
+		if (backend._perfInterval) { clearInterval(backend._perfInterval); backend._perfInterval = undefined; }
 
 		// Initialize dynamic VFO arrays (start with one VFO)
-		const defaultVfoParams: VfoParams = { freq: centerFreq, mode: 'wfm', enabled: false, deEmphasis: '50us', squelchEnabled: false, squelchLevel: -100.0, lowPass: true, highPass: false, bandwidth: initialBandwidth, volume: 50, pocsag: false };
+		const defaultVfoParams: VfoParams = { freq: centerFreq, mode: 'wfm', enabled: false, deEmphasis: '50us', squelchEnabled: false, squelchLevel: -100.0, lowPass: true, highPass: false, bandwidth: initialBandwidth, volume: 50, pocsag: false, rds: false, rdsRegion: 'eu' };
 		backend.vfoParams = [{ ...defaultVfoParams }];
 
 		const MAX_USB_SAMPLES = 131072;
@@ -108,7 +123,9 @@ export async function startRxStream(
 
 		const makeVfoState = (): VfoState => ({
 			squelchOpen: false,
+			squelchDb: -120,
 			pocsagDecoder: null,
+			rdsDecoder: null,
 			audioQueue: new Float32Array(32768),
 			audioQueueLen: 0,
 		});
@@ -120,11 +137,24 @@ export async function startRxStream(
 			worker.onmessage = (e: MessageEvent) => {
 				const msg = e.data;
 				if (msg.type === "audio") {
-					backend._handleWorkerAudio!(index, msg);
+					// Look up current index dynamically — splice() in removeVfo
+					// shifts the array, so the captured `index` goes stale.
+					const currentIndex = backend.dspWorkers!.indexOf(worker);
+					if (currentIndex === -1) return; // worker was removed
+					backend._handleWorkerAudio!(currentIndex, msg);
+				} else if (msg.type === "rds") {
+					const currentIndex = backend.dspWorkers!.indexOf(worker);
+					if (currentIndex === -1) return;
+					// Forward decoded RDS using the worker's current VFO index.
+					const params = backend.vfoParams![currentIndex];
+					if (rdsCallback && params) rdsCallback(currentIndex, params.freq, msg.msg);
 				} else if (msg.type === "dsd_status") {
-					if (dsdStatusCallback) dsdStatusCallback(index, msg.status);
+					const currentIndex = backend.dspWorkers!.indexOf(worker);
+					if (currentIndex === -1) return;
+					if (dsdStatusCallback) dsdStatusCallback(currentIndex, msg.status);
 				} else if (msg.type === "error") {
-					console.error(`[DSP Worker ${index}] Error:`, msg.error);
+					const currentIndex = backend.dspWorkers!.indexOf(worker);
+					console.error(`[DSP Worker ${currentIndex}] Error:`, msg.error);
 				}
 			};
 			worker.postMessage({
@@ -177,7 +207,33 @@ export async function startRxStream(
 				dropped: perf.droppedChunks,
 				chunkSize: perf.lastChunkSize || 0,
 				msgRate: Math.round(perf.msgsSent / dt),
+				channelAvgMs: channelCalls ? channelTimeSum / channelCalls : 0,
+				channelMaxMs: channelTimeMax,
+				channelCpuMs: channelTimeSum / dt,
 			};
+			for (const [clientId, client] of backend._remoteClients ?? []) {
+				const counters = client.perf;
+				backend._remoteHostStatsCb?.(clientId, {
+					...perf.report,
+					source: 'host',
+					audioFps: Math.round((counters?.audioCalls ?? 0) / dt),
+					audioRate: Math.round((counters?.audioSamplesOut ?? 0) / dt),
+					dspAvgMs: counters?.audioCalls ? (counters.dspTimeSum / counters.audioCalls).toFixed(2) : '0',
+					dspMaxMs: (counters?.dspTimeMax ?? 0).toFixed(2),
+					msgRate: Math.round((counters?.msgsSent ?? 0) / dt),
+					channelization: client.channelization ?? { bands: 0, vfos: 0, sampleRate },
+				});
+				if (counters) {
+					counters.audioCalls = 0;
+					counters.audioSamplesOut = 0;
+					counters.dspTimeSum = 0;
+					counters.dspTimeMax = 0;
+					counters.msgsSent = 0;
+				}
+			}
+			channelTimeSum = 0;
+			channelTimeMax = 0;
+			channelCalls = 0;
 			perf.usbCallbacks = 0;
 			perf.audioCalls = 0;
 			perf.audioSamplesOut = 0;
@@ -310,6 +366,9 @@ export async function startRxStream(
 				if (numAudioSamples === 0) { perf.droppedChunks++; vfoState.squelchOpen = false; return null; }
 				perf.audioSamplesOut += numAudioSamples;
 
+				// Read signal level from Rust (for auto-squelch calibration)
+				vfoState.squelchDb = ddc.get_squelch_db();
+
 				// Create float32 view of the returned pointer
 				const result = new Float32Array(backend.wasm.memory.buffer, outPtr, numAudioSamples);
 
@@ -382,6 +441,7 @@ export async function startRxStream(
 				}
 				squelchMag /= numDemodSamples;
 				const squelchDb = 10 * Math.log10(squelchMag + 1e-12);
+				vfoState.squelchDb = squelchDb;
 
 				// Grow the shared scratch buffer if this block is larger than expected
 				if (numDemodSamples > vfoState.scratchBuf!.length) {
@@ -496,12 +556,19 @@ export async function startRxStream(
 
 		let chunkCounter = 0;
 
+		let _audioDebugCounter = 0;
 		const handleWorkerAudio = (v: number, msg: any): void => {
 			const state = backend.vfoStates![v];
 			const params = backend.vfoParams![v];
-			if (!state || !params) return;
+			if (!state || !params) {
+				if (_audioDebugCounter++ % 200 === 0) {
+					console.warn(`[handleWorkerAudio] VFO ${v} has no state/params (vfoParams.length=${backend.vfoParams?.length}, vfoStates.length=${backend.vfoStates?.length})`);
+				}
+				return;
+			}
 
 			state.squelchOpen = msg.squelchOpen;
+			state.squelchDb = msg.squelchDb ?? -120;
 			if (!backend._latchedSquelchOpen) backend._latchedSquelchOpen = [];
 			if (msg.squelchOpen) backend._latchedSquelchOpen[v] = true;
 			if (msg.dspTime) {
@@ -525,7 +592,7 @@ export async function startRxStream(
 					state.audioQueueLen += out.length;
 
 					if (!params.pocsag && whisperCallback) {
-						whisperCallback(v, params.freq, out);
+						pushWhisper(v, params.freq, out);
 					}
 				}
 
@@ -539,12 +606,18 @@ export async function startRxStream(
 				} else if (!params.pocsag && state.pocsagDecoder) {
 					state.pocsagDecoder = null;
 				}
+
+				// Clean up RDS decoder when disabled
+				if ((!params.rds || params.mode !== 'wfm') && state.rdsDecoder) {
+					state.rdsDecoder = null;
+				}
 			}
 
-			// Mixer block logic
+			// Mixer: flush all available audio immediately on every DSP callback.
+			// Low-callback-rate devices (LimeSDR ~18/s) produce large audio bursts
+			// that the main thread's ring buffer + schedule system smooths out.
 			let anyActive = false;
 			let minAvailable = Infinity;
-			const AUDIO_BATCH_THRESHOLD_MIXER = 512;
 			const activeStates: VfoState[] = [];
 			const activeParams: VfoParams[] = [];
 
@@ -561,7 +634,9 @@ export async function startRxStream(
 				}
 			}
 
-			if (anyActive && minAvailable > 0 && minAvailable !== Infinity && minAvailable >= AUDIO_BATCH_THRESHOLD_MIXER) {
+			// Flush with no minimum threshold — let the main thread's audio ring
+			// buffer handle the smoothing via _scheduleAudioChunk
+			if (anyActive && minAvailable > 0 && minAvailable !== Infinity) {
 				if (!backend._mixBuf || backend._mixBuf.length < minAvailable) {
 					backend._mixBuf = new Float32Array(minAvailable + 1024);
 				}
@@ -591,10 +666,7 @@ export async function startRxStream(
 					else if (mixed[k] < -1.0) mixed[k] = -1.0;
 				}
 
-				if (audioCallback) audioCallback(mixed.subarray(0, minAvailable));
-				// Remote client audio is now handled exclusively by _remoteVfoWorker
-				// (spawned by setRemoteVfoParams). DO NOT send the host mixer output
-				// here — that would couple the client's audio to the host's VFO state.
+			if (audioCallback) pushAudio(mixed.subarray(0, minAvailable));
 			}
 		};
 		// Expose for worker closure inside spawnWorker
@@ -604,8 +676,12 @@ export async function startRxStream(
 		// control transfer conflicts with in-flight bulk transfers.
 		// Matches librtlsdr / SDR++ which configure everything before streaming.
 		if (gains) {
-			for (const [name, value] of Object.entries(gains)) {
-				await device.setGain(name, value);
+			if (device.setGains) {
+				await device.setGains(gains);
+			} else {
+				for (const [name, value] of Object.entries(gains)) {
+					await device.setGain(name, value);
+				}
 			}
 		}
 
@@ -631,8 +707,10 @@ export async function startRxStream(
 					srcOff += toCopy;
 					if (iqBufferPos >= iqBuffer.length) {
 						iqBufferPos = 0;
-						spectrumThrottle++;
-						if (spectrumThrottle % fftSkipFrames === 0) {
+						const now = performance.now();
+						if (now - lastSpectrumTime >= 1000 / backend._spectrumFps) {
+							spectrumFft.set_smoothing_speed(spectrumSmoothingAlpha(lastSpectrumTime === 0 ? 50 : now - lastSpectrumTime));
+							lastSpectrumTime = now;
 							// Revert back to copy-based FFT for the spectrum waterfall
 							// because `iqBuffer` batches data across USB chunk boundaries.
 							spectrumFft.fft(iqBuffer, spectrumOutput);
@@ -658,32 +736,66 @@ export async function startRxStream(
 			}
 
 			// Broadcast to DSP workers
-			for (let v = 0; v < backend.dspWorkers!.length; v++) {
-				const worker = backend.dspWorkers![v];
-				if (!worker) continue;
-				const params = backend.vfoParams![v];
-				if (typeof SharedArrayBuffer !== 'undefined') {
-					worker.postMessage({ type: 'process', params: params, useSab: true, sabIndex: backend.sabPoolIndex, chunkLen: signed.length, chunkId: chunkCounter });
-				} else {
-					const cloneBuf = signed.slice().buffer;
-					worker.postMessage({ type: 'process', params: params, useSab: false, chunk: cloneBuf, chunkLen: signed.length, chunkId: chunkCounter }, [cloneBuf]);
+			const targets = backend.dspWorkers!.map((worker, index) => ({ worker, params: backend.vfoParams![index], shared: backend._sharedChannelization }));
+			for (const client of backend._remoteClients?.values() ?? []) {
+				for (let index = 0; index < client.workers.length; index++) {
+					const worker = client.workers[index];
+					const params = client.params[index];
+					if (worker && params) targets.push({ worker, params, shared: client.sharedChannelization === true });
 				}
 			}
-
-			// Feed all remote-client VFO workers (independent from the host mixer)
-			if (backend._remoteClients) {
-				for (const [, clientState] of backend._remoteClients) {
-					for (let rv = 0; rv < clientState.workers.length; rv++) {
-						const rw = clientState.workers[rv];
-						if (!rw) continue;
-						const rp = clientState.params[rv];
-						if (typeof SharedArrayBuffer !== 'undefined') {
-							rw.postMessage({ type: 'process', params: rp, useSab: true, sabIndex: backend.sabPoolIndex, chunkLen: signed.length, chunkId: chunkCounter });
-						} else {
-							const rClone = signed.slice().buffer;
-							rw.postMessage({ type: 'process', params: rp, useSab: false, chunk: rClone, chunkLen: signed.length, chunkId: chunkCounter }, [rClone]);
+			const plannedParams = targets.map(target => target.shared ? target.params : { ...target.params, enabled: false, pocsag: false, rds: false });
+			const plan = planSharedBands(sampleRate, backend._centerFreq ?? centerFreq, plannedParams, true);
+			const nextKey = JSON.stringify([backend._centerFreq ?? centerFreq, plan.ratio, plan.bands.map(band => band.centerBin)]);
+			latestPlan = plan;
+			latestTargets = targets;
+			channelKey = nextKey;
+			backend._sharedChannelStats = { bands: plan.bands.length, vfos: plan.bands.reduce((count, band) => count + band.vfos.length, 0), sampleRate: plan.sampleRate };
+			for (const client of backend._remoteClients?.values() ?? []) {
+				const workers = new Set(client.workers);
+				const bands = plan.bands.map(band => band.vfos.filter(index => workers.has(targets[index].worker))).filter(indices => indices.length);
+				client.channelization = { bands: bands.length, vfos: bands.reduce((count, indices) => count + indices.length, 0), sampleRate: plan.sampleRate };
+			}
+			if (plan.bands.length) {
+				if (!channelWorker) {
+					channelWorker = new globalThis.Worker(new URL('../dsp-worker.ts', import.meta.url), { type: 'module' });
+					channelWorker.onmessage = ({ data: message }: MessageEvent) => {
+						pendingChannelSamples -= message.inputSamples || 0;
+						if (message.type === 'channel_error') { console.error('Shared channelizer:', message.error); perf.droppedChunks++; return; }
+						channelCalls++;
+						channelTimeSum += message.dspTime;
+						channelTimeMax = Math.max(channelTimeMax, message.dspTime);
+						if (message.key !== channelKey) return;
+						for (const result of message.bands) {
+							const band = latestPlan?.bands.find(value => value.centerBin === result.centerBin);
+							if (!band) continue;
+							for (const index of band.vfos) {
+								const target = latestTargets[index];
+								if (!target) continue;
+								target.worker.postMessage({ type: 'process', floatIq: true, chunk: result.buffer, chunkLen: result.length,
+									sampleRate: latestPlan!.sampleRate, centerFreq: band.centerFreq, params: target.params, chunkId: message.chunkId });
+							}
 						}
-					}
+					};
+				}
+				if (pendingChannelSamples < sampleRate * 0.1) {
+					const buffer = signed.slice().buffer;
+					pendingChannelSamples += signed.length / 2;
+					channelWorker.postMessage({ type: 'channelize', key: channelKey, ratio: plan.ratio, centers: plan.bands.map(band => band.centerBin),
+						sampleRate: plan.sampleRate, chunk: buffer, inputSamples: signed.length / 2, chunkId: chunkCounter }, [buffer]);
+				} else perf.droppedChunks++;
+			} else if (channelWorker) {
+				backend._disposeChannelization?.();
+			}
+			for (let index = 0; index < targets.length; index++) {
+				const { worker, params, shared } = targets[index];
+				if (shared && !plan.direct.includes(index)) continue;
+				if (!params.enabled && !params.pocsag && !(params.rds && params.mode === 'wfm')) continue;
+				if (typeof SharedArrayBuffer !== 'undefined') {
+					worker.postMessage({ type: 'process', params: params, sampleRate, centerFreq: backend._centerFreq ?? centerFreq, useSab: true, sabIndex: backend.sabPoolIndex, chunkLen: signed.length, chunkId: chunkCounter });
+				} else {
+					const cloneBuf = signed.slice().buffer;
+					worker.postMessage({ type: 'process', params: params, sampleRate, centerFreq: backend._centerFreq ?? centerFreq, useSab: false, chunk: cloneBuf, chunkLen: signed.length, chunkId: chunkCounter }, [cloneBuf]);
 				}
 			}
 

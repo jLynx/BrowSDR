@@ -19,6 +19,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 */
 
 import { ensureWasmInitialized, init } from './wasm-init';
+import { normalizeSpectrumFps } from '../spectrum-rate';
 import { MockHackRF } from './mock-hackrf';
 import type { SdrDevice, SdrDeviceInfo, DeviceCapabilities } from '../sdr-device';
 import { detectDevice } from '../sdr-device';
@@ -27,15 +28,19 @@ import '../devices/hackrf';
 import '../devices/rtlsdr';
 import '../devices/airspy';
 import '../devices/airspyhf';
+import '../devices/limesdr';
 import {
 	setRemoteHostCallback,
 	setRemoteHostFftCallback,
 	setRemoteHostAudioCallback,
+	setRemoteHostStatsCallback,
 	setRemoteHostPocsagCallback,
+	setRemoteHostRdsCallback,
 	setRemoteHostSquelchCallback,
 	_ensureRemoteClients,
 	_getOrCreateClientState,
 	addRemoteClient,
+	setRemoteSharedChannelization,
 	removeRemoteClient,
 	setRemoteVfoParams,
 	addRemoteVfo,
@@ -48,6 +53,7 @@ import {
 } from './remote-clients';
 import { startRxStream } from './rx-stream';
 import type { VfoParams, VfoState, PerfCounters, RxStreamOpts, RemoteClientState, DeviceOpenOpts } from './types';
+import { displayToDeviceFrequencyHz } from '../frequency-shift';
 
 export class Backend {
 	// Hardware — generic SDR device
@@ -68,6 +74,10 @@ export class Backend {
 	// DSP perf
 	_perf?: PerfCounters;
 	_perfInterval?: any;
+	_spectrumFps = 20;
+	_sharedChannelization = true;
+	_disposeChannelization?: () => void;
+	_sharedChannelStats = { bands: 0, vfos: 0, sampleRate: 0 };
 
 	// Internal state
 	_sampleRate?: number;
@@ -82,8 +92,10 @@ export class Backend {
 	_remoteHostCb?: any;
 	_remoteHostFftCb?: any;
 	_remoteHostAudioCb?: any;
+	_remoteHostStatsCb?: any;
 	_remoteClients?: Map<string, RemoteClientState>;
 	_remoteHostPocsagCb?: any;
+	_remoteHostRdsCb?: any;
 	_remoteHostSquelchCb?: any;
 	_remoteClientCb?: any;
 	_remoteClientAudioCb?: any;
@@ -146,11 +158,14 @@ export class Backend {
 	setRemoteHostCallback = setRemoteHostCallback.bind(this);
 	setRemoteHostFftCallback = setRemoteHostFftCallback.bind(this);
 	setRemoteHostAudioCallback = setRemoteHostAudioCallback.bind(this);
+	setRemoteHostStatsCallback = setRemoteHostStatsCallback.bind(this);
 	setRemoteHostPocsagCallback = setRemoteHostPocsagCallback.bind(this);
+	setRemoteHostRdsCallback = setRemoteHostRdsCallback.bind(this);
 	setRemoteHostSquelchCallback = setRemoteHostSquelchCallback.bind(this);
 	_ensureRemoteClients = _ensureRemoteClients.bind(this);
 	_getOrCreateClientState = _getOrCreateClientState.bind(this);
 	addRemoteClient = addRemoteClient.bind(this);
+	setRemoteSharedChannelization = setRemoteSharedChannelization.bind(this);
 	removeRemoteClient = removeRemoteClient.bind(this);
 	setRemoteVfoParams = setRemoteVfoParams.bind(this);
 	addRemoteVfo = addRemoteVfo.bind(this);
@@ -161,8 +176,8 @@ export class Backend {
 	initRemoteClient = initRemoteClient.bind(this);
 	feedRemoteAudioChunk = feedRemoteAudioChunk.bind(this);
 
-	async startRxStream(opts: RxStreamOpts, spectrumCallback: any, audioCallback: any, whisperCallback: any = null, pocsagCallback: any = null, dsdStatusCallback: any = null): Promise<void> {
-		return startRxStream(this, opts, spectrumCallback, audioCallback, whisperCallback, pocsagCallback, dsdStatusCallback);
+	async startRxStream(opts: RxStreamOpts, spectrumCallback: any, audioCallback: any, whisperCallback: any = null, pocsagCallback: any = null, rdsCallback: any = null, dsdStatusCallback: any = null): Promise<void> {
+		return startRxStream(this, opts, spectrumCallback, audioCallback, whisperCallback, pocsagCallback, rdsCallback, dsdStatusCallback);
 	}
 
 	getDspStats(): any {
@@ -176,8 +191,18 @@ export class Backend {
 
 		return {
 			...this._perf.report,
+			channelization: this._sharedChannelStats,
 			squelchOpen: combinedSquelch,
+			squelchDb: this.vfoStates ? this.vfoStates.map(s => s.squelchDb ?? -120) : [],
 		};
+	}
+
+	setSpectrumFps(value: number): void {
+		this._spectrumFps = normalizeSpectrumFps(value);
+	}
+
+	setSharedChannelization(enabled: boolean): void {
+		this._sharedChannelization = enabled;
 	}
 
 	setVfoParams(index: number, params: Partial<VfoParams>): void {
@@ -195,13 +220,16 @@ export class Backend {
 		if (params.pocsag === false && this.vfoStates && this.vfoStates[index]) {
 			this.vfoStates[index].pocsagDecoder = null;
 		}
+		if (params.rds === false && this.vfoStates && this.vfoStates[index]) {
+			this.vfoStates[index].rdsDecoder = null;
+		}
 	}
 
 	addVfo(): number {
 		if (!this.vfoParams) return -1;
 		const centerFreq = this._centerFreq || 100.0;
 		const bw = 150000;
-		const params: VfoParams = { freq: centerFreq, mode: 'wfm', enabled: false, deEmphasis: '50us', squelchEnabled: false, squelchLevel: -100.0, lowPass: true, highPass: false, bandwidth: bw, volume: 50, pocsag: false };
+		const params: VfoParams = { freq: centerFreq, mode: 'wfm', enabled: false, deEmphasis: '50us', squelchEnabled: false, squelchLevel: -100.0, lowPass: true, highPass: false, bandwidth: bw, volume: 50, pocsag: false, rds: false, rdsRegion: 'eu' };
 		this.vfoParams.push(params);
 
 		const index = this.vfoParams.length - 1;
@@ -231,11 +259,11 @@ export class Backend {
 		await this.device.setSampleRate(rate);
 	}
 
-	async setFrequency(freqHz: number): Promise<void> {
+	async setFrequency(centerFreqMhz: number, frequencyShiftMhz = 0): Promise<void> {
 		if (!this.device) throw new Error('No device connected');
-		await this.device.setFrequency(freqHz);
+		await this.device.setFrequency(displayToDeviceFrequencyHz(centerFreqMhz, frequencyShiftMhz));
 		
-		this._centerFreq = freqHz / 1e6;
+		this._centerFreq = centerFreqMhz;
 
 		if (this.vfoParams && this.dspWorkers) {
 			for (let i = 0; i < this.vfoParams.length; i++) {
@@ -290,11 +318,13 @@ export class Backend {
 	async stopRx(): Promise<void> {
 		if (!this.device) throw new Error('No device connected');
 		await this.device.stopRx();
+		this._disposeChannelization?.();
 	}
 
 	async close(): Promise<void> {
 		if (!this.device) return;
 		await this.device.close();
+		this._disposeChannelization?.();
 		this.device = null;
 	}
 }

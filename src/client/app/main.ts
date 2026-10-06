@@ -12,10 +12,20 @@ import { bookmarkMethods } from './bookmarks';
 import { whisperMethods } from './whisper';
 import { pocsagMethods } from './pocsag';
 import { dsdMethods } from './dsd';
+import { rdsMethods } from './rds';
 import { zoomMethods } from './zoom';
 import { remoteMethods } from './remote';
 
-const Backend = Comlink.wrap<any>(new Worker(new URL('../worker/main.ts', import.meta.url), { type: 'module' }));
+const backendWorker = new Worker(new URL('../worker/main.ts', import.meta.url), { type: 'module' });
+if (import.meta.env.DEV) {
+	backendWorker.addEventListener('message', event => {
+		if (event.data?.type === 'sdr-debug-log') {
+			const level = event.data.level as 'log' | 'warn' | 'error';
+			console[level](event.data.message);
+		}
+	});
+}
+const Backend = Comlink.wrap<any>(backendWorker);
 
 // When a new service worker takes control (after update), reload to get fresh assets
 if ('serviceWorker' in navigator) {
@@ -38,6 +48,7 @@ createApp({
 		...whisperMethods,
 		...pocsagMethods,
 		...dsdMethods,
+		...rdsMethods,
 		...zoomMethods,
 		...remoteMethods,
 	},
@@ -84,7 +95,7 @@ createApp({
 				freqDebounce = null;
 
 				if (this.running && this.backend) {
-					this.backend.setFrequency(newVal * 1e6).catch(console.error);
+					this.backend.setFrequency(newVal, this.radio.frequencyShift).catch(console.error);
 				}
 
 				if (this.remoteMode === 'host' && this._webrtc) {
@@ -117,6 +128,27 @@ createApp({
 				this._webrtc.sendCommand({ type: 'sync', radio: this.radio, gains: this.gains, locks: this.locks });
 			}
 		}, { deep: true });
+
+		let frequencyShiftDebounce: ReturnType<typeof setTimeout> | null = null;
+		this.$watch(() => this.radio.frequencyShift, (newVal: any) => {
+			this.saveSetting();
+
+			// The converter belongs to the host's hardware. Remote clients receive
+			// the host's shift through radio sync and cannot change it themselves.
+			if (this.remoteMode === 'client') return;
+
+			if (frequencyShiftDebounce) clearTimeout(frequencyShiftDebounce);
+			frequencyShiftDebounce = setTimeout(() => {
+				frequencyShiftDebounce = null;
+				if (this.running && this.backend) {
+					this.backend.setFrequency(this.radio.centerFreq, newVal).catch(console.error);
+				}
+
+				if (this.remoteMode === 'host' && this._webrtc) {
+					this._webrtc.sendCommand({ type: 'sync', radio: this.radio, gains: this.gains, locks: this.locks });
+				}
+			}, 200);
+		});
 
 		let gainDebounce: ReturnType<typeof setTimeout> | null = null;
 		this.$watch('gains', () => {
@@ -162,9 +194,21 @@ createApp({
 			this.saveSetting();
 		}, { deep: true });
 
+		this.$watch(() => this.display.spectrumFps, (value: number) => {
+			this.saveSetting();
+			if (this.backend && this.remoteMode !== 'client') {
+				this.backend.setSpectrumFps(value).catch(console.error);
+			}
+		});
+
 		this.$watch('collapsedPanels', () => {
 			this.saveSetting();
 		}, { deep: true });
+
+		this.$watch(() => this.display.sharedChannelization, (enabled: boolean) => {
+			this.saveSetting();
+			this.applySharedChannelization();
+		});
 
 		this.$watch('locks', () => {
 			if (this.remoteMode === 'host' && this._webrtc) {

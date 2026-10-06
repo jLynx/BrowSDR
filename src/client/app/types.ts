@@ -21,11 +21,14 @@ export interface Vfo {
 
 export interface RadioState {
 	centerFreq: number;
+	frequencyShift: number;
 	sampleRate: number;
 	fftSize: number;
 }
 
 export interface DisplayState {
+	spectrumFps: number;
+	sharedChannelization: boolean;
 	minDB: number;
 	maxDB: number;
 }

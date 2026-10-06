@@ -1,9 +1,10 @@
-import init, { DspProcessor, set_panic_hook, alloc_iq_buffer, free_iq_buffer } from "/hackrf-web/pkg/hackrf_web.js";
+import init, { DspProcessor, SharedChannelizer, set_panic_hook, alloc_iq_buffer, alloc_float_buffer, free_iq_buffer } from "/hackrf-web/pkg/hackrf_web.js";
 import { RationalResampler } from './worker/dsp-pipeline';
 import { DSDDecoder } from './worker/dsd/dsd-decoder';
 import { FMDiscriminator } from './worker/dsd/dsd-dsp';
 import { DSD_IF_RATE, DSD_AUDIO_RATE } from './worker/dsd/types';
 import type { DSDStatus } from './worker/dsd/types';
+import { RDSDecoder } from './worker/rds';
 
 // --- Worker State ---
 let wasmInitPromise: Promise<void> | null = null;
@@ -12,6 +13,14 @@ let ddc: any;
 let vfoState: any;
 let sharedIqPtr = 0;
 let sharedSabViews: Int8Array[] | null = null;
+let rdsDdc: any = null;
+let rdsPrevPhase = 0;
+let rdsDecoder: InstanceType<typeof RDSDecoder> | null = null;
+let sharedFloatPtr = 0;
+let inputIsFloat = false;
+let inputCenterFreq = 100;
+let channelizer: SharedChannelizer | undefined;
+let channelKey = '';
 
 const IF_RATES: Record<string, number> = {
     nfm: 50000,
@@ -22,7 +31,7 @@ const IF_RATES: Record<string, number> = {
     dsb: 24000,
     cw: 3000,
     raw: 48000,
-    dsd: 48000,
+    dsd: DSD_IF_RATE,
 };
 const AUDIO_RATE = 48000;
 
@@ -35,6 +44,7 @@ async function startup(): Promise<void> {
             // Allocate Wasm memory for this sub-module
             const MAX_USB_SAMPLES = 131072;
             sharedIqPtr = alloc_iq_buffer(MAX_USB_SAMPLES * 2);
+            sharedFloatPtr = alloc_float_buffer(MAX_USB_SAMPLES * 2);
             console.log("DSP Worker: Wasm Initialized. IQ Buffer Ptr:", sharedIqPtr);
         }).catch((err: any) => {
             console.error("DSP Worker: Wasm Init Failed:", err);
@@ -56,8 +66,32 @@ self.onmessage = async (e: MessageEvent) => {
     const msg = e.data;
     await startup();
 
-    if (msg.type === "init") {
+    if (msg.type === 'channelize') {
+        const started = performance.now();
+        try {
+            if (channelKey !== msg.key) {
+                channelizer?.free();
+                channelizer = new SharedChannelizer(msg.ratio, new Int32Array(msg.centers));
+                channelizer.set_batch_samples(Math.min(65536, Math.round(msg.sampleRate * 0.01)));
+                channelKey = msg.key;
+            }
+            channelizer!.process(new Int8Array(msg.chunk));
+            const bands = msg.centers.map((centerBin: number, index: number) => {
+                const length = channelizer!.output_len(index);
+                if (!length) return null;
+                const source = new Float32Array(_wasm.memory.buffer, channelizer!.output_ptr(index), length);
+                const buffer = typeof SharedArrayBuffer === 'undefined' ? source.slice().buffer : new SharedArrayBuffer(length * 4);
+                if (typeof SharedArrayBuffer !== 'undefined' && buffer instanceof SharedArrayBuffer) new Float32Array(buffer).set(source);
+                return { centerBin, buffer, length };
+            }).filter(Boolean);
+            self.postMessage({ type: 'bands', bands, key: msg.key, chunkId: msg.chunkId, inputSamples: msg.inputSamples, dspTime: performance.now() - started });
+        } catch (error: any) {
+            self.postMessage({ type: 'channel_error', error: error.message, inputSamples: msg.inputSamples });
+        }
+    }
+    else if (msg.type === "init") {
         systemSampleRate = msg.sampleRate;
+        inputCenterFreq = msg.centerFreq;
         // Initialize the DDC and VFO state
         if (ddc) {
             ddc.free();
@@ -83,7 +117,8 @@ self.onmessage = async (e: MessageEvent) => {
         self.postMessage({ type: "init_done" });
     }
     else if (msg.type === "configure") {
-        configureDDC(msg.params, msg.centerFreq);
+        if (!inputIsFloat) inputCenterFreq = msg.centerFreq;
+        configureDDC(msg.params, inputCenterFreq);
         self.postMessage({ type: "config_done" });
     }
     else if (msg.type === "process") {
@@ -92,6 +127,29 @@ self.onmessage = async (e: MessageEvent) => {
             return;
         }
 
+        const nextRate = msg.sampleRate ?? systemSampleRate;
+        const nextCenter = msg.centerFreq ?? inputCenterFreq;
+        if (nextRate !== systemSampleRate) {
+            ddc.free();
+            if (rdsDdc) { rdsDdc.free(); rdsDdc = null; }
+            rdsDecoder = null;
+            systemSampleRate = nextRate;
+            inputCenterFreq = nextCenter;
+            ddc = new DspProcessor(nextRate, 0, msg.params.bandwidth || 150000);
+            vfoState.currentIfRate = 0;
+            vfoState.dcAvg = 0;
+            vfoState.deemphPrev = 0;
+            vfoState.agcGain = 1;
+            vfoState.ssbPhase = 0;
+            configureDDC(msg.params, nextCenter);
+        } else if (nextCenter !== inputCenterFreq) {
+            inputCenterFreq = nextCenter;
+            ddc.set_shift(nextRate, (msg.params.freq - nextCenter) * 1e6);
+            rdsDdc?.set_shift(nextRate, (msg.params.freq - nextCenter) * 1e6);
+        }
+        inputIsFloat = msg.floatIq === true;
+        // Audio mute does not stop independent RDS or pager decoding.
+        if (!msg.params.enabled && !msg.params.pocsag && !(msg.params.rds && msg.params.mode === 'wfm')) return;
         // Copy payload into WASM memory
         const wasmMemView = new Int8Array(_wasm.memory.buffer);
 
@@ -99,8 +157,11 @@ self.onmessage = async (e: MessageEvent) => {
             // Zero-copy grab from SAB ring!
             wasmMemView.set(sharedSabViews[msg.sabIndex].subarray(0, msg.chunkLen), sharedIqPtr);
         } else if (msg.chunk) {
-            // Direct copy from received buffer
-            wasmMemView.set(new Int8Array(msg.chunk), sharedIqPtr);
+            if (inputIsFloat) {
+                new Float32Array(_wasm.memory.buffer, sharedFloatPtr, msg.chunkLen).set(new Float32Array(msg.chunk));
+            } else {
+                wasmMemView.set(new Int8Array(msg.chunk), sharedIqPtr);
+            }
         } else {
             return; // Invalid chunk
         }
@@ -119,10 +180,37 @@ self.onmessage = async (e: MessageEvent) => {
                     samples: cloneOut.buffer,
                     chunkId: msg.chunkId,
                     squelchOpen: vfoState.squelchOpen,
+                    squelchDb: vfoState.squelchDb ?? -120,
                     dspTime: dspTime
                 }, [cloneOut.buffer]);
             } else {
-                self.postMessage({ type: "audio", samples: null, chunkId: msg.chunkId, squelchOpen: vfoState.squelchOpen, dspTime: dspTime });
+                self.postMessage({ type: "audio", samples: null, chunkId: msg.chunkId, squelchOpen: vfoState.squelchOpen, squelchDb: vfoState.squelchDb ?? -120, dspTime: dspTime });
+            }
+
+            // RDS: extract MPX and decode in-worker (avoids blocking the audio mixer thread)
+            if (rdsDdc && rdsDecoder && msg.params.rds && msg.params.mode === 'wfm') {
+                const chunkLen = msg.chunkLen;
+                if (chunkLen > 0) {
+                    const iqPtr = inputIsFloat
+                        ? rdsDdc.process_iq_only_f32_ptr(sharedFloatPtr, chunkLen)
+                        : rdsDdc.process_iq_only_ptr(sharedIqPtr, chunkLen);
+                    const iqLen = rdsDdc.get_iq_output_len();
+                    if (iqLen > 0) {
+                        const iqView = new Float32Array(_wasm.memory.buffer, iqPtr, iqLen);
+                        const numSamples = iqLen / 2;
+                        const mpxOut = new Float32Array(numSamples);
+                        for (let i = 0; i < numSamples; i++) {
+                            const ph = Math.atan2(iqView[i * 2 + 1], iqView[i * 2]);
+                            let diff = ph - rdsPrevPhase;
+                            if (diff > Math.PI) diff -= 2 * Math.PI;
+                            else if (diff < -Math.PI) diff += 2 * Math.PI;
+                            mpxOut[i] = diff;
+                            rdsPrevPhase = ph;
+                        }
+                        // Decode RDS in this worker thread — decoded messages sent via callback
+                        rdsDecoder.process(mpxOut);
+                    }
+                }
             }
         } catch (err: any) {
             self.postMessage({ type: "error", error: err.message });
@@ -131,10 +219,15 @@ self.onmessage = async (e: MessageEvent) => {
 };
 
 function configureDDC(params: any, systemCenterFreq: number): void {
-    if (vfoState.currentIfRate !== IF_RATES[params.mode]) {
-        vfoState.audioResampler = new RationalResampler(IF_RATES[params.mode], AUDIO_RATE);
-        vfoState.currentIfRate = IF_RATES[params.mode];
-        ddc.set_if_sample_rate(IF_RATES[params.mode]);
+    const ifRate = IF_RATES[params.mode];
+    if (ifRate === undefined) {
+        console.error(`[DSP Worker] Unknown mode "${params.mode}" — no IF rate defined. Skipping DDC config.`);
+        return;
+    }
+    if (vfoState.currentIfRate !== ifRate) {
+        vfoState.audioResampler = new RationalResampler(ifRate, AUDIO_RATE);
+        vfoState.currentIfRate = ifRate;
+        ddc.set_if_sample_rate(ifRate);
     }
 
     const offsetFreq = (params.freq - systemCenterFreq) * 1e6;
@@ -183,6 +276,25 @@ function configureDDC(params: any, systemCenterFreq: number): void {
 
     // Apply UI audio filters (High Pass 300Hz, Low Pass BW/2)
     ddc.set_audio_filters(params.lowPass || false, params.highPass || false);
+
+    // RDS: second DspProcessor for MPX extraction + in-worker RDS decoder
+    if (params.rds && params.mode === 'wfm') {
+        if (!rdsDdc) {
+            rdsDdc = new DspProcessor(systemSampleRate, 0.0, 250000);
+            rdsDdc.set_if_sample_rate(250000);
+            rdsPrevPhase = 0;
+        }
+        if (!rdsDecoder) {
+            rdsDecoder = new RDSDecoder(250000, (rmsg: any) => {
+                (self as any).postMessage({ type: "rds", msg: rmsg });
+            }, params.rdsRegion || 'eu');
+        }
+        rdsDecoder.setRegion(params.rdsRegion || 'eu');
+        rdsDdc.set_shift(systemSampleRate, offsetFreq);
+    } else {
+        if (rdsDdc) { rdsDdc.free(); rdsDdc = null; }
+        rdsDecoder = null;
+    }
 }
 
 function processVfoAudio(chunkLenBytes: number, params: any): Float32Array | null {
@@ -192,7 +304,7 @@ function processVfoAudio(chunkLenBytes: number, params: any): Float32Array | nul
     if (mode === 'nfm' || mode === 'wfm') {
         let outPtr: number;
         try {
-            outPtr = ddc.process_ptr(sharedIqPtr, chunkLenBytes);
+            outPtr = inputIsFloat ? ddc.process_f32_ptr(sharedFloatPtr, chunkLenBytes) : ddc.process_ptr(sharedIqPtr, chunkLenBytes);
         } catch (e) {
             console.error("DEBUG process_ptr crashed:", e);
             throw e;
@@ -205,6 +317,7 @@ function processVfoAudio(chunkLenBytes: number, params: any): Float32Array | nul
             isSquelched = (ddc.get_output_len() > 0 && new Float32Array(_wasm.memory.buffer, outPtr, numAudioSamples)[Math.floor(numAudioSamples / 2)] === 0.0);
         }
         vfoState.squelchOpen = !isSquelched;
+        vfoState.squelchDb = ddc.get_squelch_db();
 
         if (numAudioSamples === 0) return null;
 
@@ -241,7 +354,7 @@ function processVfoAudio(chunkLenBytes: number, params: any): Float32Array | nul
         return outView;
     } else {
         // Non-FM Path
-        const outPtr = ddc.process_iq_only_ptr(sharedIqPtr, chunkLenBytes);
+        const outPtr = inputIsFloat ? ddc.process_iq_only_f32_ptr(sharedFloatPtr, chunkLenBytes) : ddc.process_iq_only_ptr(sharedIqPtr, chunkLenBytes);
         const numOutValues = ddc.get_iq_output_len();
         const numDemodSamples = numOutValues / 2;
         if (numDemodSamples === 0) return null;
@@ -256,6 +369,7 @@ function processVfoAudio(chunkLenBytes: number, params: any): Float32Array | nul
         }
         squelchMag /= numDemodSamples;
         const squelchDb = 10 * Math.log10(squelchMag + 1e-12);
+        vfoState.squelchDb = squelchDb;
 
         if (numDemodSamples > vfoState.scratchBuf.length) {
             vfoState.scratchBuf = new Float32Array(numDemodSamples + 128);
@@ -345,7 +459,7 @@ function processVfoAudio(chunkLenBytes: number, params: any): Float32Array | nul
             }
         }
         else if (mode === 'dsd') {
-            // DSD mode: FM demod the IQ at 9600 Hz, then feed to DSD decoder.
+            // DSD mode: FM demod the IQ at 48 kHz, then feed to DSD decoder.
             // Voice audio arrives in bursty chunks (one DMR superframe = 320ms).
             // The main thread's ring buffer handles variable-size chunks, so we
             // return decoded audio directly when available, silence otherwise.

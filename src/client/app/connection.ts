@@ -58,7 +58,9 @@ export const connectionMethods = {
 					// Initialize gains from device defaults
 					const newGains: Record<string, number> = {};
 					for (const gc of caps.gainControls) {
-						newGains[gc.name] = gc.default;
+						const saved = this.gains[gc.name];
+						newGains[gc.name] = caps.deviceType === 'limesdr' && (gc.name === 'Antenna' || gc.name === 'RX Channel')
+							&& Number.isInteger(saved) && saved >= gc.min && saved <= gc.max ? saved : gc.default;
 					}
 					this.gains = newGains;
 
@@ -195,8 +197,11 @@ export const connectionMethods = {
 
 		const opts = {
 			centerFreq: this.radio.centerFreq,
+			frequencyShift: this.radio.frequencyShift,
 			sampleRate: this.radio.sampleRate,
 			fftSize: this.radio.fftSize,
+			spectrumFps: this.display.spectrumFps,
+			sharedChannelization: this.display.sharedChannelization,
 			gains: { ...this.gains },
 		};
 
@@ -206,22 +211,25 @@ export const connectionMethods = {
 				Comlink.proxy((audioSamples: any) => this.playAudio(audioSamples)),
 				Comlink.proxy((vfoIndex: number, freq: number, samples: any) => this._feedWhisperVfo(vfoIndex, freq, samples)),
 				Comlink.proxy((vfoIndex: number, freq: number, msg: any) => this._onPocsagMessage(vfoIndex, freq, msg)),
+				Comlink.proxy((vfoIndex: number, freq: number, msg: any) => this._onRdsMessage(vfoIndex, freq, msg)),
 				Comlink.proxy((vfoIndex: number, status: any) => this._onDsdStatus(vfoIndex, status))
 			);
 		} catch (e: any) {
 			console.error('Error starting RX stream:', e);
-			this.showMsg("Error starting stream.");
+			this.showMsg("Error starting stream: " + e.message);
 			this.running = false;
 			return;
 		}
 
 		this._statsTimer = setInterval(async () => {
 			if (this.backend && this.running) {
-				this.dspStats = await this.backend.getDspStats();
 				// Remote clients receive squelch state via WebRTC 'squelchState'
 				// commands (see remote.ts). Skip local polling so the host-provided
 				// data isn't overwritten with stale all-false values from the mock backend.
 				if (this.remoteMode === 'client') return;
+				const stats = await this.backend.getDspStats();
+				if (this.remoteMode === 'client' || !this.running) return;
+				this.dspStats = stats;
 				if (this.dspStats && this.dspStats.squelchOpen) {
 					const now = Date.now();
 					const squelchStates = this.dspStats.squelchOpen.slice();
@@ -258,6 +266,14 @@ export const connectionMethods = {
 					}
 					// Bump reactive tick so sortedVfoActivity recomputes
 					this.activityNow = now;
+				}
+				// ── Auto-squelch sample collection ──
+				if (this.dspStats && this.dspStats.squelchDb) {
+					for (let i = 0; i < this.dspStats.squelchDb.length; i++) {
+						if (this.autoSquelchActive[i] && this.autoSquelchSamples[i]) {
+							this.autoSquelchSamples[i].push(this.dspStats.squelchDb[i]);
+						}
+					}
 				}
 			}
 		}, 500);
