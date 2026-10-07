@@ -24,6 +24,7 @@ import { POCSAGDecoder } from './pocsag';
 import { ensureWasmInitialized, init } from './wasm-init';
 
 import type { Backend } from './backend';
+import { AUDIO_QUEUE_CAPACITY, appendAudio, mixLength } from './audio-queue';
 
 // ── Remote-client VFO management (multi-client) ──────────────────────────
 // Each connected client has its own independent set of VFOs. For each one
@@ -162,7 +163,7 @@ export async function setRemoteVfoParams(this: Backend, clientId: string, index:
 			sabs: typeof SharedArrayBuffer !== 'undefined' ? this.sharedIqPools : null
 		});
 		state.workers[index] = worker;
-		state.audioQueues[index] = { queue: new Float32Array(32768), len: 0 };
+		state.audioQueues[index] = { queue: new Float32Array(AUDIO_QUEUE_CAPACITY), len: 0 };
 	} else {
 		state.workers[index]!.postMessage({
 			type: 'configure',
@@ -177,7 +178,7 @@ export async function addRemoteVfo(this: Backend, clientId: string): Promise<voi
 	const idx = state.workers.length;
 	state.workers[idx] = null;
 	state.params[idx]   = null;
-	state.audioQueues[idx] = { queue: new Float32Array(32768), len: 0 };
+	state.audioQueues[idx] = { queue: new Float32Array(AUDIO_QUEUE_CAPACITY), len: 0 };
 }
 
 export async function removeRemoteVfo(this: Backend, clientId: string, index: number): Promise<void> {
@@ -218,14 +219,7 @@ export function _queueRemoteAudio(this: Backend, clientId: string, index: number
 		return;
 	}
 
-	const needed = entry.len + samples.length;
-	if (needed > entry.queue.length) {
-		const grown = new Float32Array(Math.max(needed * 2, 32768));
-		grown.set(entry.queue.subarray(0, entry.len));
-		entry.queue = grown;
-	}
-	entry.queue.set(samples, entry.len);
-	entry.len += samples.length;
+	entry.len = appendAudio(entry.queue, entry.len, samples);
 	this._mixAndEmitRemoteAudio(clientId);
 }
 
@@ -234,30 +228,28 @@ export function _mixAndEmitRemoteAudio(this: Backend, clientId: string): void {
 	const state = this._remoteClients && this._remoteClients.get(clientId);
 	if (!state) return;
 	const BATCH = 512;
-	let minAvailable = Infinity;
 	const active: { q: { queue: Float32Array; len: number }; p: VfoParams }[] = [];
 	for (let i = 0; i < state.workers.length; i++) {
 		const p = state.params[i];
 		if (!p || !p.enabled) continue;
 		const q = state.audioQueues[i];
 		if (!q) continue;
-		if (q.len < minAvailable) minAvailable = q.len;
 		active.push({ q, p });
 	}
-	if (!active.length || minAvailable < BATCH || minAvailable === Infinity) return;
-	const MAX_CHUNK = 4800;
-	if (minAvailable > MAX_CHUNK) minAvailable = MAX_CHUNK;
+	const minAvailable = mixLength(active.map(({ q }) => q.len));
+	if (minAvailable < BATCH) return;
 	if (!state.mixBuf || state.mixBuf.length < minAvailable) {
 		state.mixBuf = new Float32Array(minAvailable + 1024);
 	}
 	const mixed = state.mixBuf;
 	mixed.fill(0, 0, minAvailable);
 	for (const { q, p } of active) {
-		const vol = (p.volume ?? 50) / 100;
+		const vol = (p.audioMuted ? 0 : (p.volume ?? 50)) / 100;
 		const vScale = vol * vol;
-		for (let k = 0; k < minAvailable; k++) mixed[k] += q.queue[k] * vScale;
-		const rem = q.len - minAvailable;
-		if (rem > 0) q.queue.copyWithin(0, minAvailable, q.len);
+		const consumed = Math.min(minAvailable, q.len);
+		for (let k = 0; k < consumed; k++) mixed[k] += q.queue[k] * vScale;
+		const rem = q.len - consumed;
+		if (rem > 0) q.queue.copyWithin(0, consumed, q.len);
 		q.len = rem;
 	}
 	for (let k = 0; k < minAvailable; k++) {
@@ -289,7 +281,7 @@ export function _reinitRemoteClientWorkers(this: Backend): void {
 				sabs: typeof SharedArrayBuffer !== 'undefined' ? this.sharedIqPools : null
 			});
 			state.workers[i] = worker;
-			state.audioQueues[i] = { queue: new Float32Array(32768), len: 0 };
+			state.audioQueues[i] = { queue: new Float32Array(AUDIO_QUEUE_CAPACITY), len: 0 };
 		}
 	}
 }
@@ -325,7 +317,7 @@ export async function feedRemoteAudioChunk(this: Backend, chunk: any): Promise<v
 
 		// Feed whisper for local transcription on remote clients.
 		// The audio arrives pre-mixed from the host, so attribute it to VFO 0.
-		if (this._remoteClientWhisperCb && this.vfoParams && this.vfoParams[0]) {
+		if (this._whisperEnabled && this._remoteClientWhisperCb && this.vfoParams && this.vfoParams[0]) {
 			this._remoteClientWhisperCb(0, this.vfoParams[0].freq, floats);
 		}
 	}

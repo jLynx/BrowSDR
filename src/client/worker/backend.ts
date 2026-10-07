@@ -76,6 +76,8 @@ export class Backend {
 	_perfInterval?: any;
 	_spectrumFps = 20;
 	_sharedChannelization = true;
+	_whisperEnabled = false;
+	_resetWhisperBatches?: () => void;
 	_disposeChannelization?: () => void;
 	_sharedChannelStats = { bands: 0, vfos: 0, sampleRate: 0 };
 
@@ -192,6 +194,8 @@ export class Backend {
 		return {
 			...this._perf.report,
 			channelization: this._sharedChannelStats,
+			whisperEnabled: this._whisperEnabled,
+			audioQueueMs: Math.max(0, ...(this.vfoStates ?? []).map(state => state.audioQueueLen / 48)),
 			squelchOpen: combinedSquelch,
 			squelchDb: this.vfoStates ? this.vfoStates.map(s => s.squelchDb ?? -120) : [],
 		};
@@ -205,9 +209,15 @@ export class Backend {
 		this._sharedChannelization = enabled;
 	}
 
+	setWhisperEnabled(enabled: boolean): void {
+		if (enabled !== this._whisperEnabled) this._resetWhisperBatches?.();
+		this._whisperEnabled = enabled;
+	}
+
 	setVfoParams(index: number, params: Partial<VfoParams>): void {
 		if (!this.vfoParams || index < 0 || index >= this.vfoParams.length) return;
 		Object.assign(this.vfoParams[index], params);
+		if (params.enabled === false && this.vfoStates?.[index]) this.vfoStates[index].audioQueueLen = 0;
 
 		if (this.dspWorkers && this.dspWorkers[index]) {
 			this.dspWorkers[index].postMessage({

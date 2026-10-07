@@ -5,6 +5,7 @@ import { DSDStream } from './worker/dsd/dsd-stream';
 import { DSD_IF_RATE } from './worker/dsd/types';
 import type { DSDStatus } from './worker/dsd/types';
 import { RDSDecoder } from './worker/rds';
+import { LatestStatus } from './worker/latest-status';
 
 if (import.meta.env.DEV) {
     for (const level of ['log', 'warn', 'error'] as const) {
@@ -67,6 +68,7 @@ let systemSampleRate = 2000000;
 
 // DSD decoder state (per-worker, one DSD decoder per VFO)
 let dsdStream: DSDStream | null = null;
+const dsdStatus = new LatestStatus<DSDStatus>(status => self.postMessage({ type: 'dsd_status', status }));
 
 self.onmessage = async (e: MessageEvent) => {
     const msg = e.data;
@@ -96,6 +98,7 @@ self.onmessage = async (e: MessageEvent) => {
         }
     }
     else if (msg.type === "init") {
+        dsdStatus.reset();
         dsdStream?.reset();
         systemSampleRate = msg.sampleRate;
         inputCenterFreq = msg.centerFreq;
@@ -232,6 +235,7 @@ function configureDDC(params: any, systemCenterFreq: number): void {
         return;
     }
     const modeChanged = vfoState.lastMode !== params.mode;
+    if (modeChanged) dsdStatus.reset();
     if (vfoState.currentIfRate !== ifRate || modeChanged) {
         vfoState.audioResampler = new RationalResampler(ifRate, AUDIO_RATE);
         if (vfoState.currentIfRate === ifRate) ddc.reset();
@@ -262,7 +266,7 @@ function configureDDC(params: any, systemCenterFreq: number): void {
             dsdStream = new DSDStream(
                 (status: DSDStatus) => {
                     // Post DSD status to main thread
-                    self.postMessage({ type: 'dsd_status', status });
+                    dsdStatus.push(status);
                 }
             );
         }
