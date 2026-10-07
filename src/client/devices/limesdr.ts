@@ -20,6 +20,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 */
 
 import type { SdrDevice, SdrDeviceInfo, GainControl } from '../sdr-device';
+import { LimeRxLevel } from './lime-rx-level';
 import { registerDriver } from '../sdr-device';
 
 // ── LMS64C Protocol ─────────────────────────────────────────────────
@@ -154,6 +155,7 @@ function lnaGainToReg(gainDb: number): number {
 // ── LimeSDR Low-Level Driver ────────────────────────────────────────
 
 class LimeSDR {
+	readonly rxLevel = new LimeRxLevel();
 	private dev!: USBDevice;
 	private commandQueue: Promise<void> = Promise.resolve();
 	private rxRunning: Promise<void>[] | null = null;
@@ -1038,6 +1040,7 @@ class LimeSDR {
 
 	async startStreaming(callback: (data: ArrayBufferView) => void): Promise<void> {
 		if (this.rxRunning) return;
+		this.rxLevel.reset();
 
 		// Follow exact LimeSuite Streamer::Start() sequence:
 
@@ -1144,6 +1147,7 @@ class LimeSDR {
 
 					const numPackets = Math.floor(raw.length / STREAM_PKT_SIZE);
 					const dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
+					this.rxLevel.observe(dv);
 
 					let outPos = 0;
 					for (let pkt = 0; pkt < numPackets; pkt++) {
@@ -1232,6 +1236,7 @@ export class LimeSDRDevice implements SdrDevice {
 	];
 
 	private lime = new LimeSDR();
+	getRxLevel() { return this.lime.rxLevel.level; }
 	private operationQueue: Promise<void> = Promise.resolve();
 	private rxCallback: ((data: ArrayBufferView) => void) | null = null;
 	private gains: Record<string, number> = { 'RX Channel': 0, LNA: 14, TIA: 2, PGA: 16, Antenna: 1 };

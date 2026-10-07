@@ -2840,3 +2840,6 @@ canvas {
 	color: #888;
 	margin-top: 2px;
 }
+
+.auto-gain { margin: 8px 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.auto-gain p { width: 100%; font-size: 11px; line-height: 1.5; color: var(--text-muted); }

@@ -111,6 +111,7 @@ export const connectionMethods = {
 		}
 	},
 	async disconnect(this: AppInstance) {
+		if (this.autoGain.active) this.cancelAutoGain();
 		if (this.remoteMode === 'client' && this._webrtc) {
 			this._webrtc.close();
 			this._webrtc = null;
@@ -154,6 +155,7 @@ export const connectionMethods = {
 	},
 	async togglePlay(this: AppInstance, isRestart = false) {
 		if (this.running) {
+			if (this.autoGain.active) this.cancelAutoGain();
 			await this.backend.stopRx();
 			this.running = false;
 			if (this._statsTimer) { clearInterval(this._statsTimer); this._statsTimer = null; }

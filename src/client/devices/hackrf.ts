@@ -21,6 +21,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 import { HackRF } from '../hackrf';
 import type { SdrDevice, SdrDeviceInfo, GainControl } from '../sdr-device';
 import { registerDriver } from '../sdr-device';
+import { HackRFRxLevel } from './hackrf-rx-level';
 
 export class HackRFDevice implements SdrDevice {
 	readonly deviceType = 'hackrf';
@@ -33,6 +34,8 @@ export class HackRFDevice implements SdrDevice {
 	];
 
 	private hackrf = new HackRF();
+	private rxLevel = new HackRFRxLevel();
+	getRxLevel() { return this.rxLevel.level; }
 
 	async open(device: USBDevice): Promise<void> {
 		await this.hackrf.open(device);
@@ -41,6 +44,7 @@ export class HackRFDevice implements SdrDevice {
 	async close(): Promise<void> {
 		await this.hackrf.close();
 		await this.hackrf.exit();
+		this.rxLevel.reset();
 	}
 
 	async getInfo(): Promise<SdrDeviceInfo> {
@@ -92,11 +96,16 @@ export class HackRFDevice implements SdrDevice {
 	}
 
 	async startRx(callback: (data: ArrayBufferView) => void): Promise<void> {
-		await this.hackrf.startRx(callback as (data: Uint8Array) => void);
+		this.rxLevel.reset();
+		await this.hackrf.startRx(data => {
+			this.rxLevel.observe(data);
+			callback(data);
+		});
 	}
 
 	async stopRx(): Promise<void> {
 		await this.hackrf.stopRx();
+		this.rxLevel.reset();
 	}
 }
 

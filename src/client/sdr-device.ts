@@ -35,6 +35,15 @@ export interface SdrDeviceInfo {
 	firmware?: string;
 }
 
+export interface RxLevel {
+	timestamp: number;
+	started: number;
+	samples: number;
+	rmsDbfs: number;
+	peakDbfs: number;
+	clippedFraction: number;
+}
+
 export interface SdrDevice {
 	readonly deviceType: string;
 	readonly sampleRates: number[];
@@ -50,6 +59,7 @@ export interface SdrDevice {
 	setGain(name: string, value: number): Promise<void>;
 	setGains?(gains: Record<string, number>): Promise<void>;
 	setBandwidth?(bwHz: number): Promise<void>;
+	getRxLevel?(): RxLevel | null;
 
 	startRx(callback: (data: ArrayBufferView) => void): Promise<void>;
 	stopRx(): Promise<void>;

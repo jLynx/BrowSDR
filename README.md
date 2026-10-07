@@ -118,6 +118,32 @@ LimeSDR-USB reception supports sample rates up to **61.44 MSPS**. Higher rates r
 
 Choose **RX1** or **RX2** using **RX Channel** in the Radio panel, then select **LNAH**, **LNAL**, or **LNAW** under **Antenna** to match the H, L, or W connector in that receiver's antenna group. One receiver is streamed at a time; switching briefly restarts reception while retaining the current frequency, gains, and antenna path. The receiver and antenna selections are saved locally.
 
+### Automatic receive gains (LimeSDR and HackRF)
+
+Use **Auto set gains** while receiving to adjust LimeSDR LNA, TIA and PGA, or
+HackRF LNA, VGA and RF amplifier, from
+sampled raw ADC RMS, peak and clipping measurements. It targets about −22 dBFS
+RMS with at least 6 dB peak headroom, applies bounded adjustments, then holds the
+result steady. This is a receiver-wide setting shared by all VFOs. It works with
+muted audio.
+Cancel keeps the last applied gains; a measurement or USB error attempts to
+restore the starting gains. Manual gain controls remain available afterward.
+PGA displays its actual gain (register value minus 12 dB).
+
+HackRF uses signed 8-bit IQ samples for these measurements. LNA changes in 8 dB
+steps (0–40 dB), VGA in 2 dB steps (0–62 dB); gain staging keeps them roughly
+balanced, following [HackRF's gain recommendations](https://hackrf.readthedocs.io/en/latest/setting_gain.html).
+The RF amplifier is enabled only when levels remain low after substantial LNA/VGA
+gain, and disabled on ADC overload. Before enabling it, downstream gain is reduced
+to limit the level jump; fresh measurements account for its frequency-dependent
+gain. The existing **Amp (14dB)** label refers to this switch; current HackRF docs
+specify roughly 11 dB. Receiver and gain controls are disabled while adjusting;
+**Cancel** keeps the gains already applied.
+
+This optimizes ADC level, not station SNR or antenna matching. Strong signals
+anywhere in the sampled band can limit gain, and analog overload before the ADC
+may not be detected. Reduce bandwidth or try manual gains if reception suffers.
+
 ---
 
 ## 💻 Build Commands
