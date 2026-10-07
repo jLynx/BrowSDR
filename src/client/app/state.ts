@@ -33,6 +33,7 @@ export function createAppData() {
 			maxDB: 0.0,
 		},
 		gains: {} as Record<string, number>,
+		autoGain: { active: false, cancelled: false, status: '', level: null as import('../sdr-device').RxLevel | null },
 		deviceCapabilities: null as any,
 		locks: {
 			centerFreq: false,

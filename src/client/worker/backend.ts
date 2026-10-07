@@ -299,6 +299,8 @@ export class Backend {
 		await this.device.setGain(name, value);
 	}
 
+	getRxLevel() { return this.device?.getRxLevel?.() ?? null; }
+
 	async setGains(gains: Record<string, number>): Promise<void> {
 		if (!this.device) throw new Error('No device connected');
 		if (this.device.setGains) {

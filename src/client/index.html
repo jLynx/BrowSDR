@@ -153,7 +153,7 @@
 						<div class="form-row">
 							<label>Center</label>
 							<div class="input-group">
-								<input type="number" v-model.number="radio.centerFreq" step="0.1" title="Center Frequency (MHz)" :disabled="remoteMode === 'client' && locks.centerFreq">
+								<input type="number" v-model.number="radio.centerFreq" step="0.1" title="Center Frequency (MHz)" :disabled="autoGain.active || (remoteMode === 'client' && locks.centerFreq)">
 								<span>MHz</span>
 							</div>
 							<div class="lock-btn" v-if="remoteMode === 'host' || (remoteMode === 'client' && locks.centerFreq)" @click="remoteMode === 'host' && (locks.centerFreq = !locks.centerFreq)" :class="{ locked: locks.centerFreq, host: remoteMode === 'host' }" :title="remoteMode === 'host' ? 'Toggle Lock' : 'Locked by Host'">
@@ -164,13 +164,13 @@
 						<div class="form-row">
 							<label>Freq Shift</label>
 							<div class="input-group">
-								<input type="number" v-model.number="radio.frequencyShift" step="0.001" title="Displayed frequency = SDR frequency + shift. Use -125 MHz for a typical 125 MHz upconverter." :disabled="remoteMode === 'client'">
+								<input type="number" v-model.number="radio.frequencyShift" step="0.001" title="Displayed frequency = SDR frequency + shift. Use -125 MHz for a typical 125 MHz upconverter." :disabled="autoGain.active || remoteMode === 'client'">
 								<span>MHz</span>
 							</div>
 						</div>
 						<div class="form-row">
 							<label>Sample Rate</label>
-							<select v-model.number="radio.sampleRate" :disabled="remoteMode === 'client' && locks.sampleRate">
+							<select v-model.number="radio.sampleRate" :disabled="autoGain.active || (remoteMode === 'client' && locks.sampleRate)">
 								<template v-if="deviceCapabilities">
 									<option v-for="rate in deviceCapabilities.sampleRates" :key="rate" :value="rate">{{ rate >= 1000000 ? (rate / 1000000) + ' MSPS' : (rate / 1000) + ' kSPS' }}</option>
 								</template>
@@ -189,24 +189,30 @@
 							</div>
 						</div>
 						<!-- Dynamic gain controls based on connected device -->
+						<div class="auto-gain" v-if="autoGainSupported() && remoteMode !== 'client'">
+							<button class="btn btn-secondary" @click="autoSetGains" :disabled="!running || autoGain.active">Auto set gains</button>
+							<button v-if="autoGain.active" class="btn" @click="cancelAutoGain" :disabled="autoGain.cancelled">Cancel</button>
+							<p>Balances {{ autoGainControls() }} for the whole receiver. Holds the result steady.<template v-if="deviceCapabilities.deviceType === 'hackrf'"> Uses the RF amplifier only when needed for weak input.</template></p>
+							<p role="status">{{ autoGain.status }}<template v-if="autoGain.level"> · RMS {{ autoGain.level.rmsDbfs.toFixed(1) }} dBFS · peak {{ autoGain.level.peakDbfs.toFixed(1) }} dBFS · {{ (autoGain.level.clippedFraction * 100).toFixed(3) }}% clipped</template></p>
+						</div>
 						<template v-if="deviceCapabilities">
 							<div class="form-row" v-for="gc in deviceCapabilities.gainControls" :key="gc.name">
 								<template v-if="gc.type === 'select'">
 									<label>{{ gc.name }}</label>
-									<select v-model.number="gains[gc.name]" :aria-label="gc.name" :disabled="remoteMode === 'client' && locks[gc.name]" style="flex:1; background:#1a1a2e; color:#e0e0e0; border:1px solid #333; border-radius:4px; padding:4px 8px;">
+									<select v-model.number="gains[gc.name]" :aria-label="gc.name" :disabled="autoGain.active || (remoteMode === 'client' && locks[gc.name])" style="flex:1; background:#1a1a2e; color:#e0e0e0; border:1px solid #333; border-radius:4px; padding:4px 8px;">
 										<option v-for="(lbl, idx) in gc.labels" :key="idx" :value="idx">{{ lbl }}</option>
 									</select>
 								</template>
 								<template v-else-if="gc.type === 'slider'">
 									<label>{{ gc.name }} Gain</label>
 									<div class="slider-group">
-										<input type="range" v-model.number="gains[gc.name]" :min="gc.min" :max="gc.max" :step="gc.step" :disabled="remoteMode === 'client' && locks[gc.name]">
-										<span class="val">{{ gc.options ? (gc.options[gains[gc.name]] / 10).toFixed(1) : gains[gc.name] }} dB</span>
+										<input type="range" v-model.number="gains[gc.name]" :aria-label="gc.name + ' Gain'" :min="gc.min" :max="gc.max" :step="gc.step" :disabled="autoGain.active || (remoteMode === 'client' && locks[gc.name])">
+										<span class="val">{{ deviceCapabilities.deviceType === 'limesdr' && gc.name === 'PGA' ? gains.PGA - 12 : gc.options ? (gc.options[gains[gc.name]] / 10).toFixed(1) : gains[gc.name] }} dB</span>
 									</div>
 								</template>
 								<template v-else>
 									<label class="checkbox" style="flex:1" :style="{ opacity: (remoteMode === 'client' && locks[gc.name]) ? 0.5 : 1 }">
-										<input type="checkbox" :checked="!!gains[gc.name]" @change="gains[gc.name] = $event.target.checked ? 1 : 0" :disabled="remoteMode === 'client' && locks[gc.name]"> {{ gc.name }}
+										<input type="checkbox" :checked="!!gains[gc.name]" @change="gains[gc.name] = $event.target.checked ? 1 : 0" :disabled="autoGain.active || (remoteMode === 'client' && locks[gc.name])"> {{ gc.name }}
 									</label>
 								</template>
 								<div class="lock-btn" v-if="remoteMode === 'host' || (remoteMode === 'client' && locks[gc.name])" @click="remoteMode === 'host' && (locks[gc.name] = !locks[gc.name])" :class="{ locked: locks[gc.name], host: remoteMode === 'host' }" :title="remoteMode === 'host' ? 'Toggle Lock' : 'Locked by Host'">

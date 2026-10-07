@@ -15,6 +15,7 @@ import { dsdMethods } from './dsd';
 import { rdsMethods } from './rds';
 import { zoomMethods } from './zoom';
 import { remoteMethods } from './remote';
+import { autoGainMethods } from './auto-gain';
 
 const backendWorker = new Worker(new URL('../worker/main.ts', import.meta.url), { type: 'module' });
 if (import.meta.env.DEV) {
@@ -51,6 +52,7 @@ createApp({
 		...rdsMethods,
 		...zoomMethods,
 		...remoteMethods,
+		...autoGainMethods,
 	},
 	created: async function () {
 		this.loadSetting();
@@ -152,11 +154,13 @@ createApp({
 
 		let gainDebounce: ReturnType<typeof setTimeout> | null = null;
 		this.$watch('gains', () => {
+			if (this.autoGain.active) return;
 			// Debounce: wait for slider to settle before sending USB commands.
 			// Dragging fires many intermediate values — only the final one matters.
 			if (gainDebounce) clearTimeout(gainDebounce);
 			gainDebounce = setTimeout(() => {
 				gainDebounce = null;
+				if (this.autoGain.active) return;
 
 				if (this.remoteMode === 'client') {
 					if (!this._applyingSync) {
