@@ -613,9 +613,10 @@
 					<span class="transcript-badge" v-else-if="whisper.status === 'ready'">Ready</span>
 					<span class="transcript-badge loading" v-else-if="whisper.status === 'loading'">
 						<template v-if="whisper.loadPhase === 'initializing'">Initializing…</template>
+						<template v-else-if="whisper.loadPhase === 'finalizing'">Finalizing download…</template>
 						<template v-else>
-							Downloading {{ whisper.loadProgress }}%
-							<span v-if="whisper.loadFile" class="transcript-load-file">· {{ whisper.loadFile }}<span v-if="whisper.loadFilesTotal > 1"> ({{ whisper.loadFilesDone + 1 }}/{{ whisper.loadFilesTotal }})</span></span>
+							Downloading ~{{ whisper.loadProgress }}%
+							<span v-if="whisper.loadFilesTotal" class="transcript-load-file"> ({{ whisper.loadFilesDone }}/{{ whisper.loadFilesTotal }} files complete)</span>
 						</template>
 					</span>
 					<span class="transcript-badge error" v-else-if="whisper.status === 'error'">Error</span>
@@ -633,7 +634,8 @@
 							<option value="onnx-community/whisper-tiny">Tiny multilingual (~40 MB)</option>
 							<option value="onnx-community/whisper-base">Base multilingual (~75 MB)</option>
 							<option value="onnx-community/whisper-small">Small multilingual (~250 MB) ★ Best for NZ/AU</option>
-							<option value="onnx-community/whisper-large-v3-turbo">Large-v3-turbo (~800 MB) ★ Highest quality</option>
+							<option value="onnx-community/whisper-large-v3-turbo">Large-v3-turbo (~1–1.6 GB)</option>
+							<option value="distil-whisper/distil-large-v3.5-ONNX">Distil-Large-v3.5 · English (~1–1.5 GB)</option>
 						</optgroup>
 					</select>
 					<select v-model.number="whisper.chunkSeconds" :disabled="whisper.active" class="transcript-select" title="Chunk length (seconds)">
@@ -650,6 +652,9 @@
 				</div>
 			</div>
 			<div class="transcript-body" ref="transcriptBody">
+				<div v-if="whisper.status === 'loading'" class="transcript-entry">
+					Loading one shared model for all VFOs. Live transcription starts when ready.<span v-if="whisper.log.length"> Results below are previous transcriptions.</span>
+				</div>
 				<div v-if="whisper.benchmarkMessage" class="transcript-entry">{{ whisper.benchmarkMessage }}</div>
 				<div v-if="whisper.benchmarkResult" class="transcript-entry">
 					Benchmark: {{ whisper.benchmarkResult.audioDuration.toFixed(2) }}s audio · CPU q8 {{ whisper.benchmarkResult.results[0].median.toFixed(2) }}s · GPU fp32 {{ whisper.benchmarkResult.results[1].median.toFixed(2) }}s · {{ (whisper.benchmarkResult.results[0].median / whisper.benchmarkResult.results[1].median).toFixed(2) }}× faster (median of 3; warm-up excluded)
@@ -658,6 +663,7 @@
 					No transcriptions yet. Start Whisper and tune to a voice transmission.
 				</div>
 				<div v-for="(entry, i) in whisper.log" :key="i" class="transcript-entry"
+					:title="entry.model ? 'Model: ' + entry.model : ''"
 					:style="entry.vfoIndex != null ? { borderLeftColor: vfoColor(entry.vfoIndex) } : {}">
 					<span class="transcript-vfo-dot" v-if="entry.vfoIndex != null" :style="{ background: vfoColor(entry.vfoIndex) }" :title="'VFO ' + (entry.vfoIndex + 1)"></span>
 					<span class="transcript-time">{{ entry.time }}</span>

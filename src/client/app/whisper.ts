@@ -40,6 +40,7 @@ export const whisperMethods = {
 		if (!this._whisperWorker) {
 			this._whisperWorker = new Worker(import.meta.env.DEV ? '/whisper-worker.ts' : './whisper-worker.js', { type: 'module' });
 			this._whisperWorker.addEventListener('message', (e: MessageEvent) => this._onWhisperMessage(e));
+			this._whisperWorker.addEventListener('error', (e: ErrorEvent) => this._onWhisperMessage({ data: { type: 'error', message: e.message || 'Whisper worker failed.' } } as MessageEvent));
 		}
 
 		// Load model
@@ -60,6 +61,12 @@ export const whisperMethods = {
 		this.whisper.active = true;
 	},
 	stopWhisper(this: AppInstance) {
+		if (this.whisper.status === 'loading' || this.whisper.status === 'error') {
+			this._whisperWorker?.terminate();
+			this._whisperWorker = null;
+			this.whisper.status = 'idle';
+			this.whisper.device = '';
+		}
 		this.whisper.active = false;
 		this.whisper.recording = false;
 		this.whisper.transcribing = false;
@@ -118,7 +125,7 @@ export const whisperMethods = {
 				const vfoIndex = meta.vfoIndex ?? null;
 				const duration = msg.audioDuration ? msg.audioDuration.toFixed(1) + 's' : '';
 				const transcribeTime = msg.transcribeTime ? msg.transcribeTime + 's' : '';
-				this.whisper.log.push({ time, freq, text, duration, transcribeTime, vfoIndex });
+				this.whisper.log.push({ time, freq, text, duration, transcribeTime, vfoIndex, model: msg.model || meta.model || '' });
 				// Auto-scroll
 				this.$nextTick(() => {
 					const el = this.$refs.transcriptBody;
@@ -278,6 +285,7 @@ export const whisperMethods = {
 			startTime: vs.recordStart || new Date(),
 			freq: vs.recordStartFreq,
 			vfoIndex,
+			model: this.whisper.model,
 		};
 		if (import.meta.env.DEV && audioDuration >= 1 && !this._whisperBenchmarkAudio) {
 			this._whisperBenchmarkAudio = full.slice();

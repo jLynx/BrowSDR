@@ -77,7 +77,7 @@ export function createAppData() {
 			loadFilesTotal: 0,
 			model: 'onnx-community/whisper-small',
 			chunkSeconds: 10,
-			log: [] as Array<{ time: string; freq: string; text: string; duration: string; transcribeTime?: string; vfoIndex?: number | null }>,
+			log: [] as Array<{ time: string; freq: string; text: string; duration: string; transcribeTime?: string; vfoIndex?: number | null; model?: string }>,
 			statusMsg: '',
 			recording: false,
 			transcribing: false,

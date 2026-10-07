@@ -4,6 +4,18 @@ import { WhisperBackend } from '../src/client/whisper-backend';
 const gpu = { requestAdapter: async () => ({}) };
 
 describe('Whisper GPU selection and CPU recovery', () => {
+	it('uses fp16 for large models when the GPU supports it', async () => {
+		const create = vi.fn().mockResolvedValue(vi.fn());
+		const backend = new WhisperBackend(create, 'onnx-community/whisper-large-v3-turbo', vi.fn(), vi.fn());
+		await backend.load({ requestAdapter: async () => ({ features: new Set(['shader-f16']) }) });
+		expect(create.mock.calls[0][2]).toMatchObject({ device: 'webgpu', dtype: 'fp16' });
+	});
+	it('avoids multi-gigabyte fp32 weights on GPUs without fp16', async () => {
+		const create = vi.fn().mockResolvedValue(vi.fn());
+		const backend = new WhisperBackend(create, 'distil-whisper/distil-large-v3.5-ONNX', vi.fn(), vi.fn());
+		await backend.load(gpu);
+		expect(create.mock.calls[0][2]).toMatchObject({ device: 'webgpu', dtype: 'q8' });
+	});
 	it('uses WebGPU when an adapter and model are available', async () => {
 		const transcribe = vi.fn().mockResolvedValue({ text: 'Radio check' });
 		const create = vi.fn().mockResolvedValue(transcribe);

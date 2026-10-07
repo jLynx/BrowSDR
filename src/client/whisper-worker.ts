@@ -19,6 +19,7 @@
 
 import { WhisperBackend } from './whisper-backend';
 import { isHallucination } from './whisper-text';
+import { WhisperProgress } from './whisper-progress';
 
 const workerSelf = self as unknown as { postMessage(msg: any): void; addEventListener(type: string, listener: (e: MessageEvent) => void): void; location: { origin: string; hostname: string } };
 
@@ -37,19 +38,9 @@ interface TranscribeMessage {
 interface BenchmarkMessage { type: 'benchmark'; audio: Float32Array; model: string }
 type WorkerInMessage = LoadMessage | TranscribeMessage | BenchmarkMessage;
 
-interface ProgressEvent {
-	status: string;
-	file?: string;
-	progress?: number;
-}
-
-interface DownloadFileInfo {
-	progress: number;
-	done: boolean;
-}
-
 let pipeline: WhisperBackend | null = null;
 let pipelinePromise: Promise<void> | null = null;
+let loadedModel = '';
 let isMultilingual: boolean = false;
 
 // Serialise transcription requests — the WASM pipeline cannot handle concurrent
@@ -59,8 +50,13 @@ let transcribeChain: Promise<void> = Promise.resolve();
 
 async function loadModel(model: string, device?: 'wasm' | 'webgpu'): Promise<void> {
 	try {
+		if (pipeline && loadedModel === model && !device) {
+			workerSelf.postMessage({ type: 'ready', device: pipeline.device });
+			return;
+		}
 		await pipeline?.dispose();
 		pipeline = null;
+		loadedModel = '';
 		workerSelf.postMessage({ type: 'status', message: `Loading Transformers.js…` });
 
 		// Dynamic import from CDN (ES module)
@@ -86,36 +82,14 @@ async function loadModel(model: string, device?: 'wasm' | 'webgpu'): Promise<voi
 
 		workerSelf.postMessage({ type: 'status', message: `Downloading model ${model}…` });
 
-		// Track per-file progress so we report the *actual* byte progress of the
-		// file currently being downloaded rather than a multi-file weighted average.
-		// Transformers.js fires: initiate -> progress (n times) -> done, per file.
-		const _dlFiles: Record<string, DownloadFileInfo> = {}; // file -> { progress, done }
-
-		const backend = new WhisperBackend(createPipeline, model, (p: ProgressEvent) => {
-			if (p.status === 'initiate') {
-				_dlFiles[p.file!] = { progress: 0, done: false };
-			} else if (p.status === 'progress' && p.progress != null) {
-				_dlFiles[p.file!] = { progress: Math.round(p.progress), done: false };
-				const filesDone  = Object.values(_dlFiles).filter((f: DownloadFileInfo) => f.done).length;
-				const filesTotal = Object.keys(_dlFiles).length;
-				workerSelf.postMessage({
-					type: 'loading',
-					phase: 'downloading',
-					progress: Math.round(p.progress), // real progress of this file
-					file: _shortName(p.file),
-					filesDone,
-					filesTotal,
-				});
-			} else if (p.status === 'done') {
-				if (_dlFiles[p.file!]) _dlFiles[p.file!].done = true;
-				const allDone = Object.values(_dlFiles).every((f: DownloadFileInfo) => f.done);
-				if (allDone) {
-					workerSelf.postMessage({ type: 'loading', phase: 'initializing', progress: 100, file: '' });
-				}
-			}
-		}, (device, reason) => workerSelf.postMessage({ type: 'backend', device, reason }));
-		await backend.load(device === 'wasm' ? undefined : (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown | null> } }).gpu);
+		// Reserve space for large weight files not yet announced by the downloader.
+		const expectedBytes = model.includes('distil-large-v3.5') ? 1514000000 : model.includes('large-v3') ? 1620000000 : 0;
+		const progress = new WhisperProgress(message => workerSelf.postMessage(message), expectedBytes);
+		const backend = new WhisperBackend(createPipeline, model, event => progress.update(event),
+			(device, reason) => workerSelf.postMessage({ type: 'backend', device, reason }));
+		await backend.load(device === 'wasm' ? undefined : (navigator as Navigator & { gpu?: { requestAdapter(): Promise<{ features?: { has(feature: string): boolean } } | null> } }).gpu);
 		pipeline = backend;
+		loadedModel = model;
 
 		workerSelf.postMessage({ type: 'ready', device: backend.device });
 	} catch (err: unknown) {
@@ -123,16 +97,6 @@ async function loadModel(model: string, device?: 'wasm' | 'webgpu'): Promise<voi
 		console.error('[whisper-worker] Model load failed:', err);
 		workerSelf.postMessage({ type: 'error', message: `Model load failed: ${message}` });
 	}
-}
-
-// Shorten a HuggingFace file path to a readable label, e.g.
-// "onnx/encoder_model_quantized.onnx" -> "encoder"
-function _shortName(file: string | undefined): string {
-	return (file || '')
-		.split('/').pop()!             // basename
-		.replace(/\.onnx$|\.json$|\.txt$|\.model$/, '')
-		.replace(/_quantized|_merged/g, '')
-		.replace(/_model$/, '');
 }
 
 function transcriptionOptions(): Record<string, any> {
@@ -193,7 +157,7 @@ async function transcribe(audio: Float32Array, id: number, audioDuration?: numbe
 			return;
 		}
 
-		workerSelf.postMessage({ type: 'result', text, id, audioDuration, transcribeTime });
+		workerSelf.postMessage({ type: 'result', text, id, audioDuration, transcribeTime, model: loadedModel });
 	} catch (err: unknown) {
 		const message = err instanceof Error ? err.message : String(err);
 		console.error('[whisper-worker] Transcription error:', err);

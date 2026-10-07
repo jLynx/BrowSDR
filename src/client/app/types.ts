@@ -54,7 +54,7 @@ export interface WhisperState {
 	loadFilesTotal: number;
 	model: string;
 	chunkSeconds: number;
-	log: Array<{ time: string; freq: string; text: string; duration: string; transcribeTime?: string; vfoIndex?: number | null }>;
+	log: Array<{ time: string; freq: string; text: string; duration: string; transcribeTime?: string; vfoIndex?: number | null; model?: string }>;
 	statusMsg: string;
 	recording: boolean;
 	transcribing: boolean;
