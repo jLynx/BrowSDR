@@ -97,10 +97,25 @@ export class HackRFDevice implements SdrDevice {
 
 	async startRx(callback: (data: ArrayBufferView) => void): Promise<void> {
 		this.rxLevel.reset();
-		await this.hackrf.startRx(data => {
-			this.rxLevel.observe(data);
-			callback(data);
+		let firstSample: () => void;
+		let timeout: ReturnType<typeof setTimeout>;
+		const started = new Promise<void>((resolve, reject) => {
+			firstSample = resolve;
+			timeout = setTimeout(() => reject(new Error('HackRF returned no USB samples. Reconnect it and close other applications using it.')), 5000);
 		});
+		// Attach the rejection handler before USB commands, which may themselves fail.
+		started.catch(() => {});
+		try {
+			await this.hackrf.startRx(data => {
+				this.rxLevel.observe(data);
+				callback(data);
+				firstSample();
+			});
+			await started;
+		} catch (error) {
+			await this.hackrf.stopRx();
+			throw error;
+		} finally { clearTimeout(timeout!); }
 	}
 
 	async stopRx(): Promise<void> {

@@ -13,6 +13,7 @@ export const canvasMethods = {
 		this.renderSize = renderSize;
 		const nx = Math.pow(2, Math.ceil(Math.log2(renderSize)));
 		const useWebGL = nx <= 16384;
+		this._waterfallEngine?.destroy?.();
 
 		// Attach non-reactively to prevent Vue DevTools from deep-inspecting rendering engine objects and freezing
 		this._waterfallEngine = useWebGL ?
@@ -452,17 +453,25 @@ export function mountCanvas(this: AppInstance) {
 
 	// Resize FFT canvas when browser window is resized
 	let resizeTimer: ReturnType<typeof setTimeout>;
-	window.addEventListener('resize', () => {
+	const resize = () => {
 		clearTimeout(resizeTimer);
 		resizeTimer = setTimeout(() => {
 			if (this._fftCtx) this.resizeFftCanvas();
 		}, 150);
-	});
+	};
+	window.addEventListener('resize', resize);
+	this._canvasCleanup = () => {
+		clearTimeout(resizeTimer);
+		window.removeEventListener('resize', resize);
+		document.body.removeEventListener('click', resumeAudio);
+		document.body.removeEventListener('touchstart', resumeAudio);
+	};
 
 	// Initial application of zoom bounds
 	this.applyZoomToEngine();
 
 	// Check for remote connection link in URL
+	if (this.workspace) return; // Workspace opens shared receivers once for the entire page.
 	const urlParams = new URLSearchParams(window.location.search);
 	const connectId = urlParams.get('connect');
 	if (connectId) {

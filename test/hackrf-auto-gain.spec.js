@@ -41,11 +41,12 @@ describe('HackRF ADC level measurements', () => {
 			transferIn: vi.fn(() => new Promise(resolve => transfers.push(resolve))),
 		};
 		const callback = vi.fn();
-		await device.startRx(callback);
+		const starting = device.startRx(callback);
 		await vi.advanceTimersByTimeAsync(300);
 		const samples = new Int8Array(4096).fill(-16);
 		transfers.shift()({ status: 'ok', data: new DataView(samples.buffer) });
 		await vi.advanceTimersByTimeAsync(1);
+		await starting;
 		expect(callback).toHaveBeenCalledOnce();
 		expect(Array.from(new Int8Array(callback.mock.calls[0][0].buffer))).toEqual(Array.from(samples));
 		expect(device.getRxLevel().rmsDbfs).toBeCloseTo(-18.0618);

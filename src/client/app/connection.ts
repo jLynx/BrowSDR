@@ -13,7 +13,7 @@ export const connectionMethods = {
 		const sdrDevices: PairedSdr[] = [];
 		for (const device of allPaired) {
 			const driver = lookupDevice(device);
-			if (driver) {
+			if (driver && !this.workspace?.isDeviceConnected(device)) {
 				sdrDevices.push({ device, driverName: driver.name, productName: device.productName || '' });
 			}
 		}
@@ -39,12 +39,18 @@ export const connectionMethods = {
 
 	async connectToDevice(this: AppInstance, device: USBDevice) {
 		this.devicePicker.show = false;
+		if (this.workspace) return this.workspace.connectDevice(this, device);
+		return this._connectToDevice(device);
+	},
+	async _connectToDevice(this: AppInstance, device: USBDevice, deviceIndex?: number) {
+		this.devicePicker.show = false;
 		this.showMsg("Connecting...");
 		try {
 			const ok = await this.backend.open({
 				vendorId: device.vendorId,
 				productId: device.productId,
-				serialNumber: device.serialNumber
+				serialNumber: device.serialNumber,
+				deviceIndex,
 			});
 			if (ok) {
 				this.connected = true;
@@ -81,6 +87,10 @@ export const connectionMethods = {
 	},
 
 	async connectMock(this: AppInstance) {
+		if (this.workspace) return this.workspace.connectDevice(this, 'mock');
+		return this._connectMock();
+	},
+	async _connectMock(this: AppInstance) {
 		if (!this.backend) return;
 		this._initAudioCtx(); // create AudioContext within user gesture
 		this.showMsg("Connecting Mock SDR...");
@@ -111,7 +121,23 @@ export const connectionMethods = {
 		}
 	},
 	async disconnect(this: AppInstance) {
+		if (this.workspace) {
+			if (this.remoteMode === 'client') return this.workspace.disconnectRemote();
+			return this.workspace.removeReceiver(this.receiverId);
+		}
+		return this._disconnectReceiver();
+	},
+	async _disconnectReceiver(this: AppInstance) {
 		if (this.autoGain.active) this.cancelAutoGain();
+		if (this.workspace) {
+			this.stopWhisper();
+			this._receiverTransport = this._webrtc = null;
+			this.remoteMode = 'none';
+			if (this.running) await this.togglePlay();
+			await this.backend.close();
+			this.connected = false;
+			return;
+		}
 		if (this.remoteMode === 'client' && this._webrtc) {
 			this._webrtc.close();
 			this._webrtc = null;
@@ -154,6 +180,12 @@ export const connectionMethods = {
 		}
 	},
 	async togglePlay(this: AppInstance, isRestart = false) {
+		if (this._playChanging) return;
+		this._playChanging = true;
+		try { await this._togglePlay(isRestart); }
+		finally { this._playChanging = false; }
+	},
+	async _togglePlay(this: AppInstance, isRestart = false) {
 		if (this.running) {
 			if (this.autoGain.active) this.cancelAutoGain();
 			await this.backend.stopRx();
@@ -184,11 +216,12 @@ export const connectionMethods = {
 				navigator.mediaSession.setActionHandler('stop', null);
 			}
 		} else {
-			this.startStream(isRestart);
+			await this.startStream(isRestart);
 		}
 	},
 	async startStream(this: AppInstance, isRestart = false) {
 		if (this.running) return;
+		this._initAudioCtx();
 
 		this.initCanvas();
 
@@ -218,6 +251,7 @@ export const connectionMethods = {
 			);
 		} catch (e: any) {
 			console.error('Error starting RX stream:', e);
+			try { await this.backend.stopRx(); } catch {}
 			this.showMsg("Error starting stream: " + e.message);
 			this.running = false;
 			return;
@@ -308,6 +342,7 @@ export const connectionMethods = {
 
 		// Add additional VFOs beyond the first (which is created by default in the worker).
 		// In client mode, notify the host via WebRTC instead of calling the mock backend.
+		if (this.remoteMode === 'client' && this._receiverTransport) this._webrtc.sendCommand({ type: 'resetRemoteVfos' });
 		for (let i = 1; i < this.vfos.length; i++) {
 			if (this.remoteMode === 'client' && this._webrtc) {
 				this._webrtc.sendCommand({ type: 'addRemoteVfo' });

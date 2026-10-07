@@ -34,7 +34,9 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
 * **🎛️ Full DSP Toolset**
   Control squelch, noise reduction, de-emphasis, and stereo output per VFO.
 * **🌐 Remote Access**
-  Share your SDR with others via WebRTC using PeerJS.
+  Share all connected SDRs with others through one WebRTC link using PeerJS. Each remote user has independent VFOs on every receiver.
+* **📡 Multiple SDRs at Once**
+  Connect any number of compatible SDRs, including mixed device families. Each receiver has independent tuning, sample rate, gains, waterfall, and VFOs. Switch receiver tabs while audio from all enabled VFOs continues playing.
 
 ---
 

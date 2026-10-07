@@ -318,7 +318,7 @@ class HackRF {
 			throw 'failed to setTransceiverMode';
 		}
 
-		this.setBasebandFilterBandwidth(HackRF.computeBasebandFilterBw(0.75 * freqHz / divider));
+		await this.setBasebandFilterBandwidth(HackRF.computeBasebandFilterBw(0.75 * freqHz / divider));
 	}
 
 	async setBasebandFilterBandwidth(bandwidthHz: number): Promise<void> {
@@ -413,18 +413,21 @@ class HackRF {
 		}
 
 		await this.setTransceiverMode(HackRF.HACKRF_TRANSCEIVER_MODE_RECEIVE);
+		const session: Promise<void>[] = [];
+		this.rxRunning = session;
 		const transfer = async (): Promise<void> => {
 			await Promise.resolve();
-			while (this.rxRunning) {
+			while (this.rxRunning === session) {
 				try {
 					const result = await this.device.transferIn(1, HackRF.TRANSFER_BUFFER_SIZE);
+					if (this.rxRunning !== session) break;
 					if (result.status !== 'ok') {
 						console.error('startRx: transfer status not ok:', result.status);
 						break;
 					}
-					callback(new Uint8Array(result.data!.buffer, 0, result.data!.byteLength));
+					callback(new Uint8Array(result.data!.buffer, result.data!.byteOffset, result.data!.byteLength));
 				} catch (e: unknown) {
-					if (this.rxRunning) {
+					if (this.rxRunning === session) {
 						const msg = e instanceof Error ? e.message : String(e);
 						console.error('startRx: transfer error:', msg);
 					}
@@ -433,7 +436,7 @@ class HackRF {
 			}
 			// transfer loop ended
 		};
-		this.rxRunning = Array.from({ length: 8 }, transfer);
+		session.push(...Array.from({ length: 8 }, transfer));
 	}
 
 	async startRxSweep(callback: RxCallback): Promise<void> {
@@ -444,18 +447,21 @@ class HackRF {
 		}
 
 		await this.setTransceiverMode(HackRF.TRANSCEIVER_MODE_RX_SWEEP);
+		const session: Promise<void>[] = [];
+		this.rxRunning = session;
 		const transfer = async (): Promise<void> => {
 			await Promise.resolve();
-			while (this.rxRunning) {
+			while (this.rxRunning === session) {
 				try {
 					const result = await this.device.transferIn(1, HackRF.TRANSFER_BUFFER_SIZE);
+					if (this.rxRunning !== session) break;
 					if (result.status !== 'ok') {
 						console.error('startRxSweep: transfer status not ok:', result.status);
 						break;
 					}
-					callback(new Uint8Array(result.data!.buffer, 0, result.data!.byteLength));
+					callback(new Uint8Array(result.data!.buffer, result.data!.byteOffset, result.data!.byteLength));
 				} catch (e: unknown) {
-					if (this.rxRunning) {
+					if (this.rxRunning === session) {
 						const msg = e instanceof Error ? e.message : String(e);
 						console.error('startRxSweep: transfer error:', msg);
 					}
@@ -464,7 +470,7 @@ class HackRF {
 			}
 			// transfer loop ended
 		};
-		this.rxRunning = Array.from({ length: 8 }, transfer);
+		session.push(...Array.from({ length: 8 }, transfer));
 	}
 
 	async boardRevRead(): Promise<number> {
@@ -577,21 +583,33 @@ class HackRF {
 	}
 
 	async stopRx(): Promise<void> {
-		if (this.rxRunning) {
-			const promises = this.rxRunning;
-			this.rxRunning = null;
-			try {
-				await Promise.allSettled(promises);
-			} catch (e: unknown) {
-				const msg = e instanceof Error ? e.message : String(e);
-				console.warn('stopRx: error during transfer shutdown:', msg);
-			}
-		}
+		const promises = this.rxRunning;
+		this.rxRunning = null;
+		// Stop the hardware before draining reads: at low sample rates a queued
+		// bulk read may never fill once the host has stopped submitting transfers.
 		try {
 			await this.setTransceiverMode(HackRF.HACKRF_TRANSCEIVER_MODE_OFF);
 		} catch (e: unknown) {
 			const msg = e instanceof Error ? e.message : String(e);
 			console.warn('stopRx: error setting mode off:', msg);
+		}
+		if (promises) {
+			let stopTimer: ReturnType<typeof setTimeout> | undefined;
+			try {
+				const settled = await Promise.race([
+					Promise.allSettled(promises).then(() => true),
+					new Promise<false>(resolve => { stopTimer = setTimeout(() => resolve(false), 1000); }),
+				]);
+				if (!settled) {
+					// WebUSB has no per-transfer cancellation. Closing the handle cancels
+					// pending bulk reads; reopening preserves the radio's configuration.
+					await this.device.close();
+					await Promise.allSettled(promises);
+					await this.device.open();
+					await this.device.selectConfiguration(HackRF.USB_CONFIG_STANDARD);
+					await this.device.claimInterface(0);
+				}
+			} finally { clearTimeout(stopTimer); }
 		}
 	}
 
