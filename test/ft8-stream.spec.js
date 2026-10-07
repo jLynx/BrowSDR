@@ -2,6 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { FT8Stream } from '../src/client/ft8/stream';
 
 describe('FT8 UTC capture', () => {
+	it('keeps nine interleaved captures independent across the same UTC slots', () => {
+		const frames = Array.from({ length: 9 }, () => []);
+		const streams = frames.map(results => new FT8Stream((audio, slot) => results.push({ audio, slot })));
+		for (let time = 100; time <= 31000; time += 100) {
+			streams.forEach((stream, index) => stream.push(new Float32Array(4800).fill((index + 1) / 10), time));
+		}
+		frames.forEach((results, index) => {
+			expect(results.map(frame => frame.slot)).toEqual([0, 15000]);
+			expect(results[0].audio[90000]).toBeCloseTo((index + 1) / 10);
+		});
+	});
 	it('discards the first partial slot and preserves complete slots across USB burst sizes', () => {
 		const frames = [];
 		const stream = new FT8Stream((audio, slot) => frames.push({ audio, slot }));

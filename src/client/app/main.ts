@@ -58,11 +58,9 @@ createApp({
 		this.loadSetting();
 		this.loadBookmarks();
 		this.$watch(() => JSON.stringify([
-			this.running, this.remoteMode, this.ft8.vfoIndex, this.radio.centerFreq,
+			this.running, this.remoteMode, this.ft8.source, this.radio.centerFreq,
 			this.radio.frequencyShift, this.radio.sampleRate,
-			this.vfos[this.ft8.vfoIndex]?.freq, this.vfos[this.ft8.vfoIndex]?.mode,
-			this.vfos[this.ft8.vfoIndex]?.bandwidth, this.vfos[this.ft8.vfoIndex]?.squelchEnabled,
-			this.vfos[this.ft8.vfoIndex]?.lowPass, this.vfos[this.ft8.vfoIndex]?.highPass,
+			this.vfos.map((vfo: any) => [vfo.freq, vfo.mode, vfo.bandwidth, vfo.squelchEnabled, vfo.noiseReduction, vfo.lowPass, vfo.highPass]),
 			this.gains['RX Channel'], this.gains.Antenna,
 		]), () => this._ft8ConfigChanged());
 
