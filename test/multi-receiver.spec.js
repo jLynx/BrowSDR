@@ -93,7 +93,7 @@ describe('receiver membership', () => {
 		expect(hackrf._connectToDevice).toHaveBeenCalledWith(device, 0);
 		expect(lime._connectToDevice).not.toHaveBeenCalled();
 		expect(lime._disconnectReceiver).not.toHaveBeenCalled();
-		await workspace.connectDevice(lime, { ...device });
+		await workspace.connectDevice(lime, device);
 		expect(lime.showMsg).toHaveBeenCalledWith('This SDR is already connected.');
 		expect(workspace.receivers).toHaveLength(2);
 	});

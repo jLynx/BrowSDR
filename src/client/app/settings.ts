@@ -16,9 +16,9 @@ export const settingsMethods = {
 		};
 		localStorage.setItem(this.settingsKey || 'SDRSetting', JSON.stringify(obj));
 	},
-	loadSetting(this: AppInstance) {
+	loadSetting(this: AppInstance, useLegacy = false) {
 		try {
-			const json = localStorage.getItem(this.settingsKey || 'SDRSetting') || (this.workspace && this.settingsKey?.startsWith('SDRSetting:usb:') ? localStorage.getItem('SDRSetting') : null);
+			const json = localStorage.getItem(this.settingsKey || 'SDRSetting') || (useLegacy ? localStorage.getItem('SDRSetting') : null);
 			if (json) {
 				const setting = JSON.parse(json);
 				if (setting.radio) {

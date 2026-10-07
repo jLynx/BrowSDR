@@ -1,6 +1,7 @@
 import { markRaw } from 'vue';
 import { WebRTCHandler, PEER_ID_PREFIX } from '../webrtc';
 import { ReceiverTransport, unpackReceiverChunk } from '../receiver-transport';
+import { usbSettingsKey } from '../usb-device-selection';
 
 interface ReceiverEntry {
 	id: string;
@@ -8,6 +9,7 @@ interface ReceiverEntry {
 	settingsKey: string;
 	status: string;
 	remote?: boolean;
+	deviceLabel?: string;
 }
 
 export async function syncReceiverAvailability(app: any, running: boolean): Promise<void> {
@@ -80,7 +82,7 @@ export function createWorkspace(Receiver: any): any {
 					const entry = this.receivers.find((item: ReceiverEntry) => item.id === id);
 					if (!entry) return;
 					entry.status = app.running ? 'Receiving' : app.connected ? 'Paused' : 'Disconnected';
-					if (app.info.boardName && !entry.remote) entry.label = app.info.boardName;
+					if (app.info.boardName && !entry.remote) entry.label = entry.deviceLabel || app.info.boardName;
 					if (this.mode === 'host') this.broadcastReceivers();
 				});
 			},
@@ -108,8 +110,9 @@ export function createWorkspace(Receiver: any): any {
 				if (app) await app.connectMock();
 			},
 			isDeviceConnected(this: any, device: USBDevice) {
-				return [...claims.keys()].some(item => item === device || (device.serialNumber &&
-					item.vendorId === device.vendorId && item.productId === device.productId && item.serialNumber === device.serialNumber));
+				// WebUSB reuses each physical device's object within this window.
+				// A serial number alone cannot identify RTL-SDRs with factory serials.
+				return claims.has(device);
 			},
 			async connectDevice(this: any, source: any, device: USBDevice | 'mock') {
 				if (this.mode === 'client') return;
@@ -126,9 +129,11 @@ export function createWorkspace(Receiver: any): any {
 						const paired = await navigator.usb.getDevices();
 						const index = paired.indexOf(device);
 						if (index < 0) throw new Error('SDR is no longer connected');
-						entry.settingsKey = `SDRSetting:usb:${device.vendorId}:${device.productId}:${device.serialNumber || `index-${index}`}`;
+						entry.settingsKey = usbSettingsKey(device, paired);
+						entry.deviceLabel = `SDR ${index + 1} · ${device.productName || 'USB SDR'}`;
+						entry.label = entry.deviceLabel;
 						await this.$nextTick();
-						app.loadSetting();
+						app.loadSetting(source === app && app.receiverId === 'local-1');
 						await app._connectToDevice(device, index);
 					} else await app._connectMock();
 					if (!app.connected) {

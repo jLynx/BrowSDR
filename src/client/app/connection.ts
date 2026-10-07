@@ -9,12 +9,12 @@ export const connectionMethods = {
 
 		// Get already-paired USB devices and filter to recognized SDR devices
 		const allPaired = await navigator.usb.getDevices();
-		type PairedSdr = { device: USBDevice; driverName: string; productName: string };
+		type PairedSdr = { device: USBDevice; driverName: string; productName: string; deviceNumber: number };
 		const sdrDevices: PairedSdr[] = [];
 		for (const device of allPaired) {
 			const driver = lookupDevice(device);
 			if (driver && !this.workspace?.isDeviceConnected(device)) {
-				sdrDevices.push({ device, driverName: driver.name, productName: device.productName || '' });
+				sdrDevices.push({ device, driverName: driver.name, productName: device.productName || '', deviceNumber: allPaired.indexOf(device) + 1 });
 			}
 		}
 

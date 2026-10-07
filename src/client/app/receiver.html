@@ -972,8 +972,9 @@
 					<div class="device-picker-list">
 						<div v-for="(entry, i) in devicePicker.devices" :key="i"
 							class="device-picker-item" @click="connectToDevice(entry.device)">
-							<div class="device-picker-name">{{ entry.driverName }}</div>
+							<div class="device-picker-name">SDR {{ entry.deviceNumber }} · {{ entry.driverName }}</div>
 							<div class="device-picker-meta">{{ entry.productName || 'USB ' + entry.device.vendorId.toString(16) + ':' + entry.device.productId.toString(16) }}</div>
+							<div class="device-picker-meta" v-if="entry.device.serialNumber">Serial: {{ entry.device.serialNumber }}</div>
 						</div>
 					</div>
 				</div>
@@ -1153,7 +1154,8 @@
 			<div class="bookmark-dialog">
 				<div class="bookmark-dialog-title">VFO Outside Bandwidth</div>
 				<div class="bookmark-dialog-body">
-					<p style="margin:0 0 12px">The requested frequency does not fit within the current bandwidth with all existing VFOs.</p>
+					<p style="margin:0 0 12px">The requested frequency does not fit within this SDR's bandwidth with all its existing VFOs.</p>
+					<p v-if="workspace" style="margin:0 0 12px">VFOs belong to the selected SDR. To receive a separate band at the same time, switch to another SDR tab or use + Add SDR.</p>
 
 					<div v-if="vfoConflictDialog.optionA" style="margin-bottom:8px">
 						<button class="btn btn-primary" style="width:100%;text-align:left;white-space:normal"

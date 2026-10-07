@@ -54,6 +54,7 @@ import {
 import { startRxStream } from './rx-stream';
 import type { VfoParams, VfoState, PerfCounters, RxStreamOpts, RemoteClientState, DeviceOpenOpts } from './types';
 import { displayToDeviceFrequencyHz } from '../frequency-shift';
+import { selectUsbDevice } from '../usb-device-selection';
 
 export class Backend {
 	// Hardware — generic SDR device
@@ -120,12 +121,7 @@ export class Backend {
 		}
 
 		const devices = await (navigator as any).usb.getDevices();
-		const matches = (d: any) => d && (!opts ||
-			((opts.vendorId === undefined || d.vendorId === opts.vendorId) &&
-			 (opts.productId === undefined || d.productId === opts.productId) &&
-			 (!opts.serialNumber || d.serialNumber === opts.serialNumber)));
-		const usbDevice = opts?.deviceIndex !== undefined ? devices[opts.deviceIndex] : devices.find(matches);
-		if (!matches(usbDevice)) return false;
+		const usbDevice = selectUsbDevice(devices, opts);
 		if (!usbDevice) {
 			return false;
 		}

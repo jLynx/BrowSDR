@@ -139,7 +139,7 @@ export interface POCSAGMessage {
 }
 
 export interface DeviceOpenOpts {
-	/** Index in getDevices() disambiguates identical devices without serial numbers. */
+	/** Index in getDevices() disambiguates missing or duplicated serial numbers. */
 	deviceIndex?: number;
 	vendorId?: number;
 	productId?: number;
