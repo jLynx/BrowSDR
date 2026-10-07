@@ -7,6 +7,8 @@ vi.mock('../src/client/worker/wasm-init', () => ({
 }));
 
 import { startRxStream } from '../src/client/worker/rx-stream';
+import { Backend } from '../src/client/worker/backend';
+import { AUDIO_QUEUE_CAPACITY } from '../src/client/worker/audio-queue';
 
 afterEach(() => {
 	vi.useRealTimers();
@@ -23,6 +25,7 @@ async function createStream(vfoCount = 1) {
 	const backend = {
 		device: { setSampleRate: vi.fn(), setFrequency: vi.fn(), startRx: vi.fn() },
 		setSpectrumFps: vi.fn(),
+		setWhisperEnabled: Backend.prototype.setWhisperEnabled,
 		_reinitRemoteClientWorkers: vi.fn(),
 	};
 	await startRxStream(backend, { centerFreq: 95, sampleRate: 61440000, fftSize: 65536 }, null, audio, whisper, null);
@@ -50,11 +53,13 @@ describe('RX audio delivery batching', () => {
 	});
 	it('batches isolated transcription audio for all nineteen VFOs', async () => {
 		const { backend, audio, whisper, feed } = await createStream(19);
+		backend.setWhisperEnabled(true);
 		for (let chunk = 0; chunk < 48; chunk++) {
 			for (let index = 0; index < 19; index++) feed(index, 51);
 		}
 		expect(audio).toHaveBeenCalledTimes(1);
 		expect(whisper).toHaveBeenCalledTimes(19);
+		expect(backend._perf.whisperMsgsSent).toBe(19);
 		whisper.mock.calls.forEach(([index, freq, samples]) => {
 			expect(freq).toBe(backend.vfoParams[index].freq);
 			expect(samples.length).toBe(2448);
@@ -75,5 +80,47 @@ describe('RX audio delivery batching', () => {
 		feed(0, 4800);
 		expect(audio).not.toHaveBeenCalled();
 		expect(whisper).not.toHaveBeenCalled();
+	});
+	it('skips disabled transcription and clears partial batches across toggles', async () => {
+		const { backend, audio, whisper, feed } = await createStream();
+		feed(0, 4800);
+		expect(whisper).not.toHaveBeenCalled();
+		expect(audio).toHaveBeenCalled();
+		backend.setWhisperEnabled(true);
+		feed(0, 1200);
+		backend.setWhisperEnabled(false);
+		feed(0, 4800);
+		backend.setWhisperEnabled(true);
+		feed(0, 1200);
+		expect(whisper).not.toHaveBeenCalled();
+		feed(0, 1200);
+		expect(whisper).toHaveBeenCalledTimes(1);
+		expect(whisper.mock.calls[0][2].length).toBe(2400);
+	});
+	it('continues playing healthy channels while another decoder stalls', async () => {
+		const { backend, audio, feed } = await createStream(2);
+		const queue = backend.vfoStates[0].audioQueue;
+		for (let chunk = 0; chunk < 100; chunk++) feed(0, 4800);
+		expect(audio).toHaveBeenCalled();
+		expect(audio.mock.calls[0][0][0]).toBeCloseTo(0.01 * 0.25);
+		expect(backend.vfoStates[0].audioQueue).toBe(queue);
+		expect(queue.length).toBe(AUDIO_QUEUE_CAPACITY);
+		expect(backend.vfoStates[0].audioQueueLen).toBeLessThan(12000);
+		feed(1, 4800);
+		expect(backend.vfoStates[1].audioQueueLen).toBe(0);
+	});
+	it('isolates the speaker mix while preserving per-VFO transcription and volumes', async () => {
+		const { backend, audio, whisper, feed } = await createStream(2);
+		backend.setWhisperEnabled(true);
+		backend.vfoParams[0].audioMuted = true;
+		feed(0, 4800);
+		feed(1, 4800);
+		expect(audio.mock.calls[0][0][0]).toBeCloseTo(0.01 * 0.25);
+		expect(whisper).toHaveBeenCalledTimes(2);
+		expect(backend.vfoParams[0].volume).toBe(50);
+		backend.vfoParams[0].audioMuted = false;
+		feed(0, 4800);
+		feed(1, 4800);
+		expect(audio.mock.calls[1][0][0]).toBeCloseTo(0.01 * 0.5);
 	});
 });

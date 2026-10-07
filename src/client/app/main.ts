@@ -198,11 +198,20 @@ createApp({
 			this.saveSetting();
 		}, { deep: true });
 
+		this.$watch(() => [this.soloAudioVfo, this.activeAudioVfos], () => {
+			this.clearInactiveSoloAudio();
+			this.flushInactiveWhisperVfos();
+		});
+
 		this.$watch(() => this.display.spectrumFps, (value: number) => {
 			this.saveSetting();
 			if (this.backend && this.remoteMode !== 'client') {
 				this.backend.setSpectrumFps(value).catch(console.error);
 			}
+		});
+
+		this.$watch(() => this.whisper.active && this.whisper.status === 'ready', (enabled: boolean) => {
+			this.backend?.setWhisperEnabled(enabled).catch(console.error);
 		});
 
 		this.$watch('collapsedPanels', () => {

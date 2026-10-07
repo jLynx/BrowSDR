@@ -1,6 +1,25 @@
 import type { AppInstance } from './types';
 
 export const whisperMethods = {
+	flushInactiveWhisperVfos(this: AppInstance) {
+		if (!this.whisper.active || this.whisper.status !== 'ready') return;
+		const active = new Set(this.activeAudioVfos.map((item: any) => item.index));
+		for (const [key, state] of Object.entries(this._whisperVfoStates || {}) as [string, any][]) {
+			const index = Number(key);
+			if (this.vfos[index]?.mode !== 'dsd') continue;
+			if (active.has(index)) state.activitySeen = true;
+			else if (state.activitySeen && state.bufLen > 0) this._flushWhisperVfoBuf(index);
+		}
+	},
+	benchmarkWhisper(this: AppInstance) {
+		if (!this._whisperBenchmarkAudio || this.whisper.benchmarkRunning) return;
+		this.stopWhisper();
+		this.whisper.benchmarkRunning = true;
+		this.whisper.benchmarkMessage = 'Starting benchmark…';
+		this.whisper.benchmarkResult = null;
+		const audio = this._whisperBenchmarkAudio.slice();
+		this._whisperWorker.postMessage({ type: 'benchmark', audio, model: this._whisperBenchmarkModel }, [audio.buffer]);
+	},
 	toggleTranscriptPanel(this: AppInstance) {
 		this.whisper.panelOpen = !this.whisper.panelOpen;
 	},
@@ -19,12 +38,14 @@ export const whisperMethods = {
 
 		// Create worker if not yet alive
 		if (!this._whisperWorker) {
-			this._whisperWorker = new Worker('./whisper-worker.js', { type: 'module' });
+			this._whisperWorker = new Worker(import.meta.env.DEV ? '/whisper-worker.ts' : './whisper-worker.js', { type: 'module' });
 			this._whisperWorker.addEventListener('message', (e: MessageEvent) => this._onWhisperMessage(e));
 		}
 
 		// Load model
 		this.whisper.status = 'loading';
+		this.whisper.device = '';
+		this.whisper.backendReason = '';
 		this.whisper.loadProgress = 0;
 		this.whisper.loadPhase = 'downloading';
 		this.whisper.loadFile = '';
@@ -49,6 +70,22 @@ export const whisperMethods = {
 	_onWhisperMessage(this: AppInstance, e: MessageEvent) {
 		const msg = e.data;
 		switch (msg.type) {
+			case 'benchmark-progress':
+				this.whisper.benchmarkMessage = msg.message;
+				break;
+			case 'benchmark-result':
+				this.whisper.benchmarkRunning = false;
+				this.whisper.benchmarkResult = msg;
+				this.whisper.benchmarkMessage = '';
+				break;
+			case 'benchmark-error':
+				this.whisper.benchmarkRunning = false;
+				this.whisper.benchmarkMessage = msg.message;
+				break;
+			case 'backend':
+				this.whisper.device = msg.device;
+				this.whisper.backendReason = msg.reason || '';
+				break;
 			case 'status':
 				this.whisper.statusMsg = msg.message;
 				break;
@@ -61,6 +98,7 @@ export const whisperMethods = {
 				break;
 			case 'ready':
 				this.whisper.status = 'ready';
+				this.whisper.device = msg.device || 'wasm';
 				this.showMsg('Whisper model loaded — transcription active.');
 				break;
 			case 'result': {
@@ -130,8 +168,9 @@ export const whisperMethods = {
 		}
 		const vs = this._whisperVfoStates[vfoIndex];
 
-		// Check if this VFO has squelch enabled
+		// Digital voice always uses transmission boundaries, even without RF squelch.
 		const vfo = this.vfos[vfoIndex];
+		const isDmr = vfo?.mode === 'dsd';
 		const squelchMode = vfo && vfo.squelchEnabled;
 
 		// RMS energy check
@@ -140,7 +179,26 @@ export const whisperMethods = {
 		const rms = Math.sqrt(sumSq / down.length);
 		const isSilent = rms < 0.005;
 
-		if (squelchMode) {
+		if (isDmr) {
+			// The bubble's decoded-voice hang time defines the end of a call.
+			// Keep internal pauses, and split at the exact selected audio limit.
+			if (!vs.recording && isSilent) return;
+			let offset = 0;
+			const limit = Math.max(1, this.whisper.chunkSeconds) * 16000;
+			while (offset < down.length) {
+				if (!vs.recording) {
+					vs.recording = true;
+					vs.recordStart = new Date();
+					vs.recordStartFreq = this.formatFreq(freqMhz) + ' MHz';
+				}
+				vs.activitySeen = vs.activitySeen || this.activeAudioVfos.some((item: any) => item.index === vfoIndex);
+				const count = Math.min(down.length - offset, limit - vs.bufLen);
+				vs.buf.push(down.slice(offset, offset + count));
+				vs.bufLen += count;
+				offset += count;
+				if (vs.bufLen >= limit) this._flushWhisperVfoBuf(vfoIndex);
+			}
+		} else if (squelchMode) {
 			// ── Squelch-aware mode: accumulate entire transmission ──
 			if (!isSilent) {
 				if (!vs.recording) {
@@ -151,7 +209,7 @@ export const whisperMethods = {
 				vs.buf.push(down);
 				vs.bufLen += down.length;
 				vs.silenceRun = 0;
-				// Safety cap: flush at 120 s
+				// Analog transmission safety cap.
 				if (vs.bufLen >= 16000 * 120) this._flushWhisperVfoBuf(vfoIndex);
 			} else {
 				if (vs.bufLen > 0) {
@@ -221,6 +279,11 @@ export const whisperMethods = {
 			freq: vs.recordStartFreq,
 			vfoIndex,
 		};
+		if (import.meta.env.DEV && audioDuration >= 1 && !this._whisperBenchmarkAudio) {
+			this._whisperBenchmarkAudio = full.slice();
+			this._whisperBenchmarkModel = this.whisper.model;
+			this.whisper.benchmarkAvailable = true;
+		}
 		this._whisperWorker.postMessage(
 			{ type: 'transcribe', audio: full, id, audioDuration },
 			[full.buffer]

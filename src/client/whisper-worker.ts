@@ -17,6 +17,9 @@
  *     { type: 'error',   message: string }
  */
 
+import { WhisperBackend } from './whisper-backend';
+import { isHallucination } from './whisper-text';
+
 const workerSelf = self as unknown as { postMessage(msg: any): void; addEventListener(type: string, listener: (e: MessageEvent) => void): void; location: { origin: string; hostname: string } };
 
 interface LoadMessage {
@@ -31,7 +34,8 @@ interface TranscribeMessage {
 	audioDuration?: number;
 }
 
-type WorkerInMessage = LoadMessage | TranscribeMessage;
+interface BenchmarkMessage { type: 'benchmark'; audio: Float32Array; model: string }
+type WorkerInMessage = LoadMessage | TranscribeMessage | BenchmarkMessage;
 
 interface ProgressEvent {
 	status: string;
@@ -44,7 +48,7 @@ interface DownloadFileInfo {
 	done: boolean;
 }
 
-let pipeline: any = null;
+let pipeline: WhisperBackend | null = null;
 let pipelinePromise: Promise<void> | null = null;
 let isMultilingual: boolean = false;
 
@@ -53,8 +57,10 @@ let isMultilingual: boolean = false;
 // invocations that hang the worker, causing the UI to stay stuck on "REC".
 let transcribeChain: Promise<void> = Promise.resolve();
 
-async function loadModel(model: string): Promise<void> {
+async function loadModel(model: string, device?: 'wasm' | 'webgpu'): Promise<void> {
 	try {
+		await pipeline?.dispose();
+		pipeline = null;
 		workerSelf.postMessage({ type: 'status', message: `Loading Transformers.js…` });
 
 		// Dynamic import from CDN (ES module)
@@ -85,35 +91,33 @@ async function loadModel(model: string): Promise<void> {
 		// Transformers.js fires: initiate -> progress (n times) -> done, per file.
 		const _dlFiles: Record<string, DownloadFileInfo> = {}; // file -> { progress, done }
 
-		pipeline = await createPipeline('automatic-speech-recognition', model, {
-			dtype: 'q8',          // quantized for speed
-			device: 'wasm',       // wasm is most compatible; webgpu used automatically when available
-			progress_callback: (p: ProgressEvent) => {
-				if (p.status === 'initiate') {
-					_dlFiles[p.file!] = { progress: 0, done: false };
-				} else if (p.status === 'progress' && p.progress != null) {
-					_dlFiles[p.file!] = { progress: Math.round(p.progress), done: false };
-					const filesDone  = Object.values(_dlFiles).filter((f: DownloadFileInfo) => f.done).length;
-					const filesTotal = Object.keys(_dlFiles).length;
-					workerSelf.postMessage({
-						type: 'loading',
-						phase: 'downloading',
-						progress: Math.round(p.progress), // real progress of this file
-						file: _shortName(p.file),
-						filesDone,
-						filesTotal,
-					});
-				} else if (p.status === 'done') {
-					if (_dlFiles[p.file!]) _dlFiles[p.file!].done = true;
-					const allDone = Object.values(_dlFiles).every((f: DownloadFileInfo) => f.done);
-					if (allDone) {
-						workerSelf.postMessage({ type: 'loading', phase: 'initializing', progress: 100, file: '' });
-					}
+		const backend = new WhisperBackend(createPipeline, model, (p: ProgressEvent) => {
+			if (p.status === 'initiate') {
+				_dlFiles[p.file!] = { progress: 0, done: false };
+			} else if (p.status === 'progress' && p.progress != null) {
+				_dlFiles[p.file!] = { progress: Math.round(p.progress), done: false };
+				const filesDone  = Object.values(_dlFiles).filter((f: DownloadFileInfo) => f.done).length;
+				const filesTotal = Object.keys(_dlFiles).length;
+				workerSelf.postMessage({
+					type: 'loading',
+					phase: 'downloading',
+					progress: Math.round(p.progress), // real progress of this file
+					file: _shortName(p.file),
+					filesDone,
+					filesTotal,
+				});
+			} else if (p.status === 'done') {
+				if (_dlFiles[p.file!]) _dlFiles[p.file!].done = true;
+				const allDone = Object.values(_dlFiles).every((f: DownloadFileInfo) => f.done);
+				if (allDone) {
+					workerSelf.postMessage({ type: 'loading', phase: 'initializing', progress: 100, file: '' });
 				}
-			},
-		});
+			}
+		}, (device, reason) => workerSelf.postMessage({ type: 'backend', device, reason }));
+		await backend.load(device === 'wasm' ? undefined : (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown | null> } }).gpu);
+		pipeline = backend;
 
-		workerSelf.postMessage({ type: 'ready' });
+		workerSelf.postMessage({ type: 'ready', device: backend.device });
 	} catch (err: unknown) {
 		const message = err instanceof Error ? err.message : String(err);
 		console.error('[whisper-worker] Model load failed:', err);
@@ -131,26 +135,43 @@ function _shortName(file: string | undefined): string {
 		.replace(/_model$/, '');
 }
 
-// Known Whisper hallucinations on silence, noise, or broadcast interference.
-// Each pattern is tested against the trimmed transcript text.
-const HALLUCINATION_PATTERNS: RegExp[] = [
-	// Single filler words (you / a / um / uh / hmm / ah / oh)
-	/^\s*(you|a|um+|uh+|hmm*|hm+|ah+|oh|eh|mhm)\s*[.!?,]*\s*$/i,
-	// YouTube / streaming phrases whisper confuses with silence
-	/thank you (for watching|very much|for joining)[.!]?\s*$/i,
-	/please (like|subscribe|share|follow)[.!]?\s*$/i,
-	/(don't forget to (like|subscribe|share))/i,
-	/\[?\(?(music|applause|laughter|background noise|silence|inaudible|crosstalk|beep|static)\)?\]?\s*$/i,
-	// Only punctuation / whitespace
-	/^[\s.…\-_*~]+$/,
-	// Character repeated 4+ times (e.g. "aaaaaaa", "......")
-	/(.)\1{4,}/,
-	// Same word repeated 3+ times in a row
-	/(\b\w+\b)(\s+\1){3,}/i,
-];
-
-function isHallucination(text: string): boolean {
-	return HALLUCINATION_PATTERNS.some(re => re.test(text));
+function transcriptionOptions(): Record<string, any> {
+	// HAM radio-tuned decode options.
+	// - temperature=0                -> greedy/deterministic (fast, no random hallucinations)
+	// - num_beams=4                  -> wider beam search catches accent-shifted phoneme candidates
+	// - condition_on_prev_text=false -> each chunk decoded fresh (less hallucination drift)
+	// - initial_prompt               -> NZ HAM vocabulary primes the decoder toward local callsigns,
+	//                                  Q-codes, and NZ English spellings/place names so accent-shifted
+	//                                  vowels score higher against the right token rather than an
+	//                                  American-English near-homophone.
+	const opts: Record<string, any> = {
+		chunk_length_s: 30,
+		stride_length_s: 6,
+		return_timestamps: false,
+		temperature: 0,
+		num_beams: 4,
+		no_repeat_ngram_size: 3,
+		condition_on_prev_text: false,
+		initial_prompt:
+			// Seed the decoder with NZ emergency-service and HAM code notation.
+			// Priming with written codes (K46, R4, Q81) makes Whisper prefer that
+			// form over phonetic expansions ("Kay forty-six", "are four").
+			// NZ place names anchor the decoder to NZ English phonology.
+			'New Zealand emergency services and amateur radio. ' +
+			'Fire codes: K1 K2 K22 K28 K31 K32 K44 K45 K46 K46-1 K46-2 K46-3 K46-4 K55 K66 K77 K88 K99. ' +
+			'Ambulance: Priority 1 Priority 2 Priority 3. Code 1 Code 2. ' +
+			'R4 R6 R7 R9 R13 R17 R25 R33 R43 R49 R99. Status 1 Status 2 Status 3 Status 4. ' +
+			'Q81 Q82 Q83 Q84 Q85 Q88 Q89 Q90. ' +
+			'Auckland Wellington Christchurch Tauranga Hamilton Rotorua Whangarei Dunedin. ' +
+			'Ngaruawahia Papatoetoe Papakura Manukau Otahuhu Waitakere Mangere. ' +
+			'Palmerston North Whanganui Napier Hastings Gisborne Invercargill Oamaru. ' +
+			'ZL1 ZL2 ZL3 ZL4. CQ QRZ QSO over roger copy standby NFM FM.',
+	};
+	if (isMultilingual) {
+		opts.language = 'en';
+		opts.task = 'transcribe';
+	}
+	return opts;
 }
 
 async function transcribe(audio: Float32Array, id: number, audioDuration?: number): Promise<void> {
@@ -158,45 +179,10 @@ async function transcribe(audio: Float32Array, id: number, audioDuration?: numbe
 		workerSelf.postMessage({ type: 'discarded', id, reason: 'pipeline-not-ready' });
 		return;
 	}
-
 	try {
-		// HAM radio-tuned decode options.
-		// - temperature=0                -> greedy/deterministic (fast, no random hallucinations)
-		// - num_beams=4                  -> wider beam search catches accent-shifted phoneme candidates
-		// - condition_on_prev_text=false -> each chunk decoded fresh (less hallucination drift)
-		// - initial_prompt               -> NZ HAM vocabulary primes the decoder toward local callsigns,
-		//                                  Q-codes, and NZ English spellings/place names so accent-shifted
-		//                                  vowels score higher against the right token rather than an
-		//                                  American-English near-homophone.
-		const opts: Record<string, any> = {
-			chunk_length_s: 30,
-			stride_length_s: 6,
-			return_timestamps: false,
-			temperature: 0,
-			num_beams: 4,
-			no_repeat_ngram_size: 3,
-			condition_on_prev_text: false,
-			initial_prompt:
-				// Seed the decoder with NZ emergency-service and HAM code notation.
-				// Priming with written codes (K46, R4, Q81) makes Whisper prefer that
-				// form over phonetic expansions ("Kay forty-six", "are four").
-				// NZ place names anchor the decoder to NZ English phonology.
-				'New Zealand emergency services and amateur radio. ' +
-				'Fire codes: K1 K2 K22 K28 K31 K32 K44 K45 K46 K46-1 K46-2 K46-3 K46-4 K55 K66 K77 K88 K99. ' +
-				'Ambulance: Priority 1 Priority 2 Priority 3. Code 1 Code 2. ' +
-				'R4 R6 R7 R9 R13 R17 R25 R33 R43 R49 R99. Status 1 Status 2 Status 3 Status 4. ' +
-				'Q81 Q82 Q83 Q84 Q85 Q88 Q89 Q90. ' +
-				'Auckland Wellington Christchurch Tauranga Hamilton Rotorua Whangarei Dunedin. ' +
-				'Ngaruawahia Papatoetoe Papakura Manukau Otahuhu Waitakere Mangere. ' +
-				'Palmerston North Whanganui Napier Hastings Gisborne Invercargill Oamaru. ' +
-				'ZL1 ZL2 ZL3 ZL4. CQ QRZ QSO over roger copy standby NFM FM.',
-		};
-		if (isMultilingual) {
-			opts.language = 'en';
-			opts.task = 'transcribe';
-		}
+		const opts = transcriptionOptions();
 		const t0 = performance.now();
-		const result = await pipeline(audio, opts);
+		const result = await pipeline.transcribe(audio, opts);
 		const transcribeTime = ((performance.now() - t0) / 1000).toFixed(2);
 		const text: string = (result.text || '').trim();
 
@@ -215,18 +201,52 @@ async function transcribe(audio: Float32Array, id: number, audioDuration?: numbe
 	}
 }
 
+async function benchmark(msg: BenchmarkMessage): Promise<void> {
+	const results: any[] = [];
+	try {
+		for (const device of ['wasm', 'webgpu'] as const) {
+			workerSelf.postMessage({ type: 'benchmark-progress', message: `Loading ${device === 'wasm' ? 'CPU' : 'GPU'}…` });
+			await loadModel(msg.model, device);
+			if (!pipeline || pipeline.device !== device) throw new Error(`${device} backend unavailable`);
+			const opts = transcriptionOptions();
+			workerSelf.postMessage({ type: 'benchmark-progress', message: `Warming up ${device}…` });
+			await pipeline.transcribe(msg.audio, opts);
+			const seconds: number[] = [];
+			let text = '';
+			for (let run = 0; run < 3; run++) {
+				workerSelf.postMessage({ type: 'benchmark-progress', message: `${device}: run ${run + 1}/3` });
+				const start = performance.now();
+				const result = await pipeline.transcribe(msg.audio, opts);
+				seconds.push((performance.now() - start) / 1000);
+				if (pipeline.device !== device) throw new Error('GPU fell back to CPU during benchmark');
+				text = result.text;
+			}
+			results.push({ device, seconds, median: [...seconds].sort((a, b) => a - b)[1], text });
+		}
+		workerSelf.postMessage({ type: 'benchmark-result', audioDuration: msg.audio.length / 16000, model: msg.model, results });
+	} catch (error) {
+		workerSelf.postMessage({ type: 'benchmark-error', message: String(error) });
+	}
+}
+
 workerSelf.addEventListener('message', (e: MessageEvent<WorkerInMessage>) => {
 	const msg = e.data;
 
 	if (msg.type === 'load') {
-		pipelinePromise = loadModel(msg.model || 'onnx-community/whisper-small');
+		// Model disposal/reload must not overlap an in-flight transcription.
+		pipelinePromise = transcribeChain.then(() => loadModel(msg.model || 'onnx-community/whisper-small'));
+		transcribeChain = pipelinePromise;
+	} else if (msg.type === 'benchmark') {
+		transcribeChain = transcribeChain.then(() => benchmark(msg));
+		pipelinePromise = transcribeChain;
 	} else if (msg.type === 'transcribe') {
 		const { id, audioDuration, audio } = msg;
 		// Chain each transcription so only one pipeline() call runs at a time.
 		// The WASM runtime hangs when concurrent calls overlap (common with
 		// continuous-audio modes like WFM where chunks arrive every ~10 s).
+		const ready = pipelinePromise;
 		transcribeChain = transcribeChain.then(async () => {
-			if (pipelinePromise) await pipelinePromise;
+			if (ready) await ready;
 			await transcribe(audio, id, audioDuration);
 		}).catch((err: unknown) => {
 			// Last-resort catch: ensure the main thread is never left hanging

@@ -204,6 +204,7 @@ export const connectionMethods = {
 			fftSize: this.radio.fftSize,
 			spectrumFps: this.display.spectrumFps,
 			sharedChannelization: this.display.sharedChannelization,
+			whisperEnabled: this.whisper.active && this.whisper.status === 'ready',
 			gains: { ...this.gains },
 		};
 

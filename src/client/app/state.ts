@@ -41,6 +41,7 @@ export function createAppData() {
 		} as Record<string, boolean>,
 		vfos: [makeDefaultVfo(100.0)],
 		activeVfoIndex: 0,
+		soloAudioVfo: null as any,
 		info: { boardName: "" },
 		hoverFreqText: "",
 		dspStats: null as any,
@@ -56,12 +57,19 @@ export function createAppData() {
 		view: {
 			zoomScale: 1.0,
 			zoomOffset: 0.0,
-			locked: false
+			locked: false,
+			autoLockDisabled: false,
 		},
 		whisper: {
+			benchmarkAvailable: false,
+			benchmarkRunning: false,
+			benchmarkMessage: '',
+			benchmarkResult: null as any,
 			panelOpen: false,
 			active: false,
 			status: 'idle' as string,
+			device: '' as '' | 'webgpu' | 'wasm',
+			backendReason: '',
 			loadProgress: 0,
 			loadPhase: 'downloading' as string,
 			loadFile: '',

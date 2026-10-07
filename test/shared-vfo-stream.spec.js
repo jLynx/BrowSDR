@@ -27,6 +27,7 @@ async function createStream(rdsCallback = null, dsdStatusCallback = null) {
 	const backend = {
 		device: { setSampleRate: vi.fn(), setFrequency: vi.fn(), startRx: async callback => { receive = callback; } },
 		setSpectrumFps(value) { this._spectrumFps = value; },
+		setWhisperEnabled(value) { this._whisperEnabled = value; },
 		_reinitRemoteClientWorkers: vi.fn(),
 	};
 	await startRxStream(backend, { centerFreq: 95, sampleRate: 61440000, fftSize: 65536 }, null, null, null, null, rdsCallback, dsdStatusCallback);

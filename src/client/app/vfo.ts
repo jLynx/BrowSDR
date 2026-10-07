@@ -2,7 +2,23 @@ import type { AppInstance } from './types';
 import { makeDefaultVfo, MODE_DEFAULTS } from './constants';
 
 export const vfoMethods = {
+	clearInactiveSoloAudio(this: AppInstance) {
+		if (this.soloAudioVfo && !this.activeAudioVfos.some((item: any) => item.vfo === this.soloAudioVfo)) {
+			this.soloAudioVfo = null;
+			this.updateAllBackendVfoParams();
+		}
+	},
+	toggleSoloAudio(this: AppInstance, index: number) {
+		const vfo = this.vfos[index];
+		if (!vfo?.enabled) return;
+		this.soloAudioVfo = this.soloAudioVfo === vfo ? null : vfo;
+		this.updateAllBackendVfoParams();
+	},
 	toggleVfoCheckbox(this: AppInstance, index: number) {
+		if (!this.vfos[index].enabled && this.soloAudioVfo === this.vfos[index]) {
+			this.soloAudioVfo = null;
+			this.updateAllBackendVfoParams();
+		}
 		const anyEnabled = this.vfos.some((v: any) => v.enabled);
 		if (anyEnabled) {
 			this._initAudioCtx();
@@ -63,6 +79,7 @@ export const vfoMethods = {
 				rds: vfo.rds && inBandwidth,
 				rdsRegion: vfo.rdsRegion,
 				volume: vfo.volume,
+				audioMuted: !!this.soloAudioVfo && this.soloAudioVfo !== vfo,
 				pocsag: vfo.pocsag,
 			};
 
@@ -91,10 +108,10 @@ export const vfoMethods = {
 		}
 		this.activeVfoIndex = this.vfos.length - 1;
 
-		// Auto lock when 5 or more VFOs are loaded
-		if (this.vfos.length >= 5 && !this.view.locked) {
+		// Auto-lock unless the user has explicitly chosen to keep the display unlocked.
+		if (this.vfos.length >= 5 && !this.view.locked && !this.view.autoLockDisabled) {
 			this.view.locked = true;
-			this.showMsg("Display auto-locked (> 5 VFOs)");
+			this.showMsg("Display auto-locked (5 or more VFOs)");
 		}
 	},
 	isFreqInBandwidth(this: AppInstance, freq: number): boolean {
@@ -277,6 +294,8 @@ export const vfoMethods = {
 
 	async removeVfo(this: AppInstance, index: number) {
 		if (this.vfos.length <= 1) return;
+		const removedSolo = this.soloAudioVfo === this.vfos[index];
+		if (removedSolo) this.soloAudioVfo = null;
 		this.vfos.splice(index, 1);
 		if (this.backend && this.running) {
 			if (this.remoteMode === 'client' && this._webrtc) {
@@ -288,5 +307,6 @@ export const vfoMethods = {
 		if (this.activeVfoIndex >= this.vfos.length) {
 			this.activeVfoIndex = this.vfos.length - 1;
 		}
+		if (removedSolo) this.updateAllBackendVfoParams();
 	},
 };

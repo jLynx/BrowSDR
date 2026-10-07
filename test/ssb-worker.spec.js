@@ -1,5 +1,7 @@
-import dspModule from '../hackrf-web/pkg/hackrf_web_bg.wasm';
+import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+
+const dspModule = readFileSync(new URL('../hackrf-web/pkg/hackrf_web_bg.wasm', import.meta.url));
 
 vi.mock('/hackrf-web/pkg/hackrf_web.js', async () => {
 	const dsp = await vi.importActual('../hackrf-web/pkg/hackrf_web.js');

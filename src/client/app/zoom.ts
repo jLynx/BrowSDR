@@ -1,6 +1,10 @@
 import type { AppInstance } from './types';
 
 export const zoomMethods = {
+	toggleDisplayLock(this: AppInstance) {
+		this.view.locked = !this.view.locked;
+		this.view.autoLockDisabled = !this.view.locked;
+	},
 	handleWheelZoom(this: AppInstance, e: WheelEvent, rect: DOMRect) {
 		e.preventDefault();
 

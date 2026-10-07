@@ -38,6 +38,12 @@ export type GainState = Record<string, number>;
 export type LockState = Record<string, boolean>;
 
 export interface WhisperState {
+	benchmarkAvailable: boolean;
+	benchmarkRunning: boolean;
+	benchmarkMessage: string;
+	benchmarkResult: any;
+	device: '' | 'webgpu' | 'wasm';
+	backendReason: string;
 	panelOpen: boolean;
 	active: boolean;
 	status: string;
@@ -63,6 +69,7 @@ export interface PocsagState {
 }
 
 export interface ViewState {
+	autoLockDisabled: boolean;
 	zoomScale: number;
 	zoomOffset: number;
 	locked: boolean;
