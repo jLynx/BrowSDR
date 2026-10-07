@@ -900,6 +900,37 @@ canvas {
 	box-shadow: 0 0 8px 1px var(--chip-color, #4488ff);
 }
 
+.audio-solo-btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: 0;
+	border-radius: 50%;
+	padding: 0;
+	width: 16px;
+	height: 16px;
+	min-height: 0;
+	flex-shrink: 0;
+	background: transparent;
+	color: #aaa;
+	cursor: pointer;
+}
+
+.audio-solo-btn svg {
+	width: 14px;
+	height: 14px;
+}
+
+.audio-solo-btn:hover,
+.audio-solo-btn[aria-pressed="true"] {
+	background: rgba(255, 255, 255, 0.15);
+	color: var(--chip-color);
+}
+
+.active-audio-chip.audio-isolated {
+	box-shadow: 0 0 8px var(--chip-color);
+}
+
 .active-audio-chip .vfo-num {
 	font-size: 12px;
 	font-weight: 700;

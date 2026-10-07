@@ -30,6 +30,7 @@ import { IF_RATES, AUDIO_RATE } from './types';
 import type { Backend } from './backend';
 import { displayToDeviceFrequencyHz } from '../frequency-shift';
 import { spectrumSmoothingAlpha } from '../spectrum-rate';
+import { AUDIO_QUEUE_CAPACITY, appendAudio, mixLength } from './audio-queue';
 
 let _streamStarting = false;
 
@@ -85,6 +86,7 @@ export async function startRxStream(
 		let iqBufferPos = 0;
 		backend.setSpectrumFps(opts.spectrumFps ?? 20);
 		backend._sharedChannelization = opts.sharedChannelization !== false;
+		backend.setWhisperEnabled(opts.whisperEnabled === true);
 		let channelWorker: Worker | undefined;
 		let latestPlan: ChannelPlan | undefined;
 		let latestTargets: { worker: Worker; params: VfoParams; shared: boolean }[] = [];
@@ -130,7 +132,7 @@ export async function startRxStream(
 			squelchDb: -120,
 			pocsagDecoder: null,
 			rdsDecoder: null,
-			audioQueue: new Float32Array(32768),
+			audioQueue: new Float32Array(AUDIO_QUEUE_CAPACITY),
 			audioQueueLen: 0,
 		});
 		backend.vfoStates = [makeVfoState()];
@@ -214,6 +216,7 @@ export async function startRxStream(
 				dropped: perf.droppedChunks,
 				chunkSize: perf.lastChunkSize || 0,
 				msgRate: Math.round(perf.msgsSent / dt),
+				whisperMsgRate: Math.round((perf.whisperMsgsSent ?? 0) / dt),
 				channelAvgMs: channelCalls ? channelTimeSum / channelCalls : 0,
 				channelMaxMs: channelTimeMax,
 				channelCpuMs: channelTimeSum / dt,
@@ -249,6 +252,7 @@ export async function startRxStream(
 			perf.inputSamplesSum = 0;
 			perf.droppedChunks = 0;
 			perf.msgsSent = 0;
+			perf.whisperMsgsSent = 0;
 			perf.lastReportTime = now;
 		}, 500);
 
@@ -266,6 +270,10 @@ export async function startRxStream(
 		const WHISPER_BATCH_THRESHOLD = 2400;
 		const whisperBatchBufs: Float32Array[] = [];   // Float32Array per VFO
 		const whisperBatchPos: number[] = [];    // write position per VFO
+		backend._resetWhisperBatches = () => {
+			whisperBatchBufs.length = 0;
+			whisperBatchPos.length = 0;
+		};
 		const ensureWhisperBuf = (v: number): void => {
 			if (!whisperBatchBufs[v]) {
 				whisperBatchBufs[v] = new Float32Array(4800);
@@ -273,7 +281,7 @@ export async function startRxStream(
 			}
 		};
 		const pushWhisper = (v: number, freq: number, samples: Float32Array): void => {
-			if (!whisperCallback) return;
+			if (!backend._whisperEnabled || !whisperCallback) return;
 			ensureWhisperBuf(v);
 			let srcOff = 0;
 			while (srcOff < samples.length) {
@@ -284,6 +292,7 @@ export async function startRxStream(
 				srcOff += toCopy;
 				if (whisperBatchPos[v] >= WHISPER_BATCH_THRESHOLD) {
 					const wCopy = whisperBatchBufs[v].slice(0, whisperBatchPos[v]);
+					perf.whisperMsgsSent = (perf.whisperMsgsSent ?? 0) + 1;
 					whisperCallback(v, freq, Comlink.transfer(wCopy, [wCopy.buffer]));
 					whisperBatchPos[v] = 0;
 				}
@@ -565,16 +574,9 @@ export async function startRxStream(
 				perf.audioSamplesOut += out.length;
 
 				if (params.enabled) {
-					const qLen = state.audioQueueLen;
-					if (qLen + out.length > state.audioQueue.length) {
-						const b = new Float32Array(state.audioQueue.length * 2);
-						b.set(state.audioQueue.subarray(0, qLen));
-						state.audioQueue = b;
-					}
-					state.audioQueue.set(out, qLen);
-					state.audioQueueLen += out.length;
+					state.audioQueueLen = appendAudio(state.audioQueue, state.audioQueueLen, out);
 
-					if (!params.pocsag && whisperCallback) {
+					if (backend._whisperEnabled && !params.pocsag && whisperCallback) {
 						pushWhisper(v, params.freq, out);
 					}
 				}
@@ -599,8 +601,6 @@ export async function startRxStream(
 			// Mixer: flush all available audio immediately on every DSP callback.
 			// Low-callback-rate devices (LimeSDR ~18/s) produce large audio bursts
 			// that the main thread's ring buffer + schedule system smooths out.
-			let anyActive = false;
-			let minAvailable = Infinity;
 			const activeStates: VfoState[] = [];
 			const activeParams: VfoParams[] = [];
 
@@ -608,10 +608,6 @@ export async function startRxStream(
 				const p = backend.vfoParams![i];
 				const s = backend.vfoStates![i];
 				if (s && p.enabled) {
-					anyActive = true;
-					if (s.audioQueueLen < minAvailable) {
-						minAvailable = s.audioQueueLen;
-					}
 					activeStates.push(s);
 					activeParams.push(p);
 				}
@@ -619,7 +615,8 @@ export async function startRxStream(
 
 			// Flush with no minimum threshold — let the main thread's audio ring
 			// buffer handle the smoothing via _scheduleAudioChunk
-			if (anyActive && minAvailable > 0 && minAvailable !== Infinity) {
+			let minAvailable: number;
+			while ((minAvailable = mixLength(activeStates.map(state => state.audioQueueLen))) > 0) {
 				if (!backend._mixBuf || backend._mixBuf.length < minAvailable) {
 					backend._mixBuf = new Float32Array(minAvailable + 1024);
 				}
@@ -629,17 +626,18 @@ export async function startRxStream(
 				for (let i = 0; i < activeStates.length; i++) {
 					const state = activeStates[i];
 					const params = activeParams[i];
-					const vol = params.volume || 50;
+					const vol = params.audioMuted ? 0 : (params.volume ?? 50);
 					const vScaling = (vol / 100) * (vol / 100);
 
 					const source = state.audioQueue;
-					for (let k = 0; k < minAvailable; k++) {
+					const consumed = Math.min(minAvailable, state.audioQueueLen);
+					for (let k = 0; k < consumed; k++) {
 						mixed[k] += source[k] * vScaling;
 					}
 
-					const remaining = state.audioQueueLen - minAvailable;
+					const remaining = state.audioQueueLen - consumed;
 					if (remaining > 0) {
-						source.copyWithin(0, minAvailable, state.audioQueueLen);
+						source.copyWithin(0, consumed, state.audioQueueLen);
 					}
 					state.audioQueueLen = remaining;
 				}
@@ -649,7 +647,7 @@ export async function startRxStream(
 					else if (mixed[k] < -1.0) mixed[k] = -1.0;
 				}
 
-			if (audioCallback) pushAudio(mixed.subarray(0, minAvailable));
+				if (audioCallback) pushAudio(mixed.subarray(0, minAvailable));
 			}
 		};
 		// Expose for worker closure inside spawnWorker

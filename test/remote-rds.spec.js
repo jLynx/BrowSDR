@@ -13,6 +13,7 @@ vi.mock('../src/client/webrtc', () => ({
 import * as remoteBackend from '../src/client/worker/remote-clients';
 import { remoteMethods } from '../src/client/app/remote';
 import { rdsMethods } from '../src/client/app/rds';
+import { AUDIO_QUEUE_CAPACITY } from '../src/client/worker/audio-queue';
 
 afterEach(() => { vi.unstubAllGlobals(); });
 
@@ -146,7 +147,7 @@ describe('remote RDS delivery', () => {
 		const event = { data: { type: 'audio', samples: new Float32Array(4800).fill(0.1).buffer } };
 		for (let count = 0; count < 100; count++) state.workers[0].onmessage(event);
 		expect(state.audioQueues[0].len).toBe(0);
-		expect(state.audioQueues[0].queue.length).toBe(32768);
+		expect(state.audioQueues[0].queue.length).toBe(AUDIO_QUEUE_CAPACITY);
 		expect(audio).not.toHaveBeenCalled();
 		await backend.setRemoteVfoParams('alice', 0, { ...params, enabled: true });
 		state.workers[0].onmessage(event);
@@ -163,5 +164,47 @@ describe('remote RDS delivery', () => {
 		client.vfos.length = 0;
 		remoteMethods.handleRemoteCommand.call(client, command);
 		expect(client.rds.stations).toEqual({});
+	});
+	it('bounds remote audio and continues playback when a decoder stops responding', async () => {
+		const backend = makeBackend();
+		const audio = vi.fn();
+		await backend.setRemoteHostAudioCallback(audio);
+		await backend.setRemoteVfoParams('alice', 0, { ...params, enabled: true });
+		await backend.addRemoteVfo('alice');
+		await backend.setRemoteVfoParams('alice', 1, { ...params, freq: 106.3, enabled: true });
+		const state = backend._remoteClients.get('alice');
+		const queue = state.audioQueues[0].queue;
+		for (let i = 0; i < 100; i++) backend._queueRemoteAudio('alice', 0, new Float32Array(4800).fill(0.1));
+		expect(audio).toHaveBeenCalled();
+		expect(audio.mock.calls[0][1][0]).toBeCloseTo(0.025);
+		expect(state.audioQueues[0].queue).toBe(queue);
+		expect(queue.length).toBe(AUDIO_QUEUE_CAPACITY);
+		expect(state.audioQueues[0].len).toBeLessThan(12000);
+	});
+	it('forwards remote transcription only when enabled', async () => {
+		const backend = makeBackend();
+		backend._remoteClientAudioCb = vi.fn();
+		backend._remoteClientWhisperCb = vi.fn();
+		backend.vfoParams = [params];
+		const samples = new Float32Array(4800);
+		await backend.feedRemoteAudioChunk(samples);
+		expect(backend._remoteClientWhisperCb).not.toHaveBeenCalled();
+		backend._whisperEnabled = true;
+		await backend.feedRemoteAudioChunk(samples);
+		expect(backend._remoteClientWhisperCb).toHaveBeenCalledWith(0, params.freq, samples);
+		expect(backend._remoteClientAudioCb).toHaveBeenCalledTimes(2);
+	});
+	it('isolates only one remote client speaker mix without disabling its VFOs', async () => {
+		const backend = makeBackend();
+		const audio = vi.fn();
+		await backend.setRemoteHostAudioCallback(audio);
+		await backend.setRemoteVfoParams('alice', 0, { ...params, enabled: true, audioMuted: true });
+		await backend.addRemoteVfo('alice');
+		await backend.setRemoteVfoParams('alice', 1, { ...params, enabled: true, audioMuted: false });
+		const samples = new Float32Array(4800).fill(0.1);
+		backend._queueRemoteAudio('alice', 0, samples);
+		backend._queueRemoteAudio('alice', 1, samples);
+		expect(audio.mock.calls[0][1][0]).toBeCloseTo(0.025);
+		expect(backend._remoteClients.get('alice').params.every(value => value.enabled && value.volume === 50)).toBe(true);
 	});
 });

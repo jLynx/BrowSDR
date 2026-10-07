@@ -122,6 +122,7 @@ export const bookmarkMethods = {
 				}
 			}
 
+			this.soloAudioVfo = null;
 			this.vfos = bm.vfos.map((v: any) => ({
 				...makeDefaultVfo(),
 				...v,

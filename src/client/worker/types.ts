@@ -19,6 +19,8 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 */
 
 export interface VfoParams {
+	/** Silence only the speaker mix while keeping decoding and transcription running. */
+	audioMuted?: boolean;
 	freq: number;
 	mode: string;
 	enabled: boolean;
@@ -71,6 +73,7 @@ export interface PerfCounters {
 	inputSamplesSum: number;
 	droppedChunks: number;
 	msgsSent: number;
+	whisperMsgsSent?: number;
 	lastReportTime: number;
 	lastChunkSize?: number;
 	report: PerfReport;
@@ -86,6 +89,7 @@ export interface PerfReport {
 	dropped: number;
 	chunkSize: number;
 	msgRate?: number;
+	whisperMsgRate?: number;
 	channelAvgMs?: number;
 	channelMaxMs?: number;
 	channelCpuMs?: number;
@@ -98,6 +102,7 @@ export interface RxStreamOpts {
 	fftSize: number;
 	spectrumFps?: number;
 	sharedChannelization?: boolean;
+	whisperEnabled?: boolean;
 	gains?: Record<string, number>;
 	/** @deprecated Use gains instead */
 	lnaGain?: number;
