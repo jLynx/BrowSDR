@@ -55,6 +55,7 @@ import {
 import { startRxStream } from './rx-stream';
 import type { VfoParams, VfoState, PerfCounters, RxStreamOpts, RemoteClientState, DeviceOpenOpts } from './types';
 import { displayToDeviceFrequencyHz } from '../frequency-shift';
+import { selectUsbDevice } from '../usb-device-selection';
 
 export class Backend {
 	// Hardware — generic SDR device
@@ -80,6 +81,8 @@ export class Backend {
 	_whisperEnabled = false;
 	_resetWhisperBatches?: () => void;
 	_disposeChannelization?: () => void;
+	_disposeSpectrum?: () => void;
+	_streamGeneration = 0;
 	_sharedChannelStats = { bands: 0, vfos: 0, sampleRate: 0 };
 
 	// Internal state
@@ -114,6 +117,7 @@ export class Backend {
 	}
 
 	async open(opts?: DeviceOpenOpts | "mock"): Promise<boolean> {
+		if (this.device) throw new Error('A device is already connected to this receiver');
 		if (opts === "mock") {
 			this.device = new MockHackRF();
 			await this.device.open(null as any);
@@ -121,12 +125,7 @@ export class Backend {
 		}
 
 		const devices = await (navigator as any).usb.getDevices();
-		const usbDevice = !opts ? devices[0] : devices.find((d: any) => {
-			if (opts.vendorId && d.vendorId !== opts.vendorId) return false;
-			if (opts.productId && d.productId !== opts.productId) return false;
-			if (opts.serialNumber && d.serialNumber !== opts.serialNumber) return false;
-			return true;
-		});
+		const usbDevice = selectUsbDevice(devices, opts);
 		if (!usbDevice) {
 			return false;
 		}
@@ -138,8 +137,10 @@ export class Backend {
 			return false;
 		}
 
-		this.device = driverEntry.create();
-		await this.device.open(usbDevice);
+		const device = driverEntry.create();
+		try { await device.open(usbDevice); }
+		catch (error) { try { await device.close(); } catch {} throw error; }
+		this.device = device;
 		return true;
 	}
 
@@ -332,14 +333,29 @@ export class Backend {
 
 	async stopRx(): Promise<void> {
 		if (!this.device) throw new Error('No device connected');
-		await this.device.stopRx();
-		this._disposeChannelization?.();
+		this._streamGeneration++;
+		try { await this.device.stopRx(); }
+		finally { this._disposeChannelization?.(); this.disposeDsp(); }
+	}
+
+	private disposeDsp(): void {
+		this._disposeSpectrum?.();
+		this._disposeSpectrum = undefined;
+		if (this._perfInterval) { clearInterval(this._perfInterval); this._perfInterval = undefined; }
+		this.dspWorkers?.forEach(worker => worker?.terminate());
+		this.dspWorkers = [];
+		for (const state of this._remoteClients?.values() ?? []) {
+			state.workers.forEach(worker => worker?.terminate());
+			state.workers = state.workers.map(() => null);
+		}
+		this.ddcs?.forEach(ddc => { try { ddc.free(); } catch {} });
+		this.ddcs = [];
 	}
 
 	async close(): Promise<void> {
 		if (!this.device) return;
-		await this.device.close();
-		this._disposeChannelization?.();
-		this.device = null;
+		this._streamGeneration++;
+		try { await this.device.close(); }
+		finally { this._disposeChannelization?.(); this.disposeDsp(); this.device = null; }
 	}
 }

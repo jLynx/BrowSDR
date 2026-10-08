@@ -276,8 +276,8 @@ export function _reinitRemoteClientWorkers(this: Backend): void {
 	for (const [clientId, state] of this._remoteClients) {
 		for (let i = 0; i < state.workers.length; i++) {
 			const oldWorker = state.workers[i];
-			if (!oldWorker) continue;
-			try { oldWorker.terminate(); } catch (_) {}
+			if (!oldWorker && !state.params[i]) continue;
+			try { oldWorker?.terminate(); } catch (_) {}
 
 			const params = state.params[i];
 			if (!params) { state.workers[i] = null; continue; }

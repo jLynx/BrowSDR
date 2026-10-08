@@ -70,8 +70,8 @@ export const uiHelperMethods = {
 
 		// Scroll the VFO tab into view within the top-bar (overflow-x: auto container)
 		this.$nextTick(() => {
-			const container = document.querySelector('.vfo-displays');
-			const tabs = document.querySelectorAll('.vfo-display');
+			const container = this.$el.querySelector('.vfo-displays');
+			const tabs = this.$el.querySelectorAll('.vfo-display');
 			if (container && tabs[index]) {
 				const tab = tabs[index] as HTMLElement;
 				const containerLeft = container.scrollLeft;

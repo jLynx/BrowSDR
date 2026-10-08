@@ -119,6 +119,13 @@ export class WaterfallGL {
 		this.initWebGL();
 	}
 
+	destroy(): void {
+		if (!this.gl) return;
+		this.textures?.forEach(texture => this.gl.deleteTexture(texture));
+		this.gl.deleteBuffer(this.vertices1);
+		this.gl.deleteProgram(this.shaderProgram);
+	}
+
 	setRange(minDB: number, maxDB: number): void {
 		this.minDB = minDB;
 		this.maxDB = maxDB;

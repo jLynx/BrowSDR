@@ -11,8 +11,9 @@ export const remoteMethods = {
 		}
 	},
 	async startRemoteHost(this: AppInstance) {
+		if (this.workspace && !this._receiverTransport) return this.workspace.startSharing();
 		console.log("[WebRTC] startRemoteHost clicked");
-		if (!this.connected || !this.running) {
+		if (!this.connected || (!this.running && !this._receiverTransport)) {
 			console.log("[WebRTC] Device not connected or running");
 			this.showMsg("Start the device first to share it.");
 			return;
@@ -31,7 +32,7 @@ export const remoteMethods = {
 
 		console.log("[WebRTC] Instantiating WebRTCHandler");
 		const savedCode = localStorage.getItem('browsdr-share-code');
-		this._webrtc = new WebRTCHandler(true, null, savedCode); // isHost = true, reuse saved code
+		this._webrtc = this._receiverTransport || new WebRTCHandler(true, null, savedCode);
 
 		this._webrtc.onStatusChange = (status: any) => {
 			console.log("[WebRTC] Host status changed:", status);
@@ -49,7 +50,7 @@ export const remoteMethods = {
 				this.showMsg("Remote client joined!");
 				// Register client in worker and sync current state
 				this.backend.addRemoteClient(clientId);
-				this._webrtc.sendCommandTo(clientId, { type: 'sync', radio: this.radio, gains: this.gains, locks: this.locks });
+				this._webrtc.sendCommandTo(clientId, { type: 'sync', radio: this.radio, gains: this.gains, locks: this.locks, capabilities: this.deviceCapabilities });
 			} else if (status.status === 'client-disconnected') {
 				const clientId = status.clientId;
 				this.remoteClients = this.remoteClients.filter((c: any) => c.id !== clientId);
@@ -69,7 +70,7 @@ export const remoteMethods = {
 		this._webrtc.onCommand = (clientId: string, cmd: any) => this.handleRemoteCommand(clientId, cmd);
 
 		console.log("[WebRTC] Calling _webrtc.init()");
-		await this._webrtc.init();
+		if (!this._receiverTransport) await this._webrtc.init();
 		console.log("[WebRTC] _webrtc.init() finished. Resolving remote host callback.");
 		// Setup worker to push FFT arrays via Comlink callback.
 		// KiwiSDR-style compression: downsample to WF_REMOTE_BINS and quantize
@@ -133,6 +134,7 @@ export const remoteMethods = {
 		}));
 	},
 	async connectRemoteClient(this: AppInstance, hostId: string) {
+		if (this.workspace && !this._receiverTransport) return this.workspace.connectRemote(hostId);
 		this._initAudioCtx(); // create AudioContext within user gesture before any await
 		this.remoteMode = 'client';
 		this.dspStats = null;
@@ -142,9 +144,9 @@ export const remoteMethods = {
 		// If this is a valid ID (it connected), it will be added to recents here or earlier.
 		// Handled via the UI (connectToRemoteId method).
 
-		this._webrtc = new WebRTCHandler(false, PEER_ID_PREFIX + hostId);
+		this._webrtc = this._receiverTransport || new WebRTCHandler(false, PEER_ID_PREFIX + hostId);
 
-		this._webrtc.onStatusChange = (status: any) => {
+		this._webrtc.onStatusChange = async (status: any) => {
 			if (status.status === 'connecting') {
 				this.remoteStatus = 'Connecting...';
 			} else if (status.status === 'connected') {
@@ -163,7 +165,8 @@ export const remoteMethods = {
 				this.saveSetting();
 
 				// Start local processing stream using mock device hooked up to WebRTC
-				this.startStream();
+				await this.startStream();
+				if (this._receiverTransport) return; // Workspace sends client identity once per connection.
 
 				// Send country info + persistent device ID to host so it can
 				// detect reconnections from the same device and kick stale peers.
@@ -233,12 +236,14 @@ export const remoteMethods = {
 			// mock isn't in place yet, hackrf is null and the call throws, leaving
 			// this.running = false forever (all FFT frames get dropped).
 			await this.backend.initRemoteClient();
-			await this._webrtc.init();
+			if (this._receiverTransport) await this._webrtc.onStatusChange({ status: 'connected' });
+			else await this._webrtc.init();
 		} catch(e: any) {
 			this.showMsg("Failed to initialize remote client.");
 		}
 	},
 	async regenerateShareCode(this: AppInstance) {
+		if (this.workspace) return this.workspace.regenerateShareCode();
 		if (this.remoteMode !== 'host' || !this._webrtc) return;
 		// Tear down current host session and restart with a fresh code
 		localStorage.removeItem('browsdr-share-code');
@@ -272,7 +277,9 @@ export const remoteMethods = {
 		}
 
 		if (cmd.type === 'sync') {
+			if (this.remoteMode !== 'client') return;
 			this._applyingSync = true;
+			if (cmd.capabilities) this.deviceCapabilities = cmd.capabilities;
 			if (cmd.radio) {
 				// Flush stale audio to prevent glitches when sample rate or center freq changes
 				this.audioRingPos = 0;
@@ -312,6 +319,13 @@ export const remoteMethods = {
 					const rc = this.remoteClients.find((c: any) => c.id === clientId);
 					if (rc) rc.firstFreq = cmd.params.freq;
 				}
+			}
+		} else if (cmd.type === 'resetRemoteVfos') {
+			if (this.remoteMode === 'host' && clientId) {
+				this.backend.removeRemoteClient(clientId);
+				this.backend.addRemoteClient(clientId);
+				const rc = this.remoteClients.find((c: any) => c.id === clientId);
+				if (rc) rc.vfoCount = 1;
 			}
 		} else if (cmd.type === 'addRemoteVfo') {
 			if (this.remoteMode === 'host' && clientId) {
@@ -369,6 +383,16 @@ export const remoteMethods = {
 		} else if (cmd.type === 'requestChange') {
 			if (this.remoteMode === 'host') {
 				const { target, property, value } = cmd;
+				if (!Number.isFinite(value)) return;
+				if (target === 'radio' && !['centerFreq', 'sampleRate'].includes(property)) return;
+				if (target === 'radio' && property === 'sampleRate' && !this.deviceCapabilities?.sampleRates.includes(value)) return;
+				if (target === 'gains') {
+					const control = this.deviceCapabilities?.gainControls.find((gc: any) => gc.name === property);
+					if (!control || value < control.min || value > control.max) return;
+					const steps = (value - control.min) / control.step;
+					if (!Number.isFinite(steps) || Math.abs(steps - Math.round(steps)) > 1e-9) return;
+				}
+				if (target !== 'radio' && target !== 'gains') return;
 				let allow = true;
 
 				if (target === 'radio' && property === 'centerFreq' && this.locks.centerFreq) allow = false;

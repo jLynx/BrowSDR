@@ -47,6 +47,7 @@ export async function startRxStream(
 ): Promise<void> {
 	if (_streamStarting) return;
 	_streamStarting = true;
+	const generation = backend._streamGeneration = (backend._streamGeneration ?? 0) + 1;
 	backend._remoteClientAudioCb = audioCallback; // Save reference for when chunk arrives
 	backend._remoteClientWhisperCb = whisperCallback; // Save for remote client transcription
 	try {
@@ -72,6 +73,8 @@ export async function startRxStream(
 			spectrumWindow[i] = spectrumWindowFunc(i / fftSize);
 		}
 		const spectrumFft = new FFT(fftSize, spectrumWindow);
+		backend._disposeSpectrum?.();
+		backend._disposeSpectrum = () => spectrumFft.free();
 		spectrumFft.set_smoothing_speed(0.6);
 		const spectrumOutput = new Float32Array(fftSize);
 
@@ -673,6 +676,7 @@ export async function startRxStream(
 		}
 
 		await device.startRx((data: any) => {
+			if (backend._streamGeneration !== generation) return;
 			perf.usbCallbacks++;
 
 			const signed = new Int8Array(data.buffer, data.byteOffset, data.length);

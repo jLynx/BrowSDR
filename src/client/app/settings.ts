@@ -14,11 +14,11 @@ export const settingsMethods = {
 			collapsedPanels: this.collapsedPanels,
 			recentRemoteIds: this.recentRemoteIds,
 		};
-		localStorage.setItem("SDRSetting", JSON.stringify(obj));
+		localStorage.setItem(this.settingsKey || 'SDRSetting', JSON.stringify(obj));
 	},
-	loadSetting(this: AppInstance) {
+	loadSetting(this: AppInstance, useLegacy = false) {
 		try {
-			const json = localStorage.getItem('SDRSetting');
+			const json = localStorage.getItem(this.settingsKey || 'SDRSetting') || (useLegacy ? localStorage.getItem('SDRSetting') : null);
 			if (json) {
 				const setting = JSON.parse(json);
 				if (setting.radio) {

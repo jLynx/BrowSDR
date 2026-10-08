@@ -51,12 +51,55 @@ body {
 	display: flex;
 }
 
-#app {
+#app, .receiver-workspace {
 	display: flex;
 	flex-direction: column;
 	width: 100%;
 	height: 100%;
 }
+
+.receiver-app {
+	display: flex;
+	flex-direction: column;
+	flex: 1;
+	min-height: 0;
+	width: 100%;
+}
+
+.receiver-tabs {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 8px 12px;
+	background: var(--bg-panel);
+	border-bottom: 1px solid var(--border);
+	overflow-x: auto;
+	flex-shrink: 0;
+}
+
+.receiver-tabs > button { flex-shrink: 0; white-space: nowrap; }
+.device-picker-mock {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	width: 100%;
+	background: transparent;
+	color: var(--text-main);
+	border: 0;
+	text-align: left;
+	font: inherit;
+}
+.receiver-tab {
+	padding: 8px 12px;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	background: var(--btn-bg);
+	color: var(--text-main);
+	cursor: pointer;
+}
+.receiver-tab.active { border-color: var(--accent); background: #173453; }
+.receiver-tab small { margin-left: 8px; color: var(--text-muted); }
+.workspace-message { padding: 12px; color: var(--text-main); background: var(--bg-header); }
 
 .top-bar {
 	display: flex;

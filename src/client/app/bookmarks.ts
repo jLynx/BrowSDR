@@ -261,7 +261,7 @@ export const bookmarkMethods = {
 					.filter((b: any) => b && typeof b === 'object')
 					.map((b: any) => ({ type: 'group', ...b }));
 				if (mode === 'replace') {
-					this.bookmarks = cleaned;
+					this.bookmarks.splice(0, this.bookmarks.length, ...cleaned);
 					this.saveBookmarks();
 					this.showMsg(`Replaced with ${cleaned.length} bookmark${cleaned.length !== 1 ? 's' : ''}.`);
 				} else {
@@ -279,12 +279,13 @@ export const bookmarkMethods = {
 		reader.readAsText(file);
 	},
 	loadBookmarks(this: AppInstance) {
+		if (this.workspace) return; // The workspace loads and owns the shared collection.
 		try {
 			const json = localStorage.getItem('sdr-web-bookmarks');
 			if (json) {
 				const bms = JSON.parse(json);
 				// Migrate old bookmarks without a type field
-				if (Array.isArray(bms)) this.bookmarks = bms.map((b: any) => ({ type: 'group', ...b }));
+				if (Array.isArray(bms)) this.bookmarks.splice(0, this.bookmarks.length, ...bms.map((b: any) => ({ type: 'group', ...b })));
 			}
 		} catch (e) { }
 	},
