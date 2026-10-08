@@ -1,5 +1,6 @@
 import { createApp, markRaw } from 'vue';
 import receiverTemplate from './receiver.html?raw';
+import VfoPanel from './vfo-panel';
 import { createWorkspace } from './workspace';
 import * as Comlink from 'comlink';
 import { createAppData } from './state';
@@ -32,7 +33,8 @@ if ('serviceWorker' in navigator) {
 
 const Receiver = {
 	template: receiverTemplate,
-	components: uiComponents,
+	components: { ...uiComponents, VfoPanel },
+	provide(this: any) { return { receiver: this }; },
 	props: ['receiverId', 'settingsKey', 'workspace'],
 	data(this: any) { return { ...createAppData(), bookmarks: this.workspace.bookmarks }; },
 	computed: { ...computedProperties },
