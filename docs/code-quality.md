@@ -17,13 +17,15 @@ Do not enable every strict option by reflex. In particular, `noUncheckedIndexedA
 ```sh
 npm ci
 npm run check           # lint, formatting, folder size, TypeScript
-npm test -- --run       # client, UI, and Cloudflare Worker tests
 npm run build          # includes nested DSP and transcription workers
+npm test -- --run       # client, UI, and Cloudflare Worker tests
 npm run test:storybook # requires Playwright Chromium or PLAYWRIGHT_CHANNEL=chrome
 npm run build:storybook
 ```
 
 Use `npm run lint:fix` for safe lint fixes and `npm run format` for formatting. CI runs the checks on pushes and pull requests to main or master. Node 22.13+ or 24+ is required by the current ESLint release; CI uses Node 22.
+
+Build before running the full test suite on a fresh checkout. The Cloudflare Worker tests use the configured `ASSETS` binding to serve `dist`, so that directory must exist before Vitest starts. The UI and performance suites can run independently without a build.
 
 ## Lint enforcement
 
