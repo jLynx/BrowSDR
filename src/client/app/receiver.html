@@ -41,11 +41,11 @@
 					<svg v-else viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
 				</button>
 				<details class="header-tools" :class="{ 'header-tools-compact': toolsCompact }" :open="!toolsCompact || toolsMenuOpen" ref="headerTools">
-					<summary class="icon-btn tools-trigger" role="button" aria-controls="header-tool-list" :aria-expanded="toolsMenuOpen" @click.prevent="toolsMenuOpen = !toolsMenuOpen">
+					<summary class="icon-btn tools-trigger" role="button" :aria-controls="receiverId + '-header-tool-list'" :aria-expanded="toolsMenuOpen" @click.prevent="toolsMenuOpen = !toolsMenuOpen">
 						<span>Tools</span>
 						<svg class="tools-chevron" viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="m7 10 5 5 5-5z"/></svg>
 					</summary>
-					<div class="header-tool-list" id="header-tool-list" @click="toolsMenuOpen = false; if (toolsCompact) $refs.headerTools.querySelector('summary').focus()">
+					<div class="header-tool-list" :id="receiverId + '-header-tool-list'" @click="toolsMenuOpen = false; if (toolsCompact) $refs.headerTools.querySelector('summary').focus()">
 						<button class="icon-btn" @click="showStats = !showStats" :class="{ active: showStats }" :aria-pressed="showStats" title="DSP Stats">
 							<svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/></svg>
 							<span class="tool-label">DSP Stats</span>
@@ -225,7 +225,7 @@
 					<div class="panel-body panel-condensed" v-show="!collapsedPanels['vfo-' + i]">
 						<div class="mode-grid">
 							<label class="mode-radio" v-for="m in ['nfm','am','usb','lsb','wfm','dsb','cw','raw','dsd']" :key="m">
-								<input type="radio" :value="m" v-model="vfo.mode" :name="'mode-' + i" @change="applyModeDefaults(i)">
+								<input type="radio" :value="m" v-model="vfo.mode" :name="receiverId + '-mode-' + i" @change="applyModeDefaults(i)">
 								<span class="mode-btn">{{ m.toUpperCase() }}</span>
 							</label>
 						</div>
@@ -321,17 +321,17 @@
 						</div>
 						<div v-if="vfo.rtl433" class="rtl433-vfo-controls">
 							<div class="form-row">
-								<label :for="'rtl433-rate-' + i">Decoder rate</label>
-								<select :id="'rtl433-rate-' + i" v-model.number="vfo.rtl433SampleRate" @change="updateBackendVfoParams(i)">
+								<label :for="receiverId + '-rtl433-rate-' + i">Decoder rate</label>
+								<select :id="receiverId + '-rtl433-rate-' + i" v-model.number="vfo.rtl433SampleRate" @change="updateBackendVfoParams(i)">
 									<option :value="250000">250 kS/s</option>
 									<option :value="500000">500 kS/s</option>
 									<option :value="1000000">1 MS/s</option>
 								</select>
 							</div>
 							<div class="form-row">
-								<label :for="'rtl433-protocols-' + i">Protocols</label>
+								<label :for="receiverId + '-rtl433-protocols-' + i">Protocols</label>
 								<div class="input-group">
-									<input :id="'rtl433-protocols-' + i" type="text" v-model.trim="vfo.rtl433Protocols" placeholder="Defaults" title="Comma-separated protocol numbers; blank enables upstream defaults">
+									<input :id="receiverId + '-rtl433-protocols-' + i" type="text" v-model.trim="vfo.rtl433Protocols" placeholder="Defaults" title="Comma-separated protocol numbers; blank enables upstream defaults">
 								</div>
 							</div>
 							<div>
@@ -948,7 +948,7 @@
 							<label class="bm-edit-label">Mode</label>
 							<div class="mode-grid bm-mode-grid">
 								<label class="mode-radio" v-for="m in ['nfm','am','usb','lsb','wfm','dsb','cw','raw','dsd']" :key="m">
-									<input type="radio" :value="m" v-model="bookmarkEdit.mode" name="bm-edit-mode">
+									<input type="radio" :value="m" v-model="bookmarkEdit.mode" :name="receiverId + '-bm-edit-mode'">
 									<span class="mode-btn">{{ m.toUpperCase() }}</span>
 								</label>
 							</div>

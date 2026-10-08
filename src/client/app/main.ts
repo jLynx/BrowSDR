@@ -31,7 +31,7 @@ if ('serviceWorker' in navigator) {
 const Receiver = {
 	template: receiverTemplate,
 	props: ['receiverId', 'settingsKey', 'workspace'],
-	data() { return createAppData(); },
+	data(this: any) { return { ...createAppData(), bookmarks: this.workspace.bookmarks }; },
 	computed: { ...computedProperties },
 	methods: {
 		...uiHelperMethods,
@@ -78,8 +78,10 @@ const Receiver = {
 		});
 		const Backend = Comlink.wrap<any>(backendWorker);
 		this.backend = markRaw(await new (Backend as any)());
+		if (this._disposed) return;
 		await this.backend.init();
-		this.workspace.registerReceiver(this.receiverId, this);
+		if (this._disposed) return;
+		if (!this.workspace.registerReceiver(this.receiverId, this)) return;
 
 		let freqDebounce: ReturnType<typeof setTimeout> | null = null;
 		this._cleanup.push(() => { if (freqDebounce) clearTimeout(freqDebounce); });
@@ -246,10 +248,12 @@ const Receiver = {
 		this._disposeHeaderTools = mountHeaderTools(this);
 	},
 	beforeUnmount(this: any) {
+		this._disposed = true;
 		this._disposeHeaderTools?.();
 		this._cleanup?.forEach((cleanup: () => void) => cleanup());
 		this._canvasCleanup?.();
-		this._backendWorker?.terminate();
+		// Workspace teardown still needs the backend to finish stopping USB/audio.
+		if (!this._removing) this._backendWorker?.terminate();
 		this._whisperWorker?.terminate();
 		if (this._statsTimer) clearInterval(this._statsTimer);
 		this._waterfallEngine?.destroy?.();

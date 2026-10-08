@@ -389,6 +389,8 @@ export const remoteMethods = {
 				if (target === 'gains') {
 					const control = this.deviceCapabilities?.gainControls.find((gc: any) => gc.name === property);
 					if (!control || value < control.min || value > control.max) return;
+					const steps = (value - control.min) / control.step;
+					if (!Number.isFinite(steps) || Math.abs(steps - Math.round(steps)) > 1e-9) return;
 				}
 				if (target !== 'radio' && target !== 'gains') return;
 				let allow = true;

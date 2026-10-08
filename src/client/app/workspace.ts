@@ -2,6 +2,7 @@ import { markRaw } from 'vue';
 import { WebRTCHandler, PEER_ID_PREFIX } from '../webrtc';
 import { ReceiverTransport, unpackReceiverChunk } from '../receiver-transport';
 import { usbSettingsKey } from '../usb-device-selection';
+import { bookmarkMethods } from './bookmarks';
 
 interface ReceiverEntry {
 	id: string;
@@ -32,6 +33,7 @@ export function createWorkspace(Receiver: any): any {
 	const claims = new Map<USBDevice, string>();
 	let transport: WebRTCHandler | null = null;
 	let manifestQueue = Promise.resolve();
+	let legacyMigrationClaimed = false;
 
 	return {
 		components: { Receiver },
@@ -57,10 +59,11 @@ export function createWorkspace(Receiver: any): any {
 				receivers: [{ id: 'local-1', label: 'Receiver 1', settingsKey: 'SDRSetting', status: 'Disconnected' }] as ReceiverEntry[],
 				selectedId: 'local-1', mode: 'none', error: '', remoteStatus: '', shareLink: '',
 				controller: null as any,
+				bookmarks: [] as any[],
 				isLocal: ['localhost', '127.0.0.1'].includes(window.location.hostname),
 			};
 		},
-		created(this: any) { this.controller = markRaw(this); },
+		created(this: any) { bookmarkMethods.loadBookmarks.call(this); this.controller = markRaw(this); },
 		mounted(this: any) {
 			const disconnected = (event: any) => {
 				const id = claims.get(event.device);
@@ -74,7 +77,7 @@ export function createWorkspace(Receiver: any): any {
 		beforeUnmount(this: any) { this._removeUsbListener?.(); transport?.close(); },
 		methods: {
 			registerReceiver(this: any, id: string, app: any) {
-				if (!this.receivers.some((entry: ReceiverEntry) => entry.id === id)) { app._backendWorker?.terminate(); return; }
+				if (app._disposed || !this.receivers.some((entry: ReceiverEntry) => entry.id === id)) { app._backendWorker?.terminate(); return false; }
 				instances.set(id, app);
 				ready.get(id)?.(app);
 				ready.delete(id);
@@ -85,6 +88,7 @@ export function createWorkspace(Receiver: any): any {
 					if (app.info.boardName && !entry.remote) entry.label = entry.deviceLabel || app.info.boardName;
 					if (this.mode === 'host') this.broadcastReceivers();
 				});
+				return true;
 			},
 			async newReceiver(this: any, entry?: ReceiverEntry) {
 				const id = entry?.id || `local-${++nextId}`;
@@ -121,9 +125,15 @@ export function createWorkspace(Receiver: any): any {
 				source._connectingDevice = true;
 				if (device !== 'mock') claims.set(device, source.receiverId);
 				const app = source.connected ? await this.newReceiver() : source;
+				if (!app) {
+					if (device !== 'mock') claims.delete(device);
+					source._connectingDevice = false;
+					return;
+				}
 				app._connectingDevice = true;
 				const entry = this.receivers.find((item: ReceiverEntry) => item.id === app.receiverId);
 				if (device !== 'mock') claims.set(device, app.receiverId); // Reserve before any USB awaits.
+				let useLegacy = false;
 				try {
 					if (device !== 'mock') {
 						const paired = await navigator.usb.getDevices();
@@ -133,10 +143,13 @@ export function createWorkspace(Receiver: any): any {
 						entry.deviceLabel = `SDR ${index + 1} · ${device.productName || 'USB SDR'}`;
 						entry.label = entry.deviceLabel;
 						await this.$nextTick();
-						app.loadSetting(source === app && app.receiverId === 'local-1');
+						useLegacy = !legacyMigrationClaimed;
+						legacyMigrationClaimed = true;
+						app.loadSetting(useLegacy);
 						await app._connectToDevice(device, index);
 					} else await app._connectMock();
 					if (!app.connected) {
+						if (useLegacy) legacyMigrationClaimed = false;
 						if (device !== 'mock') claims.delete(device);
 						return;
 					}
@@ -145,6 +158,7 @@ export function createWorkspace(Receiver: any): any {
 					await this.$nextTick();
 					this.broadcastReceivers();
 				} catch (error: any) {
+					if (useLegacy && !app.connected) legacyMigrationClaimed = false;
 					if (device !== 'mock') claims.delete(device);
 					this.error = error.message;
 				} finally {
@@ -154,14 +168,17 @@ export function createWorkspace(Receiver: any): any {
 			},
 			async removeReceiver(this: any, id: string) {
 				const app = instances.get(id);
-				if (!app || app._removing) return;
-				app._removing = true;
-				try { await app._disconnectReceiver(); } catch (error: any) { console.warn('Disconnect receiver:', error); }
-				app._backendWorker?.terminate();
-				app._whisperWorker?.terminate();
+				if (app?._removing) return;
+				if (app) app._removing = true;
+				// Remove membership before awaiting teardown so late initialization cannot register.
 				instances.delete(id);
+				ready.get(id)?.(null);
+				ready.delete(id);
 				for (const [device, receiverId] of claims) if (receiverId === id) claims.delete(device);
 				this.receivers = this.receivers.filter((entry: ReceiverEntry) => entry.id !== id);
+				try { await app?._disconnectReceiver(); } catch (error: any) { console.warn('Disconnect receiver:', error); }
+				app?._backendWorker?.terminate();
+				app?._whisperWorker?.terminate();
 				if (this.selectedId === id) this.selectedId = this.receivers[0]?.id || '';
 				this.broadcastReceivers();
 				if (!this.receivers.length && this.mode !== 'client') {
@@ -240,12 +257,10 @@ export function createWorkspace(Receiver: any): any {
 			},
 			async connectRemote(this: any, hostId: string) {
 				if (this.mode === 'client') return;
-				// The workspace mounts before its first receiver's asynchronous WASM init.
-				for (const entry of this.receivers) if (!instances.has(entry.id)) await new Promise(resolve => ready.set(entry.id, resolve));
 				this.error = '';
 				await this.stopSharing();
 				this.mode = 'client';
-				for (const id of [...instances.keys()]) await this.removeReceiver(id);
+				for (const entry of [...this.receivers]) await this.removeReceiver(entry.id);
 				this.remoteStatus = 'Connecting to remote host…';
 				transport = markRaw(new WebRTCHandler(false, PEER_ID_PREFIX + hostId));
 				const connection = transport;
@@ -293,10 +308,12 @@ export function createWorkspace(Receiver: any): any {
 					let app = instances.get(item.id);
 					if (!app) {
 						app = await this.newReceiver({ id: item.id, label: item.name || 'Remote SDR', settingsKey: `SDRSetting:remote:${hostId}:${item.id}`, status: 'Connecting', remote: true });
+						if (!app || transport !== connection || this.mode !== 'client') return;
 						Object.assign(app.radio, item.radio);
 						if (app.vfos.length && Math.abs(app.vfos[0].freq - item.radio.centerFreq) > item.radio.sampleRate / 2e6) app.vfos[0].freq = item.radio.centerFreq;
 						app._receiverTransport = markRaw(new ReceiverTransport(item.id, transport, () => this.disconnectRemote()));
 						await app.connectRemoteClient(hostId);
+						if (transport !== connection || this.mode !== 'client') return;
 						app.audioUnlockPendingId = hostId;
 					}
 					const entry = this.receivers.find((entry: ReceiverEntry) => entry.id === item.id);
@@ -312,8 +329,9 @@ export function createWorkspace(Receiver: any): any {
 				this._disconnecting = true;
 				const previous = transport;
 				transport = null;
+				manifestQueue = Promise.resolve();
 				previous?.close();
-				for (const id of [...instances.keys()]) await this.removeReceiver(id);
+				for (const entry of [...this.receivers]) await this.removeReceiver(entry.id);
 				this.mode = 'none';
 				window.history.replaceState({}, document.title, '/');
 				await this.newReceiver();
