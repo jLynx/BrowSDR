@@ -41,18 +41,20 @@ export function createWorkspace(Receiver: any): any {
 		components: { Receiver },
 		template: `
 			<div class="receiver-workspace">
-				<nav class="receiver-tabs" aria-label="SDR receivers">
+				<nav v-if="receivers.filter(receiver => receiver.status === 'Receiving' || receiver.status === 'Paused').length > 1" class="receiver-tabs" aria-label="SDR receivers">
 					<button v-for="receiver in receivers" :key="receiver.id" class="receiver-tab"
 						:class="{ active: selectedId === receiver.id }" :aria-pressed="selectedId === receiver.id" @click="selectReceiver(receiver.id)">
 						{{ receiver.label }} <small>{{ receiver.status }}</small>
 					</button>
 					<button class="btn btn-secondary" v-if="mode !== 'client'" @click="addDevice">+ Add SDR</button>
-					<button class="btn btn-secondary" v-if="isLocal && mode !== 'client'" @click="addMock">+ Mock SDR</button>
 					<button class="btn btn-secondary" v-if="mode === 'host'" @click="stopSharing">Stop Sharing</button>
 					<button class="btn btn-secondary" v-if="mode === 'client'" @click="disconnectRemote">Disconnect Remote</button>
 				</nav>
 				<div v-if="error" class="workspace-message" role="alert">{{ error }}</div>
-				<div v-if="mode === 'client' && !receivers.length" class="workspace-message">{{ remoteStatus }}</div>
+				<div v-if="mode === 'client' && !receivers.length" class="workspace-message">
+					{{ remoteStatus }}
+					<button class="btn btn-secondary" @click="disconnectRemote">Disconnect Remote</button>
+				</div>
 				<Receiver v-for="receiver in receivers" :key="receiver.id" v-show="selectedId === receiver.id"
 					:receiver-id="receiver.id" :settings-key="receiver.settingsKey" :workspace="controller" />
 			</div>`,
@@ -62,7 +64,6 @@ export function createWorkspace(Receiver: any): any {
 				selectedId: 'local-1', mode: 'none', error: '', remoteStatus: '', shareLink: '',
 				controller: null as any,
 				bookmarks: [] as any[],
-				isLocal: ['localhost', '127.0.0.1'].includes(window.location.hostname),
 			};
 		},
 		created(this: any) { bookmarkMethods.loadBookmarks.call(this); this.controller = markRaw(this); },
@@ -116,10 +117,6 @@ export function createWorkspace(Receiver: any): any {
 				const app = instances.get(this.selectedId);
 				if (!app) return;
 				try { await app.connect(); } catch (error: any) { this.error = error.message; }
-			},
-			async addMock(this: any) {
-				const app = instances.get(this.selectedId);
-				if (app) await app.connectMock();
 			},
 			isDeviceConnected(this: any, device: USBDevice) {
 				// WebUSB reuses each physical device's object within this window.

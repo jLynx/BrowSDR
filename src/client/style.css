@@ -78,6 +78,17 @@ body {
 }
 
 .receiver-tabs > button { flex-shrink: 0; white-space: nowrap; }
+.device-picker-mock {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	width: 100%;
+	background: transparent;
+	color: var(--text-main);
+	border: 0;
+	text-align: left;
+	font: inherit;
+}
 .receiver-tab {
 	padding: 8px 12px;
 	border: 1px solid var(--border);

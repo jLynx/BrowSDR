@@ -93,11 +93,12 @@
 						</div>
 						<div class="form-row" style="flex-direction: column; gap: 8px;">
 							<template v-if="!connected && remoteMode !== 'client'">
-								<button class="btn btn-primary" style="width: 100%;" @click="connect">Connect Device</button>
+								<button class="btn btn-primary" style="width: 100%;" @click="connect">Add SDR</button>
 								<button class="btn btn-secondary" style="width: 100%;" @click="showRemoteConnectDialog = true">Connect Remote</button>
-								<button class="btn btn-secondary" style="width: 100%;" v-if="isLocal" @click="connectMock">Connect Mock SDR</button>
 							</template>
 							<button class="btn" style="width: 100%;" v-else @click="disconnect">{{ remoteMode === 'client' ? 'Disconnect Remote' : 'Disconnect' }}</button>
+							<button class="btn btn-secondary" style="width: 100%;" v-if="connected && remoteMode !== 'client'" @click="connect">+ Add SDR</button>
+							<button class="btn btn-secondary" style="width: 100%;" v-if="remoteMode === 'host'" @click="workspace.stopSharing()">Stop Sharing</button>
 						</div>
 						<div class="form-row info-row" v-if="connected && remoteMode !== 'client'">
 							<small>{{ info.boardName }}</small>
@@ -1061,7 +1062,7 @@
 		<!-- Device picker dialog -->
 		<div v-if="devicePicker.show" class="bookmark-overlay" @click.self="devicePicker.show = false">
 			<div class="bookmark-dialog device-picker-dialog">
-				<div class="bookmark-dialog-title">Select SDR Device</div>
+				<div class="bookmark-dialog-title">Add SDR</div>
 				<div class="bookmark-dialog-body" style="padding: 0;">
 					<div class="device-picker-list">
 						<div v-for="(entry, i) in devicePicker.devices" :key="i"
@@ -1070,6 +1071,10 @@
 							<div class="device-picker-meta">{{ entry.productName || 'USB ' + entry.device.vendorId.toString(16) + ':' + entry.device.productId.toString(16) }}</div>
 							<div class="device-picker-meta" v-if="entry.device.serialNumber">Serial: {{ entry.device.serialNumber }}</div>
 						</div>
+						<button class="device-picker-item device-picker-mock" @click="connectMock">
+							<span class="device-picker-name">Mock SDR</span>
+							<span class="device-picker-meta">Simulated receiver for testing</span>
+						</button>
 					</div>
 				</div>
 				<div class="bookmark-dialog-footer" style="display: flex; gap: 8px;">

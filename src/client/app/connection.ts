@@ -18,14 +18,8 @@ export const connectionMethods = {
 			}
 		}
 
-		if (sdrDevices.length === 0) {
-			// No paired SDR devices — go straight to browser USB picker
-			await this.pairNewDevice();
-		} else {
-			// Show our custom picker dialog
-			this.devicePicker.devices = sdrDevices;
-			this.devicePicker.show = true;
-		}
+		this.devicePicker.devices = sdrDevices;
+		this.devicePicker.show = true;
 	},
 
 	async pairNewDevice(this: AppInstance) {
@@ -87,6 +81,7 @@ export const connectionMethods = {
 	},
 
 	async connectMock(this: AppInstance) {
+		this.devicePicker.show = false;
 		if (this.workspace) return this.workspace.connectDevice(this, 'mock');
 		return this._connectMock();
 	},
