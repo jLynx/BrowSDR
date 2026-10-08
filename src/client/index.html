@@ -88,6 +88,9 @@
 				<button class="icon-btn" @click="toggleRdsPanel" :class="{ active: rds.panelOpen }" title="FM RDS Decoder">
 					<svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M20 6H4c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 10H4V8h16v8zM6 10h2v4H6zm3 0h5v4H9z"/></svg>
 				</button>
+				<button class="icon-btn" @click="toggleRtl433Panel" :class="{ active: rtl433.panelOpen }" title="rtl_433 Sensor Decoder" aria-label="rtl_433 Sensor Decoder">
+					<svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M4 3h16v18H4V3zm2 2v14h12V5H6zm2 3h8v2H8V8zm0 4h3v4H8v-4zm5 0h3v4h-3v-4z"/></svg>
+				</button>
 				<button class="icon-btn" @click="showActivity = !showActivity" :class="{ active: showActivity }" title="Frequency Activity Tracker">
 					<svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99l1.5 1.5z"/></svg>
 				</button>
@@ -330,6 +333,34 @@
 							</label>
 						</div>
 
+						<!-- Independent sensor decoding -->
+						<div class="form-row full-checkbox-row">
+							<label class="custom-checkbox">
+								<input type="checkbox" v-model="vfo.rtl433" @change="updateBackendVfoParams(i); if (vfo.rtl433) rtl433.panelOpen = true">
+								<span class="checkmark"></span>
+								Decode rtl_433 sensors
+							</label>
+						</div>
+						<div v-if="vfo.rtl433" class="rtl433-vfo-controls">
+							<div class="form-row">
+								<label :for="'rtl433-rate-' + i">Decoder rate</label>
+								<select :id="'rtl433-rate-' + i" v-model.number="vfo.rtl433SampleRate" @change="updateBackendVfoParams(i)">
+									<option :value="250000">250 kS/s</option>
+									<option :value="500000">500 kS/s</option>
+									<option :value="1000000">1 MS/s</option>
+								</select>
+							</div>
+							<div class="form-row">
+								<label :for="'rtl433-protocols-' + i">Protocols</label>
+								<div class="input-group">
+									<input :id="'rtl433-protocols-' + i" type="text" v-model.trim="vfo.rtl433Protocols" placeholder="Defaults" title="Comma-separated protocol numbers; blank enables upstream defaults">
+								</div>
+							</div>
+							<div>
+								<div class="rtl433-status" :class="{ 'rtl433-error': rtl433.status[i]?.state === 'error' }">{{ rtl433StatusText(i) }}</div>
+								<div class="rtl433-hint">Decodes sensors while audio is muted.</div>
+							</div>
+						</div>
 						<!-- DSD status display (SDR++ Brown style) -->
 						<div class="dsd-status-panel" v-if="vfo.mode === 'dsd'" style="padding:4px 8px;font-size:11px;font-family:monospace;line-height:1.6;background:rgba(0,0,0,0.3);border-radius:4px;margin:4px 0;">
 							<!-- Mode line -->
@@ -705,6 +736,36 @@
 				</div>
 			</div>
 		</div>
+
+		<!-- rtl_433 live sensor events -->
+		<section class="pocsag-panel rtl433-panel" v-if="rtl433.panelOpen" aria-label="rtl_433 live events">
+			<div class="pocsag-header">
+				<div class="pocsag-title">rtl_433 Sensors <span class="pocsag-count">{{ rtl433.log.length }} events</span></div>
+				<div class="pocsag-controls">
+					<button class="btn transcript-btn" @click="rtl433.showProtocols = !rtl433.showProtocols">{{ rtl433.showProtocols ? 'Events' : 'Protocols' }}</button>
+					<button class="btn transcript-btn" @click="clearRtl433">Clear</button>
+					<button class="btn transcript-btn" @click="exportRtl433" :disabled="!rtl433.log.length">Export JSONL</button>
+					<button class="btn transcript-btn" @click="toggleRtl433Panel" aria-label="Close rtl_433 panel">×</button>
+				</div>
+			</div>
+			<div class="rtl433-receivers">
+				<template v-for="(vfo, i) in vfos" :key="i"><span v-if="vfo.rtl433" :class="{ 'rtl433-error': rtl433.status[i]?.state === 'error' }">VFO {{ i + 1 }} · {{ formatFreq(vfo.freq) }} MHz · {{ rtl433StatusText(i) }}</span></template>
+			</div>
+			<div v-if="rtl433.showProtocols" class="pocsag-body rtl433-protocols">
+				<div class="input-group rtl433-protocol-search">
+					<input aria-label="Search rtl_433 protocols" v-model="rtl433.filter" placeholder="Search protocol number or device…">
+				</div>
+				<div v-if="!rtl433.protocols.length" class="pocsag-empty">Start a decoder to load the protocol list.</div>
+				<div v-for="protocol in filteredRtl433Protocols()" :key="protocol.id">[{{ protocol.id }}] {{ protocol.name }} <span v-if="protocol.disabled" class="rtl433-hint">(enable by number)</span></div>
+			</div>
+			<div v-else class="pocsag-body" ref="rtl433Body">
+				<div v-if="!rtl433.log.length" class="pocsag-empty">Enable “Decode rtl_433 sensors” on a VFO and tune to a sensor frequency, such as 433.92 MHz. Waiting for a supported transmission…</div>
+				<article v-for="(entry, i) in rtl433.log" :key="i" class="rtl433-entry" :style="{ borderLeftColor: vfoColor(entry.vfoIndex) }">
+					<div class="rtl433-event-heading"><time>{{ new Date(entry.time).toLocaleTimeString() }}</time><span>VFO {{ entry.vfoIndex + 1 }} · {{ entry.freq }} MHz</span><strong>{{ entry.event.model || 'Device' }}</strong><span v-if="entry.event.id != null">ID {{ entry.event.id }}</span><span v-if="entry.event.protocol">Protocol {{ entry.event.protocol }}</span></div>
+					<div class="rtl433-fields">{{ formatRtl433Event(entry.event) }}</div>
+				</article>
+			</div>
+		</section>
 
 		<!-- RDS Panel -->
 		<div class="pocsag-panel" v-if="rds.panelOpen">

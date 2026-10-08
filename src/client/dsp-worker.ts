@@ -6,6 +6,7 @@ import { DSD_IF_RATE } from './worker/dsd/types';
 import type { DSDStatus } from './worker/dsd/types';
 import { RDSDecoder } from './worker/rds';
 import { LatestStatus } from './worker/latest-status';
+import { Rtl433Stream } from './worker/rtl433';
 
 if (import.meta.env.DEV) {
     for (const level of ['log', 'warn', 'error'] as const) {
@@ -32,6 +33,7 @@ let inputIsFloat = false;
 let inputCenterFreq = 100;
 let channelizer: SharedChannelizer | undefined;
 let channelKey = '';
+let rtl433: Rtl433Stream;
 
 const IF_RATES: Record<string, number> = {
     nfm: 50000,
@@ -50,6 +52,7 @@ async function startup(): Promise<void> {
     if (!wasmInitPromise) {
         wasmInitPromise = init().then((w: any) => {
             _wasm = w;
+            rtl433 = new Rtl433Stream(DspProcessor, _wasm.memory, message => self.postMessage(message));
             set_panic_hook();
 
             // Allocate Wasm memory for this sub-module
@@ -98,6 +101,8 @@ self.onmessage = async (e: MessageEvent) => {
         }
     }
     else if (msg.type === "init") {
+        rtl433.reset();
+        inputIsFloat = false;
         dsdStatus.reset();
         dsdStream?.reset();
         systemSampleRate = msg.sampleRate;
@@ -158,8 +163,9 @@ self.onmessage = async (e: MessageEvent) => {
             rdsDdc?.set_shift(nextRate, (msg.params.freq - nextCenter) * 1e6);
         }
         inputIsFloat = msg.floatIq === true;
+        rtl433.configure(msg.params, systemSampleRate, inputCenterFreq);
         // Audio mute does not stop independent RDS or pager decoding.
-        if (!msg.params.enabled && !msg.params.pocsag && !(msg.params.rds && msg.params.mode === 'wfm')) return;
+        if (!msg.params.enabled && !msg.params.pocsag && !(msg.params.rds && msg.params.mode === 'wfm') && !msg.params.rtl433) return;
         // Copy payload into WASM memory
         const wasmMemView = new Int8Array(_wasm.memory.buffer);
 
@@ -178,7 +184,8 @@ self.onmessage = async (e: MessageEvent) => {
 
         try {
             const processStart = performance.now();
-            const audioOut = processVfoAudio(msg.chunkLen, msg.params);
+            rtl433.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat);
+            const audioOut = msg.params.enabled || msg.params.pocsag || msg.params.rds ? processVfoAudio(msg.chunkLen, msg.params) : null;
             const processEnd = performance.now();
             const dspTime = processEnd - processStart;
 
@@ -229,6 +236,7 @@ self.onmessage = async (e: MessageEvent) => {
 };
 
 function configureDDC(params: any, systemCenterFreq: number): void {
+    rtl433.configure(params, systemSampleRate, systemCenterFreq);
     const ifRate = IF_RATES[params.mode];
     if (ifRate === undefined) {
         console.error(`[DSP Worker] Unknown mode "${params.mode}" — no IF rate defined. Skipping DDC config.`);

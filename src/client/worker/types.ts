@@ -19,6 +19,9 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 */
 
 export interface VfoParams {
+	rtl433?: boolean;
+	rtl433SampleRate?: number;
+	rtl433Protocols?: string;
 	/** Silence only the speaker mix while keeping decoding and transcription running. */
 	audioMuted?: boolean;
 	freq: number;

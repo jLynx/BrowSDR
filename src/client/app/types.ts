@@ -1,4 +1,7 @@
 export interface Vfo {
+	rtl433?: boolean;
+	rtl433SampleRate?: number;
+	rtl433Protocols?: string;
 	enabled: boolean;
 	freq: number;
 	mode: string;

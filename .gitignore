@@ -4,6 +4,13 @@ node_modules/
 # Downloaded upstream mbelib source (see mbelib-wasm/README.md)
 /mbelib-wasm/mbelib/
 
+# Downloaded rtl_433 source and compiler outputs
+/rtl433-wasm/rtl_433-*/
+/rtl433-wasm/source.tar.gz
+/rtl433-wasm/update-pin.json
+/rtl433-wasm/build/
+/rtl433-wasm/test-data/
+
 # Rust build artifacts
 hackrf-web/target/
 
