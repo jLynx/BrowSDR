@@ -13,6 +13,10 @@
 		"dev": "vite",
 		"start": "vite",
 		"test": "vitest",
+		"test:ui": "vitest run --config vitest.ui.config.ts",
+		"test:storybook": "vitest run --config vitest.storybook.config.ts",
+		"storybook": "storybook dev -p 6006 --disable-telemetry",
+		"build:storybook": "storybook build --disable-telemetry",
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
@@ -22,10 +26,19 @@
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.12.4",
+		"@storybook/addon-docs": "^10.6.1",
+		"@storybook/addon-vitest": "^10.6.1",
+		"@storybook/vue3-vite": "^10.6.1",
+		"@types/jsdom": "^21.1.7",
+		"@vitest/browser": "^3.2.7",
+		"@vue/test-utils": "^2.5.1",
+		"jsdom": "^26.1.0",
+		"playwright": "^1.58.2",
+		"storybook": "^10.6.1",
 		"typescript": "^5.9.3",
 		"vite": "^6.4.1",
 		"vite-plugin-pwa": "^1.2.0",
-		"vitest": "~3.2.0",
+		"vitest": "~3.2.7",
 		"wrangler": "^4.69.0"
 	}
 }

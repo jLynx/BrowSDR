@@ -20,6 +20,7 @@ import { remoteMethods } from './remote';
 import { autoGainMethods } from './auto-gain';
 import { rtl433Methods } from './rtl433';
 import { mountHeaderTools } from './header-tools';
+import * as uiComponents from '../ui';
 
 // When a new service worker takes control (after update), reload to get fresh assets
 if ('serviceWorker' in navigator) {
@@ -30,6 +31,7 @@ if ('serviceWorker' in navigator) {
 
 const Receiver = {
 	template: receiverTemplate,
+	components: uiComponents,
 	props: ['receiverId', 'settingsKey', 'workspace'],
 	data(this: any) { return { ...createAppData(), bookmarks: this.workspace.bookmarks }; },
 	computed: { ...computedProperties },

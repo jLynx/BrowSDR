@@ -1,0 +1,3 @@
+/* Canvas layout only. Components use the unmodified application stylesheet. */
+body { display: block; overflow: auto; height: auto; min-height: 100vh; }
+#storybook-root { width: 100%; }
