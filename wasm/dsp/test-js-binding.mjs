@@ -37,7 +37,8 @@ async function test() {
 	// Verify the DC component is larger than other frequencies
 	assert.ok(output[dcIndex] > output[0], 'DC component should be greater than other frequencies');
 
-	// Verify the binding independently of the FFT's absolute normalization.
+	// A half-amplitude DC tone must be -6.02 dB with a rectangular window.
+	assert.ok(Math.abs(output[dcIndex] - 20 * Math.log10(0.5)) < 0.001, 'DC power should be -6.02 dB');
 	assert.ok(output.every(Number.isFinite), 'FFT output should be finite');
 	const quieter = input.map((value) => value / 2);
 	const quieterOutput = new Float32Array(n);

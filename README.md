@@ -208,6 +208,12 @@ cargo make build       # Build for web (output: wasm/dsp/pkg/)
 # TypeScript / Worker tests
 npm run test
 
+# Code checks and native Rust DSP tests (requires Rust/Cargo)
+npm run check
+
+# Native Rust DSP tests only
+npm run test:dsp
+
 # Rust / WASM tests
 cd wasm/dsp
 cargo make test

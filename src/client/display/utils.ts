@@ -1,4 +1,5 @@
 import type { RGB } from './types';
+import { DEFAULT_SPECTRUM_RANGE } from './spectrum-range';
 /*
 Copyright (c) 2026, jLynx <https://github.com/jLynx>
 Copyright (c) 2019, cho45 <cho45@lowreal.net>
@@ -38,7 +39,11 @@ const DEFAULT_COLOR_MAP: Array<[number, number, number]> = [
 	[0x4a, 0x00, 0x00],
 ];
 
-export function convertDecibelToRGB(dB: number, minDB: number = -70, maxDB: number = 0): RGB {
+export function convertDecibelToRGB(
+	dB: number,
+	minDB: number = DEFAULT_SPECTRUM_RANGE.minDB,
+	maxDB: number = DEFAULT_SPECTRUM_RANGE.maxDB,
+): RGB {
 	// Map dB into a 0.0 to 1.0 range
 	let p = (dB - minDB) / (maxDB - minDB);
 	p = Math.max(0.0, Math.min(1.0, p));
@@ -108,8 +113,8 @@ export class WaterfallGL {
 		this.historySize = historySize;
 		this.canvas = canvas;
 		this.data = new Uint8Array(this.bandSize * 4);
-		this.minDB = -70;
-		this.maxDB = 0;
+		this.minDB = DEFAULT_SPECTRUM_RANGE.minDB;
+		this.maxDB = DEFAULT_SPECTRUM_RANGE.maxDB;
 		this.initWebGL();
 	}
 
@@ -298,8 +303,8 @@ export class Waterfall {
 		this.ctx = this.canvas.getContext('2d')!;
 		this.ctx.imageSmoothingEnabled = true;
 
-		this.minDB = -70;
-		this.maxDB = 0;
+		this.minDB = DEFAULT_SPECTRUM_RANGE.minDB;
+		this.maxDB = DEFAULT_SPECTRUM_RANGE.maxDB;
 
 		// internal buffer for drawing full width
 		this.offscreen = document.createElement('canvas');
