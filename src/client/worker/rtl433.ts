@@ -156,7 +156,8 @@ export class Rtl433Stream {
 	}
 
 	process(ptr: number, values: number, floatInput: boolean): void {
-		if (!this.decoder || !this.ddc) return;
+		// Empty DDC calls retain the previous IQ output; they do not flush it.
+		if (values === 0 || !this.decoder || !this.ddc) return;
 		try {
 			const out = floatInput ? this.ddc.process_iq_only_f32_ptr(ptr, values) : this.ddc.process_iq_only_ptr(ptr, values);
 			const count = this.ddc.get_iq_output_len();

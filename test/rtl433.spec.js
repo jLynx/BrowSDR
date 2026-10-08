@@ -61,10 +61,38 @@ describe('rtl_433 browser decoder', () => {
 			new Float32Array(wasm.memory.buffer, ptr, chunk.length).set(chunk);
 			stream.process(ptr, chunk.length, true);
 		}
-		stream.process(ptr, 0, true);
 		expect(messages.find(message => message.type === 'rtl433_event')?.event).toMatchObject({ model: 'Waveman-Switch', state: 'ON' });
 		stream.configure({ ...params, rtl433: false }, 2000000, 433.8);
 		expect(messages.at(-1).status.state).toBe('off');
+	});
+	it.each([true, false])('does not replay Rust IQ output for empty input (floatInput=%s)', async floatInput => {
+		const wasm = await init({ module_or_path: readFileSync(new URL('../hackrf-web/pkg/hackrf_web_bg.wasm', import.meta.url)) });
+		const messages = [];
+		const stream = new Rtl433Stream(DspProcessor, wasm.memory, message => messages.push(message));
+		stream.configure({ freq: 433.92, rtl433: true }, 250000, 433.92);
+		await vi.waitFor(() => expect(messages.some(message => message.status?.state === 'receiving')).toBe(true));
+		const process = vi.spyOn(Rtl433Decoder.prototype, 'process');
+		const now = vi.spyOn(performance, 'now').mockReturnValue(2000);
+		const values = 4096;
+		const ptr = alloc_float_buffer(values);
+		try {
+			if (floatInput) new Float32Array(wasm.memory.buffer, ptr, values).fill(0.001);
+			else new Uint8Array(wasm.memory.buffer, ptr, values).fill(1);
+			stream.process(ptr, values, floatInput);
+			const samples = messages.at(-1).status.samples;
+			expect(samples).toBeGreaterThan(0);
+			expect(process).toHaveBeenCalledOnce();
+			now.mockReturnValue(4000);
+			stream.process(ptr, 0, floatInput);
+			expect(process).toHaveBeenCalledOnce();
+			expect(messages.at(-1).status.samples).toBe(samples);
+			now.mockReturnValue(6000);
+			stream.process(ptr, values, floatInput);
+			expect(process).toHaveBeenCalledTimes(2);
+			expect(messages.at(-1).status.samples).toBeGreaterThan(samples);
+		} finally {
+			stream.reset();
+		}
 	});
 	it('discards a decoder that finishes loading after its VFO was disabled', async () => {
 		let resolve;
