@@ -3,6 +3,7 @@ import { WebRTCHandler, PEER_ID_PREFIX } from '../webrtc';
 import { ReceiverTransport, unpackReceiverChunk } from '../receiver-transport';
 import { usbSettingsKey } from '../usb-device-selection';
 import { bookmarkMethods } from './bookmarks';
+import { WorkspaceMediaSession } from './media-session';
 
 interface ReceiverEntry {
 	id: string;
@@ -34,6 +35,7 @@ export function createWorkspace(Receiver: any): any {
 	let transport: WebRTCHandler | null = null;
 	let manifestQueue = Promise.resolve();
 	let legacyMigrationClaimed = false;
+	let mediaSession: WorkspaceMediaSession;
 
 	return {
 		components: { Receiver },
@@ -41,7 +43,7 @@ export function createWorkspace(Receiver: any): any {
 			<div class="receiver-workspace">
 				<nav class="receiver-tabs" aria-label="SDR receivers">
 					<button v-for="receiver in receivers" :key="receiver.id" class="receiver-tab"
-						:class="{ active: selectedId === receiver.id }" @click="selectReceiver(receiver.id)">
+						:class="{ active: selectedId === receiver.id }" :aria-pressed="selectedId === receiver.id" @click="selectReceiver(receiver.id)">
 						{{ receiver.label }} <small>{{ receiver.status }}</small>
 					</button>
 					<button class="btn btn-secondary" v-if="mode !== 'client'" @click="addDevice">+ Add SDR</button>
@@ -74,8 +76,12 @@ export function createWorkspace(Receiver: any): any {
 			const hostId = new URLSearchParams(window.location.search).get('connect');
 			if (hostId) this.connectRemote(hostId);
 		},
-		beforeUnmount(this: any) { this._removeUsbListener?.(); transport?.close(); },
+		beforeUnmount(this: any) { this._removeUsbListener?.(); transport?.close(); mediaSession?.dispose(); },
 		methods: {
+			updateMediaSession(this: any) {
+				mediaSession ??= new WorkspaceMediaSession(() => [...instances.values()], () => instances.get(this.selectedId));
+				mediaSession.update();
+			},
 			registerReceiver(this: any, id: string, app: any) {
 				if (app._disposed || !this.receivers.some((entry: ReceiverEntry) => entry.id === id)) { app._backendWorker?.terminate(); return false; }
 				instances.set(id, app);
@@ -86,8 +92,10 @@ export function createWorkspace(Receiver: any): any {
 					if (!entry) return;
 					entry.status = app.running ? 'Receiving' : app.connected ? 'Paused' : 'Disconnected';
 					if (app.info.boardName && !entry.remote) entry.label = entry.deviceLabel || app.info.boardName;
+					this.updateMediaSession();
 					if (this.mode === 'host') this.broadcastReceivers();
 				});
+				this.updateMediaSession();
 				return true;
 			},
 			async newReceiver(this: any, entry?: ReceiverEntry) {
@@ -172,6 +180,7 @@ export function createWorkspace(Receiver: any): any {
 				if (app) app._removing = true;
 				// Remove membership before awaiting teardown so late initialization cannot register.
 				instances.delete(id);
+				this.updateMediaSession();
 				ready.get(id)?.(null);
 				ready.delete(id);
 				for (const [device, receiverId] of claims) if (receiverId === id) claims.delete(device);

@@ -41,6 +41,7 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
   Share all connected SDRs with others through one WebRTC link using PeerJS. Each remote user has independent VFOs on every receiver.
 * **📡 Multiple SDRs at Once**
   Connect any number of compatible SDRs, including mixed device families. Each receiver has independent tuning, sample rate, gains, waterfall, and VFOs. Switch receiver tabs while audio from all enabled VFOs continues playing.
+  Device settings stay in separate saved slots when USB serial numbers collide. WebUSB cannot distinguish identical devices across reloads if their enumeration order changes; assign unique serial numbers when possible for reliable physical-device matching.
 
 ---
 

@@ -216,6 +216,19 @@ describe('per-receiver remote controls', () => {
 });
 
 describe('shared receiver bookmarks', () => {
+	it('loads existing bookmarks once without replacing the collection referenced by receivers', () => {
+		vi.stubGlobal('localStorage', { getItem: () => JSON.stringify([{ id: 'saved', name: 'Saved' }]) });
+		const workspace = reactive(makeWorkspace());
+		const shared = workspace.bookmarks;
+		bookmarkMethods.loadBookmarks.call(workspace);
+		expect(workspace.bookmarks).toBe(shared);
+		expect(shared).toEqual([{ type: 'group', id: 'saved', name: 'Saved' }]);
+		shared.push({ id: 'new', name: 'New' });
+		const app = { workspace, bookmarks: shared };
+		bookmarkMethods.loadBookmarks.call(app);
+		expect(app.bookmarks).toBe(shared);
+		expect(shared.map(item => item.id)).toEqual(['saved', 'new']);
+	});
 	it('preserves saves, edits, deletions and replacement imports across mounted receivers', () => {
 		const storage = new Map();
 		vi.stubGlobal('localStorage', { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) });

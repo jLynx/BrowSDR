@@ -285,7 +285,7 @@ export const bookmarkMethods = {
 			if (json) {
 				const bms = JSON.parse(json);
 				// Migrate old bookmarks without a type field
-				if (Array.isArray(bms)) this.bookmarks = bms.map((b: any) => ({ type: 'group', ...b }));
+				if (Array.isArray(bms)) this.bookmarks.splice(0, this.bookmarks.length, ...bms.map((b: any) => ({ type: 'group', ...b })));
 			}
 		} catch (e) { }
 	},

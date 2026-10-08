@@ -35,6 +35,45 @@ function workspaceWithReceiver() {
 }
 
 describe('RTL-SDRs with matching USB identities', () => {
+	it('keeps the first saved key when an identical dongle is paired and after reloading with fewer devices', () => {
+		const storage = new Map();
+		vi.stubGlobal('localStorage', { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) });
+		const first = rtl(), second = rtl();
+		const key = usbSettingsKey(first, [first]);
+		storage.set(key, JSON.stringify({ radio: { centerFreq: 96 } }));
+		expect(usbSettingsKey(first, [first, second])).toBe(key);
+		const otherKey = usbSettingsKey(second, [first, second]);
+		expect(otherKey).not.toBe(key);
+		storage.set(otherKey, JSON.stringify({ radio: { centerFreq: 435 } }));
+		const reloaded = [rtl(), rtl()];
+		expect(usbSettingsKey(reloaded[0], reloaded)).toBe(key);
+		expect(usbSettingsKey(reloaded[1], reloaded)).toBe(otherKey);
+		expect(usbSettingsKey(reloaded[1], [reloaded[1]])).toBe(otherKey);
+		const unrelated = rtl('unrelated');
+		expect(usbSettingsKey(reloaded[0], [unrelated, ...reloaded])).toBe(key);
+	});
+	it('migrates previous indexed collision keys without overwriting existing settings', () => {
+		const base = 'SDRSetting:usb:3034:10296:00000001';
+		const storage = new Map([[`${base}:index-0`, 'first settings'], [`${base}:index-1`, 'second settings']]);
+		vi.stubGlobal('localStorage', { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) });
+		const devices = [rtl(), rtl()];
+		const keys = devices.map(device => usbSettingsKey(device, devices));
+		expect(keys[0]).toBe(base);
+		expect(keys.map(key => storage.get(key))).toEqual(['first settings', 'second settings']);
+		storage.set(base, 'new first settings');
+		const reloaded = [rtl(), rtl()];
+		usbSettingsKey(reloaded[0], reloaded);
+		expect(storage.get(base)).toBe('new first settings');
+	});
+	it('keeps slots for serial-less devices when unrelated devices change list positions', () => {
+		const storage = new Map();
+		vi.stubGlobal('localStorage', { getItem: key => storage.get(key), setItem: (key, value) => storage.set(key, value) });
+		const devices = [rtl(''), rtl('')];
+		const keys = devices.map(device => usbSettingsKey(device, devices));
+		const reloaded = [rtl('different'), rtl(''), rtl('')];
+		expect(usbSettingsKey(reloaded[1], reloaded)).toBe(keys[0]);
+		expect(usbSettingsKey(reloaded[2], reloaded)).toBe(keys[1]);
+	});
 	it.each(['00000001', ''])('connects two physical dongles with serial "%s" and excludes only the connected object', async serial => {
 		const devices = [rtl(serial), rtl(serial)];
 		vi.stubGlobal('navigator', { usb: { getDevices: async () => devices } });

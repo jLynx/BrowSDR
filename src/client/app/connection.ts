@@ -209,7 +209,8 @@ export const connectionMethods = {
 				this.gainNode = null;
 			}
 			this._releaseWakeLock();
-			if ('mediaSession' in navigator) {
+			if (this.workspace) this.workspace.updateMediaSession();
+			else if ('mediaSession' in navigator) {
 				navigator.mediaSession.playbackState = 'paused';
 				navigator.mediaSession.setActionHandler('play', null);
 				navigator.mediaSession.setActionHandler('pause', null);
@@ -317,7 +318,8 @@ export const connectionMethods = {
 		}, 500);
 
 		await this._acquireWakeLock();
-		if ('mediaSession' in navigator) {
+		if (this.workspace) this.workspace.updateMediaSession();
+		else if ('mediaSession' in navigator) {
 			navigator.mediaSession.metadata = new MediaMetadata({
 				title: 'BrowSDR',
 				artist: 'Receiving',
