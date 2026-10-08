@@ -2,6 +2,7 @@ node_modules/
 dist/
 storybook-static/
 coverage/
+test-results/
 .wrangler/
 public/
 hackrf-web/

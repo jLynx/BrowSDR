@@ -8,13 +8,14 @@ vi.mock('@/worker/runtime/wasm-init', () => ({
 }));
 
 import { startRxStream } from '@/worker/streams/rx-stream';
+import { makePerformanceVfos } from '../fixtures/multi-vfo';
 
 afterEach(() => {
 	vi.useRealTimers();
 	vi.unstubAllGlobals();
 });
 
-async function createStream(rdsCallback = null, dsdStatusCallback = null, rtl433Callback = null) {
+async function createStream(rdsCallback = null, dsdStatusCallback = null, rtl433Callback = null, spectrumCallback = null) {
 	vi.useFakeTimers();
 	const workers = [];
 	vi.stubGlobal(
@@ -50,7 +51,7 @@ async function createStream(rdsCallback = null, dsdStatusCallback = null, rtl433
 	await startRxStream(
 		backend,
 		{ centerFreq: 95, sampleRate: 61440000, fftSize: 65536 },
-		null,
+		spectrumCallback,
 		null,
 		null,
 		null,
@@ -69,6 +70,47 @@ async function createStream(rdsCallback = null, dsdStatusCallback = null, rtl433
 }
 
 describe('shared VFO worker routing', () => {
+	it('keeps the supplied 27 VFOs on 13 narrow bands and bounds spectrum delivery at USB rates', async () => {
+		const spectrum = vi.fn();
+		const { backend, workers, receive } = await createStream(null, null, null, spectrum);
+		const defaults = backend.vfoParams[0];
+		backend._centerFreq = 439;
+		backend.setSpectrumFps(60);
+		backend.vfoParams = makePerformanceVfos().map((vfo) => ({ ...defaults, ...vfo }));
+		for (let index = 3; index < 27; index++) {
+			backend.vfoStates.push(backend._makeVfoState());
+			backend.dspWorkers.push(backend._spawnWorker(index, backend.vfoParams[index]));
+		}
+		for (let chunk = 0; chunk < 1000; chunk++) {
+			vi.advanceTimersByTime(1);
+			receive();
+			const channelWorker = workers.at(-1);
+			const request = channelWorker.messages.at(-1);
+			expect(request.type).toBe('channelize');
+			expect(request.centers).toHaveLength(13);
+			channelWorker.onmessage({
+				data: {
+					type: 'bands',
+					key: request.key,
+					chunkId: request.chunkId,
+					inputSamples: request.inputSamples,
+					dspTime: 1,
+					bands: request.centers.map((centerBin) => ({ centerBin, buffer: new ArrayBuffer(128), length: 32 })),
+				},
+			});
+		}
+		expect(workers).toHaveLength(28);
+		for (const [index, worker] of backend.dspWorkers.entries()) {
+			const requests = worker.messages.filter((message) => message.type === 'process');
+			expect(requests).toHaveLength(1000);
+			expect(requests.at(-1)).toMatchObject({ floatIq: true, sampleRate: 1920000, params: { freq: backend.vfoParams[index].freq } });
+		}
+		expect(backend._sharedChannelStats).toEqual({ bands: 13, vfos: 27, sampleRate: 1920000 });
+		expect(backend._perf.droppedChunks).toBe(0);
+		expect(spectrum.mock.calls.length).toBeGreaterThan(50);
+		expect(spectrum.mock.calls.length).toBeLessThanOrEqual(60);
+		backend._disposeChannelization();
+	});
 	it.each([false, true])('feeds muted sensor VFOs through shared DSP %s', async (shared) => {
 		const received = vi.fn();
 		const { backend, workers, receive } = await createStream(null, null, received);

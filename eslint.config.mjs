@@ -12,6 +12,7 @@ export default defineConfig(
 		'**/dist/**',
 		'storybook-static/**',
 		'coverage/**',
+		'test-results/**',
 		'.wrangler/**',
 		'.cache/**',
 		'.codex/**',

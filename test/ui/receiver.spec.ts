@@ -1,45 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, type VueWrapper } from '@vue/test-utils';
-import { defineComponent } from 'vue';
-import template from '@/app/templates/receiver';
+import { nextTick, type ComponentPublicInstance } from 'vue';
+import { makeDefaultVfo } from '@/app/core/constants';
+import VfoPanel from '@/app/radio/vfo-panel';
 import * as components from '@/ui';
-import { createAppData } from '@/app/core/state';
-import { computedProperties } from '@/app/core/computed';
-import { uiHelperMethods } from '@/app/core/ui-helpers';
-import { autoGainMethods } from '@/app/radio/auto-gain';
-import { rdsMethods } from '@/app/decoders/rds';
-import { rtl433Methods } from '@/app/decoders/rtl433';
-import { bookmarkMethods } from '@/app/workspace/bookmarks';
-import { zoomMethods } from '@/app/display/zoom';
-import { audioMethods } from '@/app/audio/audio';
-import { whisperMethods } from '@/app/decoders/whisper';
-import { pocsagMethods } from '@/app/decoders/pocsag';
-import { vfoMethods } from '@/app/radio/vfo';
-import { connectionMethods } from '@/app/radio/connection';
-import { remoteMethods } from '@/app/workspace/remote';
+import { ReceiverView } from './helpers/receiver-view';
 
 let wrapper: VueWrapper;
-const ReceiverView = defineComponent({
-	template,
-	components,
-	data: () => ({ ...createAppData(), receiverId: 'test-receiver', workspace: null }),
-	computed: computedProperties,
-	methods: {
-		...uiHelperMethods,
-		...autoGainMethods,
-		...rdsMethods,
-		...rtl433Methods,
-		...bookmarkMethods,
-		...zoomMethods,
-		...audioMethods,
-		...whisperMethods,
-		...pocsagMethods,
-		...vfoMethods,
-		...connectionMethods,
-		...remoteMethods,
-		isFreqInBandwidth: () => true,
-	},
-});
+
 afterEach(() => {
 	wrapper?.unmount();
 	vi.unstubAllGlobals();
@@ -47,6 +15,66 @@ afterEach(() => {
 });
 
 describe('receiver uses the shared UI', () => {
+	it('preserves paired USB device identity through the reactive picker', async () => {
+		const device = { vendorId: 0x04b4, productId: 0x00f1, productName: 'LimeSDR', serialNumber: 'test' } as USBDevice;
+		vi.stubGlobal('isSecureContext', true);
+		vi.stubGlobal('navigator', { usb: { getDevices: vi.fn().mockResolvedValue([device]), requestDevice: vi.fn() } });
+		wrapper = mount(ReceiverView);
+		await wrapper.setData({ backend: {} });
+		vi.spyOn(wrapper.vm, '_initAudioCtx').mockImplementation(() => {});
+		await wrapper.vm.connect();
+		expect(wrapper.vm.devicePicker.devices[0].device).toBe(device);
+		const connectDevice = vi.fn();
+		await wrapper.setData({ workspace: { connectDevice } });
+		await wrapper.get('.device-picker-item').trigger('click');
+		expect(connectDevice).toHaveBeenCalledWith(wrapper.vm, device);
+	});
+	it('updates only the affected VFO panel for decoder telemetry and no panels for receiver stats', async () => {
+		const updates: number[] = [];
+		wrapper = mount(ReceiverView, {
+			global: {
+				mixins: [
+					{
+						updated(this: ComponentPublicInstance) {
+							if (this.$options.name === 'VfoPanel') updates.push((this.$props as { i: number }).i);
+						},
+					},
+				],
+			},
+		});
+		await wrapper.setData({ vfos: Array.from({ length: 27 }, (_, i) => ({ ...makeDefaultVfo(414 + i), mode: 'dsd', enabled: true })) });
+		const panels = wrapper.findAllComponents(VfoPanel);
+		updates.length = 0;
+		wrapper.vm.dsdStatus[7] = { synced: true, mode: 'dmr', syncCount: 42, voiceFrameCount: 12, mbelibLoaded: true };
+		await nextTick();
+		expect(panels[7].text()).toContain('DMR · 42 bursts');
+		expect(updates).toEqual([7]);
+		updates.length = 0;
+		await wrapper.setData({ showStats: true, dspStats: { inputRate: 61440000 }, fps: 60 });
+		expect(updates).toEqual([]);
+	});
+	it('keeps VFO controls and telemetry attached to their current index after removal', async () => {
+		wrapper = mount(ReceiverView);
+		await wrapper.setData({
+			connected: true,
+			running: true,
+			vfos: [
+				{ ...makeDefaultVfo(414), mode: 'dsd', enabled: true },
+				{ ...makeDefaultVfo(455), mode: 'dsd', enabled: true },
+			],
+		});
+		let panels = wrapper.findAllComponents(VfoPanel);
+		await panels[1].get('input[aria-label="Bandwidth"]').setValue('15000');
+		expect(wrapper.vm.vfos[1].bandwidth).toBe(15000);
+		expect(wrapper.vm.vfos[0].bandwidth).toBe(150000);
+		wrapper.vm.vfos.splice(0, 1);
+		wrapper.vm.dsdStatus = [{ synced: true, mode: 'dmr', syncCount: 9 }];
+		await nextTick();
+		panels = wrapper.findAllComponents(VfoPanel);
+		expect(panels).toHaveLength(1);
+		expect(panels[0].text()).toContain('DMR · 9 bursts');
+		expect(panels[0].get('input[aria-label="Bandwidth"]').element).toHaveProperty('value', '15000');
+	});
 	it('shows USB guidance only when Add SDR is opened, with pairing disabled and Mock SDR available', async () => {
 		vi.stubGlobal('isSecureContext', true);
 		wrapper = mount(ReceiverView, { attachTo: document.body });

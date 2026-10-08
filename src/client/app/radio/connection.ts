@@ -1,3 +1,4 @@
+import { markRaw } from 'vue';
 import type { PairedSdr } from './types';
 import { errorMessage, errorName } from '@/platform/errors';
 import type { AppInstance } from '@/app/core/receiver.types';
@@ -30,7 +31,7 @@ export const connectionMethods = {
 			const driver = lookupDevice(device);
 			if (driver && !this.workspace?.isDeviceConnected(device)) {
 				sdrDevices.push({
-					device,
+					device: markRaw(device),
 					driverName: driver.name,
 					productName: device.productName || '',
 					deviceNumber: allPaired.indexOf(device) + 1,

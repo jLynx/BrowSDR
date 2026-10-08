@@ -3,6 +3,7 @@ import type { AppInstance } from '@/app/core/receiver.types';
 import type { Backend as BackendInstance } from '@/worker/runtime/backend';
 import { createApp, markRaw } from 'vue';
 import receiverTemplate from './templates/receiver';
+import VfoPanel from './radio/vfo-panel';
 import { createWorkspace } from './workspace/workspace';
 import * as Comlink from 'comlink';
 import { createAppData } from './core/state';
@@ -35,7 +36,10 @@ if ('serviceWorker' in navigator) {
 
 const Receiver = {
 	template: receiverTemplate,
-	components: uiComponents,
+	components: { ...uiComponents, VfoPanel },
+	provide(this: AppInstance) {
+		return { receiver: this };
+	},
 	props: ['receiverId', 'settingsKey', 'workspace'],
 	data(this: AppInstance) {
 		return { ...createAppData(), bookmarks: this.workspace?.bookmarks ?? [] };

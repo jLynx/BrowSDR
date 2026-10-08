@@ -14,6 +14,7 @@
 		"start": "vite",
 		"test": "vitest",
 		"test:ui": "vitest run --config vitest.ui.config.ts",
+		"test:performance": "vitest run test/ui/vfo-performance.spec.ts test/streams/shared-vfo-stream.spec.js",
 		"test:storybook": "vitest run --config vitest.storybook.config.ts",
 		"storybook": "storybook dev -p 6006 --disable-telemetry",
 		"build:storybook": "storybook build --disable-telemetry",

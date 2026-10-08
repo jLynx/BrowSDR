@@ -23,7 +23,7 @@ npm run test:storybook # requires Playwright Chromium or PLAYWRIGHT_CHANNEL=chro
 npm run build:storybook
 ```
 
-Use `npm run lint:fix` for safe lint fixes and `npm run format` for formatting. CI runs the checks on pushes and pull requests to master. Node 22.13+ or 24+ is required by the current ESLint release; CI uses Node 22.
+Use `npm run lint:fix` for safe lint fixes and `npm run format` for formatting. CI runs the checks on pushes and pull requests to main or master. Node 22.13+ or 24+ is required by the current ESLint release; CI uses Node 22.
 
 ## Lint enforcement
 
@@ -72,7 +72,7 @@ test/                         matching feature groups plus server/ and ui/
 
 `npm run check:structure` enforces at most 14 direct files in each source, test, and script folder. Generated and vendored directories are outside this policy. Prefer descriptive feature groups with a few cohesive files over a new folder for every file. Import concrete modules directly; `ui/index.ts` remains the public component registry.
 
-`app/templates/receiver.ts` concatenates the raw HTML partials before Vue compiles them. They share the receiver scope, including refs and slots. Preserve ordering and element boundaries; these are partials rather than standalone components. `style.css` imports the feature styles in their original cascade order. Worker URL construction and the Vite post-build entry paths must be updated together whenever workers move.
+`app/templates/receiver.ts` concatenates the raw HTML partials before Vue compiles them. They share the receiver scope, including refs and slots. Preserve ordering and element boundaries; these are partials rather than standalone components. VFO controls are isolated in `app/radio/vfo-panel.ts`, using `app/templates/vfo-panel.html`, so decoder telemetry does not rerender the receiver or unrelated VFOs. `style.css` imports the feature styles in their original cascade order. Worker URL construction and the Vite post-build entry paths must be updated together whenever workers move.
 
 Receiver instances, worker messages, and external data boundaries now have explicit contracts. Future template migration should preserve their props, events, and refs.
 
