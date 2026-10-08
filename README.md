@@ -12,34 +12,34 @@ A blazing fast, next-generation browser-based Software Defined Radio (SDR) recei
 
 Enjoy the power of a desktop SDR platform fully within your web browser.
 
-* **🎯 Multi-VFO Mastery**
+- **🎯 Multi-VFO Mastery**
   Tune into multiple frequencies simultaneously! Create an unlimited number of Virtual Frequency Oscillators (VFOs), each with independent demodulation, volume, squelch, and DSP settings. Listen to multiple broadcasts without dropping a single packet.
-* **⚡ High-Speed Rust & WASM Architecture**
+- **⚡ High-Speed Rust & WASM Architecture**
   Built for raw performance. FFT and DSP pipelines are written in **Rust** and compiled to **WebAssembly (WASM)**. Running inside Web Workers off the main thread ensures a crystal-clear, smooth UI and buttery 60 FPS performance, even with multiple active VFOs.
-* **🎙️ Live Transcribe**
+- **🎙️ Live Transcribe**
   Built-in AI-powered live transcription of demodulated audio right in your browser.
-* **📟 POCSAG Decoder**
+- **📟 POCSAG Decoder**
   Instantly decode paging networks straight from the UI.
-* **🌡️ rtl_433 Sensor Decoder**
+- **🌡️ rtl_433 Sensor Decoder**
   Live browser-side OOK/FSK decoding for supported weather sensors, remotes, TPMS,
   and other ISM devices. See
   [the decoder build and reception guide](rtl433-wasm/README.md).
-* **📊 Frequency Activity**
+- **📊 Frequency Activity**
   Visually spot active signals and quickly jump to transmissions using the dynamic frequency activity scanner and interactive waterfall display.
-* **🔖 Advanced Bookmarking System**
+- **🔖 Advanced Bookmarking System**
   Save, organize, and quickly recall your favorite frequencies. Group your bookmarks into custom categories to effortlessly manage airbands, ham frequencies, repeaters, or emergency services.
-* **🌊 Real-time WebGL Waterfall & Spectrum**
+- **🌊 Real-time WebGL Waterfall & Spectrum**
   Monitor the entire RF band visually with an ultra-responsive, GPU-accelerated waterfall and spectrum analyzer.
   Waterfall scrolling and spectrum smoothing are time-based: higher FPS makes animation smoother without speeding up the history. The 512-row waterfall retains approximately 25.6 seconds of continuous reception at every target.
-* **📻 Wide Demodulation Support**
+- **📻 Wide Demodulation Support**
   Supports WFM, NFM, AM, USB, LSB, DSB, CW, and raw IQ modes.
-* **📡 RDS Decoding on the Fly**
+- **📡 RDS Decoding on the Fly**
   Instantly decode station name, programme type, and radiotext on WFM signals.
-* **🎛️ Full DSP Toolset**
+- **🎛️ Full DSP Toolset**
   Control squelch, noise reduction, de-emphasis, and stereo output per VFO.
-* **🌐 Remote Access**
+- **🌐 Remote Access**
   Share all connected SDRs with others through one WebRTC link using PeerJS. Each remote user has independent VFOs on every receiver.
-* **📡 Multiple SDRs at Once**
+- **📡 Multiple SDRs at Once**
   Connect any number of compatible SDRs, including mixed device families. Each receiver has independent tuning, sample rate, gains, waterfall, and VFOs. Switch receiver tabs while audio from all enabled VFOs continues playing.
   Device settings stay in separate saved slots when USB serial numbers collide. WebUSB cannot distinguish identical devices across reloads if their enumeration order changes; assign unique serial numbers when possible for reliable physical-device matching.
 
@@ -54,7 +54,7 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
 5. **Vue 3** — A sleek, reactive UI powering complex per-VFO controls.
 6. **Cloudflare Workers** — Fast edge-deployed static assets and API proxy.
 
-*(Note: WebUSB requires a secure context — HTTPS or `localhost`)*
+_(Note: WebUSB requires a secure context — HTTPS or `localhost`)_
 
 ---
 
@@ -62,13 +62,13 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
 
 BrowSDR includes receive drivers for the following device families. Driver availability does not mean every model, firmware version, or feature has been hardware-tested.
 
-| Device family | Models / variants | Notes |
-|---------------|-------------------|-------|
-| **HackRF** | HackRF One, HackRF Pro | Uses the HackRF WebUSB driver; compatible devices using the same protocol and recognized USB IDs may also work. |
-| **RTL-SDR** | RTL-SDR Blog V3 and V4, compatible Nooelec and generic RTL2832U dongles | Supports R820T, R820T2, R828D, E4000, FC0012, FC0013, and FC2580 tuners. Includes Blog V4-specific tuner configuration. Compatibility depends on the tuner and recognized USB ID, not just the brand. |
-| **Airspy** | Airspy One, R2, Mini | Includes an Airspy receive driver with device-reported sample rates. |
-| **Airspy HF+** | Airspy HF+ family | Includes a separate HF+ receive driver; individual variants still require hardware verification. |
-| **LimeSDR** | LimeSDR-USB | Uses the LimeSDR WebUSB receive driver with gain and antenna controls. See the Windows setup below. |
+| Device family  | Models / variants                                                       | Notes                                                                                                                                                                                                 |
+| -------------- | ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **HackRF**     | HackRF One, HackRF Pro                                                  | Uses the HackRF WebUSB driver; compatible devices using the same protocol and recognized USB IDs may also work.                                                                                       |
+| **RTL-SDR**    | RTL-SDR Blog V3 and V4, compatible Nooelec and generic RTL2832U dongles | Supports R820T, R820T2, R828D, E4000, FC0012, FC0013, and FC2580 tuners. Includes Blog V4-specific tuner configuration. Compatibility depends on the tuner and recognized USB ID, not just the brand. |
+| **Airspy**     | Airspy One, R2, Mini                                                    | Includes an Airspy receive driver with device-reported sample rates.                                                                                                                                  |
+| **Airspy HF+** | Airspy HF+ family                                                       | Includes a separate HF+ receive driver; individual variants still require hardware verification.                                                                                                      |
+| **LimeSDR**    | LimeSDR-USB                                                             | Uses the LimeSDR WebUSB receive driver with gain and antenna controls. See the Windows setup below.                                                                                                   |
 
 Use a WebUSB-capable browser such as Chrome or Edge, over HTTPS or `localhost`. On Windows, the SDR's USB interface may need **WinUSB** instead of a vendor or DVB-T driver. Close other applications using the device before connecting.
 
@@ -76,27 +76,27 @@ Use a WebUSB-capable browser such as Chrome or Edge, over HTTPS or `localhost`. 
 
 ## 🧰 Tech Stack
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | TypeScript, Vue 3 (Options API), Vite |
-| UI catalog | Storybook, shared Vue UI components |
-| DSP | Rust, RustFFT, WebAssembly, Web Workers |
-| Deployment | Cloudflare Workers (Wrangler) |
-| Testing | Vitest, wasm-bindgen-test, cargo test |
+| Layer      | Technology                                                 |
+| ---------- | ---------------------------------------------------------- |
+| Frontend   | TypeScript, Vue 3 (Options API), Vite                      |
+| UI catalog | Storybook, shared Vue UI components                        |
+| DSP        | Rust, RustFFT, WebAssembly, Web Workers                    |
+| Deployment | Cloudflare Workers (Wrangler)                              |
+| Testing    | Vitest, wasm-bindgen-test, cargo test                      |
 | UI testing | Vue Test Utils, jsdom, Storybook browser interaction tests |
 
 ---
 
 ## 🛠️ Prerequisites
 
-| Tool | Purpose | Install |
-|------|---------|---------|
-| [Node.js](https://nodejs.org/) | Build & dev server | Download from website |
-| [Rust](https://rustup.rs/) | Compile WASM module | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
-| `wasm32-unknown-unknown` target | Rust → WASM | `rustup target add wasm32-unknown-unknown` |
-| [wasm-pack](https://rustwasm.github.io/wasm-pack/) | Build & package WASM | `cargo install wasm-pack` |
-| [cargo-make](https://github.com/sagiegurari/cargo-make) | Task runner for Rust builds | `cargo install --force cargo-make` |
-| A WebUSB-capable browser | Run the app (e.g., Google Chrome) | — |
+| Tool                                                    | Purpose                           | Install                                                           |
+| ------------------------------------------------------- | --------------------------------- | ----------------------------------------------------------------- |
+| [Node.js](https://nodejs.org/)                          | Build & dev server                | Download from website                                             |
+| [Rust](https://rustup.rs/)                              | Compile WASM module               | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+| `wasm32-unknown-unknown` target                         | Rust → WASM                       | `rustup target add wasm32-unknown-unknown`                        |
+| [wasm-pack](https://rustwasm.github.io/wasm-pack/)      | Build & package WASM              | `cargo install wasm-pack`                                         |
+| [cargo-make](https://github.com/sagiegurari/cargo-make) | Task runner for Rust builds       | `cargo install --force cargo-make`                                |
+| A WebUSB-capable browser                                | Run the app (e.g., Google Chrome) | —                                                                 |
 
 ---
 
@@ -168,14 +168,14 @@ may not be detected. Reduce bandwidth or try manual gains if reception suffers.
 
 ## 💻 Build Commands
 
-| Command | Description |
-|---------|-------------|
-| `npm run dev` | Start Vite dev server (http://localhost:5173) |
-| `npm run build` | Build client assets into `dist/` |
+| Command                | Description                                                                   |
+| ---------------------- | ----------------------------------------------------------------------------- |
+| `npm run dev`          | Start Vite dev server (http://localhost:5173)                                 |
+| `npm run build`        | Build client assets into `dist/`                                              |
 | `npm run build:mbelib` | Rebuild the DSD voice codec (requires Emscripten; optional for normal builds) |
-| `npm run deploy` | Build and deploy to Cloudflare Workers |
-| `npm run typecheck` | Run TypeScript type checking |
-| `npm run test` | Run tests with Vitest |
+| `npm run deploy`       | Build and deploy to Cloudflare Workers                                        |
+| `npm run typecheck`    | Run TypeScript type checking                                                  |
+| `npm run test`         | Run tests with Vitest                                                         |
 
 ### Building the WASM Module
 

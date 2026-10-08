@@ -1,3 +1,4 @@
+import { sourceAlias } from './source-alias.mjs';
 import { defineConfig, build, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
@@ -23,7 +24,7 @@ function postBuildPlugin(): Plugin {
 				if (!file.endsWith('.ts') && !file.endsWith('.js')) continue;
 
 				const content = fs.readFileSync(filePath, 'utf-8');
-				if (content.includes("from './") || content.includes("from '../")) {
+				if (content.includes("from './") || content.includes("from '../") || content.includes("from '@/")) {
 					console.log(`[post-build] Bundling nested worker: ${file}`);
 					const jsName = file.replace(/\.ts$/, '.js');
 					renames.set(file, jsName);
@@ -35,7 +36,7 @@ function postBuildPlugin(): Plugin {
 							outDir: assetsDir,
 							emptyOutDir: false,
 							lib: {
-								entry: path.resolve(__dirname, 'src/client/dsp-worker.ts'),
+								entry: path.resolve(__dirname, 'src/client/worker/dsp-worker.ts'),
 								formats: ['es'],
 								fileName: () => jsName,
 							},
@@ -46,6 +47,7 @@ function postBuildPlugin(): Plugin {
 						},
 						resolve: {
 							alias: {
+								...sourceAlias,
 								'/hackrf-web/pkg': path.resolve(__dirname, 'hackrf-web/pkg'),
 							},
 						},
@@ -69,40 +71,14 @@ function postBuildPlugin(): Plugin {
 			}
 
 			// --- Update all .ts → .js references in output files ---
-			if (renames.size > 0) {
-				for (const file of fs.readdirSync(assetsDir)) {
-					if (!file.endsWith('.js')) continue;
-					const filePath = path.join(assetsDir, file);
-					let content = fs.readFileSync(filePath, 'utf-8');
-					let changed = false;
-					for (const [oldName, newName] of renames) {
-						if (content.includes(oldName)) {
-							content = content.replaceAll(oldName, newName);
-							changed = true;
-						}
-					}
-					if (changed) fs.writeFileSync(filePath, content);
-				}
-
-				const htmlPath = path.join(distDir, 'index.html');
-				if (fs.existsSync(htmlPath)) {
-					let html = fs.readFileSync(htmlPath, 'utf-8');
-					let changed = false;
-					for (const [oldName, newName] of renames) {
-						if (html.includes(oldName)) {
-							html = html.replaceAll(oldName, newName);
-							changed = true;
-						}
-					}
-					if (changed) fs.writeFileSync(htmlPath, html);
-				}
-			}
+			updateBuiltReferences(renames, assetsDir, distDir);
 
 			// --- Bundle whisper-worker (loaded via plain URL, not Vite worker syntax) ---
-			const whisperEntry = path.resolve(__dirname, 'src/client/whisper-worker.ts');
+			const whisperEntry = path.resolve(__dirname, 'src/client/transcription/whisper-worker.ts');
 			if (fs.existsSync(whisperEntry)) {
 				console.log('[post-build] Bundling whisper-worker');
 				await build({
+					resolve: { alias: sourceAlias },
 					configFile: false,
 					root: path.resolve(__dirname, 'src/client'),
 					build: {
@@ -115,7 +91,7 @@ function postBuildPlugin(): Plugin {
 						},
 						rollupOptions: {
 							external: [
-								/^https?:\/\//,  // CDN imports stay external
+								/^https?:\/\//, // CDN imports stay external
 							],
 						},
 						minify: true,
@@ -125,34 +101,7 @@ function postBuildPlugin(): Plugin {
 			}
 
 			// --- Copy WASM files ---
-			const wasmSrc = path.resolve(__dirname, 'hackrf-web/pkg');
-			const wasmDest = path.resolve(distDir, 'hackrf-web/pkg');
-			if (fs.existsSync(wasmSrc)) {
-				fs.mkdirSync(wasmDest, { recursive: true });
-				for (const file of fs.readdirSync(wasmSrc)) {
-					fs.copyFileSync(path.join(wasmSrc, file), path.join(wasmDest, file));
-				}
-			}
-
-			// --- Copy mbelib WASM files ---
-			const rtl433Src = path.resolve(__dirname, 'public/lib/rtl433');
-			for (const file of ['rtl433.js', 'rtl433.wasm', 'COPYING', 'NOTICE']) {
-				if (!fs.existsSync(path.join(rtl433Src, file))) {
-					throw new Error(`Missing rtl_433 asset: ${file}. Restore public/lib/rtl433 or run npm run build:rtl433.`);
-				}
-			}
-			fs.cpSync(rtl433Src, path.resolve(distDir, 'lib/rtl433'), { recursive: true });
-			const mbelibSrc = path.resolve(__dirname, 'public/lib/mbelib');
-			const mbelibDest = path.resolve(distDir, 'lib/mbelib');
-			for (const file of ['mbelib.js', 'mbelib.wasm', 'COPYRIGHT', 'NOTICE']) {
-				if (!fs.existsSync(path.join(mbelibSrc, file))) {
-					throw new Error(`Missing mbelib asset: ${file}. Restore the committed public/lib/mbelib files or run npm run build:mbelib with Emscripten installed.`);
-				}
-			}
-			fs.mkdirSync(mbelibDest, { recursive: true });
-			for (const file of fs.readdirSync(mbelibSrc)) {
-				fs.copyFileSync(path.join(mbelibSrc, file), path.join(mbelibDest, file));
-			}
+			copyDecoderAssets(distDir);
 		},
 	};
 }
@@ -163,19 +112,13 @@ export default defineConfig({
 		outDir: path.resolve(__dirname, 'dist'),
 		emptyOutDir: true,
 		rollupOptions: {
-			external: [
-				/\/hackrf-web\/pkg\//,
-				/\/lib\/mbelib\//,
-			],
+			external: [/\/hackrf-web\/pkg\//, /\/lib\/mbelib\//],
 		},
 	},
 	worker: {
 		format: 'es',
 		rollupOptions: {
-			external: [
-				/\/hackrf-web\/pkg\//,
-				/\/lib\/mbelib\//,
-			],
+			external: [/\/hackrf-web\/pkg\//, /\/lib\/mbelib\//],
 		},
 	},
 	plugins: [
@@ -224,7 +167,8 @@ export default defineConfig({
 	},
 	resolve: {
 		alias: {
-			'vue': 'vue/dist/vue.esm-bundler.js',
+			...sourceAlias,
+			vue: 'vue/dist/vue.esm-bundler.js',
 			'/hackrf-web/pkg': path.resolve(__dirname, 'hackrf-web/pkg'),
 		},
 	},
@@ -235,3 +179,67 @@ export default defineConfig({
 		},
 	},
 });
+
+function copyDecoderAssets(distDir: string) {
+	const wasmSrc = path.resolve(__dirname, 'hackrf-web/pkg');
+	const wasmDest = path.resolve(distDir, 'hackrf-web/pkg');
+	if (fs.existsSync(wasmSrc)) {
+		fs.mkdirSync(wasmDest, { recursive: true });
+		for (const file of fs.readdirSync(wasmSrc)) {
+			fs.copyFileSync(path.join(wasmSrc, file), path.join(wasmDest, file));
+		}
+	}
+
+	// --- Copy mbelib WASM files ---
+	const rtl433Src = path.resolve(__dirname, 'public/lib/rtl433');
+	for (const file of ['rtl433.js', 'rtl433.wasm', 'COPYING', 'NOTICE']) {
+		if (!fs.existsSync(path.join(rtl433Src, file))) {
+			throw new Error(`Missing rtl_433 asset: ${file}. Restore public/lib/rtl433 or run npm run build:rtl433.`);
+		}
+	}
+	fs.cpSync(rtl433Src, path.resolve(distDir, 'lib/rtl433'), { recursive: true });
+	const mbelibSrc = path.resolve(__dirname, 'public/lib/mbelib');
+	const mbelibDest = path.resolve(distDir, 'lib/mbelib');
+	for (const file of ['mbelib.js', 'mbelib.wasm', 'COPYRIGHT', 'NOTICE']) {
+		if (!fs.existsSync(path.join(mbelibSrc, file))) {
+			throw new Error(
+				`Missing mbelib asset: ${file}. Restore the committed public/lib/mbelib files or run npm run build:mbelib with Emscripten installed.`,
+			);
+		}
+	}
+	fs.mkdirSync(mbelibDest, { recursive: true });
+	for (const file of fs.readdirSync(mbelibSrc)) {
+		fs.copyFileSync(path.join(mbelibSrc, file), path.join(mbelibDest, file));
+	}
+}
+
+function updateBuiltReferences(renames: Map<string, string>, assetsDir: string, distDir: string) {
+	if (renames.size > 0) {
+		for (const file of fs.readdirSync(assetsDir)) {
+			if (!file.endsWith('.js')) continue;
+			const filePath = path.join(assetsDir, file);
+			let content = fs.readFileSync(filePath, 'utf-8');
+			let changed = false;
+			for (const [oldName, newName] of renames) {
+				if (content.includes(oldName)) {
+					content = content.replaceAll(oldName, newName);
+					changed = true;
+				}
+			}
+			if (changed) fs.writeFileSync(filePath, content);
+		}
+
+		const htmlPath = path.join(distDir, 'index.html');
+		if (fs.existsSync(htmlPath)) {
+			let html = fs.readFileSync(htmlPath, 'utf-8');
+			let changed = false;
+			for (const [oldName, newName] of renames) {
+				if (html.includes(oldName)) {
+					html = html.replaceAll(oldName, newName);
+					changed = true;
+				}
+			}
+			if (changed) fs.writeFileSync(htmlPath, html);
+		}
+	}
+}

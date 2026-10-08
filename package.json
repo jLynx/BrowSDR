@@ -14,11 +14,17 @@
 		"start": "vite",
 		"test": "vitest",
 		"test:ui": "vitest run --config vitest.ui.config.ts",
-		"test:performance": "vitest run --config vitest.ui.config.ts test/ui/vfo-performance.spec.ts",
+		"test:performance": "vitest run test/ui/vfo-performance.spec.ts test/streams/shared-vfo-stream.spec.js",
 		"test:storybook": "vitest run --config vitest.storybook.config.ts",
 		"storybook": "storybook dev -p 6006 --disable-telemetry",
 		"build:storybook": "storybook build --disable-telemetry",
-		"typecheck": "tsc --noEmit"
+		"typecheck": "tsc --noEmit",
+		"lint": "eslint . --max-warnings 0",
+		"lint:fix": "eslint . --fix --max-warnings 0",
+		"format": "prettier . --write",
+		"format:check": "prettier . --check",
+		"check:structure": "node scripts/check-structure.mjs",
+		"check": "npm run lint && npm run format:check && npm run check:structure && npm run typecheck"
 	},
 	"dependencies": {
 		"comlink": "^4.4.2",
@@ -27,19 +33,30 @@
 	},
 	"devDependencies": {
 		"@cloudflare/vitest-pool-workers": "^0.12.4",
+		"@eslint/js": "^10.0.1",
 		"@storybook/addon-docs": "^10.6.1",
 		"@storybook/addon-vitest": "^10.6.1",
 		"@storybook/vue3-vite": "^10.6.1",
 		"@types/jsdom": "^21.1.7",
+		"@types/node": "^22.20.5",
 		"@vitest/browser": "^3.2.7",
 		"@vue/test-utils": "^2.5.1",
+		"eslint": "^10.12.0",
+		"eslint-config-prettier": "^10.1.8",
+		"eslint-plugin-vue": "^10.11.1",
+		"globals": "^17.13.0",
 		"jsdom": "^26.1.0",
 		"playwright": "^1.58.2",
+		"prettier": "^3.9.9",
 		"storybook": "^10.6.1",
 		"typescript": "^5.9.3",
+		"typescript-eslint": "^8.71.1",
 		"vite": "^6.4.1",
 		"vite-plugin-pwa": "^1.2.0",
 		"vitest": "~3.2.7",
 		"wrangler": "^4.69.0"
+	},
+	"engines": {
+		"node": "^22.13.0 || >=24"
 	}
 }

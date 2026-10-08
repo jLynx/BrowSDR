@@ -1,0 +1,18 @@
+node_modules/
+dist/
+storybook-static/
+coverage/
+test-results/
+.wrangler/
+public/
+hackrf-web/
+mbelib-wasm/
+rtl433-wasm/
+package-lock.json
+lint-results.json
+.cache/
+.codex/
+radio-proxy/
+# Raw fragments intentionally share opening/closing tags across files.
+src/client/app/templates/*.html
+AGENTS.md

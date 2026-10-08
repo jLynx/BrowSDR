@@ -4,6 +4,10 @@ This is the shared UI layer for receiver and workspace features. Import from
 `src/client/ui/index.ts` and register components in the Vue Options API
 `components` option. The receiver already registers the full set.
 
+Components and stories are grouped under `controls/`, `layout/`, `feedback/`,
+`dialogs/`, and `indicators/`. Keep related stories alongside their components.
+See the [code quality guide](../../../docs/code-quality.md) for checks and limits.
+
 The existing `src/client/style.css` supplies all component styling, including
 mobile breakpoints. Components render the same native tags, classes, and nesting
 as the original UI. Do not add a second theme or duplicate these styles in
@@ -30,28 +34,28 @@ tests (PowerShell: `$env:PLAYWRIGHT_CHANNEL='msedge'`).
 
 ## Component contracts
 
-| Component | Props / variants | Intended use |
-| --- | --- | --- |
-| `UiButton` | `variant`, `type`, `disabled`, `title`; `click` event | All actions, including toolbar icons, bookmark actions, tabs, and device rows |
-| `UiInput` | `modelValue`, `type`; supports `.number`, `.trim`, `.lazy` | Native text, numeric, search, and range inputs |
-| `UiSelect` | `modelValue`; `.number`; option/optgroup slot | Native selects, including device-generated options |
-| `UiCheckbox` | `v-model`, custom/native `variant`, `trueValue`/`falseValue`, `label`, `disabled`, `inputId`, `inputLabel` | Existing custom checkbox and numeric device switches; `change` fires after model update |
-| `UiRadio` | `v-model`, `value`, `name`, `label`, `disabled` | Existing mode radio; use a receiver-specific group name |
-| `UiFormRow` | `label`, `inputId`; default slot | Form row, with optional associated label; extra classes/styles pass through |
-| `UiInputGroup` | `unit`; default slot | Existing input enclosure with optional unit suffix |
-| `UiSlider` | numeric `v-model`, `min`, `max`, `step`, `disabled`, `compact`, `inputLabel`, `valueText` | Slider with value readout; slot overrides readout formatting |
-| `UiSpinbox` | `v-model`, `step`, optional `min`/`max`, `disabled`, `inputLabel` | Numeric input with minus/plus buttons |
-| `UiPanel` | `v-model:collapsed`, `label`, `disabled`, `outOfBand`, `condensed`, `collapsible` | Standard sidebar panel; `header` slot overrides title; collapse preserves mounted content |
-| `UiPanelHeader` | `collapsed`, `label`, `showChevron`, `collapsible`; `toggle` event | Custom panel structures such as VFO action headers and bookmarks |
-| `UiChevron` | `collapsed`, `size` | Shared collapse indicator |
-| `UiDialog` | `open`, `title`, `variant`, `bodyVariant` (padded/flush), `dismissible`; `close` event | Existing dialog shell; `title`, default body, and `footer` slots |
-| `UiFrequencyDisplay` | string `v-model`, `index`, `color`, `active`, `receiving`, `enabled`, `outOfBand`, `bookmark` | Header frequency display; `select`, `focus`, `apply` events |
-| `UiLock` | `locked`, `host`; `toggle` event | Host-controlled lock indicator; client cannot toggle |
-| `UiBadge` | `variant`; default slot | Decoder states, bookmark types/categories, remote status |
-| `UiSnackbar` | `show`, `message` | Existing toast with a polite live announcement |
-| `UiNotice` | `title`, `message`, `href`, `linkLabel`; default slot | Persistent capability guidance with an optional external help link |
-| `UiToolHeader` | `variant`: transcript, pocsag, activity; `actions` slot | Decoder/tool title and toolbar, including RDS and rtl_433 |
-| `UiEmptyState` | `variant`: bookmark, transcript, pocsag, activity, remote-clients | Existing empty-state treatment |
+| Component            | Props / variants                                                                                           | Intended use                                                                              |
+| -------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| `UiButton`           | `variant`, `type`, `disabled`, `title`; `click` event                                                      | All actions, including toolbar icons, bookmark actions, tabs, and device rows             |
+| `UiInput`            | `modelValue`, `type`; supports `.number`, `.trim`, `.lazy`                                                 | Native text, numeric, search, and range inputs                                            |
+| `UiSelect`           | `modelValue`; `.number`; option/optgroup slot                                                              | Native selects, including device-generated options                                        |
+| `UiCheckbox`         | `v-model`, custom/native `variant`, `trueValue`/`falseValue`, `label`, `disabled`, `inputId`, `inputLabel` | Existing custom checkbox and numeric device switches; `change` fires after model update   |
+| `UiRadio`            | `v-model`, `value`, `name`, `label`, `disabled`                                                            | Existing mode radio; use a receiver-specific group name                                   |
+| `UiFormRow`          | `label`, `inputId`; default slot                                                                           | Form row, with optional associated label; extra classes/styles pass through               |
+| `UiInputGroup`       | `unit`; default slot                                                                                       | Existing input enclosure with optional unit suffix                                        |
+| `UiSlider`           | numeric `v-model`, `min`, `max`, `step`, `disabled`, `compact`, `inputLabel`, `valueText`                  | Slider with value readout; slot overrides readout formatting                              |
+| `UiSpinbox`          | `v-model`, `step`, optional `min`/`max`, `disabled`, `inputLabel`                                          | Numeric input with minus/plus buttons                                                     |
+| `UiPanel`            | `v-model:collapsed`, `label`, `disabled`, `outOfBand`, `condensed`, `collapsible`                          | Standard sidebar panel; `header` slot overrides title; collapse preserves mounted content |
+| `UiPanelHeader`      | `collapsed`, `label`, `showChevron`, `collapsible`; `toggle` event                                         | Custom panel structures such as VFO action headers and bookmarks                          |
+| `UiChevron`          | `collapsed`, `size`                                                                                        | Shared collapse indicator                                                                 |
+| `UiDialog`           | `open`, `title`, `variant`, `bodyVariant` (padded/flush), `dismissible`; `close` event                     | Existing dialog shell; `title`, default body, and `footer` slots                          |
+| `UiFrequencyDisplay` | string `v-model`, `index`, `color`, `active`, `receiving`, `enabled`, `outOfBand`, `bookmark`              | Header frequency display; `select`, `focus`, `apply` events                               |
+| `UiLock`             | `locked`, `host`; `toggle` event                                                                           | Host-controlled lock indicator; client cannot toggle                                      |
+| `UiBadge`            | `variant`; default slot                                                                                    | Decoder states, bookmark types/categories, remote status                                  |
+| `UiSnackbar`         | `show`, `message`                                                                                          | Existing toast with a polite live announcement                                            |
+| `UiNotice`           | `title`, `message`, `href`, `linkLabel`; default slot                                                      | Persistent capability guidance with an optional external help link                        |
+| `UiToolHeader`       | `variant`: transcript, pocsag, activity; `actions` slot                                                    | Decoder/tool title and toolbar, including RDS and rtl_433                                 |
+| `UiEmptyState`       | `variant`: bookmark, transcript, pocsag, activity, remote-clients                                          | Existing empty-state treatment                                                            |
 
 Button variants are declared in `UiButton.ts` and shown together in **UI / Button /
 All Variants**. Dialog and badge variant maps live with their components. Active
@@ -71,12 +75,11 @@ overrides or a dialog variant tied to a single feature.
 
 ```html
 <UiPanel label="Radio" v-model:collapsed="collapsedPanels.radio">
-  <UiFormRow label="Center" :input-id="receiverId + '-center'">
-    <UiInputGroup unit="MHz">
-      <UiInput :id="receiverId + '-center'" type="number"
-        v-model.number="radio.centerFreq" step="0.1" />
-    </UiInputGroup>
-  </UiFormRow>
+	<UiFormRow label="Center" :input-id="receiverId + '-center'">
+		<UiInputGroup unit="MHz">
+			<UiInput :id="receiverId + '-center'" type="number" v-model.number="radio.centerFreq" step="0.1" />
+		</UiInputGroup>
+	</UiFormRow>
 </UiPanel>
 ```
 

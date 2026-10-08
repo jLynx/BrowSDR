@@ -1,0 +1,28 @@
+	<!-- rtl_433 live sensor events -->
+	<section class="pocsag-panel rtl433-panel" v-if="rtl433.panelOpen" aria-label="rtl_433 live events">
+			<UiToolHeader variant="pocsag">rtl_433 Sensors <span class="pocsag-count">{{ rtl433.log.length }} events</span><template #actions>
+				<UiButton variant="transcript" @click="rtl433.showProtocols = !rtl433.showProtocols">{{ rtl433.showProtocols ? 'Events' : 'Protocols' }}</UiButton>
+				<UiButton variant="transcript" @click="clearRtl433">Clear</UiButton>
+				<UiButton variant="transcript" @click="exportRtl433" :disabled="!rtl433.log.length">Export JSONL</UiButton>
+				<UiButton variant="transcript" @click="toggleRtl433Panel" aria-label="Close rtl_433 panel">×</UiButton>
+			</template>
+		</UiToolHeader>
+		<div class="rtl433-receivers">
+				<template v-for="(vfo, i) in vfos" :key="i"><span v-if="vfo.rtl433" :class="{ 'rtl433-error': rtl433.status[i]?.state === 'error' }">VFO {{ i + 1 }} · {{ formatFreq(vfo.freq) }} MHz · {{ rtl433StatusText(i) }}</span></template>
+		</div>
+		<div v-if="rtl433.showProtocols" class="pocsag-body rtl433-protocols">
+			<UiInputGroup class="rtl433-protocol-search">
+				<UiInput aria-label="Search rtl_433 protocols" v-model="rtl433.filter" placeholder="Search protocol number or device…"></UiInput>
+			</UiInputGroup>
+			<UiEmptyState v-if="!rtl433.protocols.length" variant="pocsag">Start a decoder to load the protocol list.</UiEmptyState>
+				<div v-for="protocol in filteredRtl433Protocols()" :key="protocol.id">[{{ protocol.id }}] {{ protocol.name }} <span v-if="protocol.disabled" class="rtl433-hint">(enable by number)</span></div>
+		</div>
+		<div v-else class="pocsag-body" ref="rtl433Body">
+			<UiEmptyState v-if="!rtl433.log.length" variant="pocsag">Enable “Decode rtl_433 sensors” on a VFO and tune to a sensor frequency, such as 433.92 MHz. Waiting for a supported transmission…</UiEmptyState>
+			<article v-for="(entry, i) in rtl433.log" :key="i" class="rtl433-entry" :style="{ borderLeftColor: vfoColor(entry.vfoIndex) }">
+					<div class="rtl433-event-heading"><time>{{ new Date(entry.time).toLocaleTimeString() }}</time><span>VFO {{ entry.vfoIndex + 1 }} · {{ entry.freq }} MHz</span><strong>{{ entry.event.model || 'Device' }}</strong><span v-if="entry.event.id != null">ID {{ entry.event.id }}</span><span v-if="entry.event.protocol">Protocol {{ entry.event.protocol }}</span></div>
+				<div class="rtl433-fields">{{ formatRtl433Event(entry.event) }}</div>
+			</article>
+		</div>
+	</section>
+

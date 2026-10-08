@@ -1,0 +1,24 @@
+	<!-- Device picker dialog -->
+	<UiDialog :open="devicePicker.show" title="Add SDR" @close="devicePicker.show = false" dialog-class="device-picker-dialog" body-variant="flush">
+		<template #title>Add SDR</template>
+		<UiNotice v-if="usbCapabilityIssue" v-bind="usbCapabilityIssue" />
+
+		<div class="device-picker-list">
+			<div v-for="(entry, i) in devicePicker.devices" :key="i"
+				class="device-picker-item" @click="connectToDevice(entry.device)">
+				<div class="device-picker-name">SDR {{ entry.deviceNumber }} · {{ entry.driverName }}</div>
+				<div class="device-picker-meta">{{ entry.productName || 'USB ' + entry.device.vendorId.toString(16) + ':' + entry.device.productId.toString(16) }}</div>
+				<div class="device-picker-meta" v-if="entry.device.serialNumber">Serial: {{ entry.device.serialNumber }}</div>
+			</div>
+			<UiButton variant="device" @click="connectMock">
+				<span class="device-picker-name">Mock SDR</span>
+				<span class="device-picker-meta">Simulated receiver for testing</span>
+			</UiButton>
+		</div>
+
+		<template #footer>
+			<UiButton variant="primary" style="flex: 1;" @click="pairNewDevice" :disabled="!!usbCapabilityIssue" :title="usbCapabilityIssue?.title">Pair New Device</UiButton>
+			<UiButton @click="devicePicker.show = false">Cancel</UiButton>
+		</template>
+	</UiDialog>
+

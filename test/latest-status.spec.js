@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { LatestStatus } from '../src/client/worker/latest-status';
+import { LatestStatus } from '@/worker/runtime/latest-status';
 
 afterEach(() => vi.useRealTimers());
 

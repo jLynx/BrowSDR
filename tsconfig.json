@@ -9,13 +9,25 @@
 		"skipLibCheck": true,
 		"forceConsistentCasingInFileNames": true,
 		"lib": ["ES2022", "DOM", "DOM.Iterable"],
-		"types": ["vite/client"],
+		"types": ["vite/client", "node"],
 		"baseUrl": ".",
 		"paths": {
 			"hackrf-web/*": ["hackrf-web/pkg/*"],
-			"/hackrf-web/pkg/*": ["hackrf-web/pkg/*"]
-		}
+			"/hackrf-web/pkg/*": ["hackrf-web/pkg/*"],
+			"@/*": ["src/client/*"]
+		},
+		"verbatimModuleSyntax": true,
+		"isolatedModules": true,
+		"noImplicitOverride": true
 	},
-	"include": ["src/**/*.ts", "src/**/*.d.ts", "hackrf-web/pkg/*.d.ts", ".storybook/*.ts", "vitest.ui.config.ts", "vitest.storybook.config.ts"],
+	"include": [
+		"src/**/*.ts",
+		"src/**/*.d.ts",
+		"hackrf-web/pkg/*.d.ts",
+		".storybook/*.ts",
+		"vitest.ui.config.ts",
+		"vitest.storybook.config.ts",
+		"vite.config.ts"
+	],
 	"exclude": ["node_modules", "dist"]
 }

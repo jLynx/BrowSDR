@@ -1,13 +1,19 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { mount, type VueWrapper } from '@vue/test-utils';
-import { nextTick } from 'vue';
-import { dsdMethods } from '../../src/client/app/dsd';
-import VfoPanel from '../../src/client/app/vfo-panel';
+import { nextTick, type ComponentPublicInstance } from 'vue';
+import { dsdMethods } from '@/app/decoders/dsd';
+import VfoPanel from '@/app/radio/vfo-panel';
 import { makePerformanceVfos } from '../fixtures/multi-vfo';
 import { ReceiverView } from './helpers/receiver-view';
 
 let wrapper: VueWrapper;
 afterEach(() => wrapper?.unmount());
+
+function panelOwner(component: ComponentPublicInstance): number | undefined {
+	for (let parent: ComponentPublicInstance | null = component; parent; parent = parent.$parent) {
+		if (parent.$options.name === 'VfoPanel') return (parent.$props as { i: number }).i;
+	}
+}
 
 describe('multi-VFO render isolation', () => {
 	for (const collapsed of [false, true]) {
@@ -15,18 +21,27 @@ describe('multi-VFO render isolation', () => {
 			const panelUpdates: number[] = [];
 			const owners: number[] = [];
 			let receiverUpdates = 0;
-			wrapper = mount(ReceiverView, { global: { mixins: [{ updated(this: any) {
-				if (this === wrapper.vm) receiverUpdates++;
-				if (this.$options.name === 'VfoPanel') panelUpdates.push(this.i);
-				// Include nested controls: recreating their slots can cause costly work
-				// even when the enclosing panel's own update count looks reasonable.
-				for (let parent = this; parent; parent = parent.$parent) {
-					if (parent.$options.name === 'VfoPanel') { owners.push(parent.i); break; }
-				}
-			} }] } });
+			wrapper = mount(ReceiverView, {
+				global: {
+					mixins: [
+						{
+							updated(this: ComponentPublicInstance) {
+								if (this === wrapper.vm) receiverUpdates++;
+								if (this.$options.name === 'VfoPanel') panelUpdates.push((this.$props as { i: number }).i);
+								// Include nested controls: recreating their slots can cause costly work
+								// even when the enclosing panel's own update count looks reasonable.
+								const owner = panelOwner(this);
+								if (owner !== undefined) owners.push(owner);
+							},
+						},
+					],
+				},
+			});
 			const vfos = makePerformanceVfos();
 			await wrapper.setData({
-				vfos, connected: true, running: true,
+				vfos,
+				connected: true,
+				running: true,
 				radio: { centerFreq: 439, sampleRate: 61440000 },
 				collapsedPanels: Object.fromEntries(vfos.map((_, i) => [`vfo-${i}`, collapsed])),
 			});
@@ -37,8 +52,12 @@ describe('multi-VFO render isolation', () => {
 				for (let i = 0; i < vfos.length; i++) {
 					owners.length = 0;
 					dsdMethods._onDsdStatus.call(wrapper.vm, i, {
-						synced: true, mode: 'dmr', syncName: 'DMR_BS_VOICE',
-						syncCount: round, voiceFrameCount: round * 6, mbelibLoaded: true,
+						synced: true,
+						mode: 'dmr',
+						syncName: 'DMR_BS_VOICE',
+						syncCount: round,
+						voiceFrameCount: round * 6,
+						mbelibLoaded: true,
 					});
 					// Separate flushes simulate independently arriving worker messages.
 					// A single batched flush would hide the original amplification.
@@ -57,17 +76,26 @@ describe('multi-VFO render isolation', () => {
 
 	it('keeps receiver stats, audio activity, and pointer updates out of VFO controls', async () => {
 		const owners: number[] = [];
-		wrapper = mount(ReceiverView, { global: { mixins: [{ updated(this: any) {
-			for (let parent = this; parent; parent = parent.$parent) {
-				if (parent.$options.name === 'VfoPanel') { owners.push(parent.i); break; }
-			}
-		} }] } });
+		wrapper = mount(ReceiverView, {
+			global: {
+				mixins: [
+					{
+						updated(this: ComponentPublicInstance) {
+							const owner = panelOwner(this);
+							if (owner !== undefined) owners.push(owner);
+						},
+					},
+				],
+			},
+		});
 		await wrapper.setData({ vfos: makePerformanceVfos(), connected: true, running: true, showStats: true });
 		owners.length = 0;
 		for (let frame = 0; frame < 20; frame++) {
 			await wrapper.setData({
-				fps: 60, dspStats: { inputRate: 61440000, usbFps: 930 + frame },
-				hoverFreqText: `${439 + frame / 1000} MHz`, activityNow: frame * 500,
+				fps: 60,
+				dspStats: { inputRate: 61440000, usbFps: 930 + frame },
+				hoverFreqText: `${439 + frame / 1000} MHz`,
+				activityNow: frame * 500,
 				vfoSquelchOpen: Array.from({ length: 27 }, (_, i) => i === frame % 27),
 			});
 		}

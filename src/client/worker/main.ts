@@ -19,7 +19,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 */
 
 import * as Comlink from 'comlink';
-import { Backend } from './backend';
+import { Backend } from './runtime/backend';
 
 if (import.meta.env.DEV) {
 	for (const level of ['log', 'warn', 'error'] as const) {

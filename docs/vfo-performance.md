@@ -18,11 +18,11 @@ Also keep paired `USBDevice` objects raw when adding them to the reactive device
 
 A temporary Vitest/jsdom diagnostic mounted each actual template with all 27 supplied VFOs expanded. It applied 135 DMR status snapshots in round-robin order, awaiting Vue's update flush after each snapshot. Component `updated` hooks counted UI updates. These measure UI flush costs, not browser frame rate or total DSP throughput.
 
-| Template | Mean UI flush | UI component updates for 135 snapshots |
-| --- | ---: | ---: |
-| Working commit | 5.59 ms | 0 (native controls) |
-| Original main | 12.70 ms | 76,545 |
-| Fixed main | 0.55 ms | 1,620 |
+| Template       | Mean UI flush | UI component updates for 135 snapshots |
+| -------------- | ------------: | -------------------------------------: |
+| Working commit |       5.59 ms |                    0 (native controls) |
+| Original main  |      12.70 ms |                                 76,545 |
+| Fixed main     |       0.55 ms |                                  1,620 |
 
 The original main incurred about 2.3× the working commit's UI flush cost. The fix reduced that cost by about 23× and component updates by 98%. Timing varies by machine and run. Permanent tests assert which panels update rather than using timing thresholds.
 
@@ -35,3 +35,15 @@ Live verification used `http://localhost:5173/`, the attached LimeSDR-USB on RX1
 `test/ui/vfo-performance.spec.ts` replays 135 separately flushed DSD status updates across the supplied 27 frequencies, with all panels expanded and again with all panels collapsed. It asserts that each snapshot updates only the affected panel and its descendants, and never updates the receiver. Another test exercises receiver stats, audio activity, and pointer telemetry while asserting that no VFO controls update. The tests use render ownership and counts instead of elapsed-time thresholds, so slow CI machines do not cause false failures. They require no SDR or browser installation.
 
 Run `npm run test:performance` for these checks, or `npm run test:ui` for the full UI suite. The UI workflow runs the performance checks as a separate GitHub Actions job on pushes and pull requests targeting either `main` or `master`.
+
+## Refactor integration (`linting`)
+
+Merged `main` at `7283840` into the refactor based on `f463194`. The isolated panel now lives in `app/radio/vfo-panel.ts`, with markup in `app/templates/vfo-panel.html`. The receiver template assembly mounts it with stable VFO and index props. The paired USB handles still use `markRaw`. Tests mount the refactored template assembly and import the moved modules.
+
+The DSD front-end and stream, shared-band planner, and polyphase resampler retain their previous runtime behavior. Status coalescing, audio batching, shared-channel backlog bounds, USB conversion, and spectrum rate limiting were reviewed alongside their existing tests. One small allocation regression was removed: sync label/mode lookup tables now initialize once at module scope instead of being constructed on every lookup. The receive path still recomputes its shared-band plan per USB callback, as main did; caching that plan could be future work, but this review did not establish it as a new regression.
+
+An additional stream regression test replays 1,000 USB callbacks at one-millisecond intervals using the exact 27 frequencies. It verifies 13 shared bands at 1.92 MSPS, delivery to every VFO through narrow float IQ, no reported drops with synchronous worker replies, and at most 60 spectrum deliveries per second. It mocks USB, FFT, and worker execution, so it checks routing and rate limits rather than real DSP speed. `npm run test:performance` now runs the UI isolation and shared-stream suites together.
+
+Live verification on 2026-10-08 used the attached LimeSDR, RX1/LNAL, 439 MHz center, 61.44 MSPS, shared DSP, and 60 spectrum FPS. With all 27 panels expanded, repeated snapshots showed 58 FPS, about 60–61 MSa/s input, 18–20 audio messages/s, and zero reported drops. DMR burst and voice counts advanced. The final run lasted approximately two minutes after configuration, had no captured console errors, and stopped cleanly. An earlier run encountered a USB transfer error after several minutes and recovered on reconnect; subsequent source edits also reloaded the dev page. The isolated USB error's cause was not established, so these results do not guarantee long-duration hardware reliability.
+
+Validation: 403 tests passed across client, UI, and server suites; 58 Storybook browser tests passed using installed Edge; lint, formatting, folder structure, TypeScript, production build, and Storybook build passed. The quality workflow now targets `main` as well as `master`. Generated `test-results` diagnostics are excluded from lint and formatting.

@@ -1,3 +1,4 @@
+import { sourceAlias } from './source-alias.mjs';
 import { defineConfig } from 'vitest/config';
 import { defineWorkersProject } from '@cloudflare/vitest-pool-workers/config';
 
@@ -11,16 +12,17 @@ export default defineConfig({
 			...storybookProjects,
 			'./vitest.ui.config.ts',
 			{
+				resolve: { alias: sourceAlias },
 				test: {
 					name: 'client',
 					include: ['test/**/*.spec.js'],
-					exclude: ['test/index.spec.js'],
+					exclude: ['test/server/index.spec.js'],
 				},
 			},
 			defineWorkersProject({
 				test: {
 					name: 'worker',
-					include: ['test/index.spec.js'],
+					include: ['test/server/index.spec.js'],
 					poolOptions: {
 						workers: {
 							wrangler: { configPath: './wrangler.jsonc' },
