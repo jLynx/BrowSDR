@@ -79,6 +79,62 @@ function makeReceiver(id, connected = true) {
 }
 
 describe('receiver membership', () => {
+	it('keeps the last local view and worker mounted throughout disconnect and allows reconnecting', async () => {
+		const workspace = makeWorkspace();
+		const app = makeReceiver('local-1', false);
+		app.saveSetting = vi.fn();
+		workspace.registerReceiver('local-1', app);
+		const device = { vendorId: 1, productId: 2, serialNumber: 'disconnect' };
+		vi.stubGlobal('navigator', { usb: { getDevices: async () => [device] } });
+		app._connectToDevice.mockImplementation(async () => {
+			app.connected = true;
+			app.running = true;
+		});
+		await workspace.connectDevice(app, device);
+		let finish;
+		app._disconnectReceiver.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					finish = resolve;
+				}),
+		);
+		const disconnect = workspace.removeReceiver('local-1');
+		expect(workspace.receivers.map((entry) => entry.id)).toEqual(['local-1']);
+		expect(workspace.selectedId).toBe('local-1');
+		expect(workspace.isDeviceConnected(device)).toBe(false);
+		expect(app._backendWorker.terminate).not.toHaveBeenCalled();
+		finish();
+		await disconnect;
+		expect(workspace.receivers[0].status).toBe('Disconnected');
+		expect(app.connected).toBe(false);
+		expect(app._removing).toBe(false);
+		expect(app._backendWorker.terminate).not.toHaveBeenCalled();
+		await workspace.connectDevice(app, device);
+		expect(app._connectToDevice).toHaveBeenCalledTimes(2);
+		expect(app.connected).toBe(true);
+	});
+	it('selects another mounted receiver before the selected receiver finishes disconnecting', async () => {
+		const workspace = makeWorkspace();
+		const first = makeReceiver('local-1');
+		const second = makeReceiver('local-2');
+		workspace.receivers.push({ id: 'local-2' });
+		workspace.registerReceiver('local-1', first);
+		workspace.registerReceiver('local-2', second);
+		workspace.selectedId = 'local-2';
+		let finish;
+		second._disconnectReceiver.mockImplementationOnce(
+			() =>
+				new Promise((resolve) => {
+					finish = resolve;
+				}),
+		);
+		const disconnect = workspace.removeReceiver('local-2');
+		expect(workspace.selectedId).toBe('local-1');
+		expect(workspace.receivers.map((entry) => entry.id)).toEqual(['local-1']);
+		finish();
+		await disconnect;
+		expect(first._backendWorker.terminate).not.toHaveBeenCalled();
+	});
 	it('migrates the first physical SDR after a remote session regardless of runtime ID', async () => {
 		const workspace = makeWorkspace();
 		workspace.mode = 'client';

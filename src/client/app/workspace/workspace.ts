@@ -214,7 +214,7 @@ function isDeviceConnected(this: WorkspaceInstance, runtime: WorkspaceRuntime, d
 
 async function connectDevice(this: WorkspaceInstance, runtime: WorkspaceRuntime, source: AppInstance, device: USBDevice | 'mock') {
 	if (this.mode === 'client') return;
-	if (source._connectingDevice) return;
+	if ([source._connectingDevice, source._removing].some(Boolean)) return;
 	if (device !== 'mock' && this.isDeviceConnected(device)) {
 		source.showMsg('This SDR is already connected.');
 		return;
@@ -287,6 +287,11 @@ async function removeReceiver(this: WorkspaceInstance, runtime: WorkspaceRuntime
 	const app = runtime.instances.get(id);
 	if (app?._removing) return;
 	if (app) app._removing = true;
+	// Keep the last local receiver mounted while USB/audio shut down. Recreating
+	// it leaves the workspace empty and needlessly initializes another worker.
+	if (app && this.mode !== 'client' && this.receivers.length === 1) {
+		return disconnectLastLocalReceiver.call(this, runtime, app);
+	}
 	// Remove membership before awaiting teardown so late initialization cannot register.
 	runtime.instances.delete(id);
 	this.updateMediaSession();
@@ -294,13 +299,8 @@ async function removeReceiver(this: WorkspaceInstance, runtime: WorkspaceRuntime
 	runtime.ready.delete(id);
 	for (const [device, receiverId] of runtime.claims) if (receiverId === id) runtime.claims.delete(device);
 	this.receivers = this.receivers.filter((entry: ReceiverEntry) => entry.id !== id);
-	try {
-		await app?._disconnectReceiver();
-	} catch (error) {
-		console.warn('Disconnect receiver:', error);
-	}
-	app?._backendWorker?.terminate();
-	app?._whisperWorker?.terminate();
+	if (this.selectedId === id) this.selectReceiver(this.receivers[0]?.id || '');
+	await disposeReceiver(app);
 	if (this.selectedId === id) this.selectedId = this.receivers[0]?.id || '';
 	this.broadcastReceivers();
 	if (!this.receivers.length && this.mode !== 'client') {
@@ -308,6 +308,39 @@ async function removeReceiver(this: WorkspaceInstance, runtime: WorkspaceRuntime
 		await this.newReceiver();
 	}
 	this.selectReceiver(this.selectedId);
+}
+
+async function disposeReceiver(app: AppInstance | undefined) {
+	if (!app) return;
+	try {
+		await app._disconnectReceiver();
+	} catch (error) {
+		console.warn('Disconnect receiver:', error);
+	}
+	app._backendWorker?.terminate();
+	app._whisperWorker?.terminate();
+}
+
+async function disconnectLastLocalReceiver(this: WorkspaceInstance, runtime: WorkspaceRuntime, app: AppInstance) {
+	for (const [device, receiverId] of runtime.claims) if (receiverId === app.receiverId) runtime.claims.delete(device);
+	try {
+		await app._disconnectReceiver();
+	} catch (error) {
+		console.warn('Disconnect receiver:', error);
+	} finally {
+		app.connected = false;
+		app.running = false;
+		app.info.boardName = '';
+		app.deviceCapabilities = null;
+		const entry = this.receivers[0];
+		entry.status = 'Disconnected';
+		entry.label = 'Receiver';
+		entry.deviceLabel = undefined;
+		app._removing = false;
+		this.updateMediaSession();
+	}
+	this.broadcastReceivers();
+	await this.stopSharing();
 }
 
 function broadcastReceivers(this: WorkspaceInstance, runtime: WorkspaceRuntime, clientId?: string) {
