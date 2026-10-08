@@ -46,6 +46,8 @@ export function createAppData() {
 		hoverFreqText: "",
 		dspStats: null as any,
 		showStats: false,
+		toolsCompact: true,
+		toolsMenuOpen: false,
 		fps: 0,
 		vfoSquelchOpen: [] as boolean[],
 		vfoSquelchHangUntil: [] as number[],

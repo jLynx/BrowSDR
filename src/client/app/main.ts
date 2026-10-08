@@ -17,6 +17,7 @@ import { zoomMethods } from './zoom';
 import { remoteMethods } from './remote';
 import { autoGainMethods } from './auto-gain';
 import { rtl433Methods } from './rtl433';
+import { mountHeaderTools } from './header-tools';
 
 const backendWorker = new Worker(new URL('../worker/main.ts', import.meta.url), { type: 'module' });
 if (import.meta.env.DEV) {
@@ -234,5 +235,7 @@ createApp({
 	},
 	mounted() {
 		mountCanvas.call(this);
+		this._disposeHeaderTools = mountHeaderTools(this);
 	},
+	beforeUnmount() { this._disposeHeaderTools?.(); },
 }).mount('#app');
