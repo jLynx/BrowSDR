@@ -268,13 +268,18 @@ async function prepareUsbSettings(
 	const paired = await navigator.usb.getDevices();
 	const index = paired.indexOf(device);
 	if (index < 0) throw new Error('SDR is no longer connected');
+	const startupSettings = entry.settingsKey === 'SDRSetting';
 	entry.settingsKey = usbSettingsKey(device, paired);
 	entry.deviceLabel = `SDR ${index + 1} · ${device.productName || 'USB SDR'}`;
 	entry.label = entry.deviceLabel;
 	await this.$nextTick();
 	useLegacy = !runtime.legacyMigrationClaimed;
 	runtime.legacyMigrationClaimed = true;
-	app.loadSetting(useLegacy);
+	// The first local receiver already displays the user's startup configuration.
+	// Transfer that configuration to its device key rather than replacing it with
+	// an older device save. Additional receivers still restore their own settings.
+	if (useLegacy && startupSettings) app.saveSetting();
+	else app.loadSetting(useLegacy);
 	return { index, useLegacy };
 }
 

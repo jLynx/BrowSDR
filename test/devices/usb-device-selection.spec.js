@@ -31,6 +31,7 @@ function workspaceWithReceiver() {
 			this.connected = true;
 		}),
 		loadSetting: vi.fn(),
+		saveSetting: vi.fn(),
 		_initAudioCtx: vi.fn(),
 		showMsg: vi.fn(),
 	});
@@ -150,6 +151,29 @@ describe('RTL-SDRs with matching USB identities', () => {
 });
 
 describe('receiver settings and VFO bandwidth', () => {
+	it('keeps startup VFOs when connecting the first SDR despite an older one-VFO device save', async () => {
+		const device = rtl('startup-vfos');
+		const key = `SDRSetting:usb:${device.vendorId}:${device.productId}:${device.serialNumber}`;
+		const storage = new Map([
+			['SDRSetting', JSON.stringify({ radio: { centerFreq: 435 }, vfos: [{ freq: 435.1 }, { freq: 435.2 }, { freq: 435.3 }] })],
+			[key, JSON.stringify({ radio: { centerFreq: 100 }, vfos: [{ freq: 100 }] })],
+		]);
+		vi.stubGlobal('localStorage', { getItem: (key) => storage.get(key), setItem: (key, value) => storage.set(key, value) });
+		vi.stubGlobal('navigator', { usb: { getDevices: async () => [device] } });
+		const { workspace, first } = workspaceWithReceiver();
+		Object.assign(first, createAppData(), settingsMethods, { receiverId: 'local-1', formatFreq: (freq) => freq.toFixed(6) });
+		Object.defineProperty(first, 'settingsKey', { get: () => workspace.receivers[0].settingsKey });
+		first.loadSetting();
+		const displayedVfos = first.vfos;
+		first.activeVfoIndex = 2;
+		first.vfos[1].freq = 435.25;
+		await workspace.connectDevice(first, device);
+		expect(first.connected).toBe(true);
+		expect(first.vfos).toBe(displayedVfos);
+		expect(first.vfos.map((vfo) => vfo.freq)).toEqual([435.1, 435.25, 435.3]);
+		expect(first.activeVfoIndex).toBe(2);
+		expect(JSON.parse(storage.get(key)).vfos.map((vfo) => vfo.freq)).toEqual([435.1, 435.25, 435.3]);
+	});
 	it('does not copy legacy VFOs into an additional SDR; still migrates the first SDR', () => {
 		const legacy = JSON.stringify({ radio: { centerFreq: 96, sampleRate: 3200000 }, vfos: [{ freq: 96.1 }, { freq: 435 }] });
 		const storage = new Map([['SDRSetting', legacy]]);
