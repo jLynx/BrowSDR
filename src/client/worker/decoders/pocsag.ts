@@ -1,3 +1,4 @@
+import type { ECCTables, POCSAGMessage } from './types';
 /*
 Copyright (c) 2026, jLynx <https://github.com/jLynx>
 
@@ -18,8 +19,6 @@ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABI
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-import type { POCSAGMessage } from '@/worker/runtime/types';
-
 /**
  * POCSAG paging protocol decoder.
  * Operates on FM-demodulated Float32 audio samples (typically 48 kHz).
@@ -38,11 +37,6 @@ export function _pocsagHamming(a: number, b: number): number {
 	x = (x & 0x33333333) + ((x >>> 2) & 0x33333333);
 	x = (x + (x >>> 4)) & 0x0f0f0f0f;
 	return Math.imul(x, 0x01010101) >>> 24;
-}
-
-interface ECCTables {
-	ecs: Uint32Array;
-	bch: Uint32Array;
 }
 
 export class _POCSAGSingleBaud {

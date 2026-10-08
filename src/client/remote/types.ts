@@ -1,7 +1,8 @@
-import type { DeviceCapabilities } from '@/radio/sdr-device';
+import type { DataConnection } from 'peerjs';
+import type { DeviceCapabilities } from '@/radio/types';
 import type { RadioState } from '@/app/core/types';
-import type { VfoParams, PerfReport, POCSAGMessage, RDSMessage } from '@/worker/runtime/types';
-import type { Rtl433Message } from '@/worker/decoders/rtl433';
+import type { VfoParams, PerfReport } from '@/worker/runtime/types';
+import type { POCSAGMessage, RDSMessage, Rtl433Message } from '@/worker/decoders/types';
 
 export interface ReceiverInventory {
 	id: string;
@@ -48,3 +49,26 @@ export type RemoteCommand =
 export type ReceiverCommand = RemoteCommand & { receiverId?: string };
 export type CommandCallbackHost = (clientId: string, command: ReceiverCommand) => void;
 export type CommandCallbackClient = (command: ReceiverCommand) => void;
+
+export interface ClientEntry {
+	cmd: DataConnection | null;
+	fft: DataConnection | null;
+	audio: DataConnection | null;
+	fftOverflow: boolean;
+	audioOverflow: boolean;
+	isRelay: boolean;
+}
+
+export type StatusChangeCallback = (msg: StatusMessage) => void;
+
+export type ChunkCallback = (data: ArrayBuffer) => void;
+
+export type RemoteClients = Array<{
+	id: string;
+	deviceId?: string;
+	connectedAt: number;
+	country: string;
+	vfoCount: number;
+	firstFreq: number | null;
+	isRelay: boolean;
+}>;

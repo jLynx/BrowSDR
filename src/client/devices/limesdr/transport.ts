@@ -34,7 +34,7 @@ import {
 	REG_RESET,
 	setBits,
 } from './protocol';
-import type { SdrDeviceInfo } from '@/radio/sdr-device';
+import type { SdrDeviceInfo } from '@/radio/types';
 
 export abstract class LimeSDRTransport {
 	abstract close(): Promise<void>;

@@ -1,4 +1,4 @@
-import type { AppInstance } from '@/app/core/types';
+import type { AppInstance } from '@/app/core/receiver.types';
 import { makeDefaultVfo, MODE_DEFAULTS } from '@/app/core/constants';
 
 export const vfoMethods = {

@@ -1,7 +1,7 @@
 import { isRecord } from '@/platform/data';
-import type { HostStats } from '@/worker/runtime/callbacks';
+import type { HostStats } from '@/worker/runtime/callbacks.types';
 import type { ReceiverCommand, StatusMessage } from '@/remote/types';
-import type { AppInstance } from '@/app/core/types';
+import type { AppInstance } from '@/app/core/receiver.types';
 import * as Comlink from 'comlink';
 import { WebRTCHandler, PEER_ID_PREFIX } from '@/remote/webrtc';
 
@@ -442,11 +442,15 @@ function handleClientDisplay(this: AppInstance, cmd: Extract<ReceiverCommand, { 
 
 function handleVfoUpdate(this: AppInstance, cmd: Extract<ReceiverCommand, { type: 'vfoUpdate' }>, clientId: string | null) {
 	if (this.remoteMode === 'host' && clientId) {
-		Promise.resolve(this.backend.setRemoteVfoParams(clientId, cmd.index, cmd.params)).catch((error: unknown) => console.error(error));
-		if (cmd.index === 0 && cmd.params) {
-			const rc = this.remoteClients.find((c) => c.id === clientId);
-			if (rc) rc.firstFreq = cmd.params.freq;
-		}
+		this.backend
+			.setRemoteVfoParams(clientId, cmd.index, cmd.params)
+			.then((accepted) => {
+				if (accepted && cmd.index === 0) {
+					const rc = this.remoteClients.find((c) => c.id === clientId);
+					if (rc) rc.firstFreq = cmd.params.freq;
+				}
+			})
+			.catch((error: unknown) => console.error(error));
 	}
 }
 
@@ -469,9 +473,13 @@ function handleAddRemoteVfo(this: AppInstance, cmd: Extract<ReceiverCommand, { t
 
 function handleRemoveRemoteVfo(this: AppInstance, cmd: Extract<ReceiverCommand, { type: 'removeRemoteVfo' }>, clientId: string | null) {
 	if (this.remoteMode === 'host' && clientId) {
-		Promise.resolve(this.backend.removeRemoteVfo(clientId, cmd.index)).catch((error: unknown) => console.error(error));
-		const rc = this.remoteClients.find((c) => c.id === clientId);
-		if (rc && rc.vfoCount > 0) rc.vfoCount--;
+		this.backend
+			.removeRemoteVfo(clientId, cmd.index)
+			.then((removed) => {
+				const rc = this.remoteClients.find((c) => c.id === clientId);
+				if (removed && rc && rc.vfoCount > 0) rc.vfoCount--;
+			})
+			.catch((error: unknown) => console.error(error));
 	}
 }
 

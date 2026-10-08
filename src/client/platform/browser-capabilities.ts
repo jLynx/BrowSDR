@@ -1,9 +1,4 @@
-export interface CapabilityIssue {
-	title: string;
-	message: string;
-	href: string;
-	linkLabel: string;
-}
+import type { CapabilityIssue } from './types';
 
 const missingFeature = (feature: string, message: string, slug: string): CapabilityIssue => ({
 	title: `${feature} is unavailable`,

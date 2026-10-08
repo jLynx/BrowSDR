@@ -1,3 +1,4 @@
+import type { Env, IceServerEntry } from './types';
 import { isRecord } from './client/platform/data';
 /**
  * BrowSDR - Cloudflare Worker
@@ -8,23 +9,6 @@ import { isRecord } from './client/platform/data';
  * - Run `npm run dev` to start a development server on http://localhost:8787/
  * - Run `npm run deploy` to publish to Cloudflare
  */
-
-interface Env {
-	EXPRESS_TURN_URL: string;
-	EXPRESS_TURN_USER: string;
-	EXPRESS_TURN_PASS: string;
-	TURN_KEY_ID: string;
-	TURN_KEY_API_TOKEN: string;
-	ASSETS: {
-		fetch(request: Request): Promise<Response>;
-	};
-}
-
-interface IceServerEntry {
-	urls: string[];
-	username?: string;
-	credential?: string;
-}
 
 export default {
 	async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {

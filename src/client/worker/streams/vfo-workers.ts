@@ -1,10 +1,7 @@
-import type { RdsCallback, Rtl433Callback, DsdCallback } from '@/worker/runtime/callbacks';
-import type { DspOutput } from '@/worker/runtime/dsp-messages';
-
+import type { RdsCallback, Rtl433Callback, DsdCallback } from '@/worker/runtime/callbacks.types';
+import type { DspOutput } from '@/worker/runtime/dsp-messages.types';
 import type { VfoParams, VfoState } from '@/worker/runtime/types';
-
 import type { Backend } from '@/worker/runtime/backend';
-
 import { AUDIO_QUEUE_CAPACITY } from './audio-queue';
 export function initializeVfoWorkers(
 	backend: Backend,

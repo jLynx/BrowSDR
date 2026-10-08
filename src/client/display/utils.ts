@@ -1,3 +1,4 @@
+import type { RGB } from './types';
 /*
 Copyright (c) 2026, jLynx <https://github.com/jLynx>
 Copyright (c) 2019, cho45 <cho45@lowreal.net>
@@ -18,12 +19,6 @@ IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
 HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
-
-interface RGB {
-	r: number;
-	g: number;
-	b: number;
-}
 
 const DEFAULT_COLOR_MAP: Array<[number, number, number]> = [
 	[0x00, 0x00, 0x20],

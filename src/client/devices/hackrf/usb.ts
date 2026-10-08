@@ -1,3 +1,4 @@
+import type { PartIdSerialNo, RxCallback } from './types';
 import { errorMessage } from '@/platform/errors';
 /*
 Original: https://github.com/mossmann/hackrf/blob/master/host/libhackrf/src/hackrf.c
@@ -25,13 +26,6 @@ IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT,
 HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
-
-interface PartIdSerialNo {
-	partId: [number, number];
-	serialNo: [number, number, number, number];
-}
-
-type RxCallback = (data: Uint8Array) => void;
 
 class HackRF {
 	static BOARD_ID_NAME: ReadonlyMap<number, string> = Object.freeze(

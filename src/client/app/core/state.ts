@@ -1,13 +1,17 @@
-import type { DspStats } from '@/remote/types';
+import type { RdsLogEntry, Rtl433LogEntry, PocsagLogEntry, RdsStations } from '@/app/decoders/types';
+import type { WhisperLogEntry } from '@/app/decoders/whisper.types';
+import type { VfoConflictSubsetOption, VfoConflictOption, VfoActivityStats } from '@/app/core/types';
+import type { PairedDevices } from '@/app/radio/types';
+import type { RemoteClients, DspStats } from '@/remote/types';
 import type { Remote } from 'comlink';
 import type { Backend } from '@/worker/runtime/backend';
-import type { DeviceCapabilities } from '@/radio/sdr-device';
-import type { Bookmark, Vfo } from './types';
+import type { DeviceCapabilities, RxLevel } from '@/radio/types';
+import type { Bookmark } from '@/app/workspace/types';
+import type { Vfo } from './types';
 import { makeDefaultVfo, BOOKMARK_CATEGORIES } from './constants';
 import type { DSDStatus } from '@/worker/decoders/dsd/types';
-import type { CapabilityIssue } from '@/platform/browser-capabilities';
-import type { RxLevel } from '@/radio/sdr-device';
-import type { Rtl433Status, Rtl433Protocol } from '@/worker/decoders/rtl433';
+import type { CapabilityIssue } from '@/platform/types';
+import type { Rtl433Status, Rtl433Protocol } from '@/worker/decoders/types';
 
 export function createAppData() {
 	return {
@@ -21,15 +25,7 @@ export function createAppData() {
 		remoteLink: '',
 		copyLinkSuccess: false,
 		copyLinkTooltip: 'Copy link',
-		remoteClients: [] as Array<{
-			id: string;
-			deviceId?: string;
-			connectedAt: number;
-			country: string;
-			vfoCount: number;
-			firstFreq: number | null;
-			isRelay: boolean;
-		}>,
+		remoteClients: [] as RemoteClients,
 		showRemoteClientsDialog: false,
 		showRemoteConnectDialog: false,
 		remoteConnectId: '',
@@ -68,7 +64,7 @@ export function createAppData() {
 		fps: 0,
 		vfoSquelchOpen: [] as boolean[],
 		vfoSquelchHangUntil: [] as number[],
-		vfoActivityStats: [] as Array<{ count: number; totalMs: number; squelchOpenSince: number | null }>,
+		vfoActivityStats: [] as VfoActivityStats,
 		autoSquelchSamples: [] as number[][],
 		autoSquelchActive: [] as boolean[],
 		activityNow: 0,
@@ -82,7 +78,7 @@ export function createAppData() {
 		...createDecoderAndBookmarkState(),
 		devicePicker: {
 			show: false,
-			devices: [] as Array<{ device: USBDevice; driverName: string; productName: string }>,
+			devices: [] as PairedDevices,
 		},
 		sidebarOpen: false,
 		showAbout: false,
@@ -92,8 +88,8 @@ export function createAppData() {
 			vfoIndex: -1,
 			requestedFreq: 0,
 			previousFreq: 0,
-			optionA: null as { centerFreq: number; description: string } | null,
-			optionB: null as { centerFreq: number; description: string; excludedVfos: number[] } | null,
+			optionA: null as VfoConflictOption,
+			optionB: null as VfoConflictSubsetOption,
 		},
 	};
 }
@@ -117,15 +113,7 @@ function createDecoderAndBookmarkState() {
 			loadFilesTotal: 0,
 			model: 'onnx-community/whisper-small',
 			chunkSeconds: 10,
-			log: [] as Array<{
-				time: string;
-				freq: string;
-				text: string;
-				duration: string;
-				transcribeTime?: string;
-				vfoIndex?: number | null;
-				model?: string;
-			}>,
+			log: [] as WhisperLogEntry[],
 			statusMsg: '',
 			recording: false,
 			transcribing: false,
@@ -135,24 +123,21 @@ function createDecoderAndBookmarkState() {
 		},
 		pocsag: {
 			panelOpen: false,
-			log: [] as Array<{ time: string; freq: string; vfoIndex: number; capcode: string; type: string; text: string; baud: number }>,
+			log: [] as PocsagLogEntry[],
 		},
 		dsdStatus: [] as Array<DSDStatus | null>,
 		rtl433: {
 			panelOpen: false,
 			status: [] as Array<Rtl433Status | null>,
 			protocols: [] as Rtl433Protocol[],
-			log: [] as Array<{ time: string; freq: string; vfoIndex: number; event: Record<string, unknown> }>,
+			log: [] as Rtl433LogEntry[],
 			filter: '',
 			showProtocols: false,
 		},
 		rds: {
 			panelOpen: false,
-			stations: {} as Record<
-				number,
-				{ ps: string; rt: string; pi: string; pty: number; ptyLabel: string; tp: boolean; ta: boolean; freq: string }
-			>,
-			log: [] as Array<{ time: string; field: string; value: string; freq: string; vfoIndex: number }>,
+			stations: {} as RdsStations,
+			log: [] as RdsLogEntry[],
 		},
 		...createBookmarkState(),
 	};

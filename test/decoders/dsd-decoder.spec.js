@@ -10,7 +10,7 @@ vi.mock('@/worker/decoders/mbelib-init', () => ({
 
 import { DSDDecoder } from '@/worker/decoders/dsd/dsd-decoder';
 import { FIRFilter, rrcTaps } from '@/worker/decoders/dsd/dsd-dsp';
-import { RRC_NUM_TAPS, RRC_ALPHA, SYNC_WORDS } from '@/worker/decoders/dsd/types';
+import { RRC_NUM_TAPS, RRC_ALPHA, SYNC_WORDS } from '@/worker/decoders/dsd/constants';
 
 function randomDibits(length) {
 	let seed = 123456789;

@@ -1,13 +1,9 @@
+import type { SidebandState } from './types';
 /** Offset from the suppressed carrier to the center of the selected sideband. */
 export function sidebandOffsetHz(mode: string, bandwidth: number): number {
 	if (mode === 'usb') return bandwidth / 2;
 	if (mode === 'lsb') return -bandwidth / 2;
 	return 0;
-}
-
-interface SidebandState {
-	ssbPhase?: number;
-	agcGain?: number;
 }
 
 /** Restore carrier-relative audio after the DDC has filtered the sideband center. */

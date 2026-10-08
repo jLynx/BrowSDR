@@ -1,5 +1,5 @@
-import type { AppInstance } from '@/app/core/types';
-import type { Rtl433Status, Rtl433Message } from '@/worker/decoders/rtl433';
+import type { AppInstance } from '@/app/core/receiver.types';
+import type { Rtl433Status, Rtl433Message } from '@/worker/decoders/types';
 
 export const rtl433Methods = {
 	toggleRtl433Panel(this: AppInstance) {

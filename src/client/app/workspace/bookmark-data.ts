@@ -1,4 +1,5 @@
-import type { Bookmark, Vfo } from '@/app/core/types';
+import type { Bookmark } from './types';
+import type { Vfo } from '@/app/core/types';
 import { makeDefaultVfo } from '@/app/core/constants';
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -35,6 +36,7 @@ export function parseBookmarks(json: string): Bookmark[] {
 			(value.vfos !== undefined && !Array.isArray(value.vfos))
 		)
 			throw new Error('Invalid bookmark group');
+		validateGroupSelection(value);
 		return {
 			...common,
 			type: 'group',
@@ -44,4 +46,12 @@ export function parseBookmarks(json: string): Bookmark[] {
 			...(typeof value.activeVfoIndex === 'number' ? { activeVfoIndex: value.activeVfoIndex } : {}),
 		};
 	});
+}
+
+function validateGroupSelection(value: Record<string, unknown>): void {
+	if (Array.isArray(value.vfos) && value.vfos.length === 0) throw new Error('Bookmark group needs at least one VFO');
+	const index = value.activeVfoIndex;
+	if (index === undefined) return;
+	if (typeof index !== 'number' || !Number.isSafeInteger(index) || index < 0 || !Array.isArray(value.vfos) || index >= value.vfos.length)
+		throw new Error('Invalid active bookmark VFO index');
 }

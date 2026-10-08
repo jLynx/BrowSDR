@@ -132,24 +132,6 @@ export interface RemoteClientState {
 	squelchOpen: boolean[];
 }
 
-export interface RDSMessage {
-	ps?: string;
-	rt?: string;
-	pi?: string;
-	pty?: number;
-	ptyLabel?: string;
-	tp?: boolean;
-	ta?: boolean;
-}
-
-export interface POCSAGMessage {
-	capcode: number;
-	func: number;
-	type: 'alpha' | 'tone' | 'numeric';
-	text: string;
-	baud: number;
-}
-
 export interface DeviceOpenOpts {
 	/** Index in getDevices() disambiguates missing or duplicated serial numbers. */
 	deviceIndex?: number;
@@ -157,18 +139,3 @@ export interface DeviceOpenOpts {
 	productId?: number;
 	serialNumber?: string;
 }
-
-/** IF sample rates per demodulation mode */
-export const IF_RATES: Record<string, number> = {
-	nfm: 50000,
-	wfm: 250000,
-	am: 15000,
-	usb: 24000,
-	lsb: 24000,
-	dsb: 24000,
-	cw: 3000,
-	raw: 48000,
-	dsd: 48000,
-};
-
-export const AUDIO_RATE = 48000;

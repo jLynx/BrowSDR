@@ -6,9 +6,7 @@
  * Frame types: HDU, LDU1, LDU2, TDULC, TDU, TSDU, PDU.
  */
 
-import { P25_IW, P25_IX, P25_IY, P25_IZ } from './types';
-import {} from './ecc/golay';
-import {} from './ecc/hamming';
+import { P25_IW, P25_IX, P25_IY, P25_IZ } from './constants';
 import { rsDecode_36_20_17, rsDecode_24_12_13, rsDecode_24_16_9 } from './ecc/reed-solomon';
 import type { DSDStatus } from './types';
 

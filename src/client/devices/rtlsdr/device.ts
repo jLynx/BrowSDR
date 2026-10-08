@@ -31,7 +31,8 @@ import { E4000 } from './tuners/e4000';
 import { FC0013 } from './tuners/fc0013';
 import { FC2580 } from './tuners/fc2580';
 import type { TunerDriver } from './tuners/types';
-import { registerDriver, type SdrDevice, type SdrDeviceInfo, type GainControl } from '@/radio/sdr-device';
+import { registerDriver } from '@/radio/sdr-device';
+import type { SdrDevice, SdrDeviceInfo, GainControl } from '@/radio/types';
 
 // ── RTL-SDR Device ────────────────────────────────────────────────
 export class RtlSdrDevice implements SdrDevice {

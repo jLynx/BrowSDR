@@ -1,12 +1,5 @@
+import type { MediaSessionReceiver } from './types';
 /** The receiver capabilities used by the page-level Media Session. */
-export interface MediaSessionReceiver {
-	connected: boolean;
-	running: boolean;
-	_removing?: boolean;
-	_mediaAudioEl?: HTMLAudioElement | null;
-	audioCtx?: AudioContext | null;
-	togglePlay(): Promise<void>;
-}
 
 /** One page-level Media Session represents all receivers in a workspace. */
 export class WorkspaceMediaSession {

@@ -19,7 +19,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 */
 
 import { HackRF } from './usb';
-import type { SdrDevice, SdrDeviceInfo, GainControl } from '@/radio/sdr-device';
+import type { SdrDevice, SdrDeviceInfo, GainControl } from '@/radio/types';
 import { registerDriver } from '@/radio/sdr-device';
 import { HackRFRxLevel } from './rx-level';
 

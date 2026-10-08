@@ -1,6 +1,6 @@
 import type { Vfo } from './types';
-import type { BookmarkEntry } from './instance';
-import type { AppInstance } from './types';
+import type { BookmarkEntry } from '@/app/workspace/types';
+import type { AppInstance } from '@/app/core/receiver.types';
 import { BOOKMARK_CATEGORIES } from './constants';
 
 export const computedProperties = {

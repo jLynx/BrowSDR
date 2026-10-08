@@ -1,5 +1,6 @@
+import type { PairedSdr } from './types';
 import { errorMessage, errorName } from '@/platform/errors';
-import type { AppInstance } from '@/app/core/types';
+import type { AppInstance } from '@/app/core/receiver.types';
 import * as Comlink from 'comlink';
 import { getAllCatalogFilters, lookupDevice } from '@/radio/device-catalog';
 import { localUsbIssue } from '@/platform/browser-capabilities';
@@ -24,7 +25,6 @@ export const connectionMethods = {
 			this.showMsg('USB access failed: ' + errorMessage(error));
 			return;
 		}
-		type PairedSdr = { device: USBDevice; driverName: string; productName: string; deviceNumber: number };
 		const sdrDevices: PairedSdr[] = [];
 		for (const device of allPaired) {
 			const driver = lookupDevice(device);

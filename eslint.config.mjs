@@ -5,6 +5,7 @@ import vue from 'eslint-plugin-vue';
 import globals from 'globals';
 import prettier from 'eslint-config-prettier/flat';
 import imports from './scripts/lint/source-alias.mjs';
+import architecture from './scripts/lint/type-files.mjs';
 
 export default defineConfig(
 	globalIgnores([
@@ -62,6 +63,11 @@ export default defineConfig(
 		files: ['src/client/**/*.ts', 'test/**/*.{js,ts}', '.storybook/*.ts'],
 		plugins: { imports },
 		rules: { 'imports/source-alias': 'error' },
+	},
+	{
+		files: ['src/**/*.ts'],
+		plugins: { architecture },
+		rules: { 'architecture/type-files': 'error' },
 	},
 	{
 		files: ['test/**/*.ts'],

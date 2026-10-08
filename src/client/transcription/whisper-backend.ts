@@ -1,7 +1,4 @@
-import type { Pipeline, CreatePipeline, ProgressEvent, TranscriptionOptions } from './types';
-export type WhisperDevice = 'webgpu' | 'wasm';
-
-type GPUAccess = { requestAdapter(): Promise<{ features?: { has(feature: string): boolean } } | null> };
+import type { WhisperDevice, GPUAccess, Pipeline, CreatePipeline, ProgressEvent, TranscriptionOptions } from './types';
 
 /** Prefer a usable GPU, falling back once if loading or inference fails. */
 export class WhisperBackend {

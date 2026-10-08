@@ -1,4 +1,4 @@
-import type { WhisperMessage, TranscriptionOptions, BenchmarkResult } from './types';
+import type { WhisperWorkerScope, BenchmarkMessage, WorkerInMessage, TranscriptionOptions, BenchmarkResult } from './types';
 import { errorMessage } from '@/platform/errors';
 /**
  * Whisper Speech-to-Text Web Worker
@@ -23,30 +23,7 @@ import { WhisperBackend } from './whisper-backend';
 import { isHallucination } from './whisper-text';
 import { WhisperProgress } from './whisper-progress';
 
-const workerSelf = self as unknown as {
-	postMessage(msg: WhisperMessage): void;
-	addEventListener(type: string, listener: (e: MessageEvent<WorkerInMessage>) => void): void;
-	location: { origin: string; hostname: string };
-};
-
-interface LoadMessage {
-	type: 'load';
-	model?: string;
-}
-
-interface TranscribeMessage {
-	type: 'transcribe';
-	audio: Float32Array;
-	id: number;
-	audioDuration?: number;
-}
-
-interface BenchmarkMessage {
-	type: 'benchmark';
-	audio: Float32Array;
-	model: string;
-}
-type WorkerInMessage = LoadMessage | TranscribeMessage | BenchmarkMessage;
+const workerSelf = self as unknown as WhisperWorkerScope;
 
 let pipeline: WhisperBackend | null = null;
 let pipelinePromise: Promise<void> | null = null;

@@ -1,4 +1,5 @@
-import type { AppInstance, Bookmark } from '@/app/core/types';
+import type { AppInstance } from '@/app/core/receiver.types';
+import type { Bookmark } from './types';
 import { parseBookmarks } from './bookmark-data';
 import { makeDefaultVfo, BOOKMARK_CATEGORIES } from '@/app/core/constants';
 
@@ -74,7 +75,7 @@ export const bookmarkMethods = {
 		if ((bm.type || 'group') === 'individual') {
 			applyIndividualBookmark.call(this, bm);
 		} else {
-			if (bm.centerFreq === undefined || !bm.vfos) return;
+			if (bm.centerFreq === undefined || !bm.vfos?.length) return;
 			this.radio.centerFreq = bm.centerFreq;
 			if (bm.sampleRate) this.radio.sampleRate = bm.sampleRate;
 
@@ -108,7 +109,7 @@ export const bookmarkMethods = {
 				focused: false,
 				displayFreq: this.formatFreq(v.freq || bm.centerFreq),
 			}));
-			this.activeVfoIndex = Math.min(bm.activeVfoIndex || 0, this.vfos.length - 1);
+			this.activeVfoIndex = bookmarkSelection(bm.activeVfoIndex, this.vfos.length);
 			this.showMsg(`Loaded "${bm.name}" — ${bm.vfos.length} VFO${bm.vfos.length !== 1 ? 's' : ''} loaded.`);
 		}
 	},
@@ -297,4 +298,8 @@ function editIndividualBookmark(this: AppInstance, bm: Bookmark) {
 	e.rds = bm.rds ?? false;
 	e.rdsRegion = bm.rdsRegion ?? 'eu';
 	e.volume = bm.volume ?? 50;
+}
+
+function bookmarkSelection(index: number | undefined, count: number): number {
+	return typeof index === 'number' && Number.isSafeInteger(index) && index >= 0 && index < count ? index : 0;
 }

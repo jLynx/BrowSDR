@@ -35,3 +35,33 @@ export type WhisperMessage =
 	| { type: 'result'; text: string; id: number; audioDuration?: number; transcribeTime: string; model: string }
 	| { type: 'discarded'; id: number; reason: string }
 	| { type: 'benchmark-result'; audioDuration: number; model: string; results: BenchmarkResult[] };
+
+export type WhisperDevice = 'webgpu' | 'wasm';
+
+export type GPUAccess = { requestAdapter(): Promise<{ features?: { has(feature: string): boolean } } | null> };
+
+export interface LoadMessage {
+	type: 'load';
+	model?: string;
+}
+
+export interface TranscribeMessage {
+	type: 'transcribe';
+	audio: Float32Array;
+	id: number;
+	audioDuration?: number;
+}
+
+export interface BenchmarkMessage {
+	type: 'benchmark';
+	audio: Float32Array;
+	model: string;
+}
+
+export type WorkerInMessage = LoadMessage | TranscribeMessage | BenchmarkMessage;
+
+export interface WhisperWorkerScope {
+	postMessage(msg: WhisperMessage): void;
+	addEventListener(type: string, listener: (e: MessageEvent<WorkerInMessage>) => void): void;
+	location: { origin: string; hostname: string };
+}

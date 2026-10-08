@@ -3,13 +3,13 @@ import init, { DspProcessor, SharedChannelizer, set_panic_hook, alloc_iq_buffer,
 import { RationalResampler } from './streams/dsp-pipeline';
 import { demodulateSideband, sidebandOffsetHz } from './decoders/ssb';
 import { DSDStream } from './decoders/dsd/dsd-stream';
-import { DSD_IF_RATE } from './decoders/dsd/types';
+import { DSD_IF_RATE } from '@/worker/decoders/dsd/constants';
 import type { DSDStatus } from './decoders/dsd/types';
 import { RDSDecoder } from './decoders/rds';
 import { LatestStatus } from './runtime/latest-status';
 import { Rtl433Stream } from './decoders/rtl433';
 import type { InitOutput } from '/hackrf-web/pkg/hackrf_web.js';
-import type { DspInput } from './runtime/dsp-messages';
+import type { DspInput } from './runtime/dsp-messages.types';
 import type { VfoParams } from './runtime/types';
 
 if (import.meta.env.DEV) {

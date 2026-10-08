@@ -1,8 +1,8 @@
 import { errorMessage } from '@/platform/errors';
-import type { AppInstance } from '@/app/core/types';
-import { nextLimeGain, type LimeGains } from '@/radio/lime-auto-gain';
-import { nextHackRFGain, type HackRFGains } from '@/radio/hackrf-auto-gain';
-import type { DeviceCapabilities, RxLevel } from '@/radio/sdr-device';
+import type { AppInstance } from '@/app/core/receiver.types';
+import { nextLimeGain } from '@/radio/lime-auto-gain';
+import type { LimeGains, HackRFGains, DeviceCapabilities, RxLevel } from '@/radio/types';
+import { nextHackRFGain } from '@/radio/hackrf-auto-gain';
 
 export const autoGainMethods = {
 	autoGainSupported(this: AppInstance) {

@@ -6,7 +6,7 @@
  * Voice superframe: 6 bursts, each containing 3 AMBE frames.
  */
 
-import { DMR_W, DMR_X, DMR_Y, DMR_Z, SYNC_WORDS } from './types';
+import { DMR_W, DMR_X, DMR_Y, DMR_Z, SYNC_WORDS } from './constants';
 import type { DSDStatus } from './types';
 
 // ── DMR burst type detection ─────────────────────────────────────────

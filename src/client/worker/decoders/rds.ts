@@ -18,7 +18,7 @@ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABI
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-import type { RDSMessage } from '@/worker/runtime/types';
+import type { RDSMessage } from './types';
 
 // ── RDS Constants ────────────────────────────────────────────────
 const RDS_BITRATE = 1187.5;

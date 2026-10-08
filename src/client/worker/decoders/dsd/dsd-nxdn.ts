@@ -6,7 +6,7 @@
  * Voice frames are XORed with a pseudo-random sequence before interleaving.
  */
 
-import { NXDN_W, NXDN_X, NXDN_Y, NXDN_Z, NXDN_PR } from './types';
+import { NXDN_W, NXDN_X, NXDN_Y, NXDN_Z, NXDN_PR } from './constants';
 import type { DSDStatus } from './types';
 
 /**

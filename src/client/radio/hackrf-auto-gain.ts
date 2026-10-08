@@ -1,7 +1,6 @@
-import type { RxLevel } from './sdr-device';
+import type { HackRFGains, RxLevel } from './types';
 import { gainAdjustment, gainAdjustmentReason } from './auto-gain-level';
 
-export type HackRFGains = { LNA: number; VGA: number; 'Amp (14dB)'?: number };
 // RF amp gain varies with frequency; use 10 dB only to stage a conservative
 // transition, then measure the actual ADC level again.
 const ampEstimate = 10;

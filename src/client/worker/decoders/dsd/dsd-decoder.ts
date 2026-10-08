@@ -1,3 +1,4 @@
+import type { SyncPattern, DSDMode, DSDStatus } from './types';
 /*
  * Main DSD (Digital Speech Decoder) state machine.
  * Handles frame sync detection and dispatches to mode-specific processors.
@@ -5,18 +6,9 @@
  */
 
 import { FIRFilter, ClockRecovery, FourFSKSlicer, rrcTaps } from './dsd-dsp';
-import {
-	SYNC_WORDS,
-	DSD_IF_RATE,
-	DSD_SYMBOL_RATE,
-	RRC_ALPHA,
-	RRC_NUM_TAPS,
-	SyncType,
-	syncTypeToMode,
-	syncTypeLabel,
-	isVoiceSync,
-} from './types';
-import type { DSDMode, DSDStatus } from './types';
+import { SYNC_WORDS, DSD_IF_RATE, DSD_SYMBOL_RATE, RRC_ALPHA, RRC_NUM_TAPS } from './constants';
+import { SyncType } from './types';
+import { syncTypeToMode, syncTypeLabel, isVoiceSync } from './sync';
 import { processDMRSingleBurst } from './dsd-dmr';
 import { checkDMRBurstSync } from './dsd-dmr';
 import { processNXDNVoice, NXDN_VOICE_DIBITS } from './dsd-nxdn';
@@ -39,12 +31,6 @@ import {
 import { decodeAmbe, decodeImbe, ensureMbelibInitialized, getMbeErrors, resetMbe } from '@/worker/decoders/mbelib-init';
 
 // ── Sync word matching ───────────────────────────────────────────────
-
-interface SyncPattern {
-	pattern: string;
-	type: SyncType;
-	len: number;
-}
 
 const SYNC_PATTERNS: SyncPattern[] = [
 	// P25 (24 dibits)
@@ -637,7 +623,7 @@ export class DSDDecoder {
 			return;
 		}
 
-		const ambeFrames = processDSTARVoice(this.dibitBuf, startPos, this.status);
+		const ambeFrames = processDSTARVoice(this.dibitBuf, startPos, this.status, syncType === SyncType.INV_DSTAR);
 
 		if (!this.mbelibReady) {
 			this.status.mbeDecoding = false;
@@ -729,8 +715,8 @@ export class DSDDecoder {
 				return P25_NID_DIBITS + P25_LDU_BODY_DIBITS; // ~752 dibits
 			case 'dstar':
 				return isVoiceSync(syncType)
-					? DSTAR_FRAME_DIBITS // 75 dibits
-					: 330; // Header: 660 bits = 330 dibits
+					? DSTAR_FRAME_DIBITS // 72 voice + 24 slow-data GMSK symbols
+					: 660; // Header: 660 one-bit GMSK symbols
 			case 'nxdn':
 				return NXDN_VOICE_DIBITS; // 144 dibits
 			default:

@@ -1,6 +1,6 @@
 import type { DSDStatus } from '@/worker/decoders/dsd/types';
-import type { Rtl433Message } from '@/worker/decoders/rtl433';
-import type { PerfReport, POCSAGMessage, RDSMessage } from './types';
+import type { Rtl433Message, POCSAGMessage, RDSMessage } from '@/worker/decoders/types';
+import type { PerfReport } from './types';
 
 export type SamplesCallback = (samples: Float32Array) => void;
 export type WhisperCallback = (index: number, freq: number, samples: Float32Array) => void;

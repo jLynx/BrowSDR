@@ -1,5 +1,4 @@
 import type { PerfCounters } from '@/worker/runtime/types';
-
 import type { Backend } from '@/worker/runtime/backend';
 
 export function initializePerformanceReporting(

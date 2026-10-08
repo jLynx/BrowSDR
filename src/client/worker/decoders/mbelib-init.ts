@@ -1,13 +1,6 @@
+import type { MbelibModule, MbelibFactory } from './types';
 import { isRecord } from '@/platform/data';
-interface MbelibModule {
-	HEAP8: Int8Array;
-	HEAPF32: Float32Array;
-	_malloc(this: void, size: number): number;
-	_free(this: void, ptr: number): void;
-	cwrap(name: string, result: 'number', args: ['number', 'number']): (frame: number, audio: number) => number;
-	cwrap(name: string, result: null, args: []): () => void;
-}
-type MbelibFactory = (options: { locateFile(path: string): string }) => Promise<MbelibModule>;
+
 /*
  * Lazy loader for the mbelib WASM module.
  * Provides typed wrappers around the C functions for AMBE/IMBE decoding.

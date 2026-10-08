@@ -1,14 +1,9 @@
+import type { DeviceCatalogEntry } from './types';
 /**
  * Lightweight device catalog for the main thread.
  * Contains only USB VID/PID filters and display names — no driver code.
  * The worker thread uses the full driver registrations in devices/ instead.
  */
-
-export interface DeviceCatalogEntry {
-	type: string;
-	name: string;
-	filters: USBDeviceFilter[];
-}
 
 export const DEVICE_CATALOG: DeviceCatalogEntry[] = [
 	{

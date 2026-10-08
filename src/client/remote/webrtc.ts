@@ -1,26 +1,17 @@
+import type {
+	ClientEntry,
+	StatusChangeCallback,
+	ChunkCallback,
+	StatusMessage,
+	ReceiverCommand,
+	CommandCallbackHost,
+	CommandCallbackClient,
+} from './types';
 import type Peer from 'peerjs';
 import type { DataConnection } from 'peerjs';
-import type { ReceiverCommand, CommandCallbackHost, CommandCallbackClient } from './types';
 import { isReceiverCommand } from './validation';
 import { isRecord } from '@/platform/data';
 import { errorMessage } from '@/platform/errors';
-interface ClientEntry {
-	cmd: DataConnection | null;
-	fft: DataConnection | null;
-	audio: DataConnection | null;
-	fftOverflow: boolean;
-	audioOverflow: boolean;
-	isRelay: boolean;
-}
-
-type StatusMessage =
-	| { status: 'ready'; id: string }
-	| { status: 'client-connected' | 'client-disconnected'; clientId: string; isRelay?: boolean }
-	| { status: 'error'; error: string }
-	| { status: 'connecting' | 'connected' | 'disconnected' };
-
-type StatusChangeCallback = (msg: StatusMessage) => void;
-type ChunkCallback = (data: ArrayBuffer) => void;
 
 /** Prefix prepended to all PeerJS IDs (hidden from users / share links). */
 export const PEER_ID_PREFIX = 'browsdr-';

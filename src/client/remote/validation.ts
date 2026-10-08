@@ -14,7 +14,7 @@ export function isReceiverCommand(value: unknown): value is ReceiverCommand {
 const validators: Record<string, (value: Record<string, unknown>) => boolean> = {
 	resetRemoteVfos: (_value: Record<string, unknown>) => true,
 	addRemoteVfo: (_value: Record<string, unknown>) => true,
-	removeRemoteVfo: (value: Record<string, unknown>) => numbers(value, ['index']),
+	removeRemoteVfo: (value: Record<string, unknown>) => validIndex(value.index),
 	requestChange: (value: Record<string, unknown>) =>
 		typeof value.target === 'string' && typeof value.property === 'string' && numbers(value, ['value']),
 	clientInfo: (value: Record<string, unknown>) =>
@@ -41,7 +41,7 @@ const validators: Record<string, (value: Record<string, unknown>) => boolean> = 
 				primitiveMap<boolean>(item.locks, 'boolean') &&
 				validCapabilities(item.capabilities),
 		),
-	vfoUpdate: (value: Record<string, unknown>) => numbers(value, ['index']) && validVfoParams(value.params),
+	vfoUpdate: (value: Record<string, unknown>) => validIndex(value.index) && validVfoParams(value.params),
 	dspStats: (value) => validDspStats(value.stats),
 	rtl433: (value: Record<string, unknown>) => numbers(value, ['vfoIndex', 'freq']) && validSensorMessage(value.msg),
 	pocsag: (value: Record<string, unknown>) =>
@@ -55,6 +55,10 @@ const validators: Record<string, (value: Record<string, unknown>) => boolean> = 
 		isRecord(value.msg) &&
 		Object.values(value.msg).every((field) => ['string', 'number', 'boolean'].includes(typeof field)),
 };
+
+function validIndex(value: unknown): boolean {
+	return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
 
 function typedFields(value: unknown, fields: string[], kind: string): boolean {
 	return isRecord(value) && fields.every((key) => typeof value[key] === kind);

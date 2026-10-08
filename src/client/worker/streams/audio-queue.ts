@@ -1,4 +1,4 @@
-import { AUDIO_RATE } from '@/worker/runtime/types';
+import { AUDIO_RATE } from '@/worker/runtime/constants';
 
 export const AUDIO_QUEUE_CAPACITY = AUDIO_RATE / 2;
 const MAX_SKEW = AUDIO_RATE / 4;

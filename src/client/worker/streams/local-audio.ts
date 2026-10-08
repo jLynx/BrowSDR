@@ -1,12 +1,10 @@
-import type { SamplesCallback, WhisperCallback, PocsagCallback } from '@/worker/runtime/callbacks';
-import type { DspAudio } from '@/worker/runtime/dsp-messages';
+import type { SamplesCallback, WhisperCallback, PocsagCallback } from '@/worker/runtime/callbacks.types';
+import type { DspAudio } from '@/worker/runtime/dsp-messages.types';
 import * as Comlink from 'comlink';
-
 import { POCSAGDecoder } from '@/worker/decoders/pocsag';
 import type { VfoParams, VfoState, PerfCounters } from '@/worker/runtime/types';
-import { AUDIO_RATE } from '@/worker/runtime/types';
+import { AUDIO_RATE } from '@/worker/runtime/constants';
 import type { Backend } from '@/worker/runtime/backend';
-
 import { appendAudio, mixLength } from './audio-queue';
 export function installWorkerAudioHandler(
 	backend: Backend,

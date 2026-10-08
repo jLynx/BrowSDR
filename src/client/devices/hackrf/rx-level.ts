@@ -1,4 +1,4 @@
-import type { RxLevel } from '@/radio/sdr-device';
+import type { RxLevel } from '@/radio/types';
 
 /** Measure signed 8-bit HackRF IQ before any filtering, demodulation or volume. */
 export class HackRFRxLevel {

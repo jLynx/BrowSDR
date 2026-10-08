@@ -77,7 +77,9 @@ describe('remote RDS delivery', () => {
 		host._webrtc.sendCommandTo.mockImplementation((id, command) =>
 			remoteMethods.handleRemoteCommand.call(listeners[id], JSON.parse(JSON.stringify(command))),
 		);
+		await backend.addRemoteClient('alice');
 		await backend.setRemoteVfoParams('alice', 0, sensor);
+		await backend.addRemoteClient('bob');
 		await backend.setRemoteVfoParams('bob', 0, sensor);
 		const worker = backend._remoteClients.get('alice').workers[0];
 		const event = { type: 'rtl433_event', freq: sensor.freq, event: { model: 'Weather', temperature_C: 20 } };
@@ -100,7 +102,9 @@ describe('remote RDS delivery', () => {
 		const received = vi.fn();
 		await backend.setRemoteHostRtl433Callback(received);
 		const sensor = { ...params, freq: 433.92, rtl433: true };
+		await backend.addRemoteClient('alice');
 		await backend.setRemoteVfoParams('alice', 0, sensor);
+		await backend.addRemoteVfo('alice');
 		await backend.setRemoteVfoParams('alice', 1, sensor);
 		const state = backend._remoteClients.get('alice');
 		const removed = state.workers[0];
@@ -134,6 +138,7 @@ describe('remote RDS delivery', () => {
 		backend._perf = { audioCalls: 0, audioSamplesOut: 0, dspTimeSum: 0, dspTimeMax: 0 };
 		const host = { connected: true, running: true, remoteMode: 'none', locks: {}, backend, radio: {}, gains: {} };
 		await remoteMethods.startRemoteHost.call(host);
+		await backend.addRemoteClient('alice');
 		await backend.setRemoteVfoParams('alice', 0, { ...params, enabled: true });
 		const state = backend._remoteClients.get('alice');
 		state.workers[0].onmessage({ data: { type: 'audio', samples: new Float32Array(4800).buffer, dspTime: 2 } });
@@ -181,7 +186,9 @@ describe('remote RDS delivery', () => {
 		host._webrtc.sendCommandTo.mockImplementation((id, command) => {
 			remoteMethods.handleRemoteCommand.call(listeners[id], JSON.parse(JSON.stringify(command)));
 		});
+		await backend.addRemoteClient('alice');
 		await backend.setRemoteVfoParams('alice', 0, params);
+		await backend.addRemoteClient('bob');
 		await backend.setRemoteVfoParams('bob', 0, { ...params, freq: 98.9 });
 		const worker = backend._remoteClients.get('alice').workers[0];
 		for (const message of [{ pi: '9240' }, { ps: 'channelX' }, { rt: 'Madness - Our House' }]) {
@@ -202,7 +209,9 @@ describe('remote RDS delivery', () => {
 		const backend = makeBackend();
 		const received = vi.fn();
 		await backend.setRemoteHostRdsCallback(received);
+		await backend.addRemoteClient('alice');
 		await backend.setRemoteVfoParams('alice', 0, params);
+		await backend.addRemoteVfo('alice');
 		await backend.setRemoteVfoParams('alice', 1, { ...params, freq: 98.9 });
 		const state = backend._remoteClients.get('alice');
 		const removed = state.workers[0];
@@ -231,6 +240,7 @@ describe('remote RDS delivery', () => {
 		const backend = makeBackend();
 		const audio = vi.fn();
 		await backend.setRemoteHostAudioCallback(audio);
+		await backend.addRemoteClient('alice');
 		await backend.setRemoteVfoParams('alice', 0, params);
 		const state = backend._remoteClients.get('alice');
 		const event = { data: { type: 'audio', samples: new Float32Array(4800).fill(0.1).buffer } };
@@ -258,6 +268,7 @@ describe('remote RDS delivery', () => {
 		const backend = makeBackend();
 		const audio = vi.fn();
 		await backend.setRemoteHostAudioCallback(audio);
+		await backend.addRemoteClient('alice');
 		await backend.setRemoteVfoParams('alice', 0, { ...params, enabled: true });
 		await backend.addRemoteVfo('alice');
 		await backend.setRemoteVfoParams('alice', 1, { ...params, freq: 106.3, enabled: true });
@@ -287,6 +298,7 @@ describe('remote RDS delivery', () => {
 		const backend = makeBackend();
 		const audio = vi.fn();
 		await backend.setRemoteHostAudioCallback(audio);
+		await backend.addRemoteClient('alice');
 		await backend.setRemoteVfoParams('alice', 0, { ...params, enabled: true, audioMuted: true });
 		await backend.addRemoteVfo('alice');
 		await backend.setRemoteVfoParams('alice', 1, { ...params, enabled: true, audioMuted: false });

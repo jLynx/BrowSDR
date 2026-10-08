@@ -1,4 +1,4 @@
-import type { RxLevel } from './sdr-device';
+import type { RxLevel } from './types';
 
 /** Target receiver level while retaining headroom for peaks across the capture. */
 export function gainAdjustment(level: RxLevel): number {

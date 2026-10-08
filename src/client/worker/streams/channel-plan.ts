@@ -1,20 +1,8 @@
-import { IF_RATES } from '@/worker/runtime/types';
+import type { SharedBand, ChannelPlan } from './types';
+import { IF_RATES } from '@/worker/runtime/constants';
 import type { VfoParams } from '@/worker/runtime/types';
 import { sidebandOffsetHz } from '@/worker/decoders/ssb';
 import { rtl433SampleRate } from '@/worker/decoders/rtl433';
-
-export interface SharedBand {
-	centerBin: number;
-	centerFreq: number;
-	vfos: number[];
-}
-
-export interface ChannelPlan {
-	ratio: number;
-	sampleRate: number;
-	bands: SharedBand[];
-	direct: number[];
-}
 
 export function planSharedBands(sampleRate: number, centerFreq: number, params: VfoParams[], enabled: boolean): ChannelPlan {
 	const active = params

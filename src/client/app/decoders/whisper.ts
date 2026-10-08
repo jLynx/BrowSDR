@@ -1,5 +1,5 @@
 import type { WhisperMessage } from '@/transcription/types';
-import type { AppInstance } from '@/app/core/types';
+import type { AppInstance } from '@/app/core/receiver.types';
 
 export const whisperMethods = {
 	flushInactiveWhisperVfos(this: AppInstance) {

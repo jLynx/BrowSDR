@@ -1,7 +1,6 @@
-import type { RxLevel } from './sdr-device';
+import type { LimeGains, RxLevel } from './types';
 import { gainAdjustment, gainAdjustmentReason } from './auto-gain-level';
 
-export type LimeGains = { LNA: number; TIA: number; PGA: number };
 const lnaSteps = [0, 3, 6, 9, 12, 15, 18, 21, 24, 25, 26, 27, 28, 29, 30];
 const tiaDb = [0, 9, 12];
 export const limeGainTotal = (gains: LimeGains) =>

@@ -3,7 +3,7 @@
  * Ported from SDR++ Brown ch_extravhf_decoder.
  */
 
-import { DSD_SYMBOL_RATE, DSD_IF_RATE, SLICER_MID_FACTOR } from './types';
+import { DSD_SYMBOL_RATE, DSD_IF_RATE, SLICER_MID_FACTOR } from './constants';
 
 // ── Root Raised Cosine (RRC) Filter ──────────────────────────────────
 

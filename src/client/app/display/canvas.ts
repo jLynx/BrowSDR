@@ -1,4 +1,4 @@
-import type { AppInstance } from '@/app/core/types';
+import type { AppInstance } from '@/app/core/receiver.types';
 import { VFO_COLORS } from '@/app/core/constants';
 import { Waterfall, WaterfallGL } from '@/display/utils';
 import { SpectrumFrameLimiter, WaterfallClock } from '@/display/spectrum-rate';

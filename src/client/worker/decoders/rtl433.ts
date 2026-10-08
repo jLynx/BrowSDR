@@ -1,24 +1,8 @@
+import type { Rtl433Message, Rtl433Protocol, Rtl433Status, RtlModule, RtlFactory } from './types';
 import { errorMessage } from '@/platform/errors';
 import type { VfoParams } from '@/worker/runtime/types';
 import type { DspProcessor } from '/hackrf-web/pkg/hackrf_web.js';
 import { isRecord } from '@/platform/data';
-
-export type Rtl433Message =
-	{ type: 'rtl433_event'; freq: number; event: Record<string, unknown> } | { type: 'rtl433_status'; freq?: number; status: Rtl433Status };
-
-export interface Rtl433Protocol {
-	id: number;
-	name: string;
-	disabled: boolean;
-}
-export interface Rtl433Status {
-	state: 'off' | 'loading' | 'receiving' | 'error';
-	message: string;
-	sampleRate: number;
-	samples: number;
-	events: number;
-	protocols?: Rtl433Protocol[];
-}
 
 export function rtl433SampleRate(value: unknown): number {
 	return [250000, 500000, 1000000].includes(Number(value)) ? Number(value) : 250000;
@@ -33,27 +17,6 @@ export function rtl433ProtocolIds(value: unknown): string {
 	return ids.join(',');
 }
 
-interface RtlModule {
-	HEAPF32: Float32Array;
-	_malloc(bytes: number): number;
-	_free(ptr: number): void;
-	stringToNewUTF8(text: string): number;
-	UTF8ToString(ptr: number): string;
-	_rtl433_init(rate: number, frequency: number, protocols: number): number;
-	_rtl433_process(ptr: number, count: number): number;
-	_rtl433_flush(): number;
-	_rtl433_destroy(): void;
-	_rtl433_protocol_count(): number;
-	_rtl433_protocol_name(id: number): number;
-	_rtl433_protocol_disabled(id: number): number;
-}
-
-type RtlFactory = (options: {
-	locateFile(path: string): string;
-	onDecoded(json: string): void;
-	print(): void;
-	printErr(): void;
-}) => Promise<RtlModule>;
 let factoryPromise: Promise<RtlFactory> | undefined;
 async function loadFactory(): Promise<RtlFactory> {
 	// Load the committed Emscripten ES module as a static asset in dev and production.

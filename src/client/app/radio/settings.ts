@@ -1,4 +1,4 @@
-import type { AppInstance } from '@/app/core/types';
+import type { AppInstance } from '@/app/core/receiver.types';
 import { makeDefaultVfo } from '@/app/core/constants';
 import { normalizeSpectrumFps } from '@/display/spectrum-rate';
 import { isRecord, restoreFields, primitiveMap } from '@/platform/data';

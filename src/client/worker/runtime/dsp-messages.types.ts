@@ -1,7 +1,6 @@
 import type { VfoParams } from './types';
-import type { RDSMessage } from './types';
+import type { RDSMessage, Rtl433Message } from '@/worker/decoders/types';
 import type { DSDStatus } from '@/worker/decoders/dsd/types';
-import type { Rtl433Message } from '@/worker/decoders/rtl433';
 
 export type DspOutput =
 	| DspAudio

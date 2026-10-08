@@ -1,5 +1,5 @@
 import { isRecord } from '@/platform/data';
-import type { AppInstance } from './core/types';
+import type { AppInstance } from '@/app/core/receiver.types';
 import type { Backend as BackendInstance } from '@/worker/runtime/backend';
 import { createApp, markRaw } from 'vue';
 import receiverTemplate from './templates/receiver';

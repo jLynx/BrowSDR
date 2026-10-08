@@ -1,5 +1,12 @@
-import type { SamplesCallback, PocsagCallback, RdsCallback, Rtl433Callback, HostCallback, HostStats } from '@/worker/runtime/callbacks';
-import type { DspAudio, DspOutput } from '@/worker/runtime/dsp-messages';
+import type {
+	SamplesCallback,
+	PocsagCallback,
+	RdsCallback,
+	Rtl433Callback,
+	HostCallback,
+	HostStats,
+} from '@/worker/runtime/callbacks.types';
+import type { DspAudio, DspOutput } from '@/worker/runtime/dsp-messages.types';
 /*
 Copyright (c) 2026, jLynx <https://github.com/jLynx>
 
@@ -21,10 +28,9 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 */
 
 import type { VfoParams, RemoteClientState } from '@/worker/runtime/types';
-import { AUDIO_RATE } from '@/worker/runtime/types';
+import { AUDIO_RATE } from '@/worker/runtime/constants';
 import { POCSAGDecoder } from '@/worker/decoders/pocsag';
 import { ensureWasmInitialized, init } from '@/worker/runtime/wasm-init';
-
 import type { Backend } from '@/worker/runtime/backend';
 import { AUDIO_QUEUE_CAPACITY, appendAudio, mixLength } from './audio-queue';
 
@@ -90,7 +96,11 @@ export function _getOrCreateClientState(this: Backend, clientId: string): Remote
 }
 
 export function addRemoteClient(this: Backend, clientId: string): Promise<void> {
-	this._getOrCreateClientState(clientId);
+	if (!this._remoteClients?.has(clientId)) {
+		this._getOrCreateClientState(clientId);
+		// Clients begin with VFO 0. Further slots must be explicitly allocated.
+		return this.addRemoteVfo(clientId);
+	}
 
 	return Promise.resolve();
 }
@@ -169,8 +179,9 @@ function handleRemoteWorkerAudio(state: RemoteClientState, msg: DspAudio, backen
 	}
 }
 
-export function setRemoteVfoParams(this: Backend, clientId: string, index: number, params: VfoParams): Promise<void> {
-	const state = this._getOrCreateClientState(clientId);
+export function setRemoteVfoParams(this: Backend, clientId: string, index: number, params: VfoParams): Promise<boolean> {
+	const state = this._remoteClients?.get(clientId);
+	if (!state || !Number.isSafeInteger(index) || index < 0 || index >= state.workers.length) return Promise.resolve(false);
 	const wasEnabled = state.params[index] && state.params[index].enabled;
 	state.params[index] = params;
 
@@ -179,7 +190,7 @@ export function setRemoteVfoParams(this: Backend, clientId: string, index: numbe
 	}
 
 	if (!state.workers[index]) {
-		if (!this._sampleRate || !this.sharedIqPools) return Promise.resolve();
+		if (!this._sampleRate || !this.sharedIqPools) return Promise.resolve(true);
 		const worker = new globalThis.Worker(new URL('../dsp-worker.ts', import.meta.url), { type: 'module' });
 		bindRemoteWorker(this, clientId, state, worker);
 		worker.postMessage({
@@ -199,7 +210,7 @@ export function setRemoteVfoParams(this: Backend, clientId: string, index: numbe
 		});
 	}
 
-	return Promise.resolve();
+	return Promise.resolve(true);
 }
 
 export function addRemoteVfo(this: Backend, clientId: string): Promise<void> {
@@ -212,9 +223,9 @@ export function addRemoteVfo(this: Backend, clientId: string): Promise<void> {
 	return Promise.resolve();
 }
 
-export function removeRemoteVfo(this: Backend, clientId: string, index: number): Promise<void> {
+export function removeRemoteVfo(this: Backend, clientId: string, index: number): Promise<boolean> {
 	const state = this._remoteClients && this._remoteClients.get(clientId);
-	if (!state) return Promise.resolve();
+	if (!state || !Number.isSafeInteger(index) || index < 0 || index >= state.workers.length) return Promise.resolve(false);
 	const w = state.workers[index];
 	if (w) {
 		try {
@@ -230,7 +241,7 @@ export function removeRemoteVfo(this: Backend, clientId: string, index: number):
 	state.rdsDecoders.splice(index, 1);
 	state.squelchOpen.splice(index, 1);
 
-	return Promise.resolve();
+	return Promise.resolve(true);
 }
 
 export function _queueRemoteAudio(this: Backend, clientId: string, index: number, samples: Float32Array): void {

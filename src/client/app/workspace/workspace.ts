@@ -20,8 +20,8 @@ const workspaceTemplate = `
 			</div>`;
 import { isRecord } from '@/platform/data';
 import { errorMessage } from '@/platform/errors';
-import type { WorkspaceInstance, ReceiverEntry, ReceiverComponent } from './types';
-import type { AppInstance, Bookmark } from '@/app/core/types';
+import type { WorkspaceInstance, ReceiverEntry, ReceiverComponent, Bookmark } from './types';
+import type { AppInstance } from '@/app/core/receiver.types';
 import type { ReceiverCommand, ReceiverInventory } from '@/remote/types';
 import { markRaw } from 'vue';
 import { WebRTCHandler, PEER_ID_PREFIX } from '@/remote/webrtc';
@@ -30,7 +30,8 @@ import { usbSettingsKey } from '@/radio/usb-device-selection';
 import { bookmarkMethods } from './bookmarks';
 import { WorkspaceMediaSession } from '@/app/audio/media-session';
 import { UiButton, UiNotice } from '@/ui';
-import { remoteConnectionIssue, type CapabilityIssue } from '@/platform/browser-capabilities';
+import { remoteConnectionIssue } from '@/platform/browser-capabilities';
+import type { CapabilityIssue } from '@/platform/types';
 
 export async function syncReceiverAvailability(app: AppInstance, running: boolean): Promise<void> {
 	// Inventory changes preserve a client's own pause choice. Only resume

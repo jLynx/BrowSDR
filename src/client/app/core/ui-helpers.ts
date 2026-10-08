@@ -1,4 +1,4 @@
-import type { AppInstance } from './types';
+import type { AppInstance } from '@/app/core/receiver.types';
 import { VFO_COLORS } from './constants';
 
 export const uiHelperMethods = {

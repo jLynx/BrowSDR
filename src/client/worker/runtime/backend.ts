@@ -7,8 +7,8 @@ import type {
 	DsdCallback,
 	HostCallback,
 	HostStats,
-} from '@/worker/runtime/callbacks';
-import type { DspAudio } from '@/worker/runtime/dsp-messages';
+} from '@/worker/runtime/callbacks.types';
+import type { DspAudio } from '@/worker/runtime/dsp-messages.types';
 import type { InitOutput, DspProcessor } from '/hackrf-web/pkg/hackrf_web.js';
 /*
 Copyright (c) 2026, jLynx <https://github.com/jLynx>
@@ -33,7 +33,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 import { ensureWasmInitialized, init } from './wasm-init';
 import { normalizeSpectrumFps } from '@/display/spectrum-rate';
 import { MockHackRF } from './mock-hackrf';
-import type { SdrDevice, SdrDeviceInfo, DeviceCapabilities } from '@/radio/sdr-device';
+import type { SdrDevice, SdrDeviceInfo, DeviceCapabilities } from '@/radio/types';
 import { detectDevice } from '@/radio/sdr-device';
 // Import device drivers so they self-register
 import '@/devices/hackrf/device';

@@ -21,7 +21,8 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 
 import { LimeSDR } from './driver';
 import { MAX_SAMPLE_RATE } from './protocol';
-import { registerDriver, type SdrDevice, type SdrDeviceInfo, type GainControl } from '@/radio/sdr-device';
+import { registerDriver } from '@/radio/sdr-device';
+import type { SdrDevice, SdrDeviceInfo, GainControl } from '@/radio/types';
 // ── LimeSDRDevice (SdrDevice wrapper) ───────────────────────────────
 
 export class LimeSDRDevice implements SdrDevice {

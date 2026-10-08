@@ -1,10 +1,7 @@
-import type { DspOutput } from '@/worker/runtime/dsp-messages';
-
+import type { ChannelState } from './types';
+import type { DspOutput } from '@/worker/runtime/dsp-messages.types';
 import { planSharedBands } from './channel-plan';
-import type { ChannelPlan } from './channel-plan';
-
 import type { VfoParams, PerfCounters } from '@/worker/runtime/types';
-
 import type { Backend } from '@/worker/runtime/backend';
 
 export function dispatchIqChunk(
@@ -135,15 +132,6 @@ export function ensureChannelWorker(channel: ChannelState, perf: PerfCounters) {
 			}
 		};
 	}
-}
-
-export interface ChannelState {
-	worker?: Worker;
-	plan?: ChannelPlan;
-	targets: Array<{ worker: Worker; params: VfoParams; shared: boolean }>;
-	pending: number;
-	key: string;
-	perf: { calls: number; sum: number; max: number };
 }
 
 function collectTargets(backend: Backend) {

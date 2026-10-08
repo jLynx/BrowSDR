@@ -1,4 +1,4 @@
-import type { BookmarkCategory } from './types';
+import type { BookmarkCategory } from '@/app/workspace/types';
 
 // Color palette for N VFOs
 export const VFO_COLORS = ['#ff4444', '#4488ff', '#44cc44', '#ff44ff', '#ffaa44', '#44cccc', '#cccc44', '#ff8844'];

@@ -75,7 +75,7 @@ try {
 		}
 		resetMbe();
 		const dibits = new Uint8Array(144 * 120);
-		const { SYNC_WORDS } = await server.ssrLoadModule('/src/client/worker/decoders/dsd/types.ts');
+		const { SYNC_WORDS } = await server.ssrLoadModule('/src/client/worker/decoders/dsd/constants.ts');
 		for (let burst = 0; burst < 120; burst++) {
 			dibits.set(payload, burst * 144 + 12);
 			if (burst % 12 === 0) dibits.set(Uint8Array.from(SYNC_WORDS.DMR_BS_VOICE, Number), burst * 144 + 66);

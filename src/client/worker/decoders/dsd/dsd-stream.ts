@@ -1,7 +1,7 @@
 import { RationalResampler } from '@/worker/streams/dsp-pipeline';
 import { DSDDecoder } from './dsd-decoder';
 import { FMDiscriminator } from './dsd-dsp';
-import { DSD_AUDIO_RATE, DSD_IF_RATE } from './types';
+import { DSD_AUDIO_RATE, DSD_IF_RATE } from './constants';
 import type { DSDStatus } from './types';
 
 /** Turns bursty codec output into audio paced by the received IQ clock. */

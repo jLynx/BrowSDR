@@ -1,8 +1,7 @@
-import type { Component } from 'vue';
-import type { AppInstance } from '@/app/core/instance';
-import type { Bookmark } from '@/app/core/types';
-import type { CapabilityIssue } from '@/platform/browser-capabilities';
-import type { WatchOptions, WatchStopHandle } from 'vue';
+import type { Vfo } from '@/app/core/types';
+import type { Component, WatchOptions, WatchStopHandle } from 'vue';
+import type { AppInstance } from '@/app/core/receiver.types';
+import type { CapabilityIssue } from '@/platform/types';
 import type { ReceiverInventory } from '@/remote/types';
 
 export interface ReceiverEntry {
@@ -48,3 +47,76 @@ export interface WorkspaceInstance extends WorkspaceData {
 }
 export type ReceiverComponent = Component;
 export type ReceiverInstance = AppInstance;
+
+export interface BookmarkModal {
+	show: boolean;
+	type: string;
+	name: string;
+	category: string;
+}
+
+export interface BookmarkImportModal {
+	show: boolean;
+}
+
+export interface BookmarkEdit {
+	show: boolean;
+	index: number;
+	type: string;
+	name: string;
+	category: string;
+	freq: number;
+	mode: string;
+	bandwidth: number;
+	snapInterval: number;
+	deEmphasis: string;
+	squelchEnabled: boolean;
+	squelchLevel: number;
+	noiseReduction: boolean;
+	stereo: boolean;
+	lowPass: boolean;
+	highPass: boolean;
+	rds: boolean;
+	rdsRegion: string;
+	volume: number;
+	centerFreq: number;
+	sampleRate: number;
+	vfos: Vfo[];
+	activeVfoIndex: number;
+}
+
+export interface BookmarkCategory {
+	value: string;
+	label: string;
+}
+
+export interface Bookmark {
+	type: string;
+	name: string;
+	category?: string;
+	id?: string;
+	freq?: number;
+	rtl433?: boolean;
+	rtl433SampleRate?: number;
+	rtl433Protocols?: string;
+	mode?: string;
+	bandwidth?: number;
+	snapInterval?: number;
+	deEmphasis?: string;
+	squelchEnabled?: boolean;
+	squelchLevel?: number;
+	noiseReduction?: boolean;
+	stereo?: boolean;
+	lowPass?: boolean;
+	highPass?: boolean;
+	rds?: boolean;
+	rdsRegion?: string;
+	volume?: number;
+	// group fields
+	centerFreq?: number;
+	sampleRate?: number;
+	vfos?: Vfo[];
+	activeVfoIndex?: number;
+}
+
+export type BookmarkEntry = { bm: Bookmark; i: number };
