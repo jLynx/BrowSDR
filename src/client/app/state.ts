@@ -1,9 +1,11 @@
 import { makeDefaultVfo, BOOKMARK_CATEGORIES } from './constants';
 import type { DSDStatus } from '../worker/dsd/types';
+import type { CapabilityIssue } from '../browser-capabilities';
 
 export function createAppData() {
 	return {
 		backend: null as any,
+		usbCapabilityIssue: null as CapabilityIssue | null,
 		connected: false,
 		running: false,
 		isOnline: navigator.onLine,

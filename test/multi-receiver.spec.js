@@ -50,6 +50,7 @@ describe('multiplexed SDR streams', () => {
 });
 
 function makeWorkspace() {
+	vi.stubGlobal('RTCPeerConnection', vi.fn());
 	vi.stubGlobal('window', { location: { hostname: 'localhost' }, history: { replaceState: vi.fn() } });
 	vi.stubGlobal('document', { title: 'BrowSDR' });
 	const options = createWorkspace({});

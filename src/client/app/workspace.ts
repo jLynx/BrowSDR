@@ -4,7 +4,8 @@ import { ReceiverTransport, unpackReceiverChunk } from '../receiver-transport';
 import { usbSettingsKey } from '../usb-device-selection';
 import { bookmarkMethods } from './bookmarks';
 import { WorkspaceMediaSession } from './media-session';
-import { UiButton } from '../ui';
+import { UiButton, UiNotice } from '../ui';
+import { remoteConnectionIssue, type CapabilityIssue } from '../browser-capabilities';
 
 interface ReceiverEntry {
 	id: string;
@@ -39,7 +40,7 @@ export function createWorkspace(Receiver: any): any {
 	let mediaSession: WorkspaceMediaSession;
 
 	return {
-		components: { Receiver, UiButton },
+		components: { Receiver, UiButton, UiNotice },
 		template: `
 			<div class="receiver-workspace">
 				<nav v-if="receivers.filter(receiver => receiver.status === 'Receiving' || receiver.status === 'Paused').length > 1" class="receiver-tabs" aria-label="SDR receivers">
@@ -52,6 +53,7 @@ export function createWorkspace(Receiver: any): any {
 					<UiButton variant="secondary" v-if="mode === 'client'" @click="disconnectRemote">Disconnect Remote</UiButton>
 				</nav>
 				<div v-if="error" class="workspace-message" role="alert">{{ error }}</div>
+				<UiNotice v-if="remoteCapabilityIssue" v-bind="remoteCapabilityIssue" />
 				<div v-if="mode === 'client' && !receivers.length" class="workspace-message">
 					{{ remoteStatus }}
 					<UiButton variant="secondary" @click="disconnectRemote">Disconnect Remote</UiButton>
@@ -64,6 +66,7 @@ export function createWorkspace(Receiver: any): any {
 				receivers: [{ id: 'local-1', label: 'Receiver 1', settingsKey: 'SDRSetting', status: 'Disconnected' }] as ReceiverEntry[],
 				selectedId: 'local-1', mode: 'none', error: '', remoteStatus: '', shareLink: '',
 				controller: null as any,
+				remoteCapabilityIssue: null as CapabilityIssue | null,
 				bookmarks: [] as any[],
 			};
 		},
@@ -212,6 +215,8 @@ export function createWorkspace(Receiver: any): any {
 			},
 			async startSharing(this: any) {
 				if (this.mode === 'host') return;
+				this.remoteCapabilityIssue = remoteConnectionIssue();
+				if (this.remoteCapabilityIssue) return;
 				if (![...instances.values()].some(app => app.running && app.connected)) { this.error = 'Start an SDR before sharing.'; return; }
 				this.error = '';
 				this.mode = 'host';
@@ -264,6 +269,8 @@ export function createWorkspace(Receiver: any): any {
 			},
 			async connectRemote(this: any, hostId: string) {
 				if (this.mode === 'client') return;
+				this.remoteCapabilityIssue = remoteConnectionIssue();
+				if (this.remoteCapabilityIssue) return;
 				this.error = '';
 				await this.stopSharing();
 				this.mode = 'client';

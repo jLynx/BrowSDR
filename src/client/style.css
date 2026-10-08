@@ -2974,3 +2974,17 @@ canvas {
 
 .auto-gain { margin: 8px 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .auto-gain p { width: 100%; font-size: 11px; line-height: 1.5; color: var(--text-muted); }
+
+.ui-notice {
+	margin: 12px;
+	padding: 12px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--bg-dark);
+	color: var(--text-main);
+	font-size: 12px;
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+}
+.ui-notice p { margin: 6px 0; color: var(--text-muted); }
+.ui-notice a { color: var(--accent); text-decoration: underline; }

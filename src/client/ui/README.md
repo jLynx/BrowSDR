@@ -49,6 +49,7 @@ tests (PowerShell: `$env:PLAYWRIGHT_CHANNEL='msedge'`).
 | `UiLock` | `locked`, `host`; `toggle` event | Host-controlled lock indicator; client cannot toggle |
 | `UiBadge` | `variant`; default slot | Decoder states, bookmark types/categories, remote status |
 | `UiSnackbar` | `show`, `message` | Existing toast with a polite live announcement |
+| `UiNotice` | `title`, `message`, `href`, `linkLabel`; default slot | Persistent capability guidance with an optional external help link |
 | `UiToolHeader` | `variant`: transcript, pocsag, activity; `actions` slot | Decoder/tool title and toolbar, including RDS and rtl_433 |
 | `UiEmptyState` | `variant`: bookmark, transcript, pocsag, activity, remote-clients | Existing empty-state treatment |
 

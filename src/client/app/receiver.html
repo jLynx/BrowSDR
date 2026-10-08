@@ -930,6 +930,7 @@
 	<!-- Device picker dialog -->
 	<UiDialog :open="devicePicker.show" title="Add SDR" @close="devicePicker.show = false" dialog-class="device-picker-dialog" body-variant="flush">
 		<template #title>Add SDR</template>
+		<UiNotice v-if="usbCapabilityIssue" v-bind="usbCapabilityIssue" />
 
 		<div class="device-picker-list">
 			<div v-for="(entry, i) in devicePicker.devices" :key="i"
@@ -945,7 +946,7 @@
 		</div>
 
 		<template #footer>
-			<UiButton variant="primary" style="flex: 1;" @click="pairNewDevice">Pair New Device</UiButton>
+			<UiButton variant="primary" style="flex: 1;" @click="pairNewDevice" :disabled="!!usbCapabilityIssue" :title="usbCapabilityIssue?.title">Pair New Device</UiButton>
 			<UiButton @click="devicePicker.show = false">Cancel</UiButton>
 		</template>
 	</UiDialog>

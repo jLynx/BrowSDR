@@ -1,14 +1,24 @@
 import type { AppInstance } from './types';
 import * as Comlink from 'comlink';
 import { getAllCatalogFilters, lookupDevice } from '../device-catalog';
+import { localUsbIssue } from '../browser-capabilities';
 
 export const connectionMethods = {
 	async connect(this: AppInstance) {
+		if (this.remoteMode === 'client' || this.workspace?.mode === 'client') return;
+		this.usbCapabilityIssue = localUsbIssue();
+		if (this.usbCapabilityIssue) {
+			this.devicePicker.devices = [];
+			this.devicePicker.show = true;
+			return;
+		}
 		if (!this.backend) return;
 		this._initAudioCtx(); // create AudioContext within user gesture
 
 		// Get already-paired USB devices and filter to recognized SDR devices
-		const allPaired = await navigator.usb.getDevices();
+		let allPaired: USBDevice[];
+		try { allPaired = await navigator.usb.getDevices(); }
+		catch (error: any) { this.showMsg('USB access failed: ' + error.message); return; }
 		type PairedSdr = { device: USBDevice; driverName: string; productName: string; deviceNumber: number };
 		const sdrDevices: PairedSdr[] = [];
 		for (const device of allPaired) {
@@ -23,10 +33,16 @@ export const connectionMethods = {
 	},
 
 	async pairNewDevice(this: AppInstance) {
+		if (this.remoteMode === 'client' || this.workspace?.mode === 'client') return;
+		this.usbCapabilityIssue = localUsbIssue();
+		if (this.usbCapabilityIssue) { this.devicePicker.show = true; return; }
 		this.devicePicker.show = false;
 		const device = await navigator.usb.requestDevice({
 			filters: getAllCatalogFilters()
-		}).catch(() => null);
+		}).catch((error: any) => {
+			if (error.name !== 'NotFoundError') this.showMsg('USB access failed: ' + error.message);
+			return null;
+		});
 		if (!device) return;
 		await this.connectToDevice(device);
 	},

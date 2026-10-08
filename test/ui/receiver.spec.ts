@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { defineComponent } from 'vue';
 import template from '../../src/client/app/receiver.html?raw';
@@ -29,9 +29,41 @@ const ReceiverView = defineComponent({
 		isFreqInBandwidth: () => true,
 	},
 });
-afterEach(() => wrapper?.unmount());
+afterEach(() => { wrapper?.unmount(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('receiver uses the shared UI', () => {
+	it('shows USB guidance only when Add SDR is opened, with pairing disabled and Mock SDR available', async () => {
+		vi.stubGlobal('isSecureContext', true);
+		wrapper = mount(ReceiverView, { attachTo: document.body });
+		expect(wrapper.find('.ui-notice').exists()).toBe(false);
+		await wrapper.findAll('button').find(button => button.text() === 'Add SDR')!.trigger('click');
+		expect(wrapper.get('.ui-notice').text()).toContain('WebUSB is unavailable');
+		expect(wrapper.get('.ui-notice a').attributes('href')).toBe('https://caniuse.com/webusb');
+		expect(wrapper.findAll('button').find(button => button.text() === 'Pair New Device')!.attributes('disabled')).toBeDefined();
+		const demo = vi.fn();
+		await wrapper.setData({ workspace: { connectDevice: demo } });
+		await wrapper.findAll('button').find(button => button.text().includes('Mock SDR'))!.trigger('click');
+		expect(demo).toHaveBeenCalledOnce();
+		expect(wrapper.vm.devicePicker.show).toBe(false);
+	});
+	it('does not open the USB picker for remote clients', async () => {
+		wrapper = mount(ReceiverView, { attachTo: document.body });
+		await wrapper.setData({ remoteMode: 'client' });
+		await wrapper.vm.connect();
+		expect(wrapper.find('.ui-notice').exists()).toBe(false);
+		expect(wrapper.vm.devicePicker.show).toBe(false);
+	});
+	it('keeps USB permission errors separate from compatibility guidance', async () => {
+		vi.stubGlobal('isSecureContext', true);
+		vi.stubGlobal('navigator', { usb: { getDevices: vi.fn().mockRejectedValue(new Error('Permission denied')), requestDevice: vi.fn() } });
+		wrapper = mount(ReceiverView, { attachTo: document.body });
+		await wrapper.setData({ backend: {} });
+		vi.spyOn(wrapper.vm, '_initAudioCtx').mockImplementation(() => {});
+		const message = vi.spyOn(wrapper.vm, 'showMsg').mockImplementation(() => {});
+		await wrapper.vm.connect();
+		expect(wrapper.vm.usbCapabilityIssue).toBeNull();
+		expect(message).toHaveBeenCalledWith('USB access failed: Permission denied');
+	});
 	it('opens the remote dialog and keeps its native input model connected', async () => {
 		wrapper = mount(ReceiverView, { attachTo: document.body });
 		const connect = wrapper.findAll('button').find(button => button.text() === 'Connect Remote')!;
