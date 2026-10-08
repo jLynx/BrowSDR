@@ -45,6 +45,9 @@ export const bookmarkMethods = {
 				highPass: vfo.highPass,
 				rds: vfo.rds,
 				rdsRegion: vfo.rdsRegion,
+				rtl433: vfo.rtl433,
+				rtl433SampleRate: vfo.rtl433SampleRate,
+				rtl433Protocols: vfo.rtl433Protocols,
 				volume: vfo.volume,
 			};
 		} else {
@@ -90,6 +93,9 @@ export const bookmarkMethods = {
 				highPass: bm.highPass ?? false,
 				rds: bm.rds ?? false,
 				rdsRegion: bm.rdsRegion ?? 'eu',
+				rtl433: bm.rtl433 ?? false,
+				rtl433SampleRate: bm.rtl433SampleRate ?? 250000,
+				rtl433Protocols: bm.rtl433Protocols ?? '',
 				volume: bm.volume ?? 50,
 				displayFreq: this.formatFreq(bm.freq),
 				focused: false,
