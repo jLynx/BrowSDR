@@ -5,8 +5,8 @@
 `mbelib/` is a downloaded cache and is excluded from Git, including upstream native
 tests, Google Test/Mock and packaging files.
 
-The compiled files `public/lib/mbelib/mbelib.js` and `mbelib.wasm` are committed,
-alongside `COPYRIGHT` and `NOTICE`. Vite copies this directory to `dist/lib/mbelib/`
+The compiled files `wasm/mbelib/pkg/mbelib.js` and `mbelib.wasm` are committed,
+alongside `COPYRIGHT` and `NOTICE`. Vite copies this directory to `dist/wasm/mbelib/`
 and Cloudflare Workers serves it as static assets. The browser runs the codec.
 `npm install`, `npm run build` and `npm run deploy` do not compile mbelib or need
 Emscripten. Keep the licence and notices with the compiled files.
@@ -31,7 +31,7 @@ and activate version 4.0.7. In Bash (Linux, macOS or WSL on Windows):
 source ./emsdk_env.sh
 
 # Then, from the BrowSDR repository root:
-bash mbelib-wasm/build.sh
+bash wasm/mbelib/build.sh
 ```
 
 `npm run build:mbelib` invokes the same script if Node/npm and the activated SDK
@@ -41,7 +41,7 @@ rebuilds reuse the local source directory. Compilation uses a temporary director
 and replaces the committed outputs only after it succeeds.
 
 When updating the upstream revision, update the commit and checksum in `build.sh`,
-these instructions and `public/lib/mbelib/NOTICE`, and remove the cached `mbelib/`
+these instructions and `wasm/mbelib/pkg/NOTICE`, and remove the cached `mbelib/`
 directory before rebuilding. When updating Emscripten, update its pinned version in
 the same files. Review upstream licence/notice changes and commit the regenerated
 JavaScript and WASM together. Validate with:

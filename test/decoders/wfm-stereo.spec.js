@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-const dspModule = readFileSync(new URL('../../hackrf-web/pkg/hackrf_web_bg.wasm', import.meta.url));
-vi.mock('/hackrf-web/pkg/hackrf_web.js', async () => {
-	const dsp = await vi.importActual('../../hackrf-web/pkg/hackrf_web.js');
+const dspModule = readFileSync(new URL('../../wasm/dsp/pkg/browsdr_dsp_bg.wasm', import.meta.url));
+vi.mock('/wasm/dsp/browsdr_dsp.js', async () => {
+	const dsp = await vi.importActual('../../wasm/dsp/pkg/browsdr_dsp.js');
 	const wasm = dsp.initSync({ module: dspModule });
 	return { ...dsp, default: async () => wasm };
 });

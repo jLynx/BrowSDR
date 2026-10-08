@@ -12,8 +12,10 @@ print(pin['commit'], pin['sha256'], pin['emscripten'])
 PY
 )
 SOURCE="$ROOT/rtl_433-$COMMIT"
-BUILD="$ROOT/build/$COMMIT"
-OUT="$ROOT/../public/lib/rtl433"
+# Moving the checkout must not reuse CMake's absolute source/build paths.
+LOCATION_KEY="$(printf '%s' "$ROOT" | sha256sum | cut -c1-12)"
+BUILD="$ROOT/build/$COMMIT-$LOCATION_KEY"
+OUT="$ROOT/pkg"
 if [[ "$(emcc --version | head -1)" != *" $EMSCRIPTEN "* ]]; then
     echo "Activate Emscripten $EMSCRIPTEN before rebuilding rtl_433." >&2
     exit 1
@@ -60,8 +62,8 @@ Source archive SHA-256: {pin['sha256']}
 Compiler: Emscripten {pin['emscripten']}
 License: GPL-2.0-or-later; see COPYING and upstream per-file copyright notices.
 
-Corresponding source: upstream revision above, rtl433-wasm/wrapper.c and
-rtl433-wasm/build.sh in the BrowSDR source repository. The build script reduces
+Corresponding source: upstream revision above, wasm/rtl433/wrapper.c and
+wasm/rtl433/build.sh in the BrowSDR source repository. The build script reduces
 MAXIMAL_BUF_LENGTH to 65536 for bounded browser streaming and disables native
 SDR drivers. Network output and CLI teardown are excluded by the adapter and
 linker; no file or socket input is opened. Device protocol code is unchanged.

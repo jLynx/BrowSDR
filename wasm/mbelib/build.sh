@@ -4,32 +4,32 @@
 # Prerequisites: Emscripten SDK 4.0.7 (emcc) must be in PATH.
 #   Install: https://emscripten.org/docs/getting_started/downloads.html
 #
-# Usage: npm run build:mbelib (or bash mbelib-wasm/build.sh)
+# Usage: npm run build:mbelib (or bash wasm/mbelib/build.sh)
 #
-# Output: ../public/lib/mbelib/mbelib.js + mbelib.wasm
+# Output: wasm/mbelib/pkg/mbelib.js + mbelib.wasm
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-OUT_DIR="$SCRIPT_DIR/../public/lib/mbelib"
+OUT_DIR="$SCRIPT_DIR/pkg"
 MBELIB_DIR="$SCRIPT_DIR/mbelib"
 MBELIB_COMMIT="9a04ed5c78176a9965f3d43f7aa1b1f5330e771f"
 MBELIB_SHA256="c7d6ebbbf3ca44bc10ee0755dede7f74fd65c31d1568d4174f29a68ae2f92278"
 EMSCRIPTEN_VERSION="4.0.7"
 
 if ! command -v emcc >/dev/null 2>&1; then
-    echo "Emscripten $EMSCRIPTEN_VERSION is required. See mbelib-wasm/README.md." >&2
+    echo "Emscripten $EMSCRIPTEN_VERSION is required. See wasm/mbelib/README.md." >&2
     exit 1
 fi
 COMPILER_VERSION="$(emcc --version)"
 if [[ "${COMPILER_VERSION%%$'\n'*}" != *" $EMSCRIPTEN_VERSION "* ]]; then
-    echo "Activate Emscripten $EMSCRIPTEN_VERSION before rebuilding. See mbelib-wasm/README.md." >&2
+    echo "Activate Emscripten $EMSCRIPTEN_VERSION before rebuilding. See wasm/mbelib/README.md." >&2
     exit 1
 fi
 
 for NOTICE_FILE in COPYRIGHT NOTICE; do
     if [ ! -f "$OUT_DIR/$NOTICE_FILE" ]; then
-        echo "Restore public/lib/mbelib/$NOTICE_FILE before rebuilding." >&2
+        echo "Restore wasm/mbelib/pkg/$NOTICE_FILE before rebuilding." >&2
         exit 1
     fi
 done

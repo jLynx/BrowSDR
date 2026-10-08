@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
-import Rtl433Module from '../public/lib/rtl433/rtl433.js';
+import Rtl433Module from '../wasm/rtl433/pkg/rtl433.js';
 
 const args = process.argv.slice(2);
 const file = args[0];
@@ -14,7 +14,7 @@ const ids = option('--protocols', '');
 async function decode(blockValues) {
 	const events = [];
 	const module = await Rtl433Module({
-		wasmBinary: fs.readFileSync(new URL('../public/lib/rtl433/rtl433.wasm', import.meta.url)),
+		wasmBinary: fs.readFileSync(new URL('../wasm/rtl433/pkg/rtl433.wasm', import.meta.url)),
 		onDecoded: (json) => events.push(JSON.parse(json)),
 		print: () => {},
 		printErr: () => {},

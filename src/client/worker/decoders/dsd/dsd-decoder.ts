@@ -234,7 +234,7 @@ export class DSDDecoder {
 				this.status.mbelibLoaded = false;
 				this.status.mbelibError = 'Voice decoder unavailable';
 				this.onStatus({ ...this.status });
-				console.warn('DSD: mbelib WASM not available — run mbelib-wasm/build.sh to enable voice decoding. Error:', err);
+				console.warn('DSD: mbelib WASM not available — run wasm/mbelib/build.sh to enable voice decoding. Error:', err);
 			});
 	}
 

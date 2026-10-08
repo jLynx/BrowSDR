@@ -1,5 +1,5 @@
 [package]
-name = "hackrf-web"
+name = "browsdr-dsp"
 version = "0.1.0"
 authors = ["jLynx"]
 edition = "2021"

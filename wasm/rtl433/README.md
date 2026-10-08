@@ -7,7 +7,7 @@ protocol decoding. No native SDR driver, local service, or network output is use
 Decoding continues when VFO audio is muted. Remote VFOs decode on the host and
 forward events/status over the existing command channel.
 
-The generated `public/lib/rtl433/rtl433.js`, `rtl433.wasm`, `COPYING`, and `NOTICE`
+The generated `wasm/rtl433/pkg/rtl433.js`, `rtl433.wasm`, `COPYING`, and `NOTICE`
 are committed. Normal builds require no C compiler. Keep source and notices
 available with distributions of these GPL-2.0-or-later assets.
 
@@ -43,7 +43,7 @@ Already-current revisions are skipped; use `build:rtl433` to force a rebuild.
 Before distributing an update, run `npm run typecheck`, `npm run build`, then
 `npm run test -- --run`; optionally validate recorded OOK/FSK captures with the
 command below. Review and commit `upstream.json` and all four
-`public/lib/rtl433` assets together. Upstream C API changes may require an
+`wasm/rtl433/pkg` assets together. Upstream C API changes may require an
 adapter change; new protocols are picked up automatically by a successful
 build. Normal app builds keep using these tested assets. Updates are manual
 and become available to users when the new app build is deployed.

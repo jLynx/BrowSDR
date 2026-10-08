@@ -34,7 +34,7 @@ export async function ensureMbelibInitialized(factory?: MbelibFactory): Promise<
 		const MbelibModuleFactory = factory ?? (await loadMbelibFactory());
 
 		const module = await MbelibModuleFactory({
-			locateFile: (path: string) => '/lib/mbelib/' + path,
+			locateFile: (path: string) => '/wasm/mbelib/' + path,
 		});
 
 		_decode_ambe = module.cwrap('mbelib_decode_ambe', 'number', ['number', 'number']);
@@ -118,7 +118,7 @@ export function isMbelibReady(): boolean {
 }
 
 async function loadMbelibFactory(): Promise<MbelibFactory> {
-	const url = new URL('/lib/mbelib/mbelib.js', location.origin).href;
+	const url = new URL('/wasm/mbelib/mbelib.js', location.origin).href;
 	const loaded: unknown = await import(/* @vite-ignore */ url);
 	if (!isRecord(loaded) || typeof loaded.default !== 'function') throw new Error('mbelib.js did not produce a factory');
 	return loaded.default as MbelibFactory;

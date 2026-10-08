@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { FFT } from './node/hackrf_web.js';
+import { FFT } from './node/browsdr_dsp.js';
 
 async function test() {
 	// WASM module is loaded automatically
@@ -14,8 +14,8 @@ async function test() {
 	// DC input (Int8Array from the JS side)
 	const input = new Int8Array(n * 2);
 	for (let i = 0; i < n; i++) {
-		input[i * 2] = 64;     // real part = 0.5 (64/128)
-		input[i * 2 + 1] = 0;  // imaginary part = 0
+		input[i * 2] = 64; // real part = 0.5 (64/128)
+		input[i * 2 + 1] = 0; // imaginary part = 0
 	}
 	console.log('✓ Input array created (DC signal)');
 
@@ -37,9 +37,16 @@ async function test() {
 	// Verify the DC component is larger than other frequencies
 	assert.ok(output[dcIndex] > output[0], 'DC component should be greater than other frequencies');
 
-	// Verify output values are within a reasonable range (dB scale)
-	assert.ok(output[dcIndex] < 0, 'DC component should be negative (dB scale)');
-	assert.ok(output[dcIndex] > -100, 'DC component should be greater than -100 dB');
+	// Verify the binding independently of the FFT's absolute normalization.
+	assert.ok(output.every(Number.isFinite), 'FFT output should be finite');
+	const quieter = input.map((value) => value / 2);
+	const quieterOutput = new Float32Array(n);
+	fft.fft(quieter, quieterOutput);
+	assert.ok(
+		Math.abs(output[dcIndex] - quieterOutput[dcIndex] - 20 * Math.log10(2)) < 0.001,
+		'Halving IQ amplitude should lower DC power by 6.02 dB',
+	);
+	fft.free();
 
 	console.log('Output values:', Array.from(output));
 	console.log('✓ DC component validation passed');
@@ -47,7 +54,7 @@ async function test() {
 	console.log('\n✅ All tests passed!');
 }
 
-test().catch(err => {
+test().catch((err) => {
 	console.error('❌ Test failed:', err);
 	process.exit(1);
 });

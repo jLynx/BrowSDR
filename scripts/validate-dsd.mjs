@@ -1,12 +1,12 @@
 import { sourceAlias } from '../source-alias.mjs';
-import MbelibFactory from '../public/lib/mbelib/mbelib.js';
+import MbelibFactory from '../wasm/mbelib/pkg/mbelib.js';
 // Offline DMR recording validation with the same decoder and mbelib WASM as the app.
 // Usage: node scripts/validate-dsd.mjs --self-test
 //        node scripts/validate-dsd.mjs path/to/iq.wav [shiftHz] [invert]
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { createServer } from 'vite';
-import { initSync, DspProcessor, alloc_float_buffer } from '../hackrf-web/pkg/hackrf_web.js';
+import { initSync, DspProcessor, alloc_float_buffer } from '../wasm/dsp/pkg/browsdr_dsp.js';
 
 const filename = process.argv[2];
 if (!filename) throw new Error('Provide a PCM or float stereo IQ WAV recording');
@@ -33,14 +33,14 @@ if (
 	throw new Error('Expected stereo IQ, PCM16 or float32 WAV');
 
 const root = resolve(import.meta.dirname, '..');
-const js = await readFile(resolve(root, 'public/lib/mbelib/mbelib.js'), 'utf8');
-const wasm = await readFile(resolve(root, 'public/lib/mbelib/mbelib.wasm'));
+const js = await readFile(resolve(root, 'wasm/mbelib/pkg/mbelib.js'), 'utf8');
+const wasm = await readFile(resolve(root, 'wasm/mbelib/pkg/mbelib.wasm'));
 const originalFetch = globalThis.fetch;
-globalThis.self = { location: { href: 'http://localhost/lib/mbelib/mbelib.js' } };
+globalThis.self = { location: { href: 'http://localhost/wasm/mbelib/mbelib.js' } };
 globalThis.WorkerGlobalScope = class {};
 globalThis.fetch = async (url, options) => {
-	if (String(url).endsWith('/lib/mbelib/mbelib.js')) return new Response(js);
-	if (String(url).endsWith('/lib/mbelib/mbelib.wasm')) return new Response(wasm, { headers: { 'Content-Type': 'application/wasm' } });
+	if (String(url).endsWith('/wasm/mbelib/mbelib.js')) return new Response(js);
+	if (String(url).endsWith('/wasm/mbelib/mbelib.wasm')) return new Response(wasm, { headers: { 'Content-Type': 'application/wasm' } });
 	return originalFetch(url, options);
 };
 const server = await createServer({
@@ -49,6 +49,7 @@ const server = await createServer({
 	resolve: { alias: sourceAlias },
 	server: { middlewareMode: true },
 	appType: 'custom',
+	optimizeDeps: { noDiscovery: true, include: [] },
 });
 try {
 	const { DSDDecoder } = await server.ssrLoadModule('/src/client/worker/decoders/dsd/dsd-decoder.ts');
@@ -97,7 +98,7 @@ try {
 		iq = Float32Array.from({ length: values }, (_, i) => (format.type === 3 ? data.readFloatLE(i * 4) : data.readInt16LE(i * 2) / 32768));
 	}
 	const shift = Number(process.argv[3] ?? 0);
-	const dspWasm = initSync({ module: await readFile(resolve(root, 'hackrf-web/pkg/hackrf_web_bg.wasm')) });
+	const dspWasm = initSync({ module: await readFile(resolve(root, 'wasm/dsp/pkg/browsdr_dsp_bg.wasm')) });
 	const ddc = new DspProcessor(format.rate, shift, 12500);
 	ddc.set_if_sample_rate(48000);
 	const inputPtr = alloc_float_buffer(iq.length);

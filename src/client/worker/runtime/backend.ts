@@ -10,7 +10,7 @@ import type {
 	HostStats,
 } from '@/worker/runtime/callbacks.types';
 import type { DspAudio } from '@/worker/runtime/dsp-messages.types';
-import type { InitOutput, DspProcessor } from '/hackrf-web/pkg/hackrf_web.js';
+import type { InitOutput, DspProcessor } from '/wasm/dsp/browsdr_dsp.js';
 /*
 Copyright (c) 2026, jLynx <https://github.com/jLynx>
 

@@ -1,5 +1,5 @@
 import { errorMessage } from '@/platform/errors';
-import init, { DspProcessor, SharedChannelizer, set_panic_hook, alloc_iq_buffer, alloc_float_buffer } from '/hackrf-web/pkg/hackrf_web.js';
+import init, { DspProcessor, SharedChannelizer, set_panic_hook, alloc_iq_buffer, alloc_float_buffer } from '/wasm/dsp/browsdr_dsp.js';
 import { RationalResampler } from './streams/dsp-pipeline';
 import { demodulateSideband, sidebandOffsetHz } from './decoders/ssb';
 import { DSDStream } from './decoders/dsd/dsd-stream';
@@ -8,7 +8,7 @@ import type { DSDStatus } from './decoders/dsd/types';
 import { RDSDecoder } from './decoders/rds';
 import { LatestStatus } from './runtime/latest-status';
 import { Rtl433Stream } from './decoders/rtl433';
-import type { InitOutput } from '/hackrf-web/pkg/hackrf_web.js';
+import type { InitOutput } from '/wasm/dsp/browsdr_dsp.js';
 import type { DspInput } from './runtime/dsp-messages.types';
 import type { VfoParams } from './runtime/types';
 

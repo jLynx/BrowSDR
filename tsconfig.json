@@ -12,8 +12,8 @@
 		"types": ["vite/client", "node"],
 		"baseUrl": ".",
 		"paths": {
-			"hackrf-web/*": ["hackrf-web/pkg/*"],
-			"/hackrf-web/pkg/*": ["hackrf-web/pkg/*"],
+			"wasm/dsp/*": ["wasm/dsp/pkg/*"],
+			"/wasm/dsp/*": ["wasm/dsp/pkg/*"],
 			"@/*": ["src/client/*"]
 		},
 		"verbatimModuleSyntax": true,
@@ -23,7 +23,7 @@
 	"include": [
 		"src/**/*.ts",
 		"src/**/*.d.ts",
-		"hackrf-web/pkg/*.d.ts",
+		"wasm/dsp/pkg/*.d.ts",
 		".storybook/*.ts",
 		"vitest.ui.config.ts",
 		"vitest.storybook.config.ts",

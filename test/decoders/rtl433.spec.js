@@ -1,13 +1,13 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import Rtl433Module from '../../public/lib/rtl433/rtl433.js';
+import Rtl433Module from '../../wasm/rtl433/pkg/rtl433.js';
 import { Rtl433Decoder, Rtl433Stream, rtl433ProtocolIds } from '@/worker/decoders/rtl433';
 import { rtl433Methods } from '@/app/decoders/rtl433';
 import { planSharedBands } from '@/worker/streams/channel-plan';
-import init, { DspProcessor, alloc_float_buffer } from '../../hackrf-web/pkg/hackrf_web.js';
+import init, { DspProcessor, alloc_float_buffer } from '../../wasm/dsp/pkg/browsdr_dsp.js';
 
-const binary = readFileSync(new URL('../../public/lib/rtl433/rtl433.wasm', import.meta.url));
-vi.mock('/lib/rtl433/rtl433.js', () => ({ default: (options) => Rtl433Module({ ...options, wasmBinary: binary }) }));
+const binary = readFileSync(new URL('../../wasm/rtl433/pkg/rtl433.wasm', import.meta.url));
+vi.mock('/wasm/rtl433/rtl433.js', () => ({ default: (options) => Rtl433Module({ ...options, wasmBinary: binary }) }));
 afterEach(() => vi.restoreAllMocks());
 
 // Locally generated, valid Waveman OOK frame (no downloaded fixture required).
@@ -59,7 +59,7 @@ describe('rtl_433 browser decoder', () => {
 		expect(events[0]).toMatchObject({ model: 'Waveman-Switch', id: 'D', channel: 2, button: 3, state: 'ON' });
 	});
 	it('tunes and resamples real float IQ through Rust into rtl_433 while speaker audio is muted', async () => {
-		const wasm = await init({ module_or_path: readFileSync(new URL('../../hackrf-web/pkg/hackrf_web_bg.wasm', import.meta.url)) });
+		const wasm = await init({ module_or_path: readFileSync(new URL('../../wasm/dsp/pkg/browsdr_dsp_bg.wasm', import.meta.url)) });
 		const messages = [];
 		const stream = new Rtl433Stream(DspProcessor, wasm.memory, (message) => messages.push(message));
 		const params = { freq: 433.92, mode: 'nfm', enabled: false, rtl433: true, rtl433SampleRate: 250000 };
@@ -78,7 +78,7 @@ describe('rtl_433 browser decoder', () => {
 		expect(messages.at(-1).status.state).toBe('off');
 	});
 	it.each([true, false])('does not replay Rust IQ output for empty input (floatInput=%s)', async (floatInput) => {
-		const wasm = await init({ module_or_path: readFileSync(new URL('../../hackrf-web/pkg/hackrf_web_bg.wasm', import.meta.url)) });
+		const wasm = await init({ module_or_path: readFileSync(new URL('../../wasm/dsp/pkg/browsdr_dsp_bg.wasm', import.meta.url)) });
 		const messages = [];
 		const stream = new Rtl433Stream(DspProcessor, wasm.memory, (message) => messages.push(message));
 		stream.configure({ freq: 433.92, rtl433: true }, 250000, 433.92);

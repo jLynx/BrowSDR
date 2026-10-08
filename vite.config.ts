@@ -41,15 +41,12 @@ function postBuildPlugin(): Plugin {
 								fileName: () => jsName,
 							},
 							rollupOptions: {
-								external: [/\/hackrf-web\/pkg\//, /\/lib\/mbelib\//],
+								external: [/^\/wasm\//],
 							},
 							minify: true,
 						},
 						resolve: {
-							alias: {
-								...sourceAlias,
-								'/hackrf-web/pkg': path.resolve(__dirname, 'hackrf-web/pkg'),
-							},
+							alias: sourceAlias,
 						},
 						logLevel: 'warn',
 					});
@@ -112,16 +109,17 @@ export default defineConfig({
 		outDir: path.resolve(__dirname, 'dist'),
 		emptyOutDir: true,
 		rollupOptions: {
-			external: [/\/hackrf-web\/pkg\//, /\/lib\/mbelib\//],
+			external: [/^\/wasm\//],
 		},
 	},
 	worker: {
 		format: 'es',
 		rollupOptions: {
-			external: [/\/hackrf-web\/pkg\//, /\/lib\/mbelib\//],
+			external: [/^\/wasm\//],
 		},
 	},
 	plugins: [
+		wasmAssetsPlugin(),
 		VitePWA({
 			registerType: 'autoUpdate',
 			injectRegister: 'script',
@@ -169,7 +167,6 @@ export default defineConfig({
 		alias: {
 			...sourceAlias,
 			vue: 'vue/dist/vue.esm-bundler.js',
-			'/hackrf-web/pkg': path.resolve(__dirname, 'hackrf-web/pkg'),
 		},
 	},
 	server: {
@@ -180,37 +177,56 @@ export default defineConfig({
 	},
 });
 
-function copyDecoderAssets(distDir: string) {
-	const wasmSrc = path.resolve(__dirname, 'hackrf-web/pkg');
-	const wasmDest = path.resolve(distDir, 'hackrf-web/pkg');
-	if (fs.existsSync(wasmSrc)) {
-		fs.mkdirSync(wasmDest, { recursive: true });
-		for (const file of fs.readdirSync(wasmSrc)) {
-			fs.copyFileSync(path.join(wasmSrc, file), path.join(wasmDest, file));
-		}
-	}
+const wasmAssets = {
+	dsp: ['browsdr_dsp.js', 'browsdr_dsp_bg.wasm'],
+	mbelib: ['mbelib.js', 'mbelib.wasm', 'COPYRIGHT', 'NOTICE'],
+	rtl433: ['rtl433.js', 'rtl433.wasm', 'COPYING', 'NOTICE'],
+};
 
-	// --- Copy mbelib WASM files ---
-	const rtl433Src = path.resolve(__dirname, 'public/lib/rtl433');
-	for (const file of ['rtl433.js', 'rtl433.wasm', 'COPYING', 'NOTICE']) {
-		if (!fs.existsSync(path.join(rtl433Src, file))) {
-			throw new Error(`Missing rtl_433 asset: ${file}. Restore public/lib/rtl433 or run npm run build:rtl433.`);
+function copyDecoderAssets(distDir: string) {
+	for (const [module, files] of Object.entries(wasmAssets)) {
+		const source = path.resolve(__dirname, 'wasm', module, 'pkg');
+		const destination = path.resolve(distDir, 'wasm', module);
+		fs.mkdirSync(destination, { recursive: true });
+		for (const file of files) {
+			if (!fs.existsSync(path.join(source, file))) {
+				throw new Error(`Missing ${module} asset: ${file}. Restore wasm/${module}/pkg or run npm run build:${module}.`);
+			}
+			fs.copyFileSync(path.join(source, file), path.join(destination, file));
 		}
 	}
-	fs.cpSync(rtl433Src, path.resolve(distDir, 'lib/rtl433'), { recursive: true });
-	const mbelibSrc = path.resolve(__dirname, 'public/lib/mbelib');
-	const mbelibDest = path.resolve(distDir, 'lib/mbelib');
-	for (const file of ['mbelib.js', 'mbelib.wasm', 'COPYRIGHT', 'NOTICE']) {
-		if (!fs.existsSync(path.join(mbelibSrc, file))) {
-			throw new Error(
-				`Missing mbelib asset: ${file}. Restore the committed public/lib/mbelib files or run npm run build:mbelib with Emscripten installed.`,
-			);
-		}
-	}
-	fs.mkdirSync(mbelibDest, { recursive: true });
-	for (const file of fs.readdirSync(mbelibSrc)) {
-		fs.copyFileSync(path.join(mbelibSrc, file), path.join(mbelibDest, file));
-	}
+}
+
+/** Serve the committed bundles unchanged, including dynamically loaded codecs. */
+function wasmAssetsPlugin(): Plugin {
+	return {
+		name: 'wasm-assets',
+		configureServer(server) {
+			server.middlewares.use((request, response, next) => {
+				const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
+				const match = /^\/wasm\/(dsp|mbelib|rtl433)\/([^/]+)$/.exec(pathname);
+				if (!match) return next();
+				const module = match[1] as keyof typeof wasmAssets;
+				const file = match[2];
+				if (!wasmAssets[module].includes(file)) {
+					response.statusCode = 404;
+					response.end();
+					return;
+				}
+				const source = path.resolve(__dirname, 'wasm', module, 'pkg', file);
+				if (!fs.existsSync(source)) {
+					response.statusCode = 404;
+					response.end();
+					return;
+				}
+				response.setHeader(
+					'Content-Type',
+					file.endsWith('.wasm') ? 'application/wasm' : file.endsWith('.js') ? 'text/javascript' : 'text/plain',
+				);
+				response.end(fs.readFileSync(source));
+			});
+		},
+	};
 }
 
 function updateBuiltReferences(renames: Map<string, string>, assetsDir: string, distDir: string) {

@@ -4,7 +4,7 @@ Upstream: https://github.com/szechyjs/mbelib
 Version: 1.3.0
 Commit: 9a04ed5c78176a9965f3d43f7aa1b1f5330e771f
 Rebuild compiler: Emscripten 4.0.7
-Build instructions: mbelib-wasm/README.md in the BrowSDR repository
+Build instructions: wasm/mbelib/README.md in the BrowSDR repository
 Licence: ISC; see COPYRIGHT in this directory.
 
 The following notice is reproduced from upstream README.md:
