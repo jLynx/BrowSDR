@@ -4,6 +4,7 @@ import { ReceiverTransport, unpackReceiverChunk } from '../receiver-transport';
 import { usbSettingsKey } from '../usb-device-selection';
 import { bookmarkMethods } from './bookmarks';
 import { WorkspaceMediaSession } from './media-session';
+import { UiButton } from '../ui';
 
 interface ReceiverEntry {
 	id: string;
@@ -38,22 +39,22 @@ export function createWorkspace(Receiver: any): any {
 	let mediaSession: WorkspaceMediaSession;
 
 	return {
-		components: { Receiver },
+		components: { Receiver, UiButton },
 		template: `
 			<div class="receiver-workspace">
 				<nav v-if="receivers.filter(receiver => receiver.status === 'Receiving' || receiver.status === 'Paused').length > 1" class="receiver-tabs" aria-label="SDR receivers">
-					<button v-for="receiver in receivers" :key="receiver.id" class="receiver-tab"
+					<UiButton v-for="receiver in receivers" :key="receiver.id" variant="receiver-tab"
 						:class="{ active: selectedId === receiver.id }" :aria-pressed="selectedId === receiver.id" @click="selectReceiver(receiver.id)">
 						{{ receiver.label }} <small>{{ receiver.status }}</small>
-					</button>
-					<button class="btn btn-secondary" v-if="mode !== 'client'" @click="addDevice">+ Add SDR</button>
-					<button class="btn btn-secondary" v-if="mode === 'host'" @click="stopSharing">Stop Sharing</button>
-					<button class="btn btn-secondary" v-if="mode === 'client'" @click="disconnectRemote">Disconnect Remote</button>
+					</UiButton>
+					<UiButton variant="secondary" v-if="mode !== 'client'" @click="addDevice">+ Add SDR</UiButton>
+					<UiButton variant="secondary" v-if="mode === 'host'" @click="stopSharing">Stop Sharing</UiButton>
+					<UiButton variant="secondary" v-if="mode === 'client'" @click="disconnectRemote">Disconnect Remote</UiButton>
 				</nav>
 				<div v-if="error" class="workspace-message" role="alert">{{ error }}</div>
 				<div v-if="mode === 'client' && !receivers.length" class="workspace-message">
 					{{ remoteStatus }}
-					<button class="btn btn-secondary" @click="disconnectRemote">Disconnect Remote</button>
+					<UiButton variant="secondary" @click="disconnectRemote">Disconnect Remote</UiButton>
 				</div>
 				<Receiver v-for="receiver in receivers" :key="receiver.id" v-show="selectedId === receiver.id"
 					:receiver-id="receiver.id" :settings-key="receiver.settingsKey" :workspace="controller" />

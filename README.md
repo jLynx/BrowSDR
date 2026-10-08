@@ -79,9 +79,11 @@ Use a WebUSB-capable browser such as Chrome or Edge, over HTTPS or `localhost`. 
 | Layer | Technology |
 |-------|-----------|
 | Frontend | TypeScript, Vue 3 (Options API), Vite |
+| UI catalog | Storybook, shared Vue UI components |
 | DSP | Rust, RustFFT, WebAssembly, Web Workers |
 | Deployment | Cloudflare Workers (Wrangler) |
 | Testing | Vitest, wasm-bindgen-test, cargo test |
+| UI testing | Vue Test Utils, jsdom, Storybook browser interaction tests |
 
 ---
 
@@ -112,6 +114,17 @@ npm run dev
 ```
 
 Then open **[http://localhost:5173](http://localhost:5173)** in Google Chrome or any WebUSB-supported browser.
+
+### Shared UI and Storybook
+
+Run `npm run storybook` to browse existing component variants at
+[http://localhost:6006](http://localhost:6006). The app and Storybook use the same
+stylesheet. See the [UI component guide](src/client/ui/README.md) for component
+contracts, examples, tests, and how to add future features.
+
+Run `npm run test:ui` for component tests. After `npx playwright install chromium`,
+run `npm run test:storybook` to render the catalog and check story interactions.
+`npm run build:storybook` creates a standalone catalog in `storybook-static/`.
 
 ### LimeSDR-USB on Windows
 

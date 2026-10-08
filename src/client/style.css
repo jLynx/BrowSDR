@@ -1709,6 +1709,11 @@ canvas {
 	gap: 10px;
 }
 
+/* List rows provide their own spacing, including at mobile breakpoints. */
+.bookmark-dialog-body.bookmark-dialog-body-flush {
+	padding: 0;
+}
+
 .bookmark-dialog-input {
 	width: 100%;
 	background: #111;
