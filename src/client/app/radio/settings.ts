@@ -1,11 +1,13 @@
 import type { AppInstance } from '@/app/core/receiver.types';
 import { makeDefaultVfo } from '@/app/core/constants';
 import { normalizeSpectrumFps } from '@/display/spectrum-rate';
+import { DEFAULT_FFT_SIZE, normalizedSpectrumRange, SPECTRUM_RANGE_VERSION } from '@/display/spectrum-range';
 import { isRecord, restoreFields, primitiveMap } from '@/platform/data';
 
 export const settingsMethods = {
 	saveSetting(this: AppInstance) {
 		const obj = {
+			spectrumRangeVersion: SPECTRUM_RANGE_VERSION,
 			radio: this.radio,
 			display: this.display,
 			gains: this.gains,
@@ -35,11 +37,10 @@ export const settingsMethods = {
 					restoreFields(this.radio, setting.radio);
 					// Migrate: enforce minimum fftSize (old saves may have used 2048)
 					if (!this.radio.fftSize || this.radio.fftSize < 8192) {
-						this.radio.fftSize = 65536;
+						this.radio.fftSize = DEFAULT_FFT_SIZE;
 					}
 				}
-				if (setting.display) restoreFields(this.display, setting.display);
-				this.display.spectrumFps = normalizeSpectrumFps(this.display.spectrumFps);
+				restoreDisplaySettings.call(this, setting);
 				if (primitiveMap<number>(setting.gains, 'number')) Object.assign(this.gains, setting.gains);
 				if (primitiveMap<boolean>(setting.locks, 'boolean')) Object.assign(this.locks, setting.locks);
 				// Handle new format (vfos array) or legacy format (audio/audio2)
@@ -70,6 +71,20 @@ export const settingsMethods = {
 		}
 	},
 };
+
+function restoreDisplaySettings(this: AppInstance, setting: Record<string, unknown>) {
+	if (setting.display) restoreFields(this.display, setting.display);
+	if (setting.spectrumRangeVersion !== SPECTRUM_RANGE_VERSION && isRecord(setting.display)) {
+		// Legacy bounds used FFT power that was N times too high. Move only
+		// saved bounds, retaining any defaults for missing/invalid fields.
+		const fftSize = this.radio?.fftSize || DEFAULT_FFT_SIZE;
+		const range = normalizedSpectrumRange(fftSize, this.display.minDB, this.display.maxDB);
+		for (const key of ['minDB', 'maxDB'] as const) {
+			if (typeof setting.display[key] === 'number' && Number.isFinite(setting.display[key])) this.display[key] = range[key];
+		}
+	}
+	this.display.spectrumFps = normalizeSpectrumFps(this.display.spectrumFps);
+}
 
 function restoreVfoSettings(this: AppInstance, setting: Record<string, unknown>) {
 	if (setting.vfos && Array.isArray(setting.vfos)) {

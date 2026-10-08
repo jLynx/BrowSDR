@@ -34,10 +34,11 @@ impl FFT {
         let mut planner = FftPlanner::new();
         let fft = planner.plan_fft_forward(n);
 
-        // Pre-compute scaled window: window[i] * (-1)^i / 128
+        // Pre-compute scaled window: window[i] * (-1)^i / (128 * N).
         // The (-1)^i factor shifts DC to the centre of the output (fftShift)
-        // Note: 1/N normalization is applied separately in the power spectrum step
-        let scale = 1.0 / 128.0;
+        // Normalize FFT amplitude by N, equivalent to VOLK's normalization factor.
+        // Squaring the normalized amplitude below therefore divides power by N^2.
+        let scale = 1.0 / (128.0 * n as f32);
         let scaled_window: Vec<f32> = window_
             .iter()
             .enumerate()
@@ -68,7 +69,9 @@ impl FFT {
     /// Process raw i8 IQ samples and write power spectrum to `result`.
     ///
     /// Input: i8 IQ pairs [I0, Q0, I1, Q1, ...] — length must be at least 2 * n
-    /// Output: f32 power spectrum in dB, DC-centered, length `n`
+    /// Output: f32 power spectrum in dB, DC-centered, length `n`.
+    /// A bin-centered unit-amplitude tone with a rectangular window is 0 dB.
+    /// Window gain is retained, matching SDR++ (no coherent-gain correction).
     pub fn fft(&mut self, input_: &[i8], result: &mut [f32]) {
         let n = self.n;
 
@@ -85,7 +88,7 @@ impl FFT {
         // Convert to power spectrum in dB with optional EMA smoothing
         let alpha = self.smoothing_speed;
         for i in 0..n {
-            let power = self.buffer[i].norm_sqr() / (n as f32);
+            let power = self.buffer[i].norm_sqr();
             let db = power.max(1e-20).log10() * 10.0;
 
             result[i] = if alpha < 1.0 {
@@ -115,7 +118,7 @@ impl FFT {
 
         let alpha = self.smoothing_speed;
         for i in 0..n {
-            let power = self.buffer[i].norm_sqr() / (n as f32);
+            let power = self.buffer[i].norm_sqr();
             let db = power.max(1e-20).log10() * 10.0;
 
             self.output[i] = if alpha < 1.0 {

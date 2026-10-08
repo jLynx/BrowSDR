@@ -12,6 +12,7 @@ import { makeDefaultVfo, BOOKMARK_CATEGORIES } from './constants';
 import type { DSDStatus } from '@/worker/decoders/dsd/types';
 import type { CapabilityIssue } from '@/platform/types';
 import type { Rtl433Status, Rtl433Protocol } from '@/worker/decoders/types';
+import { DEFAULT_FFT_SIZE, DEFAULT_SPECTRUM_RANGE } from '@/display/spectrum-range';
 
 export function createAppData() {
 	return {
@@ -37,13 +38,12 @@ export function createAppData() {
 			centerFreq: 100.0,
 			frequencyShift: 0.0,
 			sampleRate: 20000000,
-			fftSize: 65536,
+			fftSize: DEFAULT_FFT_SIZE,
 		},
 		display: {
 			spectrumFps: 20,
 			sharedChannelization: true,
-			minDB: -70.0,
-			maxDB: 0.0,
+			...DEFAULT_SPECTRUM_RANGE,
 		},
 		gains: {} as Record<string, number>,
 		autoGain: { active: false, cancelled: false, status: '', level: null as RxLevel | null },

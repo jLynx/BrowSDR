@@ -214,7 +214,9 @@ export class FFT {
      * Process raw i8 IQ samples and write power spectrum to `result`.
      *
      * Input: i8 IQ pairs [I0, Q0, I1, Q1, ...] — length must be at least 2 * n
-     * Output: f32 power spectrum in dB, DC-centered, length `n`
+     * Output: f32 power spectrum in dB, DC-centered, length `n`.
+     * A bin-centered unit-amplitude tone with a rectangular window is 0 dB.
+     * Window gain is retained, matching SDR++ (no coherent-gain correction).
      * @param {Int8Array} input_
      * @param {Float32Array} result
      */

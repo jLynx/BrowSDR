@@ -240,6 +240,63 @@ fn test_fft_dc_input_magnitude() {
 }
 
 #[test]
+fn test_fft_tone_levels_across_sizes_windows_and_processing_methods() {
+    // Quarter-rate tones have exact i8 IQ values, avoiding quantization error.
+    // Check analytical levels for both sidebands, including the app's Nuttall window.
+    for n in [8, 16, 1024, 65536] {
+        for (nuttall, gain) in [(false, 1.0_f32), (true, 0.355768_f32)] {
+            let window: Vec<f32> = (0..n)
+                .map(|i| {
+                    if !nuttall {
+                        return 1.0;
+                    }
+                    let phase = 2.0 * std::f32::consts::PI * i as f32 / n as f32;
+                    0.355768 - 0.487396 * phase.cos()
+                        + 0.144232 * (2.0 * phase).cos()
+                        - 0.012604 * (3.0 * phase).cos()
+                })
+                .collect();
+            for sign in [-1, 1] {
+                let mut input = vec![0i8; n * 2];
+                for i in 0..n {
+                    input[i * 2] = [64, 0, -64, 0][i % 4];
+                    input[i * 2 + 1] = [0, 64, 0, -64][i % 4] * sign;
+                }
+                let bin = if sign > 0 { n * 3 / 4 } else { n / 4 };
+                let tone_db = 20.0 * (0.5 * gain).log10();
+                for alpha in [1.0_f32, 0.3] {
+                    let mut copied = FFT::new(n, &window);
+                    let mut pointed = FFT::new(n, &window);
+                    copied.set_smoothing_speed(alpha);
+                    pointed.set_smoothing_speed(alpha);
+                    let mut result = vec![0.0; n];
+                    let mut expected = 0.0;
+                    for _ in 0..2 {
+                        expected = alpha * tone_db + (1.0 - alpha) * expected;
+                        copied.fft(&input, &mut result);
+                        let output_ptr = pointed.fft_ptr(input.as_ptr(), input.len());
+                        // The FFT owns n output values, valid until its next call.
+                        let pointed_result = unsafe { std::slice::from_raw_parts(output_ptr, n) };
+                        for spectrum in [&result[..], pointed_result] {
+                            assert!(spectrum.iter().all(|value| value.is_finite()));
+                            assert!(
+                                (spectrum[bin] - expected).abs() < 0.002,
+                                "N={n}, Nuttall={nuttall}, sign={sign}, alpha={alpha}: {} vs {expected}",
+                                spectrum[bin]
+                            );
+                            let peak = spectrum.iter().enumerate()
+                                .max_by(|a, b| a.1.partial_cmp(b.1).unwrap()).unwrap().0;
+                            assert_eq!(peak, bin);
+                        }
+                        assert_eq!(&result[..], pointed_result);
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn test_fft_negative_input() {
     // Test with negative input values
     let n = 8;
