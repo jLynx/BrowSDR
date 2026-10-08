@@ -76,7 +76,7 @@ describe('RTL-SDRs with matching USB identities', () => {
 	});
 	it.each(['00000001', ''])('connects two physical dongles with serial "%s" and excludes only the connected object', async serial => {
 		const devices = [rtl(serial), rtl(serial)];
-		vi.stubGlobal('navigator', { usb: { getDevices: async () => devices } });
+		vi.stubGlobal('navigator', { usb: { getDevices: async () => devices, requestDevice: vi.fn() } });
 		const { workspace, first } = workspaceWithReceiver();
 		first.connected = false;
 		await workspace.connectDevice(first, devices[0]);

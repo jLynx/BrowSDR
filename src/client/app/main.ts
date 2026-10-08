@@ -21,6 +21,7 @@ import { autoGainMethods } from './auto-gain';
 import { rtl433Methods } from './rtl433';
 import { mountHeaderTools } from './header-tools';
 import * as uiComponents from '../ui';
+import { coreCapabilityIssues } from '../browser-capabilities';
 
 // When a new service worker takes control (after update), reload to get fresh assets
 if ('serviceWorker' in navigator) {
@@ -262,4 +263,15 @@ const Receiver = {
 	},
 };
 
-createApp(createWorkspace(Receiver)).mount('#app');
+const capabilityIssues = coreCapabilityIssues();
+if (capabilityIssues.length) {
+	createApp({
+		components: { UiPanel: uiComponents.UiPanel, UiNotice: uiComponents.UiNotice },
+		data: () => ({ issues: capabilityIssues }),
+		template: `<UiPanel label="Browser requirements" :collapsible="false">
+			<UiNotice v-for="issue in issues" :key="issue.title" v-bind="issue" />
+		</UiPanel>`,
+	}).mount('#app');
+} else {
+	createApp(createWorkspace(Receiver)).mount('#app');
+}

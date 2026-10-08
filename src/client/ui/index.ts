@@ -17,3 +17,4 @@ export { default as UiSnackbar } from './UiSnackbar';
 export { default as UiFrequencyDisplay } from './UiFrequencyDisplay';
 export { default as UiToolHeader } from './UiToolHeader';
 export { default as UiEmptyState } from './UiEmptyState';
+export { default as UiNotice } from './UiNotice';
