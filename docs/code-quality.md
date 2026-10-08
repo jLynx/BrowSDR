@@ -1,7 +1,5 @@
 # Code quality and source layout
 
-Research reviewed on 8 October 2026 against the official documentation and npm registry.
-
 ## Tool choices
 
 - [ESLint flat configuration](https://eslint.org/docs/latest/use/configure/configuration-files): ESLint 10.12.0 with `eslint.config.mjs`; no legacy eslintrc configuration.
