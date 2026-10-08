@@ -24,7 +24,7 @@ const validators: Record<string, (value: Record<string, unknown>) => boolean> = 
 	squelchState: (value: Record<string, unknown>) =>
 		Array.isArray(value.squelchOpen) && value.squelchOpen.every((item: unknown) => typeof item === 'boolean'),
 	sync: (value: Record<string, unknown>) =>
-		(value.radio === undefined || numbers(value.radio, ['centerFreq', 'sampleRate', 'fftSize'])) &&
+		(value.radio === undefined || validRadio(value.radio)) &&
 		(value.gains === undefined || primitiveMap<number>(value.gains, 'number')) &&
 		(value.locks === undefined || primitiveMap<boolean>(value.locks, 'boolean')) &&
 		validCapabilities(value.capabilities),
@@ -36,7 +36,7 @@ const validators: Record<string, (value: Record<string, unknown>) => boolean> = 
 				typeof item.id === 'string' &&
 				typeof item.name === 'string' &&
 				typeof item.running === 'boolean' &&
-				numbers(item.radio, ['centerFreq', 'sampleRate', 'fftSize']) &&
+				validRadio(item.radio) &&
 				primitiveMap<number>(item.gains, 'number') &&
 				primitiveMap<boolean>(item.locks, 'boolean') &&
 				validCapabilities(item.capabilities),
@@ -50,11 +50,21 @@ const validators: Record<string, (value: Record<string, unknown>) => boolean> = 
 		typeof value.msg.text === 'string' &&
 		numbers(value.msg, ['capcode', 'func', 'baud']) &&
 		['alpha', 'tone', 'numeric'].includes(String(value.msg.type)),
-	rds: (value: Record<string, unknown>) =>
-		numbers(value, ['vfoIndex', 'freq']) &&
-		isRecord(value.msg) &&
-		Object.values(value.msg).every((field) => ['string', 'number', 'boolean'].includes(typeof field)),
+	rds: (value: Record<string, unknown>) => validIndex(value.vfoIndex) && numbers(value, ['freq']) && validRdsMessage(value.msg),
 };
+
+function validRadio(value: unknown): boolean {
+	return numbers(value, ['centerFreq', 'frequencyShift', 'sampleRate', 'fftSize']);
+}
+
+function validRdsMessage(value: unknown): boolean {
+	return (
+		isRecord(value) &&
+		optionalFields(value, ['ps', 'rt', 'pi', 'ptyLabel'], 'string') &&
+		optionalFields(value, ['pty'], 'number') &&
+		optionalFields(value, ['tp', 'ta'], 'boolean')
+	);
+}
 
 function validIndex(value: unknown): boolean {
 	return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;

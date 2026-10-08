@@ -31,11 +31,7 @@ export function parseBookmarks(json: string): Bookmark[] {
 			...(typeof value.id === 'string' ? { id: value.id } : {}),
 		};
 		if (value.type === 'individual') return { ...vfoFromData(value), ...common, type: 'individual' };
-		if (
-			(value.centerFreq !== undefined && (typeof value.centerFreq !== 'number' || !Number.isFinite(value.centerFreq))) ||
-			(value.vfos !== undefined && !Array.isArray(value.vfos))
-		)
-			throw new Error('Invalid bookmark group');
+		validateGroupFields(value);
 		validateGroupSelection(value);
 		return {
 			...common,
@@ -46,6 +42,14 @@ export function parseBookmarks(json: string): Bookmark[] {
 			...(typeof value.activeVfoIndex === 'number' ? { activeVfoIndex: value.activeVfoIndex } : {}),
 		};
 	});
+}
+
+function validateGroupFields(value: Record<string, unknown>): void {
+	for (const key of ['centerFreq', 'sampleRate']) {
+		if (value[key] !== undefined && (typeof value[key] !== 'number' || !Number.isFinite(value[key])))
+			throw new Error(`Invalid bookmark group field: ${key}`);
+	}
+	if (value.vfos !== undefined && !Array.isArray(value.vfos)) throw new Error('Invalid bookmark group');
 }
 
 function validateGroupSelection(value: Record<string, unknown>): void {

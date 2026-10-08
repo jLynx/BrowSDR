@@ -16,6 +16,40 @@ const report = {
 };
 
 describe('remote command boundaries', () => {
+	it.each(['sync', 'receivers'])('requires a finite numeric frequency shift in %s radio state', (type) => {
+		const command = (frequencyShift) => {
+			const radio = { centerFreq: 100, sampleRate: 2000000, fftSize: 65536, frequencyShift };
+			return type === 'sync'
+				? { type, radio }
+				: { type, receivers: [{ id: 'radio', name: 'SDR', running: true, radio, gains: {}, locks: {} }] };
+		};
+		for (const value of [undefined, '0', {}, null, NaN, Infinity, -Infinity]) expect(isReceiverCommand(command(value))).toBe(false);
+		for (const value of [0, -125, 125]) expect(isReceiverCommand(command(value))).toBe(true);
+	});
+	it.each([
+		['ps', true],
+		['rt', 1],
+		['pi', false],
+		['ptyLabel', {}],
+		['pty', 'music'],
+		['pty', Infinity],
+		['tp', 'yes'],
+		['ta', 1],
+	])('rejects RDS field %s with invalid value %s', (field, value) => {
+		expect(isReceiverCommand({ type: 'rds', vfoIndex: 0, freq: 100, msg: { [field]: value } })).toBe(false);
+	});
+	it('accepts valid partial RDS updates and rejects invalid VFO indices', () => {
+		const command = {
+			type: 'rds',
+			vfoIndex: 0,
+			freq: 100,
+			msg: { ps: 'Station', rt: '', pi: 'ABCD', pty: 0, ptyLabel: 'None', tp: false, ta: true },
+		};
+		expect(isReceiverCommand(command)).toBe(true);
+		expect(isReceiverCommand({ ...command, msg: { ps: 'Station' } })).toBe(true);
+		for (const index of [-1, 0.5, Infinity, Number.MAX_SAFE_INTEGER + 1, '0'])
+			expect(isReceiverCommand({ ...command, vfoIndex: index })).toBe(false);
+	});
 	it.each([-1, 0.5, NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, '0'])('rejects invalid remote VFO index %s', (index) => {
 		expect(isReceiverCommand({ type: 'vfoUpdate', index, params: makeDefaultVfo() })).toBe(false);
 		expect(isReceiverCommand({ type: 'removeRemoteVfo', index })).toBe(false);
@@ -43,6 +77,13 @@ describe('remote command boundaries', () => {
 	});
 });
 describe('bookmark data boundaries', () => {
+	it.each(['1e400', '-1e400', '"2000000"', '{}', 'null'])('rejects malformed group sample rate %s', (literal) => {
+		expect(() => parseBookmarks(`[{"name":"Group","centerFreq":100,"sampleRate":${literal}}]`)).toThrow();
+	});
+	it('preserves a valid group sample rate and permits legacy groups without one', () => {
+		expect(parseBookmarks('[{"name":"Group","sampleRate":2000000}]')[0].sampleRate).toBe(2000000);
+		expect(parseBookmarks('[{"name":"Group"}]')[0].sampleRate).toBeUndefined();
+	});
 	it.each([
 		[-1, 0],
 		[0.5, 0],
