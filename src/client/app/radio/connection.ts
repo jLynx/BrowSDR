@@ -295,7 +295,7 @@ export const connectionMethods = {
 			await this.backend.startRxStream(
 				opts,
 				Comlink.proxy((spectrumData: Float32Array) => this.drawSpectrum(spectrumData)),
-				Comlink.proxy((audioSamples: Float32Array) => this.playAudio(audioSamples)),
+				Comlink.proxy((audioSamples: Float32Array, channels: 1 | 2 = 1) => this.playAudio(audioSamples, channels)),
 				Comlink.proxy((vfoIndex: number, freq: number, samples: Float32Array) => this._feedWhisperVfo(vfoIndex, freq, samples)),
 				Comlink.proxy((vfoIndex: number, freq: number, msg: Parameters<AppInstance['_onPocsagMessage']>[2]) =>
 					this._onPocsagMessage(vfoIndex, freq, msg),

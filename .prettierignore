@@ -1,13 +1,12 @@
 node_modules/
+**/.vite/
 dist/
 storybook-static/
 coverage/
 test-results/
 .wrangler/
 public/
-hackrf-web/
-mbelib-wasm/
-rtl433-wasm/
+wasm/
 package-lock.json
 lint-results.json
 .cache/

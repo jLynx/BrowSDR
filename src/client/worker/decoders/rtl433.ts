@@ -1,7 +1,7 @@
 import type { Rtl433Message, Rtl433Protocol, Rtl433Status, RtlModule, RtlFactory } from './types';
 import { errorMessage } from '@/platform/errors';
 import type { VfoParams } from '@/worker/runtime/types';
-import type { DspProcessor } from '/hackrf-web/pkg/hackrf_web.js';
+import type { DspProcessor } from '/wasm/dsp/browsdr_dsp.js';
 import { isRecord } from '@/platform/data';
 
 export function rtl433SampleRate(value: unknown): number {
@@ -21,7 +21,7 @@ let factoryPromise: Promise<RtlFactory> | undefined;
 async function loadFactory(): Promise<RtlFactory> {
 	// Load the committed Emscripten ES module as a static asset in dev and production.
 	// Absolute HTTP URLs bypass Vite's source-import query rewriting for public assets.
-	const url = typeof location === 'undefined' ? '/lib/rtl433/rtl433.js' : new URL('/lib/rtl433/rtl433.js', location.origin).href;
+	const url = typeof location === 'undefined' ? '/wasm/rtl433/rtl433.js' : new URL('/wasm/rtl433/rtl433.js', location.origin).href;
 	factoryPromise ??= import(/* @vite-ignore */ url)
 		.then((module: unknown) => {
 			if (!isRecord(module) || typeof module.default !== 'function') throw new Error('Missing rtl_433 factory');
@@ -29,7 +29,7 @@ async function loadFactory(): Promise<RtlFactory> {
 		})
 		.catch((error) => {
 			factoryPromise = undefined;
-			throw new Error(`Could not load rtl_433. Restore public/lib/rtl433 assets or rebuild the decoder. ${errorMessage(error)}`);
+			throw new Error(`Could not load rtl_433. Restore wasm/rtl433/pkg assets or rebuild the decoder. ${errorMessage(error)}`);
 		});
 	return factoryPromise;
 }
@@ -51,7 +51,7 @@ export class Rtl433Decoder {
 	): Promise<Rtl433Decoder> {
 		const factory = await loadFactory();
 		const module: RtlModule = await factory({
-			locateFile: (path: string) => '/lib/rtl433/' + path,
+			locateFile: (path: string) => '/wasm/rtl433/' + path,
 			onDecoded: (json: string) => {
 				const event: unknown = JSON.parse(json);
 				if (isRecord(event)) onEvent(event);

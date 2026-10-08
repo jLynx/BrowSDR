@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ processors: [], decoders: [], memory: { buffer: new ArrayBuffer(65536) } }));
 
-vi.mock('/hackrf-web/pkg/hackrf_web.js', () => ({
+vi.mock('/wasm/dsp/browsdr_dsp.js', () => ({
 	default: async () => ({ memory: mocks.memory }),
 	set_panic_hook() {},
 	alloc_iq_buffer: () => 0,
@@ -22,6 +22,7 @@ vi.mock('/hackrf-web/pkg/hackrf_web.js', () => ({
 		set_bandwidth() {}
 		set_squelch() {}
 		set_wfm_mode() {}
+		set_stereo() {}
 		set_audio_filters() {}
 		process_ptr() {
 			return 4096;

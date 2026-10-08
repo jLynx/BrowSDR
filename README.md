@@ -23,7 +23,7 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
 - **🌡️ rtl_433 Sensor Decoder**
   Live browser-side OOK/FSK decoding for supported weather sensors, remotes, TPMS,
   and other ISM devices. See
-  [the decoder build and reception guide](rtl433-wasm/README.md).
+  [the decoder build and reception guide](wasm/rtl433/README.md).
 - **📊 Frequency Activity**
   Visually spot active signals and quickly jump to transmissions using the dynamic frequency activity scanner and interactive waterfall display.
 - **🔖 Advanced Bookmarking System**
@@ -107,7 +107,7 @@ Use a WebUSB-capable browser such as Chrome or Edge, over HTTPS or `localhost`. 
 npm install
 
 # 2. Build the WASM module (first time or after Rust changes)
-cd hackrf-web && cargo make build && cd ..
+npm run build:dsp
 
 # 3. Start the local dev server
 npm run dev
@@ -182,11 +182,11 @@ may not be detected. Reduce bandwidth or try manual gains if reception suffers.
 The Rust/WASM module must be built separately (requires Rust toolchain):
 
 ```bash
-cd hackrf-web
-cargo make build       # Build for web (output: hackrf-web/pkg/)
+cd wasm/dsp
+cargo make build       # Build for web (output: wasm/dsp/pkg/)
 ```
 
-> **Note:** The WASM build outputs in `hackrf-web/pkg/` are committed to the repo, so `npm run deploy` works seamlessly even without Rust installed on the CI/deployment machine.
+> **Note:** The WASM build outputs in `wasm/dsp/pkg/` are committed to the repo, so `npm run deploy` works seamlessly even without Rust installed on the CI/deployment machine.
 
 ---
 
@@ -209,7 +209,7 @@ cargo make build       # Build for web (output: hackrf-web/pkg/)
 npm run test
 
 # Rust / WASM tests
-cd hackrf-web
+cd wasm/dsp
 cargo make test
 ```
 

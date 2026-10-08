@@ -1,0 +1,14 @@
+{
+  "name": "browsdr-dsp",
+  "collaborators": [
+    "jLynx"
+  ],
+  "version": "0.1.0",
+  "files": [
+    "browsdr_dsp_bg.wasm",
+    "browsdr_dsp.js",
+    "browsdr_dsp.d.ts"
+  ],
+  "main": "browsdr_dsp.js",
+  "types": "browsdr_dsp.d.ts"
+}

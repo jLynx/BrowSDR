@@ -18,7 +18,7 @@ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABI
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-import init, { FFT, DspProcessor, set_panic_hook, alloc_iq_buffer, free_iq_buffer } from '/hackrf-web/pkg/hackrf_web.js';
+import init, { FFT, DspProcessor, set_panic_hook, alloc_iq_buffer, free_iq_buffer } from '/wasm/dsp/browsdr_dsp.js';
 
 // wasm module (top-level import)
 let wasmInitialized = false;

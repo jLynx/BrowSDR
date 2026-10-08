@@ -5,9 +5,9 @@ import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
-const pinPath = path.join(root, 'rtl433-wasm/upstream.json');
-const candidatePath = path.join(root, 'rtl433-wasm/update-pin.json');
-const assetDir = path.join(root, 'public/lib/rtl433');
+const pinPath = path.join(root, 'wasm/rtl433/upstream.json');
+const candidatePath = path.join(root, 'wasm/rtl433/update-pin.json');
+const assetDir = path.join(root, 'wasm/rtl433/pkg');
 const assets = ['rtl433.js', 'rtl433.wasm', 'COPYING', 'NOTICE'];
 const args = process.argv.slice(2);
 
@@ -27,10 +27,10 @@ async function build(pin) {
 		if (!drive) throw new Error('The Windows checkout must be on a drive accessible from WSL.');
 		const wslRoot = `/mnt/${drive[1].toLowerCase()}/${drive[2].replaceAll('\\', '/')}`;
 		const wslPin = `${wslRoot}${path.relative(root, pin).replaceAll('\\', '/')}`;
-		const script = `source ~/emsdk/emsdk_env.sh >/dev/null 2>&1 && cd ${shellQuote(wslRoot)} && bash rtl433-wasm/build.sh ${shellQuote(wslPin)}`;
+		const script = `source ~/emsdk/emsdk_env.sh >/dev/null 2>&1 && cd ${shellQuote(wslRoot)} && bash wasm/rtl433/build.sh ${shellQuote(wslPin)}`;
 		await run('wsl.exe', ['-d', process.env.RTL433_WSL_DISTRO || 'Ubuntu', '--', 'bash', '-lc', script]);
 	} else {
-		await run('bash', ['rtl433-wasm/build.sh', pin]);
+		await run('bash', ['wasm/rtl433/build.sh', pin]);
 	}
 }
 
@@ -75,7 +75,7 @@ async function main() {
 		}
 		const archive = Buffer.from(await (await request(`https://codeload.github.com/merbanan/rtl_433/tar.gz/${upstream.sha}`)).arrayBuffer());
 		candidate = { ...pin, commit: upstream.sha, sha256: createHash('sha256').update(archive).digest('hex') };
-		await fs.writeFile(path.join(root, 'rtl433-wasm/source.tar.gz'), archive);
+		await fs.writeFile(path.join(root, 'wasm/rtl433/source.tar.gz'), archive);
 	}
 	const previous = await Promise.all(assets.map((name) => fs.readFile(path.join(assetDir, name))));
 	await fs.writeFile(candidatePath, JSON.stringify(candidate, null, 2) + '\n');
@@ -84,7 +84,7 @@ async function main() {
 		// Validate the produced binary itself and the Rust-to-decoder streaming path.
 		await run(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', '--project', 'client', 'test/decoders/rtl433.spec.js']);
 		await fs.writeFile(pinPath, JSON.stringify(candidate, null, 2) + '\n');
-		console.log(`Built and validated rtl_433 ${candidate.commit}. Review and commit the pin and public/lib/rtl433 assets together.`);
+		console.log(`Built and validated rtl_433 ${candidate.commit}. Review and commit the pin and wasm/rtl433/pkg assets together.`);
 	} catch (error) {
 		await Promise.all(assets.map((name, i) => fs.writeFile(path.join(assetDir, name), previous[i])));
 		await fs.writeFile(pinPath, originalPin);

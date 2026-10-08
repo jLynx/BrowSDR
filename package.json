@@ -5,7 +5,10 @@
 	"type": "module",
 	"scripts": {
 		"build": "vite build",
-		"build:mbelib": "bash mbelib-wasm/build.sh",
+		"build:dsp": "wasm-pack build wasm/dsp --target web --out-dir pkg",
+		"build:dsp:node": "wasm-pack build wasm/dsp --target nodejs --out-dir node",
+		"test:dsp:bindings": "npm run build:dsp:node && node wasm/dsp/test-js-binding.mjs",
+		"build:mbelib": "bash wasm/mbelib/build.sh",
 		"build:rtl433": "node scripts/update-rtl433.mjs --build",
 		"check:rtl433": "node scripts/update-rtl433.mjs --check",
 		"update:rtl433": "node scripts/update-rtl433.mjs",

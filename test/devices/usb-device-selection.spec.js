@@ -151,6 +151,30 @@ describe('RTL-SDRs with matching USB identities', () => {
 });
 
 describe('receiver settings and VFO bandwidth', () => {
+	it('restores the latest first-receiver VFO edits on refresh without copying additional or remote receivers', () => {
+		const storage = new Map();
+		vi.stubGlobal('localStorage', { getItem: (key) => storage.get(key), setItem: (key, value) => storage.set(key, value) });
+		const workspace = { mode: 'none', receivers: [{ id: 'local-1' }, { id: 'local-2' }] };
+		const first = { ...createAppData(), workspace, receiverId: 'local-1', settingsKey: 'SDRSetting:usb:first' };
+		first.vfos.push({ ...first.vfos[0], freq: 435.2, mode: 'usb' });
+		first.vfos[0].freq = 435.1;
+		settingsMethods.saveSetting.call(first);
+		const second = { ...createAppData(), workspace, receiverId: 'local-2', settingsKey: 'SDRSetting:usb:second' };
+		second.vfos[0].freq = 96.1;
+		settingsMethods.saveSetting.call(second);
+		const remote = {
+			...createAppData(),
+			workspace: { mode: 'client', receivers: [{ id: 'remote', remote: true }] },
+			receiverId: 'remote',
+			settingsKey: 'SDRSetting:remote:host',
+		};
+		settingsMethods.saveSetting.call(remote);
+		const refreshed = { ...createAppData(), settingsKey: 'SDRSetting' };
+		settingsMethods.loadSetting.call(refreshed);
+		expect(refreshed.vfos.map((vfo) => vfo.freq)).toEqual([435.1, 435.2]);
+		expect(refreshed.vfos[1].mode).toBe('usb');
+		expect(JSON.parse(storage.get(second.settingsKey)).vfos[0].freq).toBe(96.1);
+	});
 	it('keeps startup VFOs when connecting the first SDR despite an older one-VFO device save', async () => {
 		const device = rtl('startup-vfos');
 		const key = `SDRSetting:usb:${device.vendorId}:${device.productId}:${device.serialNumber}`;

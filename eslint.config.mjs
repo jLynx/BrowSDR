@@ -10,6 +10,7 @@ import architecture from './scripts/lint/type-files.mjs';
 export default defineConfig(
 	globalIgnores([
 		'**/dist/**',
+		'**/.vite/**',
 		'storybook-static/**',
 		'coverage/**',
 		'test-results/**',
@@ -17,11 +18,11 @@ export default defineConfig(
 		'.cache/**',
 		'.codex/**',
 		'public/lib/**',
-		'hackrf-web/pkg/**',
-		'hackrf-web/node/**',
+		'wasm/dsp/pkg/**',
+		'wasm/dsp/node/**',
 		'**/target/**',
-		'rtl433-wasm/**',
-		'mbelib-wasm/**',
+		'wasm/rtl433/**',
+		'wasm/mbelib/**',
 	]),
 	{
 		files: ['**/*.{js,mjs,ts}'],
@@ -35,7 +36,7 @@ export default defineConfig(
 		},
 	},
 	{
-		files: ['*.{js,mjs,ts}', 'scripts/**/*.mjs', '.storybook/*.ts', 'test/**/*.{js,ts}', 'hackrf-web/*.mjs'],
+		files: ['*.{js,mjs,ts}', 'scripts/**/*.mjs', '.storybook/*.ts', 'test/**/*.{js,ts}', 'wasm/dsp/*.mjs'],
 		languageOptions: { globals: globals.node },
 	},
 	{

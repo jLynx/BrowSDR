@@ -1,18 +1,19 @@
 # Dependencies
 node_modules/
+**/.vite/
 
-# Downloaded upstream mbelib source (see mbelib-wasm/README.md)
-/mbelib-wasm/mbelib/
+# Downloaded upstream mbelib source (see wasm/mbelib/README.md)
+/wasm/mbelib/mbelib/
 
 # Downloaded rtl_433 source and compiler outputs
-/rtl433-wasm/rtl_433-*/
-/rtl433-wasm/source.tar.gz
-/rtl433-wasm/update-pin.json
-/rtl433-wasm/build/
-/rtl433-wasm/test-data/
+/wasm/rtl433/rtl_433-*/
+/wasm/rtl433/source.tar.gz
+/wasm/rtl433/update-pin.json
+/wasm/rtl433/build/
+/wasm/rtl433/test-data/
 
 # Rust build artifacts
-hackrf-web/target/
+wasm/dsp/target/
 
 # Logs
 logs

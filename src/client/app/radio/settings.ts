@@ -15,7 +15,15 @@ export const settingsMethods = {
 			collapsedPanels: this.collapsedPanels,
 			recentRemoteIds: this.recentRemoteIds,
 		};
-		localStorage.setItem(this.settingsKey || 'SDRSetting', JSON.stringify(obj));
+		const json = JSON.stringify(obj);
+		localStorage.setItem(this.settingsKey || 'SDRSetting', json);
+		// Startup displays the first local receiver before hardware is connected.
+		// Keep that copy current without allowing other SDRs or remote sessions
+		// to replace the configuration shown on the next page load.
+		const first = this.workspace?.receivers[0];
+		if (first && this.workspace?.mode !== 'client' && first.id === this.receiverId && !first.remote) {
+			localStorage.setItem('SDRSetting', json);
+		}
 	},
 	loadSetting(this: AppInstance, useLegacy = false) {
 		try {

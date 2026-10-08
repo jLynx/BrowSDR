@@ -47,6 +47,7 @@ export type DspInput =
 	  };
 
 export interface DspAudio {
+	channels?: 1 | 2;
 	type: 'audio';
 	samples: ArrayBuffer | null;
 	chunkId: number;

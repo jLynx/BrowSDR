@@ -1,5 +1,5 @@
 import { errorMessage } from '@/platform/errors';
-import init, { DspProcessor, SharedChannelizer, set_panic_hook, alloc_iq_buffer, alloc_float_buffer } from '/hackrf-web/pkg/hackrf_web.js';
+import init, { DspProcessor, SharedChannelizer, set_panic_hook, alloc_iq_buffer, alloc_float_buffer } from '/wasm/dsp/browsdr_dsp.js';
 import { RationalResampler } from './streams/dsp-pipeline';
 import { demodulateSideband, sidebandOffsetHz } from './decoders/ssb';
 import { DSDStream } from './decoders/dsd/dsd-stream';
@@ -8,7 +8,7 @@ import type { DSDStatus } from './decoders/dsd/types';
 import { RDSDecoder } from './decoders/rds';
 import { LatestStatus } from './runtime/latest-status';
 import { Rtl433Stream } from './decoders/rtl433';
-import type { InitOutput } from '/hackrf-web/pkg/hackrf_web.js';
+import type { InitOutput } from '/wasm/dsp/browsdr_dsp.js';
 import type { DspInput } from './runtime/dsp-messages.types';
 import type { VfoParams } from './runtime/types';
 
@@ -30,6 +30,9 @@ let vfoState: {
 	dcAvg: number;
 	carrierAgcGain: number;
 	deemphPrev: number;
+	deemphRight: number;
+	stereo?: boolean;
+	deEmphasis?: string;
 	agcGain: number;
 	ssbPhase: number;
 	audioResampler: RationalResampler | null;
@@ -168,6 +171,7 @@ function configureDDC(params: VfoParams, systemCenterFreq: number): void {
 		vfoState.ssbPhase = 0;
 		vfoState.dcAvg = 0;
 		vfoState.deemphPrev = 0;
+		vfoState.deemphRight = 0;
 		vfoState.agcGain = 1;
 	}
 
@@ -177,6 +181,7 @@ function configureDDC(params: VfoParams, systemCenterFreq: number): void {
 	ddc.set_shift(systemSampleRate, offsetFreq + sidebandOffsetHz(params.mode, params.bandwidth));
 	ddc.set_bandwidth(params.bandwidth);
 	ddc.set_squelch(params.squelchLevel, params.squelchEnabled);
+	configureStereo(params);
 	if (params.mode === 'wfm') {
 		ddc.set_wfm_mode(true);
 	} else {
@@ -227,6 +232,17 @@ function configureDDC(params: VfoParams, systemCenterFreq: number): void {
 		}
 		rdsDecoder = null;
 	}
+}
+
+function configureStereo(params: VfoParams) {
+	const stereo = params.mode === 'wfm' && !!params.stereo;
+	if (vfoState.stereo !== stereo || vfoState.deEmphasis !== params.deEmphasis) {
+		vfoState.deemphPrev = 0;
+		vfoState.deemphRight = 0;
+		vfoState.stereo = stereo;
+		vfoState.deEmphasis = params.deEmphasis;
+	}
+	ddc.set_stereo(stereo);
 }
 
 function processVfoAudio(chunkLenBytes: number, params: VfoParams): Float32Array | null {
@@ -395,12 +411,16 @@ function processFmAudio(chunkLenBytes: number, params: VfoParams): Float32Array 
 		const alpha = 1.0 / (1.0 + tau * AUDIO_RATE);
 		const oneMinusAlpha = 1.0 - alpha;
 
-		let prev = vfoState.deemphPrev;
+		const channels = ddc.get_output_channels();
+		const history = [vfoState.deemphPrev, vfoState.deemphRight];
 		for (let i = 0; i < numAudioSamples; i++) {
-			prev = alpha * result[i] + oneMinusAlpha * prev;
-			result[i] = prev < -1.0 ? -1.0 : prev > 1.0 ? 1.0 : prev;
+			const channel = i % channels;
+			const value = alpha * result[i] + oneMinusAlpha * history[channel];
+			history[channel] = value;
+			result[i] = Math.max(-1, Math.min(1, value));
 		}
-		vfoState.deemphPrev = prev;
+		vfoState.deemphPrev = history[0];
+		vfoState.deemphRight = history[1];
 	} else {
 		for (let i = 0; i < numAudioSamples; i++) {
 			if (result[i] > 1.0) result[i] = 1.0;
@@ -466,6 +486,7 @@ function handleDspInit(msg: Extract<DspInput, { type: 'init' }>) {
 		dcAvg: 0,
 		carrierAgcGain: 1.0,
 		deemphPrev: 0,
+		deemphRight: 0,
 		agcGain: 1.0,
 		ssbPhase: 0.0,
 		audioResampler: null as RationalResampler | null,
@@ -513,6 +534,7 @@ function handleDspProcess(msg: Extract<DspInput, { type: 'process' }>) {
 				{
 					type: 'audio',
 					samples: cloneOut.buffer,
+					channels: msg.params.mode === 'wfm' && msg.params.stereo ? 2 : 1,
 					chunkId: msg.chunkId,
 					squelchOpen: vfoState.squelchOpen,
 					squelchDb: vfoState.squelchDb ?? -120,
@@ -565,6 +587,7 @@ function configureInputRate(msg: {
 		vfoState.currentIfRate = 0;
 		vfoState.dcAvg = 0;
 		vfoState.deemphPrev = 0;
+		vfoState.deemphRight = 0;
 		vfoState.agcGain = 1;
 		vfoState.ssbPhase = 0;
 		configureDDC(msg.params, nextCenter);

@@ -31,6 +31,7 @@ export interface ReceiverInternals {
 	gainNode: GainNode | null;
 	audioRingBuf: Float32Array;
 	audioRingPos: number;
+	audioRingChannels?: 1 | 2;
 	audioRingSize: string;
 	queuedAudioSched: string;
 	nextPlayTime: number;
@@ -108,8 +109,8 @@ export interface ReceiverMethods {
 	initCanvas(): void;
 	resizeFftCanvas(): void;
 	drawSpectrum(data: Float32Array): void;
-	playAudio(samples: Float32Array | Record<number, number>): void;
-	_scheduleAudioChunk(floats: Float32Array): void;
+	playAudio(samples: Float32Array | Record<number, number>, channels?: 1 | 2): void;
+	_scheduleAudioChunk(floats: Float32Array, channels?: 1 | 2): void;
 	clearInactiveSoloAudio(): void;
 	toggleSoloAudio(index: number): void;
 	toggleVfoCheckbox(index: number): void;
