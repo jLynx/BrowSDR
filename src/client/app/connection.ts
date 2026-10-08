@@ -1,4 +1,5 @@
 import type { AppInstance } from './types';
+import { markRaw } from 'vue';
 import * as Comlink from 'comlink';
 import { getAllCatalogFilters, lookupDevice } from '../device-catalog';
 import { localUsbIssue } from '../browser-capabilities';
@@ -24,7 +25,7 @@ export const connectionMethods = {
 		for (const device of allPaired) {
 			const driver = lookupDevice(device);
 			if (driver && !this.workspace?.isDeviceConnected(device)) {
-				sdrDevices.push({ device, driverName: driver.name, productName: device.productName || '', deviceNumber: allPaired.indexOf(device) + 1 });
+				sdrDevices.push({ device: markRaw(device), driverName: driver.name, productName: device.productName || '', deviceNumber: allPaired.indexOf(device) + 1 });
 			}
 		}
 
