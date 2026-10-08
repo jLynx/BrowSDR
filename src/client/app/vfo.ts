@@ -81,6 +81,9 @@ export const vfoMethods = {
 				volume: vfo.volume,
 				audioMuted: !!this.soloAudioVfo && this.soloAudioVfo !== vfo,
 				pocsag: vfo.pocsag,
+				rtl433: vfo.rtl433 && inBandwidth,
+				rtl433SampleRate: vfo.rtl433SampleRate,
+				rtl433Protocols: vfo.rtl433Protocols,
 			};
 
 			if (this.remoteMode === 'client' && this._webrtc) {
@@ -297,6 +300,7 @@ export const vfoMethods = {
 		const removedSolo = this.soloAudioVfo === this.vfos[index];
 		if (removedSolo) this.soloAudioVfo = null;
 		this.vfos.splice(index, 1);
+		this.rtl433?.status.splice(index, 1);
 		if (this.backend && this.running) {
 			if (this.remoteMode === 'client' && this._webrtc) {
 				this._webrtc.sendCommand({ type: 'removeRemoteVfo', index });

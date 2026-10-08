@@ -36,6 +36,7 @@ import {
 	setRemoteHostStatsCallback,
 	setRemoteHostPocsagCallback,
 	setRemoteHostRdsCallback,
+	setRemoteHostRtl433Callback,
 	setRemoteHostSquelchCallback,
 	_ensureRemoteClients,
 	_getOrCreateClientState,
@@ -101,6 +102,7 @@ export class Backend {
 	_remoteClients?: Map<string, RemoteClientState>;
 	_remoteHostPocsagCb?: any;
 	_remoteHostRdsCb?: any;
+	_remoteHostRtl433Cb?: any;
 	_remoteHostSquelchCb?: any;
 	_remoteClientCb?: any;
 	_remoteClientAudioCb?: any;
@@ -164,6 +166,7 @@ export class Backend {
 	setRemoteHostStatsCallback = setRemoteHostStatsCallback.bind(this);
 	setRemoteHostPocsagCallback = setRemoteHostPocsagCallback.bind(this);
 	setRemoteHostRdsCallback = setRemoteHostRdsCallback.bind(this);
+	setRemoteHostRtl433Callback = setRemoteHostRtl433Callback.bind(this);
 	setRemoteHostSquelchCallback = setRemoteHostSquelchCallback.bind(this);
 	_ensureRemoteClients = _ensureRemoteClients.bind(this);
 	_getOrCreateClientState = _getOrCreateClientState.bind(this);
@@ -179,8 +182,8 @@ export class Backend {
 	initRemoteClient = initRemoteClient.bind(this);
 	feedRemoteAudioChunk = feedRemoteAudioChunk.bind(this);
 
-	async startRxStream(opts: RxStreamOpts, spectrumCallback: any, audioCallback: any, whisperCallback: any = null, pocsagCallback: any = null, rdsCallback: any = null, dsdStatusCallback: any = null): Promise<void> {
-		return startRxStream(this, opts, spectrumCallback, audioCallback, whisperCallback, pocsagCallback, rdsCallback, dsdStatusCallback);
+	async startRxStream(opts: RxStreamOpts, spectrumCallback: any, audioCallback: any, whisperCallback: any = null, pocsagCallback: any = null, rdsCallback: any = null, dsdStatusCallback: any = null, rtl433Callback: any = null): Promise<void> {
+		return startRxStream(this, opts, spectrumCallback, audioCallback, whisperCallback, pocsagCallback, rdsCallback, dsdStatusCallback, rtl433Callback);
 	}
 
 	getDspStats(): any {

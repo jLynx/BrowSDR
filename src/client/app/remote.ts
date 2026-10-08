@@ -123,6 +123,9 @@ export const remoteMethods = {
 				this._webrtc.sendCommandTo(clientId, { type: 'rds', vfoIndex, freq, msg });
 			}
 		}));
+		await this.backend.setRemoteHostRtl433Callback(Comlink.proxy((clientId: string, vfoIndex: number, freq: number, msg: any) => {
+			this._webrtc?.sendCommandTo(clientId, { type: 'rtl433', vfoIndex, freq, msg });
+		}));
 		// Forward squelch state changes so remote clients can track frequency activity
 		await this.backend.setRemoteHostSquelchCallback(Comlink.proxy((clientId: string, squelchOpen: boolean[]) => {
 			if (this._webrtc) {
@@ -336,6 +339,8 @@ export const remoteMethods = {
 				const rc = this.remoteClients.find((c: any) => c.id === clientId);
 				if (rc && rc.vfoCount > 0) rc.vfoCount--;
 			}
+		} else if (cmd.type === 'rtl433') {
+			if (this.remoteMode === 'client') this._onRtl433Message(cmd.vfoIndex, cmd.freq, cmd.msg);
 		} else if (cmd.type === 'pocsag') {
 			if (this.remoteMode === 'client') {
 				this._onPocsagMessage(cmd.vfoIndex, cmd.freq, cmd.msg);

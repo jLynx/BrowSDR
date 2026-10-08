@@ -18,6 +18,8 @@ import { rdsMethods } from './rds';
 import { zoomMethods } from './zoom';
 import { remoteMethods } from './remote';
 import { autoGainMethods } from './auto-gain';
+import { rtl433Methods } from './rtl433';
+import { mountHeaderTools } from './header-tools';
 
 // When a new service worker takes control (after update), reload to get fresh assets
 if ('serviceWorker' in navigator) {
@@ -46,6 +48,7 @@ const Receiver = {
 		...zoomMethods,
 		...remoteMethods,
 		...autoGainMethods,
+		...rtl433Methods,
 	},
 	created: async function (this: any) {
 		this._cleanup = [];
@@ -240,8 +243,10 @@ const Receiver = {
 	},
 	mounted(this: any) {
 		mountCanvas.call(this);
+		this._disposeHeaderTools = mountHeaderTools(this);
 	},
 	beforeUnmount(this: any) {
+		this._disposeHeaderTools?.();
 		this._cleanup?.forEach((cleanup: () => void) => cleanup());
 		this._canvasCleanup?.();
 		this._backendWorker?.terminate();

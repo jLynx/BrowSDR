@@ -42,7 +42,8 @@ export async function startRxStream(
 	whisperCallback: any,
 	pocsagCallback: any,
 	rdsCallback: any = null,
-	dsdStatusCallback: any = null
+	dsdStatusCallback: any = null,
+	rtl433Callback: any = null
 ): Promise<void> {
 	if (_streamStarting) return;
 	_streamStarting = true;
@@ -142,6 +143,14 @@ export async function startRxStream(
 			const worker = new globalThis.Worker(new URL('../dsp-worker.ts', import.meta.url), { type: 'module' });
 			worker.onmessage = (e: MessageEvent) => {
 				const msg = e.data;
+				if (msg.type === 'rtl433_event' || msg.type === 'rtl433_status') {
+					const currentIndex = backend.dspWorkers!.indexOf(worker);
+					const params = backend.vfoParams![currentIndex];
+					if (currentIndex >= 0 && params && params.freq === msg.freq && (msg.type === 'rtl433_status' || params.rtl433)) {
+						rtl433Callback?.(currentIndex, params.freq, msg);
+					}
+					return;
+				}
 				if (msg.type === "audio") {
 					// Look up current index dynamically — splice() in removeVfo
 					// shifts the array, so the captured `index` goes stale.
@@ -726,7 +735,7 @@ export async function startRxStream(
 					if (worker && params) targets.push({ worker, params, shared: client.sharedChannelization === true });
 				}
 			}
-			const plannedParams = targets.map(target => target.shared ? target.params : { ...target.params, enabled: false, pocsag: false, rds: false });
+			const plannedParams = targets.map(target => target.shared ? target.params : { ...target.params, enabled: false, pocsag: false, rds: false, rtl433: false });
 			const plan = planSharedBands(sampleRate, backend._centerFreq ?? centerFreq, plannedParams, true);
 			const nextKey = JSON.stringify([backend._centerFreq ?? centerFreq, plan.ratio, plan.bands.map(band => band.centerBin)]);
 			latestPlan = plan;
@@ -772,7 +781,7 @@ export async function startRxStream(
 			for (let index = 0; index < targets.length; index++) {
 				const { worker, params, shared } = targets[index];
 				if (shared && !plan.direct.includes(index)) continue;
-				if (!params.enabled && !params.pocsag && !(params.rds && params.mode === 'wfm')) continue;
+				if (!params.enabled && !params.pocsag && !(params.rds && params.mode === 'wfm') && !params.rtl433) continue;
 				if (typeof SharedArrayBuffer !== 'undefined') {
 					worker.postMessage({ type: 'process', params: params, sampleRate, centerFreq: backend._centerFreq ?? centerFreq, useSab: true, sabIndex: backend.sabPoolIndex, chunkLen: signed.length, chunkId: chunkCounter });
 				} else {

@@ -135,6 +135,13 @@ function postBuildPlugin(): Plugin {
 			}
 
 			// --- Copy mbelib WASM files ---
+			const rtl433Src = path.resolve(__dirname, 'public/lib/rtl433');
+			for (const file of ['rtl433.js', 'rtl433.wasm', 'COPYING', 'NOTICE']) {
+				if (!fs.existsSync(path.join(rtl433Src, file))) {
+					throw new Error(`Missing rtl_433 asset: ${file}. Restore public/lib/rtl433 or run npm run build:rtl433.`);
+				}
+			}
+			fs.cpSync(rtl433Src, path.resolve(distDir, 'lib/rtl433'), { recursive: true });
 			const mbelibSrc = path.resolve(__dirname, 'public/lib/mbelib');
 			const mbelibDest = path.resolve(distDir, 'lib/mbelib');
 			for (const file of ['mbelib.js', 'mbelib.wasm', 'COPYRIGHT', 'NOTICE']) {

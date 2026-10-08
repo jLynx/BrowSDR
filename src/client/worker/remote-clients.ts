@@ -57,6 +57,10 @@ export async function setRemoteHostRdsCallback(this: Backend, callback: any): Pr
 	this._remoteHostRdsCb = callback;
 }
 
+export async function setRemoteHostRtl433Callback(this: Backend, callback: any): Promise<void> {
+	this._remoteHostRtl433Cb = callback;
+}
+
 export async function setRemoteHostSquelchCallback(this: Backend, callback: any): Promise<void> {
 	this._remoteHostSquelchCb = callback;
 }
@@ -110,6 +114,13 @@ function bindRemoteWorker(backend: Backend, clientId: string, state: RemoteClien
 		const index = state.workers.indexOf(worker);
 		if (index === -1) return;
 		const msg = e.data;
+		if (msg.type === 'rtl433_event' || msg.type === 'rtl433_status') {
+			const params = state.params[index];
+			if (params && params.freq === msg.freq && (msg.type === 'rtl433_status' || params.rtl433)) {
+				backend._remoteHostRtl433Cb?.(clientId, index, params.freq, msg);
+			}
+			return;
+		}
 		if (msg.type === 'rds') {
 			const params = state.params[index];
 			if (params?.rds && params.mode === 'wfm') {

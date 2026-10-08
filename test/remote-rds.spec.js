@@ -13,6 +13,7 @@ vi.mock('../src/client/webrtc', () => ({
 import * as remoteBackend from '../src/client/worker/remote-clients';
 import { remoteMethods } from '../src/client/app/remote';
 import { rdsMethods } from '../src/client/app/rds';
+import { rtl433Methods } from '../src/client/app/rtl433';
 import { AUDIO_QUEUE_CAPACITY } from '../src/client/worker/audio-queue';
 
 afterEach(() => { vi.unstubAllGlobals(); });
@@ -41,6 +42,63 @@ function makeClient(frequency = 106.2) {
 }
 
 describe('remote RDS delivery', () => {
+	it('forwards muted sensor events and status only to the matching remote client', async () => {
+		vi.stubGlobal('window', { location: { origin: 'http://localhost:5173' } });
+		vi.stubGlobal('localStorage', { getItem: () => null });
+		const backend = makeBackend();
+		const host = { connected: true, running: true, remoteMode: 'none', locks: {}, backend, radio: {}, gains: {} };
+		await remoteMethods.startRemoteHost.call(host);
+		const sensor = { ...params, freq: 433.92, mode: 'nfm', rds: false, rtl433: true };
+		const listeners = Object.fromEntries(['alice', 'bob'].map(id => [id, {
+			running: true, remoteMode: 'client', vfos: [{ ...sensor }], rtl433: { log: [], status: [], protocols: [] },
+			formatFreq: String, $refs: {}, $nextTick: callback => callback(), ...rtl433Methods,
+		}]));
+		host._webrtc.sendCommandTo.mockImplementation((id, command) => remoteMethods.handleRemoteCommand.call(listeners[id], JSON.parse(JSON.stringify(command))));
+		await backend.setRemoteVfoParams('alice', 0, sensor);
+		await backend.setRemoteVfoParams('bob', 0, sensor);
+		const worker = backend._remoteClients.get('alice').workers[0];
+		const event = { type: 'rtl433_event', freq: sensor.freq, event: { model: 'Weather', temperature_C: 20 } };
+		worker.onmessage({ data: event });
+		worker.onmessage({ data: { type: 'rtl433_status', freq: sensor.freq, status: { state: 'receiving', samples: 250000 } } });
+		expect(listeners.alice.rtl433.log[0].event).toEqual(event.event);
+		expect(listeners.alice.rtl433.status[0]).toMatchObject({ state: 'receiving', samples: 250000 });
+		expect(listeners.bob.rtl433.log).toEqual([]);
+		const hostMessage = vi.fn();
+		remoteMethods.handleRemoteCommand.call({ remoteMode: 'host', _onRtl433Message: hostMessage }, 'alice', { type: 'rtl433', vfoIndex: 0, freq: sensor.freq, msg: event });
+		expect(hostMessage).not.toHaveBeenCalled();
+	});
+	it('discards remote sensor messages after retuning, VFO removal, restart or disconnection', async () => {
+		const backend = makeBackend();
+		const received = vi.fn();
+		await backend.setRemoteHostRtl433Callback(received);
+		const sensor = { ...params, freq: 433.92, rtl433: true };
+		await backend.setRemoteVfoParams('alice', 0, sensor);
+		await backend.setRemoteVfoParams('alice', 1, sensor);
+		const state = backend._remoteClients.get('alice');
+		const removed = state.workers[0];
+		const survivor = state.workers[1];
+		await backend.removeRemoteVfo('alice', 0);
+		const event = { type: 'rtl433_event', freq: sensor.freq, event: { model: 'Weather' } };
+		survivor.onmessage({ data: event });
+		expect(received).toHaveBeenLastCalledWith('alice', 0, sensor.freq, event);
+		await backend.setRemoteVfoParams('alice', 0, { ...sensor, freq: 434 });
+		survivor.onmessage({ data: event });
+		survivor.onmessage({ data: { type: 'rtl433_status', freq: sensor.freq, status: { state: 'receiving' } } });
+		removed.onmessage({ data: event });
+		expect(received).toHaveBeenCalledOnce();
+		backend._reinitRemoteClientWorkers();
+		const restarted = state.workers[0];
+		survivor.onmessage({ data: { ...event, freq: 434 } });
+		await backend.setRemoteVfoParams('alice', 0, { ...sensor, freq: 434, rtl433: false });
+		restarted.onmessage({ data: { ...event, freq: 434 } });
+		expect(received).toHaveBeenCalledOnce();
+		const off = { type: 'rtl433_status', freq: 434, status: { state: 'off' } };
+		restarted.onmessage({ data: off });
+		expect(received).toHaveBeenLastCalledWith('alice', 0, 434, off);
+		await backend.removeRemoteClient('alice');
+		restarted.onmessage({ data: off });
+		expect(received).toHaveBeenCalledTimes(2);
+	});
 	it('records remote DSP time and audio output and forwards reports to the correct client', async () => {
 		vi.stubGlobal('window', { location: { origin: 'http://localhost:5173' } });
 		vi.stubGlobal('localStorage', { getItem: () => null });

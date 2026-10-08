@@ -248,7 +248,8 @@ export const connectionMethods = {
 				Comlink.proxy((vfoIndex: number, freq: number, samples: any) => this._feedWhisperVfo(vfoIndex, freq, samples)),
 				Comlink.proxy((vfoIndex: number, freq: number, msg: any) => this._onPocsagMessage(vfoIndex, freq, msg)),
 				Comlink.proxy((vfoIndex: number, freq: number, msg: any) => this._onRdsMessage(vfoIndex, freq, msg)),
-				Comlink.proxy((vfoIndex: number, status: any) => this._onDsdStatus(vfoIndex, status))
+				Comlink.proxy((vfoIndex: number, status: any) => this._onDsdStatus(vfoIndex, status)),
+				Comlink.proxy((vfoIndex: number, freq: number, msg: any) => this._onRtl433Message(vfoIndex, freq, msg))
 			);
 		} catch (e: any) {
 			console.error('Error starting RX stream:', e);

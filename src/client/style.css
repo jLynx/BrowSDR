@@ -101,6 +101,7 @@ body {
 }
 
 .brand {
+	flex-shrink: 0;
 	font-weight: 600;
 	font-size: 16px;
 	margin-right: 32px;
@@ -375,7 +376,37 @@ body {
 	display: flex;
 	align-items: center;
 	gap: 4px;
+	flex-shrink: 0;
 }
+
+.header-tools { position: relative; }
+.header-tool-list { display: flex; align-items: center; gap: 4px; }
+.tools-trigger, .tool-label { display: none; }
+.header-tools-compact .tools-trigger { display: flex; gap: 6px; font-size: 13px; font-weight: 600; list-style: none; }
+.tools-trigger::-webkit-details-marker { display: none; }
+.header-tools-compact .header-tool-list {
+	position: absolute;
+	top: calc(100% + 10px);
+	right: 0;
+	width: min(280px, calc(100vw - 16px));
+	max-height: calc(100dvh - 70px);
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	align-items: stretch;
+	gap: 4px;
+	padding: 6px;
+	background: var(--bg-panel);
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	box-shadow: 0 8px 24px rgba(0,0,0,.45);
+	z-index: 250;
+}
+.header-tools-compact:not([open]) .header-tool-list { display: none; }
+.header-tools-compact .header-tool-list .icon-btn { justify-content: flex-start; gap: 10px; padding: 8px; min-height: 40px; text-align: left; }
+.header-tools-compact .tool-label { display: block; font-size: 13px; }
+.header-tool-list svg { flex-shrink: 0; }
+.tools-trigger:focus-visible, .header-tool-list .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 .main-layout {
 	display: flex;
@@ -1118,6 +1149,26 @@ canvas {
 }
 
 /* ────── POCSAG Decoder Panel ────── */
+.rtl433-vfo-controls { display: flex; flex-direction: column; gap: 12px; }
+.rtl433-vfo-controls .input-group, .rtl433-vfo-controls select { flex: 0 0 140px; }
+.rtl433-vfo-controls input { min-width: 0; }
+.rtl433-vfo-controls .input-group input { text-align: left; }
+.rtl433-status, .rtl433-hint { font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.rtl433-status { color: #80cbc4; }
+.rtl433-hint { color: var(--text-muted); }
+.rtl433-error { color: #ff8888 !important; }
+.rtl433-panel { height: 250px !important; border-top-color: #4db6ac !important; }
+.rtl433-panel .pocsag-header { background: #102a2a; gap: 8px; flex-wrap: wrap; }
+.rtl433-panel .pocsag-title { color: #80cbc4; }
+.rtl433-panel .pocsag-count { background: #287e76; }
+.rtl433-receivers { display: flex; flex-wrap: wrap; gap: 4px 16px; padding: 4px 12px; font-size: 11px; color: #80cbc4; }
+.rtl433-entry { border-left: 3px solid; padding: 5px 8px; margin-bottom: 6px; background: rgba(0,0,0,.12); }
+.rtl433-event-heading { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.rtl433-event-heading time { color: var(--text-muted); }
+.rtl433-event-heading strong { color: #80cbc4; }
+.rtl433-fields { white-space: normal; overflow-wrap: anywhere; }
+.rtl433-protocol-search { width: min(100%, 400px); margin-bottom: 8px; }
+.rtl433-protocol-search input { min-width: 0; text-align: left; font-family: inherit; }
 .pocsag-panel {
 	flex-shrink: 0;
 	display: flex;
@@ -2427,6 +2478,7 @@ canvas {
 
 	.top-controls {
 		gap: 2px;
+		margin-left: auto;
 	}
 
 	.top-controls .icon-btn {

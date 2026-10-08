@@ -14,7 +14,7 @@ afterEach(() => {
 	vi.unstubAllGlobals();
 });
 
-async function createStream(rdsCallback = null, dsdStatusCallback = null) {
+async function createStream(rdsCallback = null, dsdStatusCallback = null, rtl433Callback = null) {
 	vi.useFakeTimers();
 	const workers = [];
 	vi.stubGlobal('Worker', class {
@@ -30,7 +30,7 @@ async function createStream(rdsCallback = null, dsdStatusCallback = null) {
 		setWhisperEnabled(value) { this._whisperEnabled = value; },
 		_reinitRemoteClientWorkers: vi.fn(),
 	};
-	await startRxStream(backend, { centerFreq: 95, sampleRate: 61440000, fftSize: 65536 }, null, null, null, null, rdsCallback, dsdStatusCallback);
+	await startRxStream(backend, { centerFreq: 95, sampleRate: 61440000, fftSize: 65536 }, null, null, null, null, rdsCallback, dsdStatusCallback, rtl433Callback);
 	for (const freq of [95.1, 95.2]) {
 		const params = { ...backend.vfoParams[0], freq, enabled: true };
 		backend.vfoParams.push(params);
@@ -42,6 +42,47 @@ async function createStream(rdsCallback = null, dsdStatusCallback = null) {
 }
 
 describe('shared VFO worker routing', () => {
+	it.each([false, true])('feeds muted sensor VFOs through shared DSP %s', async shared => {
+		const received = vi.fn();
+		const { backend, workers, receive } = await createStream(null, null, received);
+		backend._sharedChannelization = shared;
+		backend.vfoParams.forEach(params => { params.enabled = false; params.rtl433 = true; params.rtl433SampleRate = 250000; });
+		receive();
+		if (shared) {
+			const channelWorker = workers[3];
+			const request = channelWorker.messages[0];
+			channelWorker.onmessage({ data: { type: 'bands', key: request.key, chunkId: request.chunkId, inputSamples: request.inputSamples,
+				bands: [{ centerBin: request.centers[0], buffer: new ArrayBuffer(128), length: 32 }] } });
+		}
+		backend.dspWorkers.forEach(worker => {
+			expect(worker.messages.at(-1)).toMatchObject({ type: 'process', params: { enabled: false, rtl433: true }, sampleRate: shared ? 1920000 : 61440000 });
+		});
+		const event = { type: 'rtl433_event', freq: 95, event: { model: 'Weather' } };
+		backend.dspWorkers[0].onmessage({ data: event });
+		expect(received).toHaveBeenCalledWith(0, 95, event);
+	});
+	it('routes sensor events to the current VFO and discards stale events and status', async () => {
+		const received = vi.fn();
+		const { backend } = await createStream(null, null, received);
+		const removed = backend.dspWorkers.shift();
+		backend.vfoParams.shift(); backend.vfoStates.shift();
+		backend.vfoParams[0].rtl433 = true;
+		const worker = backend.dspWorkers[0];
+		const event = { type: 'rtl433_event', freq: 95.1, event: { model: 'Weather' } };
+		worker.onmessage({ data: event });
+		expect(received).toHaveBeenLastCalledWith(0, 95.1, event);
+		backend.vfoParams[0].freq = 95.3;
+		worker.onmessage({ data: event });
+		worker.onmessage({ data: { type: 'rtl433_status', freq: 95.1, status: { state: 'receiving' } } });
+		removed.onmessage({ data: event });
+		expect(received).toHaveBeenCalledOnce();
+		backend.vfoParams[0].rtl433 = false;
+		worker.onmessage({ data: { ...event, freq: 95.3 } });
+		const off = { type: 'rtl433_status', freq: 95.3, status: { state: 'off' } };
+		worker.onmessage({ data: off });
+		expect(received).toHaveBeenLastCalledWith(0, 95.3, off);
+		expect(received).toHaveBeenCalledTimes(2);
+	});
 	it('routes DSD status and RDS separately after an earlier VFO is removed', async () => {
 		const rdsCallback = vi.fn();
 		const dsdStatusCallback = vi.fn();

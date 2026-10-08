@@ -1,6 +1,7 @@
 import { IF_RATES } from './types';
 import type { VfoParams } from './types';
 import { sidebandOffsetHz } from './ssb';
+import { rtl433SampleRate } from './rtl433';
 
 export interface SharedBand {
 	centerBin: number;
@@ -17,7 +18,7 @@ export interface ChannelPlan {
 
 export function planSharedBands(sampleRate: number, centerFreq: number, params: VfoParams[], enabled: boolean): ChannelPlan {
 	const active = params.map((value, index) => ({ value, index })).filter(({ value }) =>
-		value.enabled || value.pocsag || (value.rds && value.mode === 'wfm'));
+		value.enabled || value.pocsag || value.rtl433 || (value.rds && value.mode === 'wfm'));
 	const direct = active.map(({ index }) => index);
 	const fallback = { ratio: 1, sampleRate, bands: [], direct };
 	if (!enabled || active.length < 3 || sampleRate < 4000000) return fallback;
@@ -28,7 +29,7 @@ export function planSharedBands(sampleRate: number, centerFreq: number, params: 
 	const bands = new Map<number, SharedBand>();
 	const remaining: number[] = [];
 	for (const { value, index } of active) {
-		const width = Math.max(value.bandwidth || 150000, IF_RATES[value.mode] || sampleRate);
+		const width = Math.max(value.bandwidth || 150000, IF_RATES[value.mode] || sampleRate, value.rtl433 ? rtl433SampleRate(value.rtl433SampleRate) : 0);
 		const offset = (value.freq - centerFreq) * 1000000 + sidebandOffsetHz(value.mode, value.bandwidth);
 		const centerBin = Math.round(offset / (bandRate / 2)) * (8192 / (ratio * 2));
 		const bandOffset = centerBin * sampleRate / 8192;

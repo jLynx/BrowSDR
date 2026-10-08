@@ -46,6 +46,8 @@ export function createAppData() {
 		hoverFreqText: "",
 		dspStats: null as any,
 		showStats: false,
+		toolsCompact: true,
+		toolsMenuOpen: false,
 		fps: 0,
 		vfoSquelchOpen: [] as boolean[],
 		vfoSquelchHangUntil: [] as number[],
@@ -90,6 +92,14 @@ export function createAppData() {
 			log: [] as Array<{ time: string; freq: string; vfoIndex: number; capcode: string; type: string; text: string; baud: number }>,
 		},
 		dsdStatus: [] as Array<DSDStatus | null>,
+		rtl433: {
+			panelOpen: false,
+			status: [] as Array<import('../worker/rtl433').Rtl433Status | null>,
+			protocols: [] as import('../worker/rtl433').Rtl433Protocol[],
+			log: [] as Array<{ time: string; freq: string; vfoIndex: number; event: Record<string, unknown> }>,
+			filter: '',
+			showProtocols: false,
+		},
 		rds: {
 			panelOpen: false,
 			stations: {} as Record<number, { ps: string; rt: string; pi: string; pty: number; ptyLabel: string; tp: boolean; ta: boolean; freq: string }>,
