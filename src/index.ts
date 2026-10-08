@@ -1,3 +1,4 @@
+import { isRecord } from './client/platform/data';
 /**
  * BrowSDR - Cloudflare Worker
  *
@@ -25,12 +26,8 @@ interface IceServerEntry {
 	credential?: string;
 }
 
-interface TurnApiResponse {
-	iceServers?: IceServerEntry[];
-}
-
 export default {
-	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+	async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
 		const url = new URL(request.url);
 
 		// Cross-origin isolation headers (required for SharedArrayBuffer)
@@ -41,10 +38,9 @@ export default {
 
 		// Return the caller's country code (from Cloudflare headers)
 		if (url.pathname === '/api/geo') {
-			return new Response(
-				JSON.stringify({ country: request.headers.get('CF-IPCountry') || 'XX' }),
-				{ headers: { 'Content-Type': 'application/json', ...coopHeaders } }
-			);
+			return new Response(JSON.stringify({ country: request.headers.get('CF-IPCountry') || 'XX' }), {
+				headers: { 'Content-Type': 'application/json', ...coopHeaders },
+			});
 		}
 
 		// Return TURN/STUN ICE servers for WebRTC connectivity.
@@ -64,26 +60,22 @@ export default {
 			// Fallback: Cloudflare TURN (paid beyond 1TB free tier)
 			if (env.TURN_KEY_ID && env.TURN_KEY_API_TOKEN) {
 				try {
-					const turnResp = await fetch(
-						`https://rtc.live.cloudflare.com/v1/turn/keys/${env.TURN_KEY_ID}/credentials/generate-ice-servers`,
-						{
-							method: 'POST',
-							headers: {
-								'Authorization': `Bearer ${env.TURN_KEY_API_TOKEN}`,
-								'Content-Type': 'application/json',
-							},
-							body: JSON.stringify({ ttl: 14400 }), // 4 hours
-						}
-					);
-					const data: TurnApiResponse = await turnResp.json();
-					if (data.iceServers) iceServers.push(...data.iceServers);
-				} catch (_) {}
+					const turnResp = await fetch(`https://rtc.live.cloudflare.com/v1/turn/keys/${env.TURN_KEY_ID}/credentials/generate-ice-servers`, {
+						method: 'POST',
+						headers: {
+							Authorization: `Bearer ${env.TURN_KEY_API_TOKEN}`,
+							'Content-Type': 'application/json',
+						},
+						body: JSON.stringify({ ttl: 14400 }), // 4 hours
+					});
+					const data: unknown = await turnResp.json();
+					if (isRecord(data) && Array.isArray(data.iceServers)) iceServers.push(...data.iceServers.filter(isIceServer));
+				} catch (_) {
+					/* Best-effort cleanup or optional capability; retain the current state if unavailable. */
+				}
 			}
 
-			return new Response(
-				JSON.stringify({ iceServers }),
-				{ headers: { 'Content-Type': 'application/json', ...coopHeaders } }
-			);
+			return new Response(JSON.stringify({ iceServers }), { headers: { 'Content-Type': 'application/json', ...coopHeaders } });
 		}
 
 		// Proxy HuggingFace model downloads to avoid CORS issues
@@ -115,3 +107,13 @@ export default {
 		return newResponse;
 	},
 };
+
+function isIceServer(value: unknown): value is IceServerEntry {
+	return (
+		isRecord(value) &&
+		Array.isArray(value.urls) &&
+		value.urls.every((url: unknown) => typeof url === 'string') &&
+		(value.username === undefined || typeof value.username === 'string') &&
+		(value.credential === undefined || typeof value.credential === 'string')
+	);
+}

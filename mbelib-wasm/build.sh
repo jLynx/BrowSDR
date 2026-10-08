@@ -63,6 +63,7 @@ echo "Building mbelib WASM..."
 emcc -O3 \
     -s WASM=1 \
     -s MODULARIZE=1 \
+    -s EXPORT_ES6=1 \
     -s EXPORT_NAME='MbelibModule' \
     -s EXPORTED_FUNCTIONS='["_mbelib_init","_mbelib_reset","_mbelib_decode_ambe","_mbelib_decode_imbe","_mbelib_get_err_str","_mbelib_get_errs","_mbelib_get_errs2","_malloc","_free"]' \
     -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap","getValue","setValue","UTF8ToString","HEAPF32","HEAP8"]' \

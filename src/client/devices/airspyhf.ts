@@ -1,3 +1,4 @@
+import { errorMessage } from '../platform/errors';
 /*
 Airspy HF+ WebUSB driver for BrowSDR
 Copyright (c) 2026, jLynx <https://github.com/jLynx>
@@ -19,8 +20,8 @@ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABI
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-import type { SdrDevice, SdrDeviceInfo, GainControl } from '../sdr-device';
-import { registerDriver } from '../sdr-device';
+import type { SdrDevice, SdrDeviceInfo, GainControl } from '../radio/sdr-device';
+import { registerDriver } from '../radio/sdr-device';
 
 // ── Airspy HF+ vendor request codes ──────────────────────────────
 const AIRSPYHF_RECEIVER_MODE = 1;
@@ -56,7 +57,7 @@ export class AirspyHfDevice implements SdrDevice {
 	sampleRates: number[] = [192000, 256000, 384000, 456000, 768000, 912000];
 
 	private dev!: USBDevice;
-	private rxRunning: Promise<void>[] | null = null;
+	private rxRunning: Array<Promise<void>> | null = null;
 
 	async open(device: USBDevice): Promise<void> {
 		this.dev = device;
@@ -86,8 +87,14 @@ export class AirspyHfDevice implements SdrDevice {
 		await this.stopRx();
 		try {
 			await this.vendorOut(AIRSPYHF_RECEIVER_MODE, 0, 0);
-		} catch (_) { /* ignore */ }
-		try { await this.dev.close(); } catch (_) { /* ignore */ }
+		} catch (_) {
+			/* ignore */
+		}
+		try {
+			await this.dev.close();
+		} catch (_) {
+			/* ignore */
+		}
 	}
 
 	async getInfo(): Promise<SdrDeviceInfo> {
@@ -102,12 +109,16 @@ export class AirspyHfDevice implements SdrDevice {
 			serial = sn.toString(16).padStart(16, '0');
 			const boardId = dv.getUint16(8, true);
 			name = BOARD_NAMES[boardId] || `Airspy HF+ (ID ${boardId})`;
-		} catch (_) { /* ignore */ }
+		} catch (_) {
+			/* ignore */
+		}
 
 		try {
 			const verBuf = await this.vendorIn(AIRSPYHF_GET_VERSION_STRING, 0, 0, 128);
-			firmware = String.fromCharCode(...new Uint8Array(verBuf).filter(b => b !== 0));
-		} catch (_) { /* ignore */ }
+			firmware = String.fromCharCode(...new Uint8Array(verBuf).filter((b) => b !== 0));
+		} catch (_) {
+			/* ignore */
+		}
 
 		return { name, serial, firmware };
 	}
@@ -160,7 +171,7 @@ export class AirspyHfDevice implements SdrDevice {
 				try {
 					const result = await this.dev.transferIn(1, TRANSFER_BUFFER_SIZE);
 					if (result.status !== 'ok') break;
-					const raw = new Uint8Array(result.data!.buffer, 0, result.data!.byteLength);
+					const raw = new Uint8Array(result.data.buffer, 0, result.data.byteLength);
 
 					// Airspy HF+ sends complex float32 IQ pairs
 					// Convert to int8 IQ for the DSP pipeline
@@ -176,7 +187,7 @@ export class AirspyHfDevice implements SdrDevice {
 					callback(new Uint8Array(int8Data.buffer));
 				} catch (e: unknown) {
 					if (this.rxRunning) {
-						const msg = e instanceof Error ? e.message : String(e);
+						const msg = e instanceof Error ? errorMessage(e) : String(e);
 						console.error('AirspyHF: transfer error:', msg);
 					}
 					break;
@@ -190,35 +201,47 @@ export class AirspyHfDevice implements SdrDevice {
 		if (this.rxRunning) {
 			const promises = this.rxRunning;
 			this.rxRunning = null;
-			try { await Promise.allSettled(promises); } catch (_) { /* ignore */ }
+			try {
+				await Promise.allSettled(promises);
+			} catch (_) {
+				/* ignore */
+			}
 		}
 		try {
 			await this.vendorOut(AIRSPYHF_RECEIVER_MODE, 0, 0);
-		} catch (_) { /* ignore */ }
+		} catch (_) {
+			/* ignore */
+		}
 	}
 
 	// ── USB helper methods ────────────────────────────────────────
 	private async vendorOut(request: number, value: number, index: number, data?: ArrayBuffer): Promise<void> {
-		const result = await this.dev.controlTransferOut({
-			requestType: 'vendor',
-			recipient: 'device',
-			request,
-			value,
-			index,
-		}, data);
+		const result = await this.dev.controlTransferOut(
+			{
+				requestType: 'vendor',
+				recipient: 'device',
+				request,
+				value,
+				index,
+			},
+			data,
+		);
 		if (result.status !== 'ok') throw new Error(`AirspyHF: vendor OUT failed (req=${request})`);
 	}
 
 	private async vendorIn(request: number, value: number, index: number, length: number): Promise<ArrayBuffer> {
-		const result = await this.dev.controlTransferIn({
-			requestType: 'vendor',
-			recipient: 'device',
-			request,
-			value,
-			index,
-		}, length);
+		const result = await this.dev.controlTransferIn(
+			{
+				requestType: 'vendor',
+				recipient: 'device',
+				request,
+				value,
+				index,
+			},
+			length,
+		);
 		if (result.status !== 'ok') throw new Error(`AirspyHF: vendor IN failed (req=${request})`);
-		return new Uint8Array(result.data!.buffer).buffer as ArrayBuffer;
+		return new Uint8Array(result.data.buffer).buffer as ArrayBuffer;
 	}
 }
 

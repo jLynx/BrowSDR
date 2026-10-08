@@ -8,11 +8,9 @@
 	"main": "src/index.ts",
 	"compatibility_date": "2026-02-27",
 	"observability": {
-		"enabled": true
+		"enabled": true,
 	},
-	"compatibility_flags": [
-		"nodejs_compat"
-	],
+	"compatibility_flags": ["nodejs_compat"],
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
@@ -36,7 +34,7 @@
 	 * https://developers.cloudflare.com/workers/static-assets/binding/
 	 */
 	"assets": { "directory": "./dist/", "binding": "ASSETS" },
-	"build": { "command": "npx vite build", "watch_dir": "src/client" }
+	"build": { "command": "npx vite build", "watch_dir": "src/client" },
 	/**
 	 * Service Bindings (communicate between multiple Workers)
 	 * https://developers.cloudflare.com/workers/wrangler/configuration/#service-bindings

@@ -1,0 +1,29 @@
+	<!-- POCSAG Panel -->
+	<div class="pocsag-panel" v-if="pocsag.panelOpen">
+		<UiToolHeader variant="pocsag">
+				<svg viewBox="0 0 24 24" width="16" height="16" style="vertical-align:middle;margin-right:4px"><path fill="currentColor" d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-3 12H7v-2h10v2zm0-3H7V9h10v2zm0-3H7V6h10v2z"/></svg>
+			POCSAG Decoder
+			<span class="pocsag-count" v-if="pocsag.log.length">{{ pocsag.log.length }} msg{{ pocsag.log.length !== 1 ? 's' : '' }}</span>
+			<template #actions>
+				<UiButton variant="transcript" @click="clearPocsag" title="Clear log">Clear</UiButton>
+				<UiButton variant="transcript" @click="exportPocsag" title="Export as text" :disabled="pocsag.log.length === 0">Export</UiButton>
+			</template>
+		</UiToolHeader>
+		<div class="pocsag-body" ref="pocsagBody">
+			<UiEmptyState v-if="pocsag.log.length === 0" variant="pocsag">
+				No messages yet. Enable "Decode POCSAG" on an NFM VFO and tune to a paging frequency.
+			</UiEmptyState>
+			<div v-for="(entry, i) in pocsag.log" :key="i" class="pocsag-entry"
+				:style="entry.vfoIndex != null ? { borderLeftColor: vfoColor(entry.vfoIndex) } : {}">
+				<span class="pocsag-vfo-dot" v-if="entry.vfoIndex != null" :style="{ background: vfoColor(entry.vfoIndex) }" :title="'VFO ' + (entry.vfoIndex + 1)"></span>
+				<span class="pocsag-time">{{ entry.time }}</span>
+				<span class="pocsag-freq" :style="entry.vfoIndex != null ? { color: vfoColor(entry.vfoIndex) } : {}">{{ entry.freq }}</span>
+				<span class="pocsag-capcode" title="Capcode (pager address)">CAP:{{ entry.capcode }}</span>
+				<span class="pocsag-type" :class="'pocsag-type-' + entry.type">{{ entry.type.toUpperCase() }}</span>
+				<span class="pocsag-baud" v-if="entry.baud">{{ entry.baud }}Bd</span>
+				<span class="pocsag-text" v-if="entry.text">{{ entry.text }}</span>
+				<span class="pocsag-text pocsag-tone" v-else>(tone only)</span>
+			</div>
+		</div>
+	</div>
+

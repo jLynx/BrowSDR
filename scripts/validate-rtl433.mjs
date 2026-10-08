@@ -5,7 +5,7 @@ import Rtl433Module from '../public/lib/rtl433/rtl433.js';
 const args = process.argv.slice(2);
 const file = args[0];
 if (!file) throw new Error('Usage: node scripts/validate-rtl433.mjs capture.cu8 [--rate 250000] [--freq 433920000] [--protocols 40,41]');
-const option = (key, fallback) => args.includes(key) ? args[args.indexOf(key) + 1] : fallback;
+const option = (key, fallback) => (args.includes(key) ? args[args.indexOf(key) + 1] : fallback);
 const bytes = fs.readFileSync(file);
 assert.equal(bytes.length % 2, 0, 'Expected interleaved unsigned 8-bit IQ');
 const rate = Number(option('--rate', '250000'));
@@ -15,8 +15,9 @@ async function decode(blockValues) {
 	const events = [];
 	const module = await Rtl433Module({
 		wasmBinary: fs.readFileSync(new URL('../public/lib/rtl433/rtl433.wasm', import.meta.url)),
-		onDecoded: json => events.push(JSON.parse(json)),
-		print: () => {}, printErr: () => {},
+		onDecoded: (json) => events.push(JSON.parse(json)),
+		print: () => {},
+		printErr: () => {},
 	});
 	const idsPtr = module.stringToNewUTF8(ids);
 	const active = module._rtl433_init(rate, freq, idsPtr);
@@ -39,4 +40,4 @@ const result = await decode(65536);
 assert(result.events.length > 0, 'Capture did not produce decoded events');
 const split = await decode(1024);
 assert.deepEqual(split.events, result.events, 'Payloads changed at streaming block boundaries');
-console.log(JSON.stringify({ file, rate, freq, ...result, rfDurationMs: bytes.length / 2 / rate * 1000 }, null, 2));
+console.log(JSON.stringify({ file, rate, freq, ...result, rfDurationMs: (bytes.length / 2 / rate) * 1000 }, null, 2));

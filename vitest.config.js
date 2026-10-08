@@ -14,13 +14,13 @@ export default defineConfig({
 				test: {
 					name: 'client',
 					include: ['test/**/*.spec.js'],
-					exclude: ['test/index.spec.js'],
+					exclude: ['test/server/index.spec.js'],
 				},
 			},
 			defineWorkersProject({
 				test: {
 					name: 'worker',
-					include: ['test/index.spec.js'],
+					include: ['test/server/index.spec.js'],
 					poolOptions: {
 						workers: {
 							wrangler: { configPath: './wrangler.jsonc' },

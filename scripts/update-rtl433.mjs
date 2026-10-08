@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 
-const root = fileURLToPath(new URL('../', import.meta.url));
+const root = fileURLToPath(new URL('..', import.meta.url));
 const pinPath = path.join(root, 'rtl433-wasm/upstream.json');
 const candidatePath = path.join(root, 'rtl433-wasm/update-pin.json');
 const assetDir = path.join(root, 'public/lib/rtl433');
@@ -15,11 +15,11 @@ function run(command, argv) {
 	return new Promise((resolve, reject) => {
 		const child = spawn(command, argv, { cwd: root, stdio: 'inherit' });
 		child.on('error', reject);
-		child.on('exit', code => code === 0 ? resolve() : reject(new Error(`${command} exited with code ${code}`)));
+		child.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`${command} exited with code ${code}`))));
 	});
 }
 
-const shellQuote = value => "'" + value.replaceAll("'", "'\\''") + "'";
+const shellQuote = (value) => "'" + value.replaceAll("'", "'\\''") + "'";
 async function build(pin) {
 	if (process.platform === 'win32') {
 		// Use the existing WSL Emscripten installation without requiring Bash on PATH.
@@ -47,7 +47,11 @@ async function main() {
 	}
 	const refIndex = args.indexOf('--ref');
 	const ref = refIndex === -1 ? 'master' : args[refIndex + 1];
-	if (!ref || ref.startsWith('--') || args.some((arg, i) => !['--check', '--build', '--ref'].includes(arg) && !(refIndex !== -1 && i === refIndex + 1))) {
+	if (
+		!ref ||
+		ref.startsWith('--') ||
+		args.some((arg, i) => !['--check', '--build', '--ref'].includes(arg) && !(refIndex !== -1 && i === refIndex + 1))
+	) {
 		throw new Error('Invalid arguments. Use --help for usage.');
 	}
 	if (args.includes('--check') && args.includes('--build')) throw new Error('Choose either --check or --build.');
@@ -60,29 +64,37 @@ async function main() {
 		if (!/^[a-f0-9]{40}$/.test(upstream.sha)) throw new Error('Upstream returned an invalid commit.');
 		console.log(`Bundled:  ${pin.commit}\nUpstream: ${upstream.sha} (${ref})`);
 		if (args.includes('--check')) {
-			console.log(upstream.sha === pin.commit ? 'rtl_433 is up to date.' : 'Update available. Run npm run update:rtl433 to build and validate it.');
+			console.log(
+				upstream.sha === pin.commit ? 'rtl_433 is up to date.' : 'Update available. Run npm run update:rtl433 to build and validate it.',
+			);
 			return;
 		}
-		if (upstream.sha === pin.commit) { console.log('rtl_433 is already up to date. Use npm run build:rtl433 to rebuild.'); return; }
+		if (upstream.sha === pin.commit) {
+			console.log('rtl_433 is already up to date. Use npm run build:rtl433 to rebuild.');
+			return;
+		}
 		const archive = Buffer.from(await (await request(`https://codeload.github.com/merbanan/rtl_433/tar.gz/${upstream.sha}`)).arrayBuffer());
 		candidate = { ...pin, commit: upstream.sha, sha256: createHash('sha256').update(archive).digest('hex') };
 		await fs.writeFile(path.join(root, 'rtl433-wasm/source.tar.gz'), archive);
 	}
-	const previous = await Promise.all(assets.map(name => fs.readFile(path.join(assetDir, name))));
+	const previous = await Promise.all(assets.map((name) => fs.readFile(path.join(assetDir, name))));
 	await fs.writeFile(candidatePath, JSON.stringify(candidate, null, 2) + '\n');
 	try {
 		await build(candidatePath);
 		// Validate the produced binary itself and the Rust-to-decoder streaming path.
-		await run(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', '--project', 'client', 'test/rtl433.spec.js']);
+		await run(process.execPath, ['node_modules/vitest/vitest.mjs', 'run', '--project', 'client', 'test/decoders/rtl433.spec.js']);
 		await fs.writeFile(pinPath, JSON.stringify(candidate, null, 2) + '\n');
 		console.log(`Built and validated rtl_433 ${candidate.commit}. Review and commit the pin and public/lib/rtl433 assets together.`);
 	} catch (error) {
 		await Promise.all(assets.map((name, i) => fs.writeFile(path.join(assetDir, name), previous[i])));
 		await fs.writeFile(pinPath, originalPin);
-		throw new Error(`Update failed; the previous decoder assets and pin were restored. ${error.message}`);
+		throw new Error(`Update failed; the previous decoder assets and pin were restored. ${error.message}`, { cause: error });
 	} finally {
 		await fs.rm(candidatePath, { force: true });
 	}
 }
 
-main().catch(error => { console.error(error.message); process.exitCode = 1; });
+main().catch((error) => {
+	console.error(error.message);
+	process.exitCode = 1;
+});
