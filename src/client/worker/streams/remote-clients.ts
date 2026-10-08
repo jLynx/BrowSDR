@@ -1,5 +1,6 @@
 import type {
 	SamplesCallback,
+	AudioCallback,
 	PocsagCallback,
 	RdsCallback,
 	Rtl433Callback,
@@ -32,7 +33,8 @@ import { AUDIO_RATE } from '@/worker/runtime/constants';
 import { POCSAGDecoder } from '@/worker/decoders/pocsag';
 import { ensureWasmInitialized, init } from '@/worker/runtime/wasm-init';
 import type { Backend } from '@/worker/runtime/backend';
-import { AUDIO_QUEUE_CAPACITY, appendAudio, mixLength } from './audio-queue';
+import { AUDIO_QUEUE_CAPACITY, appendPcm, mixLength } from './audio-queue';
+import { downmix, unpackAudio } from '@/audio/pcm';
 
 // ── Remote-client VFO management (multi-client) ──────────────────────────
 // Each connected client has its own independent set of VFOs. For each one
@@ -49,7 +51,7 @@ export function setRemoteHostFftCallback(this: Backend, callback: SamplesCallbac
 	this._remoteHostFftCb = callback;
 }
 
-export function setRemoteHostAudioCallback(this: Backend, callback: HostCallback<[Float32Array]>): void {
+export function setRemoteHostAudioCallback(this: Backend, callback: HostCallback<Parameters<AudioCallback>>): void {
 	this._remoteHostAudioCb = callback;
 }
 
@@ -161,12 +163,12 @@ function handleRemoteWorkerAudio(state: RemoteClientState, msg: DspAudio, backen
 	perf.audioCalls++;
 	perf.dspTimeSum += elapsed;
 	perf.dspTimeMax = Math.max(perf.dspTimeMax, elapsed);
-	perf.audioSamplesOut += samples?.length ?? 0;
+	perf.audioSamplesOut += (samples?.length ?? 0) / (msg.channels ?? 1);
 	if (backend._perf) {
 		backend._perf.audioCalls++;
 		backend._perf.dspTimeSum += elapsed;
 		backend._perf.dspTimeMax = Math.max(backend._perf.dspTimeMax, elapsed);
-		backend._perf.audioSamplesOut += samples?.length ?? 0;
+		backend._perf.audioSamplesOut += (samples?.length ?? 0) / (msg.channels ?? 1);
 	}
 	const prev = state.squelchOpen[index] || false;
 	const curr = !!msg.squelchOpen;
@@ -175,7 +177,7 @@ function handleRemoteWorkerAudio(state: RemoteClientState, msg: DspAudio, backen
 		backend._remoteHostSquelchCb(clientId, state.squelchOpen.slice());
 	}
 	if (samples) {
-		backend._queueRemoteAudio(clientId, index, samples);
+		backend._queueRemoteAudio(clientId, index, samples, msg.channels ?? 1);
 	}
 }
 
@@ -244,7 +246,7 @@ export function removeRemoteVfo(this: Backend, clientId: string, index: number):
 	return Promise.resolve(true);
 }
 
-export function _queueRemoteAudio(this: Backend, clientId: string, index: number, samples: Float32Array): void {
+export function _queueRemoteAudio(this: Backend, clientId: string, index: number, samples: Float32Array, channels: 1 | 2 = 1): void {
 	const state = this._remoteClients && this._remoteClients.get(clientId);
 	if (!state) return;
 	const entry = state.audioQueues[index];
@@ -269,7 +271,11 @@ export function _queueRemoteAudio(this: Backend, clientId: string, index: number
 		return;
 	}
 
-	entry.len = appendAudio(entry.queue, entry.len, samples);
+	if (entry.channels !== channels) entry.len = 0;
+	entry.channels = channels;
+	const queued = appendPcm(entry.queue, entry.right, entry.len, samples, channels);
+	entry.len = queued.length;
+	entry.right = queued.right;
 	this._mixAndEmitRemoteAudio(clientId);
 }
 
@@ -278,7 +284,7 @@ export function _mixAndEmitRemoteAudio(this: Backend, clientId: string): void {
 	const state = this._remoteClients && this._remoteClients.get(clientId);
 	if (!state) return;
 	const BATCH = 512;
-	const active: Array<{ q: { queue: Float32Array; len: number }; p: VfoParams }> = [];
+	const active: Array<{ q: RemoteClientState['audioQueues'][number]; p: VfoParams }> = [];
 	for (let i = 0; i < state.workers.length; i++) {
 		const p = state.params[i];
 		if (!p || !p.enabled) continue;
@@ -288,26 +294,35 @@ export function _mixAndEmitRemoteAudio(this: Backend, clientId: string): void {
 	}
 	const minAvailable = mixLength(active.map(({ q }) => q.len));
 	if (minAvailable < BATCH) return;
-	if (!state.mixBuf || state.mixBuf.length < minAvailable) {
-		state.mixBuf = new Float32Array(minAvailable + 1024);
+	const channels = active.some(({ q }) => q.channels === 2) ? 2 : 1;
+	const values = minAvailable * channels;
+	if (!state.mixBuf || state.mixBuf.length < values) {
+		state.mixBuf = new Float32Array(values + 1024);
 	}
 	const mixed = state.mixBuf;
-	mixed.fill(0, 0, minAvailable);
-	for (const { q, p } of active) {
-		const vol = (p.audioMuted ? 0 : (p.volume ?? 50)) / 100;
-		const vScale = vol * vol;
-		const consumed = Math.min(minAvailable, q.len);
-		for (let k = 0; k < consumed; k++) mixed[k] += q.queue[k] * vScale;
-		const rem = q.len - consumed;
-		if (rem > 0) q.queue.copyWithin(0, consumed, q.len);
-		q.len = rem;
-	}
-	for (let k = 0; k < minAvailable; k++) {
+	mixed.fill(0, 0, values);
+	for (const { q, p } of active) mixRemoteVfo(q, p, mixed, minAvailable, channels);
+	for (let k = 0; k < values; k++) {
 		if (mixed[k] > 1) mixed[k] = 1;
 		else if (mixed[k] < -1) mixed[k] = -1;
 	}
-	this._remoteHostAudioCb(clientId, mixed.slice(0, minAvailable));
+	this._remoteHostAudioCb(clientId, mixed.slice(0, values), channels);
 	if (state.perf) state.perf.msgsSent++;
+}
+
+function mixRemoteVfo(q: RemoteClientState['audioQueues'][number], p: VfoParams, mixed: Float32Array, frames: number, channels: 1 | 2) {
+	const vol = (p.audioMuted ? 0 : (p.volume ?? 50)) / 100;
+	const consumed = Math.min(frames, q.len);
+	for (let k = 0; k < consumed; k++) {
+		mixed[k * channels] += q.queue[k] * vol * vol;
+		if (channels === 2) mixed[k * 2 + 1] += (q.channels === 2 ? q.right![k] : q.queue[k]) * vol * vol;
+	}
+	const remaining = q.len - consumed;
+	if (remaining > 0) {
+		q.queue.copyWithin(0, consumed, q.len);
+		q.right?.copyWithin(0, consumed, q.len);
+	}
+	q.len = remaining;
 }
 
 export function _reinitRemoteClientWorkers(this: Backend): void {
@@ -373,13 +388,13 @@ export async function initRemoteClient(this: Backend): Promise<void> {
 
 export function feedRemoteAudioChunk(this: Backend, chunk: ArrayBuffer | Float32Array): Promise<void> {
 	if (this._remoteClientAudioCb) {
-		const floats = chunk instanceof Float32Array ? chunk : new Float32Array(chunk);
-		this._remoteClientAudioCb(floats);
+		const { samples: floats, channels } = unpackAudio(chunk);
+		this._remoteClientAudioCb(floats, channels);
 
 		// Feed whisper for local transcription on remote clients.
 		// The audio arrives pre-mixed from the host, so attribute it to VFO 0.
 		if (this._whisperEnabled && this._remoteClientWhisperCb && this.vfoParams && this.vfoParams[0]) {
-			this._remoteClientWhisperCb(0, this.vfoParams[0].freq, floats);
+			this._remoteClientWhisperCb(0, this.vfoParams[0].freq, downmix(floats, channels));
 		}
 	}
 

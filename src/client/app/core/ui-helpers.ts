@@ -150,6 +150,7 @@ export const uiHelperMethods = {
 
 			this.nextPlayTime = 0;
 			this.audioRingBuf = new Float32Array(4800);
+			this.audioRingChannels = 1;
 			this.audioRingPos = 0;
 		}
 		if (this.audioCtx.state === 'suspended') {

@@ -1,11 +1,13 @@
-import type { SamplesCallback, WhisperCallback, PocsagCallback } from '@/worker/runtime/callbacks.types';
+import type { AudioCallback, WhisperCallback, PocsagCallback } from '@/worker/runtime/callbacks.types';
+import { downmix } from '@/audio/pcm';
+import type { AudioChannels } from '@/audio/types';
 import type { DspAudio } from '@/worker/runtime/dsp-messages.types';
 import * as Comlink from 'comlink';
 import { POCSAGDecoder } from '@/worker/decoders/pocsag';
 import type { VfoParams, VfoState, PerfCounters } from '@/worker/runtime/types';
 import { AUDIO_RATE } from '@/worker/runtime/constants';
 import type { Backend } from '@/worker/runtime/backend';
-import { appendAudio, mixLength } from './audio-queue';
+import { appendPcm, mixLength } from './audio-queue';
 export function installWorkerAudioHandler(
 	backend: Backend,
 	_audioDebugCounter: number,
@@ -13,7 +15,7 @@ export function installWorkerAudioHandler(
 	whisperCallback: WhisperCallback | null,
 	pushWhisper: (v: number, freq: number, samples: Float32Array) => void,
 	pocsagCallback: PocsagCallback | null,
-	pushAudio: (samples: Float32Array) => void,
+	pushAudio: AudioCallback,
 ) {
 	const handleWorkerAudio = (v: number, msg: DspAudio): void => {
 		const state = backend.vfoStates![v];
@@ -39,13 +41,14 @@ export function installWorkerAudioHandler(
 
 		if (msg.samples) {
 			const out = new Float32Array(msg.samples);
-			perf.audioSamplesOut += out.length;
+			const channels = msg.channels ?? 1;
+			perf.audioSamplesOut += out.length / channels;
 
 			if (params.enabled) {
-				state.audioQueueLen = appendAudio(state.audioQueue, state.audioQueueLen, out);
+				queueLocalPcm(state, out, channels);
 
 				if (backend._whisperEnabled && !params.pocsag && whisperCallback) {
-					pushWhisper(v, params.freq, out);
+					pushWhisper(v, params.freq, downmix(out, channels));
 				}
 			}
 
@@ -67,6 +70,14 @@ export function installWorkerAudioHandler(
 	return _audioDebugCounter;
 }
 
+function queueLocalPcm(state: VfoState, samples: Float32Array, channels: AudioChannels) {
+	if (state.audioChannels !== channels) state.audioQueueLen = 0;
+	state.audioChannels = channels;
+	const queued = appendPcm(state.audioQueue, state.audioRightQueue, state.audioQueueLen, samples, channels);
+	state.audioQueueLen = queued.length;
+	state.audioRightQueue = queued.right;
+}
+
 export function decodeLocalPager(
 	pocsagCallback: PocsagCallback | null,
 	params: VfoParams,
@@ -86,7 +97,7 @@ export function decodeLocalPager(
 	}
 }
 
-export function mixLocalAudio(backend: Backend, pushAudio: (samples: Float32Array) => void) {
+export function mixLocalAudio(backend: Backend, pushAudio: AudioCallback) {
 	const activeStates: VfoState[] = [];
 	const activeParams: VfoParams[] = [];
 
@@ -102,12 +113,14 @@ export function mixLocalAudio(backend: Backend, pushAudio: (samples: Float32Arra
 	// Flush with no minimum threshold — let the main thread's audio ring
 	// buffer handle the smoothing via _scheduleAudioChunk
 	let minAvailable: number;
+	const channels: AudioChannels = activeStates.some((state) => state.audioChannels === 2) ? 2 : 1;
 	while ((minAvailable = mixLength(activeStates.map((state) => state.audioQueueLen))) > 0) {
-		if (!backend._mixBuf || backend._mixBuf.length < minAvailable) {
-			backend._mixBuf = new Float32Array(minAvailable + 1024);
+		const values = minAvailable * channels;
+		if (!backend._mixBuf || backend._mixBuf.length < values) {
+			backend._mixBuf = new Float32Array(values + 1024);
 		}
 		const mixed = backend._mixBuf;
-		mixed.fill(0, 0, minAvailable);
+		mixed.fill(0, 0, values);
 
 		for (let i = 0; i < activeStates.length; i++) {
 			const state = activeStates[i];
@@ -118,22 +131,24 @@ export function mixLocalAudio(backend: Backend, pushAudio: (samples: Float32Arra
 			const source = state.audioQueue;
 			const consumed = Math.min(minAvailable, state.audioQueueLen);
 			for (let k = 0; k < consumed; k++) {
-				mixed[k] += source[k] * vScaling;
+				mixed[k * channels] += source[k] * vScaling;
+				if (channels === 2) mixed[k * 2 + 1] += (state.audioChannels === 2 ? state.audioRightQueue![k] : source[k]) * vScaling;
 			}
 
 			const remaining = state.audioQueueLen - consumed;
 			if (remaining > 0) {
 				source.copyWithin(0, consumed, state.audioQueueLen);
+				state.audioRightQueue?.copyWithin(0, consumed, state.audioQueueLen);
 			}
 			state.audioQueueLen = remaining;
 		}
 
-		for (let k = 0; k < minAvailable; k++) {
+		for (let k = 0; k < values; k++) {
 			if (mixed[k] > 1.0) mixed[k] = 1.0;
 			else if (mixed[k] < -1.0) mixed[k] = -1.0;
 		}
 
-		pushAudio(mixed.subarray(0, minAvailable));
+		pushAudio(mixed.subarray(0, values), channels);
 	}
 }
 
@@ -141,11 +156,12 @@ export function createAudioBatchers(
 	backend: Backend,
 	whisperCallback: WhisperCallback | null,
 	perf: PerfCounters,
-	audioCallback: SamplesCallback,
+	audioCallback: AudioCallback,
 ) {
 	const AUDIO_BATCH_THRESHOLD = 2400; // 50ms at 48kHz
-	const audioBatchBuf = new Float32Array(4800); // 100ms capacity
+	const audioBatchBuf = new Float32Array(9600); // 100ms stereo capacity
 	let audioBatchPos = 0;
+	let audioChannels: AudioChannels = 1;
 
 	// ── Per-VFO Whisper Batching ──────────────────────────────────
 	// Each VFO gets its own batch buffer so Whisper receives isolated
@@ -186,21 +202,25 @@ export function createAudioBatchers(
 		if (audioBatchPos > 0) {
 			perf.msgsSent++;
 			const aCopy = audioBatchBuf.slice(0, audioBatchPos);
-			audioCallback(Comlink.transfer(aCopy, [aCopy.buffer]));
+			audioCallback(Comlink.transfer(aCopy, [aCopy.buffer]), audioChannels);
 			audioBatchPos = 0;
 		}
 	};
 
-	const pushAudio = (samples: Float32Array): void => {
+	const pushAudio: AudioCallback = (samples, channels = 1): void => {
+		if (channels !== audioChannels) {
+			flushAudio();
+			audioChannels = channels;
+		}
 		let srcOff = 0;
 		while (srcOff < samples.length) {
-			const space = audioBatchBuf.length - audioBatchPos;
+			const space = 4800 * channels - audioBatchPos;
 			const toCopy = Math.min(space, samples.length - srcOff);
 			audioBatchBuf.set(samples.subarray(srcOff, srcOff + toCopy), audioBatchPos);
 			audioBatchPos += toCopy;
 			srcOff += toCopy;
 
-			if (audioBatchPos >= AUDIO_BATCH_THRESHOLD) {
+			if (audioBatchPos >= AUDIO_BATCH_THRESHOLD * channels) {
 				flushAudio();
 			}
 		}

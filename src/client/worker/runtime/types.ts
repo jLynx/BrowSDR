@@ -23,6 +23,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 */
 
 export interface VfoParams {
+	stereo?: boolean;
 	rtl433?: boolean;
 	rtl433SampleRate?: number;
 	rtl433Protocols?: string;
@@ -50,6 +51,8 @@ export interface VfoState {
 	rdsDecoder: RDSDecoder | null;
 	audioQueue: Float32Array;
 	audioQueueLen: number;
+	audioRightQueue?: Float32Array;
+	audioChannels?: 1 | 2;
 	lastMode?: string;
 	deemphPrev?: number;
 	dcAvg?: number;
@@ -125,7 +128,7 @@ export interface RemoteClientState {
 	sharedChannelization?: boolean;
 	workers: Array<Worker | null>;
 	params: Array<VfoParams | null>;
-	audioQueues: Array<{ queue: Float32Array; len: number }>;
+	audioQueues: Array<{ queue: Float32Array; len: number; right?: Float32Array; channels?: 1 | 2 }>;
 	mixBuf: Float32Array | null;
 	pocsagDecoders: Array<POCSAGDecoder | null>;
 	rdsDecoders: Array<RDSDecoder | null>;

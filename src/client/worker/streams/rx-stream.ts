@@ -4,6 +4,7 @@ import { dispatchIqChunk } from './channel-dispatch';
 import { initializeVfoWorkers } from './vfo-workers';
 import type {
 	SamplesCallback,
+	AudioCallback,
 	WhisperCallback,
 	PocsagCallback,
 	RdsCallback,
@@ -45,7 +46,7 @@ export async function startRxStream(
 	backend: Backend,
 	opts: RxStreamOpts,
 	spectrumCallback: SamplesCallback,
-	audioCallback: SamplesCallback,
+	audioCallback: AudioCallback,
 	whisperCallback: WhisperCallback | null,
 	pocsagCallback: PocsagCallback | null,
 	rdsCallback: RdsCallback | null = null,

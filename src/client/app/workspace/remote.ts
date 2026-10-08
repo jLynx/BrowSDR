@@ -1,4 +1,5 @@
 import { isRecord } from '@/platform/data';
+import { packAudio } from '@/audio/pcm';
 import type { HostStats } from '@/worker/runtime/callbacks.types';
 import type { ReceiverCommand, StatusMessage } from '@/remote/types';
 import type { AppInstance } from '@/app/core/receiver.types';
@@ -347,9 +348,9 @@ async function installHostStreamCallbacks(this: AppInstance) {
 	);
 	// Setup worker to push processed Audio buffer callbacks (per-client)
 	await this.backend.setRemoteHostAudioCallback(
-		Comlink.proxy((clientId: string, chunk: Float32Array) => {
+		Comlink.proxy((clientId: string, chunk: Float32Array, channels: 1 | 2 = 1) => {
 			if (this._webrtc) {
-				this._webrtc.sendAudioChunkTo(clientId, chunk);
+				this._webrtc.sendAudioChunkTo(clientId, packAudio(chunk, channels));
 			}
 		}),
 	);

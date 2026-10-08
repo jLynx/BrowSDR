@@ -1,5 +1,6 @@
 import type {
 	SamplesCallback,
+	AudioCallback,
 	WhisperCallback,
 	PocsagCallback,
 	RdsCallback,
@@ -109,7 +110,7 @@ export class Backend {
 	// Remote client state
 	_remoteHostCb?: SamplesCallback;
 	_remoteHostFftCb?: SamplesCallback;
-	_remoteHostAudioCb?: HostCallback<[Float32Array]>;
+	_remoteHostAudioCb?: HostCallback<Parameters<AudioCallback>>;
 	_remoteHostStatsCb?: HostCallback<[HostStats]>;
 	_remoteClients?: Map<string, RemoteClientState>;
 	_remoteHostPocsagCb?: HostCallback<Parameters<PocsagCallback>>;
@@ -117,7 +118,7 @@ export class Backend {
 	_remoteHostRtl433Cb?: HostCallback<Parameters<Rtl433Callback>>;
 	_remoteHostSquelchCb?: HostCallback<[boolean[]]>;
 	_remoteClientCb?: ((data: ArrayBufferView) => void) | null;
-	_remoteClientAudioCb?: SamplesCallback;
+	_remoteClientAudioCb?: AudioCallback;
 	_remoteClientWhisperCb?: WhisperCallback | null;
 
 	constructor() {}
@@ -204,7 +205,7 @@ export class Backend {
 	async startRxStream(
 		opts: RxStreamOpts,
 		spectrumCallback: SamplesCallback,
-		audioCallback: SamplesCallback,
+		audioCallback: AudioCallback,
 		whisperCallback: WhisperCallback | null = null,
 		pocsagCallback: PocsagCallback | null = null,
 		rdsCallback: RdsCallback | null = null,

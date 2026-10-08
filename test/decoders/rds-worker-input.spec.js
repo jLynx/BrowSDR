@@ -22,6 +22,7 @@ vi.mock('/hackrf-web/pkg/hackrf_web.js', () => ({
 		set_bandwidth() {}
 		set_squelch() {}
 		set_wfm_mode() {}
+		set_stereo() {}
 		set_audio_filters() {}
 		process_ptr() {
 			return 4096;

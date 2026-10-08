@@ -22,6 +22,7 @@ use crate::dsp::decimation::{compute_power_decim_ratio, PowerDecimator};
 use crate::dsp::filter::{ComplexFIR, RealFIR};
 use crate::dsp::primitives::{gcd, high_pass_taps, low_pass_taps};
 use crate::dsp::resampler::{PolyphaseResamplerComplex, PolyphaseResamplerF32};
+use crate::dsp::stereo::StereoDecoder;
 
 #[wasm_bindgen]
 pub struct DspProcessor {
@@ -41,6 +42,13 @@ pub struct DspProcessor {
 
     // WFM mode flag (uses SDR++ broadcast_fm.h audio filter settings)
     is_wfm: bool,
+    stereo_enabled: bool,
+    stereo_decoder: Option<StereoDecoder>,
+    right_fir: RealFIR,
+    right_resampler: PolyphaseResamplerF32,
+    stereo_left: Vec<f32>,
+    stereo_right: Vec<f32>,
+    right_audio: Vec<f32>,
 
     // Bandwidth
     bandwidth: f32,
@@ -157,6 +165,13 @@ impl DspProcessor {
             audio_sample_rate,
             power_decim,
             is_wfm: false,
+            stereo_enabled: false,
+            stereo_decoder: None,
+            right_fir: RealFIR::new(low_pass_taps(15000.0, 4000.0, if_sample_rate as f64)),
+            right_resampler: Self::build_f32_resampler(if_sample_rate, audio_sample_rate),
+            stereo_left: Vec::new(),
+            stereo_right: Vec::new(),
+            right_audio: Vec::new(),
             bandwidth,
             iq_resampler,
             channel_filter,
@@ -262,6 +277,10 @@ impl DspProcessor {
         };
         let taps = low_pass_taps(cutoff, trans, self.if_sample_rate as f64);
         self.post_demod_fir.set_taps(taps);
+        if self.is_wfm && self.stereo_enabled {
+            self.audio_resampler.reset();
+            self.reset_stereo();
+        }
     }
 
     /// Set squelch level in dB. Set to -200 or below to effectively disable.
@@ -299,6 +318,21 @@ impl DspProcessor {
         // Use self.if_sample_rate here, but WFM also needs an IF SR of 250k.
         let taps = low_pass_taps(cutoff, trans, self.if_sample_rate as f64);
         self.post_demod_fir.set_taps(taps);
+        self.reset_stereo();
+        if self.stereo_enabled { self.audio_resampler.reset(); }
+    }
+
+    /// Stereo output is interleaved L/R; get_output_len counts float values.
+    pub fn set_stereo(&mut self, enabled: bool) {
+        if self.stereo_enabled == enabled { return; }
+        self.stereo_enabled = enabled;
+        self.post_demod_fir.reset();
+        self.audio_resampler.reset();
+        self.reset_stereo();
+    }
+
+    pub fn get_output_channels(&self) -> usize {
+        if self.is_wfm && self.stereo_enabled { 2 } else { 1 }
     }
 
     /// Change the IF sample rate and rebuild the entire resampler/filter chain.
@@ -344,6 +378,10 @@ impl DspProcessor {
 
         // Rebuild audio resampler: new IF → audio
         self.audio_resampler = Self::build_f32_resampler(new_if_sr, self.audio_sample_rate);
+        self.right_resampler = Self::build_f32_resampler(new_if_sr, self.audio_sample_rate);
+        self.right_fir.set_taps(low_pass_taps(15000.0, 4000.0, new_if_sr as f64));
+        self.stereo_decoder = None;
+        self.reset_stereo();
 
         // Reset all state
         self.prev_phase = 0.0;
@@ -374,6 +412,7 @@ impl DspProcessor {
         // Reset resamplers
         self.iq_resampler.reset();
         self.audio_resampler.reset();
+        self.reset_stereo();
 
         // Reset DC blocker
         self.dc_avg_i = 0.0;
@@ -384,7 +423,7 @@ impl DspProcessor {
     /// Returns the number of f32 audio samples written to `output`.
     ///
     /// Input: i8 IQ pairs [I0, Q0, I1, Q1, ...]
-    /// Output: f32 mono audio at 48 kHz
+    /// Output: f32 audio at 48 kHz; interleaved L/R when WFM stereo is enabled.
     pub fn process(&mut self, input: &[i8], output: &mut [f32]) -> usize {
         self.process_values(input.len() / 2, |index| input[index] as f32 / 128.0, output)
     }
@@ -397,7 +436,17 @@ impl DspProcessor {
 }
 
 impl DspProcessor {
+    fn reset_stereo(&mut self) {
+        if self.is_wfm && self.stereo_enabled {
+            if let Some(decoder) = &mut self.stereo_decoder { decoder.reset(); }
+            else { self.stereo_decoder = Some(StereoDecoder::new(self.if_sample_rate)); }
+        } else { self.stereo_decoder = None; }
+        self.right_fir.reset();
+        self.right_resampler.reset();
+    }
+
     fn process_values(&mut self, num_iq: usize, sample: impl Fn(usize) -> f32, output: &mut [f32]) -> usize {
+        self.scratch_audio.clear();
         if num_iq == 0 {
             return 0;
         }
@@ -512,6 +561,26 @@ impl DspProcessor {
             prev_phase = cur_phase;
         }
         self.prev_phase = prev_phase;
+
+        if self.is_wfm && self.stereo_enabled {
+            self.stereo_decoder.as_mut().unwrap().process(
+                &self.scratch_audio, &mut self.stereo_left, &mut self.stereo_right);
+            self.scratch_audio2.resize(if_count, 0.0);
+            self.post_demod_fir.process_block(&self.stereo_left, &mut self.scratch_audio2);
+            self.stereo_left.clear();
+            self.audio_resampler.process(&self.scratch_audio2, &mut self.stereo_left);
+            self.right_fir.process_block(&self.stereo_right, &mut self.scratch_audio2);
+            self.right_audio.clear();
+            self.right_resampler.process(&self.scratch_audio2, &mut self.right_audio);
+            self.scratch_audio.resize(self.stereo_left.len() * 2, 0.0);
+            for k in 0..self.stereo_left.len() {
+                self.scratch_audio[k * 2] = self.stereo_left[k];
+                self.scratch_audio[k * 2 + 1] = self.right_audio[k];
+            }
+            let count = output.len().min(self.scratch_audio.len());
+            output[..count].copy_from_slice(&self.scratch_audio[..count]);
+            return count;
+        }
 
         // ── Stage 6: Post-Demod FIR Filter ──────────────────────────
         // (matches SDR++ dsp/demod/fm.h, lowPass at bandwidth/2, highPass at 300Hz)
