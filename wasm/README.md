@@ -12,6 +12,11 @@ Run commands from the repository root. DSP requires Rust and wasm-pack; the C
 codecs require the pinned Emscripten version described in their READMEs.
 Normal application builds use committed bundles and do not compile native code.
 
+`npm run check` includes the native Rust DSP tests (`npm run test:dsp`) and requires
+Rust/Cargo on PATH. Cached runs take about two seconds; the first run compiles
+dependencies and takes longer. These tests do not require wasm-pack or rebuild
+the browser bundles. After Rust changes, run `npm run build:dsp` separately.
+
 Vite serves each module's `pkg/` files at `/wasm/<module>/` in development and
 copies them into `dist/wasm/<module>/` for production. Keep licenses and notices
 alongside the JavaScript and WASM. DSP also has a generated `node/` bundle for

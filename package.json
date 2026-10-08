@@ -16,6 +16,7 @@
 		"dev": "vite",
 		"start": "vite",
 		"test": "vitest",
+		"test:dsp": "cargo test --manifest-path wasm/dsp/Cargo.toml",
 		"test:ui": "vitest run --config vitest.ui.config.ts",
 		"test:performance": "vitest run test/ui/vfo-performance.spec.ts test/streams/shared-vfo-stream.spec.js",
 		"test:storybook": "vitest run --config vitest.storybook.config.ts",
@@ -27,7 +28,7 @@
 		"format": "prettier . --write",
 		"format:check": "prettier . --check",
 		"check:structure": "node scripts/check-structure.mjs",
-		"check": "npm run lint && npm run format:check && npm run check:structure && npm run typecheck"
+		"check": "npm run lint && npm run format:check && npm run check:structure && npm run typecheck && npm run test:dsp"
 	},
 	"dependencies": {
 		"comlink": "^4.4.2",
