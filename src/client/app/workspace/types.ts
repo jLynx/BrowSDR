@@ -1,9 +1,9 @@
 import type { Component } from 'vue';
-import type { AppInstance } from '../core/instance';
-import type { Bookmark } from '../core/types';
-import type { CapabilityIssue } from '../../platform/browser-capabilities';
+import type { AppInstance } from '@/app/core/instance';
+import type { Bookmark } from '@/app/core/types';
+import type { CapabilityIssue } from '@/platform/browser-capabilities';
 import type { WatchOptions, WatchStopHandle } from 'vue';
-import type { ReceiverInventory } from '../../remote/types';
+import type { ReceiverInventory } from '@/remote/types';
 
 export interface ReceiverEntry {
 	id: string;

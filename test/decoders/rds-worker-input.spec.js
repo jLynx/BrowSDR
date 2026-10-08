@@ -41,7 +41,7 @@ vi.mock('/hackrf-web/pkg/hackrf_web.js', () => ({
 	},
 }));
 
-vi.mock('../../src/client/worker/decoders/rds', () => ({
+vi.mock('@/worker/decoders/rds', () => ({
 	RDSDecoder: class {
 		process = vi.fn();
 		setRegion = vi.fn();
@@ -61,7 +61,7 @@ describe('RDS worker input routing', () => {
 		mocks.processors.length = 0;
 		mocks.decoders.length = 0;
 		vi.stubGlobal('self', { postMessage: vi.fn() });
-		await import('../../src/client/worker/dsp-worker');
+		await import('@/worker/dsp-worker');
 		const params = { freq: 95.1, mode: 'wfm', enabled: true, rds: true, bandwidth: 150000 };
 		const send = (data) => self.onmessage({ data });
 		await send({ type: 'init', sampleRate: 2000000, centerFreq: 95, params });

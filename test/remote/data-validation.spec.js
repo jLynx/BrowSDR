@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { isReceiverCommand } from '../../src/client/remote/validation';
-import { makeDefaultVfo } from '../../src/client/app/core/constants';
-import { parseBookmarks } from '../../src/client/app/workspace/bookmark-data';
+import { isReceiverCommand } from '@/remote/validation';
+import { makeDefaultVfo } from '@/app/core/constants';
+import { parseBookmarks } from '@/app/workspace/bookmark-data';
 
 const report = {
 	usbFps: 20,

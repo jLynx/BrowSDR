@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { whisperMethods } from '../../src/client/app/decoders/whisper';
+import { whisperMethods } from '@/app/decoders/whisper';
 
 function receiver(mode = 'dsd', squelchEnabled = false) {
 	const app = {

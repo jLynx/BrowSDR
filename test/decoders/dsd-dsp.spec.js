@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ClockRecovery, FIRFilter, FourFSKSlicer, rrcTaps } from '../../src/client/worker/decoders/dsd/dsd-dsp';
+import { ClockRecovery, FIRFilter, FourFSKSlicer, rrcTaps } from '@/worker/decoders/dsd/dsd-dsp';
 
 function recover(input, sizes) {
 	const clock = new ClockRecovery();

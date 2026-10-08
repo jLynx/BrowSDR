@@ -36,7 +36,7 @@ import {
 	DUID_TDU,
 	DUID_TDULC,
 } from './dsd-p25';
-import { decodeAmbe, decodeImbe, ensureMbelibInitialized, getMbeErrors, resetMbe } from '../mbelib-init';
+import { decodeAmbe, decodeImbe, ensureMbelibInitialized, getMbeErrors, resetMbe } from '@/worker/decoders/mbelib-init';
 
 // ── Sync word matching ───────────────────────────────────────────────
 

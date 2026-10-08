@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import Rtl433Module from '../../public/lib/rtl433/rtl433.js';
-import { Rtl433Decoder, Rtl433Stream, rtl433ProtocolIds } from '../../src/client/worker/decoders/rtl433';
-import { rtl433Methods } from '../../src/client/app/decoders/rtl433';
-import { planSharedBands } from '../../src/client/worker/streams/channel-plan';
+import { Rtl433Decoder, Rtl433Stream, rtl433ProtocolIds } from '@/worker/decoders/rtl433';
+import { rtl433Methods } from '@/app/decoders/rtl433';
+import { planSharedBands } from '@/worker/streams/channel-plan';
 import init, { DspProcessor, alloc_float_buffer } from '../../hackrf-web/pkg/hackrf_web.js';
 
 const binary = readFileSync(new URL('../../public/lib/rtl433/rtl433.wasm', import.meta.url));

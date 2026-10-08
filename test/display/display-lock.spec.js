@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { vfoMethods } from '../../src/client/app/radio/vfo';
-import { zoomMethods } from '../../src/client/app/display/zoom';
-import { settingsMethods } from '../../src/client/app/radio/settings';
-import { makeDefaultVfo } from '../../src/client/app/core/constants';
+import { vfoMethods } from '@/app/radio/vfo';
+import { zoomMethods } from '@/app/display/zoom';
+import { settingsMethods } from '@/app/radio/settings';
+import { makeDefaultVfo } from '@/app/core/constants';
 
 const receiver = () => ({
 	vfos: Array.from({ length: 4 }, () => makeDefaultVfo()),

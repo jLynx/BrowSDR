@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computedProperties } from '../../src/client/app/core/computed';
+import { computedProperties } from '@/app/core/computed';
 
 const activity = (state) => computedProperties.sortedVfoActivity.call(state);
 

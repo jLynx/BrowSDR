@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { defineComponent } from 'vue';
-import * as ui from '../../src/client/ui';
+import * as ui from '@/ui';
 
 const wrappers: VueWrapper[] = [];
 function render(template: string, data: Record<string, unknown> = {}) {

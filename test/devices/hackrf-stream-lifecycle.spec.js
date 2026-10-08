@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { HackRF } from '../../src/client/devices/hackrf/usb';
-import { HackRFDevice } from '../../src/client/devices/hackrf/device';
+import { HackRF } from '@/devices/hackrf/usb';
+import { HackRFDevice } from '@/devices/hackrf/device';
 
 afterEach(() => vi.useRealTimers());
 

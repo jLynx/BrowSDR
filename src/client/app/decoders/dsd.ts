@@ -1,9 +1,9 @@
-import type { DSDStatus } from '../../worker/decoders/dsd/types';
+import type { DSDStatus } from '@/worker/decoders/dsd/types';
 /*
  * DSD (Digital Speech Decoder) UI methods for the Vue app.
  */
 
-import type { AppInstance } from '../core/types';
+import type { AppInstance } from '@/app/core/types';
 
 export const dsdMethods = {
 	_onDsdStatus(this: AppInstance, vfoIndex: number, status: DSDStatus) {

@@ -1,13 +1,13 @@
 import type { WatchOptions, WatchStopHandle } from 'vue';
 import type { Remote } from 'comlink';
-import type { Backend } from '../../worker/runtime/backend';
+import type { Backend } from '@/worker/runtime/backend';
 import type { createAppData } from './state';
-import type { Waterfall, WaterfallGL } from '../../display/utils';
-import type { SpectrumFrameLimiter, WaterfallClock } from '../../display/spectrum-rate';
-import type { WebRTCHandler } from '../../remote/webrtc';
-import type { ReceiverTransport } from '../../remote/receiver-transport';
+import type { Waterfall, WaterfallGL } from '@/display/utils';
+import type { SpectrumFrameLimiter, WaterfallClock } from '@/display/spectrum-rate';
+import type { WebRTCHandler } from '@/remote/webrtc';
+import type { ReceiverTransport } from '@/remote/receiver-transport';
 import type { Vfo, Bookmark } from './types';
-import type { WorkspaceInstance } from '../workspace/types';
+import type { WorkspaceInstance } from '@/app/workspace/types';
 
 import type { ReceiverMethods } from './methods';
 

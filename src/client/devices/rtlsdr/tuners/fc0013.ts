@@ -22,7 +22,7 @@ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABI
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-import type { RtlCom } from '../usb';
+import type { RtlCom } from '@/devices/rtlsdr/usb';
 
 // ── FC0013 Tuner ─────────────────────────────────────────────────
 // Very similar to FC0012 but different init regs, VHF tracking, and gain table.

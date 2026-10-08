@@ -1,9 +1,9 @@
-import { isRecord } from '../../platform/data';
-import type { HostStats } from '../../worker/runtime/callbacks';
-import type { ReceiverCommand, StatusMessage } from '../../remote/types';
-import type { AppInstance } from '../core/types';
+import { isRecord } from '@/platform/data';
+import type { HostStats } from '@/worker/runtime/callbacks';
+import type { ReceiverCommand, StatusMessage } from '@/remote/types';
+import type { AppInstance } from '@/app/core/types';
 import * as Comlink from 'comlink';
-import { WebRTCHandler, PEER_ID_PREFIX } from '../../remote/webrtc';
+import { WebRTCHandler, PEER_ID_PREFIX } from '@/remote/webrtc';
 
 export const remoteMethods = {
 	applySharedChannelization(this: AppInstance) {

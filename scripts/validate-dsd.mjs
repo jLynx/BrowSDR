@@ -1,3 +1,4 @@
+import { sourceAlias } from '../source-alias.mjs';
 import MbelibFactory from '../public/lib/mbelib/mbelib.js';
 // Offline DMR recording validation with the same decoder and mbelib WASM as the app.
 // Usage: node scripts/validate-dsd.mjs --self-test
@@ -42,7 +43,13 @@ globalThis.fetch = async (url, options) => {
 	if (String(url).endsWith('/lib/mbelib/mbelib.wasm')) return new Response(wasm, { headers: { 'Content-Type': 'application/wasm' } });
 	return originalFetch(url, options);
 };
-const server = await createServer({ root, configFile: false, server: { middlewareMode: true }, appType: 'custom' });
+const server = await createServer({
+	root,
+	configFile: false,
+	resolve: { alias: sourceAlias },
+	server: { middlewareMode: true },
+	appType: 'custom',
+});
 try {
 	const { DSDDecoder } = await server.ssrLoadModule('/src/client/worker/decoders/dsd/dsd-decoder.ts');
 	const { FMDiscriminator, FIRFilter, rrcTaps } = await server.ssrLoadModule('/src/client/worker/decoders/dsd/dsd-dsp.ts');

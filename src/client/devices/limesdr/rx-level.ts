@@ -1,4 +1,4 @@
-import type { RxLevel } from '../../radio/sdr-device';
+import type { RxLevel } from '@/radio/sdr-device';
 
 /** Sample the original 12-bit ADC words before the driver reduces them to int8. */
 export class LimeRxLevel {

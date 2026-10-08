@@ -1,8 +1,8 @@
-import type { AppInstance } from '../core/types';
-import { VFO_COLORS } from '../core/constants';
-import { Waterfall, WaterfallGL } from '../../display/utils';
-import { SpectrumFrameLimiter, WaterfallClock } from '../../display/spectrum-rate';
-import { sidebandOffsetHz } from '../../worker/decoders/ssb';
+import type { AppInstance } from '@/app/core/types';
+import { VFO_COLORS } from '@/app/core/constants';
+import { Waterfall, WaterfallGL } from '@/display/utils';
+import { SpectrumFrameLimiter, WaterfallClock } from '@/display/spectrum-rate';
+import { sidebandOffsetHz } from '@/worker/decoders/ssb';
 
 export const canvasMethods = {
 	initCanvas(this: AppInstance) {

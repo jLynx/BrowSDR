@@ -1,4 +1,4 @@
-import { isRecord } from '../../platform/data';
+import { isRecord } from '@/platform/data';
 interface MbelibModule {
 	HEAP8: Int8Array;
 	HEAPF32: Float32Array;

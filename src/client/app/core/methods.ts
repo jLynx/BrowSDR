@@ -1,9 +1,9 @@
-import type { WhisperMessage } from '../../transcription/types';
-import type { RDSMessage, POCSAGMessage } from '../../worker/runtime/types';
-import type { DSDStatus } from '../../worker/decoders/dsd/types';
-import type { ReceiverCommand } from '../../remote/types';
+import type { WhisperMessage } from '@/transcription/types';
+import type { RDSMessage, POCSAGMessage } from '@/worker/runtime/types';
+import type { DSDStatus } from '@/worker/decoders/dsd/types';
+import type { ReceiverCommand } from '@/remote/types';
 import type { AppInstance } from './instance';
-import type { Rtl433Protocol, Rtl433Message } from '../../worker/decoders/rtl433';
+import type { Rtl433Protocol, Rtl433Message } from '@/worker/decoders/rtl433';
 
 export interface ReceiverMethods {
 	copyRemoteLink(): void;

@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { coreCapabilityIssues, localUsbIssue, remoteConnectionIssue } from '../../src/client/platform/browser-capabilities';
-import { UiNotice } from '../../src/client/ui';
-import { createWorkspace } from '../../src/client/app/workspace/workspace';
+import { coreCapabilityIssues, localUsbIssue, remoteConnectionIssue } from '@/platform/browser-capabilities';
+import { UiNotice } from '@/ui';
+import { createWorkspace } from '@/app/workspace/workspace';
 
 afterEach(() => {
 	vi.unstubAllGlobals();

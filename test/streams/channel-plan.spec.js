@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { planSharedBands } from '../../src/client/worker/streams/channel-plan';
+import { planSharedBands } from '@/worker/streams/channel-plan';
 
 const frequencies = [
 	89.4, 88.6, 90.212, 91.018, 91.805, 92.593, 93.398, 89, 93.793, 94.213, 94.989, 95.812, 96.601, 97.394, 98.204, 98.991, 99.788, 100.619,

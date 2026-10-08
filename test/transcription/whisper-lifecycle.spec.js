@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { whisperMethods } from '../../src/client/app/decoders/whisper';
+import { whisperMethods } from '@/app/decoders/whisper';
 
 describe('shared Whisper loading and transcript history', () => {
 	it('keeps old history labelled with its model while new model audio is gated off', () => {

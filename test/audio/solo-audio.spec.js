@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { vfoMethods } from '../../src/client/app/radio/vfo';
-import { computedProperties } from '../../src/client/app/core/computed';
+import { vfoMethods } from '@/app/radio/vfo';
+import { computedProperties } from '@/app/core/computed';
 
 function receiver() {
 	const app = {

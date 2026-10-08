@@ -1,5 +1,5 @@
 import { defineComponent, h } from 'vue';
-import UiInput from '../controls/UiInput';
+import UiInput from '@/ui/controls/UiInput';
 
 export default defineComponent({
 	name: 'UiFrequencyDisplay',

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { WorkspaceMediaSession } from '../../src/client/app/audio/media-session';
+import { WorkspaceMediaSession } from '@/app/audio/media-session';
 
 afterEach(() => vi.unstubAllGlobals());
 

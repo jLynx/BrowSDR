@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RDSDecoder } from '../../src/client/worker/decoders/rds';
+import { RDSDecoder } from '@/worker/decoders/rds';
 
 const offsets = [0xfc, 0x198, 0x168, 0x1b4];
 

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../src/client/worker/runtime/wasm-init', () => ({ ensureWasmInitialized: vi.fn(), init: vi.fn() }));
-vi.mock('../../src/client/remote/webrtc', () => ({
+vi.mock('@/worker/runtime/wasm-init', () => ({ ensureWasmInitialized: vi.fn(), init: vi.fn() }));
+vi.mock('@/remote/webrtc', () => ({
 	PEER_ID_PREFIX: 'test-',
 	WebRTCHandler: class {
 		init = vi.fn();
@@ -10,11 +10,11 @@ vi.mock('../../src/client/remote/webrtc', () => ({
 	},
 }));
 
-import * as remoteBackend from '../../src/client/worker/streams/remote-clients';
-import { remoteMethods } from '../../src/client/app/workspace/remote';
-import { rdsMethods } from '../../src/client/app/decoders/rds';
-import { rtl433Methods } from '../../src/client/app/decoders/rtl433';
-import { AUDIO_QUEUE_CAPACITY } from '../../src/client/worker/streams/audio-queue';
+import * as remoteBackend from '@/worker/streams/remote-clients';
+import { remoteMethods } from '@/app/workspace/remote';
+import { rdsMethods } from '@/app/decoders/rds';
+import { rtl433Methods } from '@/app/decoders/rtl433';
+import { AUDIO_QUEUE_CAPACITY } from '@/worker/streams/audio-queue';
 
 afterEach(() => {
 	vi.unstubAllGlobals();

@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../src/client/worker/runtime/wasm-init', () => ({
+vi.mock('@/worker/runtime/wasm-init', () => ({
 	FFT: class {
 		set_smoothing_speed() {}
 	},
 }));
 
-import { startRxStream } from '../../src/client/worker/streams/rx-stream';
-import { Backend } from '../../src/client/worker/runtime/backend';
-import { AUDIO_QUEUE_CAPACITY } from '../../src/client/worker/streams/audio-queue';
+import { startRxStream } from '@/worker/streams/rx-stream';
+import { Backend } from '@/worker/runtime/backend';
+import { AUDIO_QUEUE_CAPACITY } from '@/worker/streams/audio-queue';
 
 afterEach(() => {
 	vi.useRealTimers();

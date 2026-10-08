@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { WhisperBackend } from '../../src/client/transcription/whisper-backend';
+import { WhisperBackend } from '@/transcription/whisper-backend';
 
 const gpu = { requestAdapter: async () => ({}) };
 

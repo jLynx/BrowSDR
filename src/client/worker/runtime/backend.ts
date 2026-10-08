@@ -7,8 +7,8 @@ import type {
 	DsdCallback,
 	HostCallback,
 	HostStats,
-} from '../runtime/callbacks';
-import type { DspAudio } from '../runtime/dsp-messages';
+} from '@/worker/runtime/callbacks';
+import type { DspAudio } from '@/worker/runtime/dsp-messages';
 import type { InitOutput, DspProcessor } from '/hackrf-web/pkg/hackrf_web.js';
 /*
 Copyright (c) 2026, jLynx <https://github.com/jLynx>
@@ -31,16 +31,16 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 */
 
 import { ensureWasmInitialized, init } from './wasm-init';
-import { normalizeSpectrumFps } from '../../display/spectrum-rate';
+import { normalizeSpectrumFps } from '@/display/spectrum-rate';
 import { MockHackRF } from './mock-hackrf';
-import type { SdrDevice, SdrDeviceInfo, DeviceCapabilities } from '../../radio/sdr-device';
-import { detectDevice } from '../../radio/sdr-device';
+import type { SdrDevice, SdrDeviceInfo, DeviceCapabilities } from '@/radio/sdr-device';
+import { detectDevice } from '@/radio/sdr-device';
 // Import device drivers so they self-register
-import '../../devices/hackrf/device';
-import '../../devices/rtlsdr/device';
-import '../../devices/airspy';
-import '../../devices/airspyhf';
-import '../../devices/limesdr/device';
+import '@/devices/hackrf/device';
+import '@/devices/rtlsdr/device';
+import '@/devices/airspy';
+import '@/devices/airspyhf';
+import '@/devices/limesdr/device';
 import {
 	setRemoteHostCallback,
 	setRemoteHostFftCallback,
@@ -63,11 +63,11 @@ import {
 	_reinitRemoteClientWorkers,
 	initRemoteClient,
 	feedRemoteAudioChunk,
-} from '../streams/remote-clients';
-import { startRxStream } from '../streams/rx-stream';
+} from '@/worker/streams/remote-clients';
+import { startRxStream } from '@/worker/streams/rx-stream';
 import type { VfoParams, VfoState, PerfCounters, RxStreamOpts, RemoteClientState, DeviceOpenOpts } from './types';
-import { displayToDeviceFrequencyHz } from '../../radio/frequency-shift';
-import { selectUsbDevice } from '../../radio/usb-device-selection';
+import { displayToDeviceFrequencyHz } from '@/radio/frequency-shift';
+import { selectUsbDevice } from '@/radio/usb-device-selection';
 
 export class Backend {
 	// Hardware — generic SDR device

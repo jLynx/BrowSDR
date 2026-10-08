@@ -1,4 +1,4 @@
-import type { AppInstance } from '../core/types';
+import type { AppInstance } from '@/app/core/types';
 
 export const zoomMethods = {
 	toggleDisplayLock(this: AppInstance) {

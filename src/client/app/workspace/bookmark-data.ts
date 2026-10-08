@@ -1,5 +1,5 @@
-import type { Bookmark, Vfo } from '../core/types';
-import { makeDefaultVfo } from '../core/constants';
+import type { Bookmark, Vfo } from '@/app/core/types';
+import { makeDefaultVfo } from '@/app/core/constants';
 
 function record(value: unknown): value is Record<string, unknown> {
 	return typeof value === 'object' && value !== null && !Array.isArray(value);

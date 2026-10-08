@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { displayToDeviceFrequencyHz, normalizeFrequencyShiftMhz } from '../../src/client/radio/frequency-shift';
+import { displayToDeviceFrequencyHz, normalizeFrequencyShiftMhz } from '@/radio/frequency-shift';
 
 describe('frequency shift', () => {
 	it('leaves the hardware frequency unchanged when disabled', () => {

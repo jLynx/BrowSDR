@@ -22,8 +22,8 @@ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABI
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-import { IF_FREQ } from '../protocol';
-import type { RtlCom } from '../usb';
+import { IF_FREQ } from '@/devices/rtlsdr/protocol';
+import type { RtlCom } from '@/devices/rtlsdr/usb';
 
 // ── R820T Tuner Constants ─────────────────────────────────────────
 export const R820T_I2C_ADDR = 0x34;

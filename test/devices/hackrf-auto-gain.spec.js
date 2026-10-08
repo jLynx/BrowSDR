@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { reactive, nextTick } from 'vue';
-import { HackRFDevice } from '../../src/client/devices/hackrf/device';
-import { HackRFRxLevel } from '../../src/client/devices/hackrf/rx-level';
-import { hackrfGainProfile, hackrfGainTotal, nextHackRFGain } from '../../src/client/radio/hackrf-auto-gain';
-import { autoGainMethods } from '../../src/client/app/radio/auto-gain';
+import { HackRFDevice } from '@/devices/hackrf/device';
+import { HackRFRxLevel } from '@/devices/hackrf/rx-level';
+import { hackrfGainProfile, hackrfGainTotal, nextHackRFGain } from '@/radio/hackrf-auto-gain';
+import { autoGainMethods } from '@/app/radio/auto-gain';
 
 afterEach(() => vi.useRealTimers());
 const level = (rmsDbfs = -22, peakDbfs = -8, clippedFraction = 0) => ({

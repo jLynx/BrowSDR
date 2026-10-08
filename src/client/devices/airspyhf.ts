@@ -1,4 +1,4 @@
-import { errorMessage } from '../platform/errors';
+import { errorMessage } from '@/platform/errors';
 /*
 Airspy HF+ WebUSB driver for BrowSDR
 Copyright (c) 2026, jLynx <https://github.com/jLynx>
@@ -20,8 +20,8 @@ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABI
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-import type { SdrDevice, SdrDeviceInfo, GainControl } from '../radio/sdr-device';
-import { registerDriver } from '../radio/sdr-device';
+import type { SdrDevice, SdrDeviceInfo, GainControl } from '@/radio/sdr-device';
+import { registerDriver } from '@/radio/sdr-device';
 
 // ── Airspy HF+ vendor request codes ──────────────────────────────
 const AIRSPYHF_RECEIVER_MODE = 1;

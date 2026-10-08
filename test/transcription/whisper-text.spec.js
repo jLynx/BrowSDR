@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isHallucination } from '../../src/client/transcription/whisper-text';
+import { isHallucination } from '@/transcription/whisper-text';
 
 describe('radio non-speech transcript filtering', () => {
 	it.each(['[BLANK_AUDIO]', '[Sounds of children talking]', '(speaking in foreign language)', '(audience laughing)', '(laughs)'])(

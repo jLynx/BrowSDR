@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { packReceiverChunk, unpackReceiverChunk, ReceiverTransport } from '../../src/client/remote/receiver-transport';
-import { createWorkspace, syncReceiverAvailability } from '../../src/client/app/workspace/workspace';
-import { remoteMethods } from '../../src/client/app/workspace/remote';
-import { bookmarkMethods } from '../../src/client/app/workspace/bookmarks';
+import { packReceiverChunk, unpackReceiverChunk, ReceiverTransport } from '@/remote/receiver-transport';
+import { createWorkspace, syncReceiverAvailability } from '@/app/workspace/workspace';
+import { remoteMethods } from '@/app/workspace/remote';
+import { bookmarkMethods } from '@/app/workspace/bookmarks';
 import { reactive } from 'vue';
 
-vi.mock('../../src/client/remote/webrtc', () => ({
+vi.mock('@/remote/webrtc', () => ({
 	PEER_ID_PREFIX: 'browsdr-',
 	WebRTCHandler: class {
 		async init() {

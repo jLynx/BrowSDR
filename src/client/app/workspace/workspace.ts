@@ -18,19 +18,19 @@ const workspaceTemplate = `
 				<Receiver v-for="receiver in receivers" :key="receiver.id" v-show="selectedId === receiver.id"
 					:receiver-id="receiver.id" :settings-key="receiver.settingsKey" :workspace="controller" />
 			</div>`;
-import { isRecord } from '../../platform/data';
-import { errorMessage } from '../../platform/errors';
+import { isRecord } from '@/platform/data';
+import { errorMessage } from '@/platform/errors';
 import type { WorkspaceInstance, ReceiverEntry, ReceiverComponent } from './types';
-import type { AppInstance, Bookmark } from '../core/types';
-import type { ReceiverCommand, ReceiverInventory } from '../../remote/types';
+import type { AppInstance, Bookmark } from '@/app/core/types';
+import type { ReceiverCommand, ReceiverInventory } from '@/remote/types';
 import { markRaw } from 'vue';
-import { WebRTCHandler, PEER_ID_PREFIX } from '../../remote/webrtc';
-import { ReceiverTransport, unpackReceiverChunk } from '../../remote/receiver-transport';
-import { usbSettingsKey } from '../../radio/usb-device-selection';
+import { WebRTCHandler, PEER_ID_PREFIX } from '@/remote/webrtc';
+import { ReceiverTransport, unpackReceiverChunk } from '@/remote/receiver-transport';
+import { usbSettingsKey } from '@/radio/usb-device-selection';
 import { bookmarkMethods } from './bookmarks';
-import { WorkspaceMediaSession } from '../audio/media-session';
-import { UiButton, UiNotice } from '../../ui';
-import { remoteConnectionIssue, type CapabilityIssue } from '../../platform/browser-capabilities';
+import { WorkspaceMediaSession } from '@/app/audio/media-session';
+import { UiButton, UiNotice } from '@/ui';
+import { remoteConnectionIssue, type CapabilityIssue } from '@/platform/browser-capabilities';
 
 export async function syncReceiverAvailability(app: AppInstance, running: boolean): Promise<void> {
 	// Inventory changes preserve a client's own pause choice. Only resume

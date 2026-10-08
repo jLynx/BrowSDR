@@ -1,4 +1,4 @@
-import { errorMessage } from '../platform/errors';
+import { errorMessage } from '@/platform/errors';
 import init, { DspProcessor, SharedChannelizer, set_panic_hook, alloc_iq_buffer, alloc_float_buffer } from '/hackrf-web/pkg/hackrf_web.js';
 import { RationalResampler } from './streams/dsp-pipeline';
 import { demodulateSideband, sidebandOffsetHz } from './decoders/ssb';

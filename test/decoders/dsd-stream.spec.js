@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const codec = vi.hoisted(() => ({ emit: null, reset: vi.fn(), process: vi.fn() }));
-vi.mock('../../src/client/worker/decoders/dsd/dsd-decoder', () => ({
+vi.mock('@/worker/decoders/dsd/dsd-decoder', () => ({
 	DSDDecoder: class {
 		constructor(onAudio) {
 			codec.emit = onAudio;
@@ -11,7 +11,7 @@ vi.mock('../../src/client/worker/decoders/dsd/dsd-decoder', () => ({
 	},
 }));
 
-import { DSDStream } from '../../src/client/worker/decoders/dsd/dsd-stream';
+import { DSDStream } from '@/worker/decoders/dsd/dsd-stream';
 
 beforeEach(() => {
 	codec.reset.mockClear();

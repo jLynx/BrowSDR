@@ -1,7 +1,7 @@
-import type { DeviceCapabilities } from '../radio/sdr-device';
-import type { RadioState } from '../app/core/types';
-import type { VfoParams, PerfReport, POCSAGMessage, RDSMessage } from '../worker/runtime/types';
-import type { Rtl433Message } from '../worker/decoders/rtl433';
+import type { DeviceCapabilities } from '@/radio/sdr-device';
+import type { RadioState } from '@/app/core/types';
+import type { VfoParams, PerfReport, POCSAGMessage, RDSMessage } from '@/worker/runtime/types';
+import type { Rtl433Message } from '@/worker/decoders/rtl433';
 
 export interface ReceiverInventory {
 	id: string;

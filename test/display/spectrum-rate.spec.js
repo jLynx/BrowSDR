@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeSpectrumFps, spectrumSmoothingAlpha, SpectrumFrameLimiter, WaterfallClock } from '../../src/client/display/spectrum-rate';
-import { settingsMethods } from '../../src/client/app/radio/settings';
+import { normalizeSpectrumFps, spectrumSmoothingAlpha, SpectrumFrameLimiter, WaterfallClock } from '@/display/spectrum-rate';
+import { settingsMethods } from '@/app/radio/settings';
 
 describe('spectrum update rate', () => {
 	it.each([20, 30, 60])('preserves the supported target %i', (value) => {

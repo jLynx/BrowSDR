@@ -1,5 +1,5 @@
-import type { SamplesCallback, PocsagCallback, RdsCallback, Rtl433Callback, HostCallback, HostStats } from '../runtime/callbacks';
-import type { DspAudio, DspOutput } from '../runtime/dsp-messages';
+import type { SamplesCallback, PocsagCallback, RdsCallback, Rtl433Callback, HostCallback, HostStats } from '@/worker/runtime/callbacks';
+import type { DspAudio, DspOutput } from '@/worker/runtime/dsp-messages';
 /*
 Copyright (c) 2026, jLynx <https://github.com/jLynx>
 
@@ -20,12 +20,12 @@ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABI
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-import type { VfoParams, RemoteClientState } from '../runtime/types';
-import { AUDIO_RATE } from '../runtime/types';
-import { POCSAGDecoder } from '../decoders/pocsag';
-import { ensureWasmInitialized, init } from '../runtime/wasm-init';
+import type { VfoParams, RemoteClientState } from '@/worker/runtime/types';
+import { AUDIO_RATE } from '@/worker/runtime/types';
+import { POCSAGDecoder } from '@/worker/decoders/pocsag';
+import { ensureWasmInitialized, init } from '@/worker/runtime/wasm-init';
 
-import type { Backend } from '../runtime/backend';
+import type { Backend } from '@/worker/runtime/backend';
 import { AUDIO_QUEUE_CAPACITY, appendAudio, mixLength } from './audio-queue';
 
 // ── Remote-client VFO management (multi-client) ──────────────────────────

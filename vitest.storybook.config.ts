@@ -1,8 +1,10 @@
 /// <reference types="@vitest/browser/providers/playwright" />
+import { sourceAlias } from './source-alias.mjs';
 import { defineConfig } from 'vitest/config';
 import { storybookTest } from '@storybook/addon-vitest/vitest-plugin';
 
 export default defineConfig({
+	resolve: { alias: sourceAlias },
 	define: { __VUE_OPTIONS_API__: true, __VUE_PROD_DEVTOOLS__: false, __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: false },
 	plugins: [storybookTest({ configDir: '.storybook' })],
 	test: {

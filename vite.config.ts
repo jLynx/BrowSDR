@@ -1,3 +1,4 @@
+import { sourceAlias } from './source-alias.mjs';
 import { defineConfig, build, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
@@ -23,7 +24,7 @@ function postBuildPlugin(): Plugin {
 				if (!file.endsWith('.ts') && !file.endsWith('.js')) continue;
 
 				const content = fs.readFileSync(filePath, 'utf-8');
-				if (content.includes("from './") || content.includes("from '../")) {
+				if (content.includes("from './") || content.includes("from '../") || content.includes("from '@/")) {
 					console.log(`[post-build] Bundling nested worker: ${file}`);
 					const jsName = file.replace(/\.ts$/, '.js');
 					renames.set(file, jsName);
@@ -46,6 +47,7 @@ function postBuildPlugin(): Plugin {
 						},
 						resolve: {
 							alias: {
+								...sourceAlias,
 								'/hackrf-web/pkg': path.resolve(__dirname, 'hackrf-web/pkg'),
 							},
 						},
@@ -76,6 +78,7 @@ function postBuildPlugin(): Plugin {
 			if (fs.existsSync(whisperEntry)) {
 				console.log('[post-build] Bundling whisper-worker');
 				await build({
+					resolve: { alias: sourceAlias },
 					configFile: false,
 					root: path.resolve(__dirname, 'src/client'),
 					build: {
@@ -164,6 +167,7 @@ export default defineConfig({
 	},
 	resolve: {
 		alias: {
+			...sourceAlias,
 			vue: 'vue/dist/vue.esm-bundler.js',
 			'/hackrf-web/pkg': path.resolve(__dirname, 'hackrf-web/pkg'),
 		},

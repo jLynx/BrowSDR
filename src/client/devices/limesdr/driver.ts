@@ -1,4 +1,4 @@
-import { errorMessage } from '../../platform/errors';
+import { errorMessage } from '@/platform/errors';
 /*
 LimeSDR USB WebUSB driver for BrowSDR
 Copyright (c) 2026, jLynx <https://github.com/jLynx>

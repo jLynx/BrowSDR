@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { reactive, nextTick } from 'vue';
-import { LimeRxLevel } from '../../src/client/devices/limesdr/rx-level';
-import { limeGainProfile, limeGainTotal, nextLimeGain } from '../../src/client/radio/lime-auto-gain';
-import { autoGainMethods } from '../../src/client/app/radio/auto-gain';
+import { LimeRxLevel } from '@/devices/limesdr/rx-level';
+import { limeGainProfile, limeGainTotal, nextLimeGain } from '@/radio/lime-auto-gain';
+import { autoGainMethods } from '@/app/radio/auto-gain';
 
 afterEach(() => vi.useRealTimers());
 const level = (rmsDbfs = -22, peakDbfs = -8, clippedFraction = 0) => ({

@@ -1,5 +1,5 @@
 import { defineComponent, h } from 'vue';
-import UiChevron from '../indicators/UiChevron';
+import UiChevron from '@/ui/indicators/UiChevron';
 
 export default defineComponent({
 	name: 'UiPanelHeader',

@@ -1,4 +1,4 @@
-import { errorMessage } from '../../platform/errors';
+import { errorMessage } from '@/platform/errors';
 /*
 LimeSDR USB WebUSB driver for BrowSDR
 Copyright (c) 2026, jLynx <https://github.com/jLynx>
@@ -34,7 +34,7 @@ import {
 	REG_RESET,
 	setBits,
 } from './protocol';
-import type { SdrDeviceInfo } from '../../radio/sdr-device';
+import type { SdrDeviceInfo } from '@/radio/sdr-device';
 
 export abstract class LimeSDRTransport {
 	abstract close(): Promise<void>;

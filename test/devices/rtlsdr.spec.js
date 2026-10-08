@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { RtlCom } from '../../src/client/devices/rtlsdr/usb';
-import { BLOCK, WRITE_FLAG } from '../../src/client/devices/rtlsdr/protocol';
+import { RtlCom } from '@/devices/rtlsdr/usb';
+import { BLOCK, WRITE_FLAG } from '@/devices/rtlsdr/protocol';
 
 describe('RTL-SDR USB transport', () => {
 	it('writes little-endian device registers with the correct block and write flag', async () => {

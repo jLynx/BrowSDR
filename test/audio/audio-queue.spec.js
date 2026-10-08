@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appendAudio } from '../../src/client/worker/streams/audio-queue';
+import { appendAudio } from '@/worker/streams/audio-queue';
 
 describe('bounded audio queues', () => {
 	it('drops oldest overflow and preserves recent audio in order', () => {

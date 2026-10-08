@@ -1,5 +1,5 @@
-import type { DSDStatus } from '../decoders/dsd/types';
-import type { Rtl433Message } from '../decoders/rtl433';
+import type { DSDStatus } from '@/worker/decoders/dsd/types';
+import type { Rtl433Message } from '@/worker/decoders/rtl433';
 import type { PerfReport, POCSAGMessage, RDSMessage } from './types';
 
 export type SamplesCallback = (samples: Float32Array) => void;

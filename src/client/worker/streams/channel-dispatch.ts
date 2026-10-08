@@ -1,11 +1,11 @@
-import type { DspOutput } from '../runtime/dsp-messages';
+import type { DspOutput } from '@/worker/runtime/dsp-messages';
 
 import { planSharedBands } from './channel-plan';
 import type { ChannelPlan } from './channel-plan';
 
-import type { VfoParams, PerfCounters } from '../runtime/types';
+import type { VfoParams, PerfCounters } from '@/worker/runtime/types';
 
-import type { Backend } from '../runtime/backend';
+import type { Backend } from '@/worker/runtime/backend';
 
 export function dispatchIqChunk(
 	backend: Backend,

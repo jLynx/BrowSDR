@@ -1,4 +1,4 @@
-import { isRecord, primitiveMap } from '../platform/data';
+import { isRecord, primitiveMap } from '@/platform/data';
 import type { ReceiverCommand } from './types';
 
 function numbers(value: unknown, fields: string[]): boolean {

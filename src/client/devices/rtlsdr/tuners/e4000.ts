@@ -22,7 +22,7 @@ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABI
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-import type { RtlCom } from '../usb';
+import type { RtlCom } from '@/devices/rtlsdr/usb';
 
 // ── E4000 Tuner ───────────────────────────────────────────────────
 // Ported from tuner_e4k.c (Harald Welte / Sylvain Munaut / GPL-2.0)

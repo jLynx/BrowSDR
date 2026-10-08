@@ -2,8 +2,8 @@ import type Peer from 'peerjs';
 import type { DataConnection } from 'peerjs';
 import type { ReceiverCommand, CommandCallbackHost, CommandCallbackClient } from './types';
 import { isReceiverCommand } from './validation';
-import { isRecord } from '../platform/data';
-import { errorMessage } from '../platform/errors';
+import { isRecord } from '@/platform/data';
+import { errorMessage } from '@/platform/errors';
 interface ClientEntry {
 	cmd: DataConnection | null;
 	fft: DataConnection | null;

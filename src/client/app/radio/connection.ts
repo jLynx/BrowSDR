@@ -1,8 +1,8 @@
-import { errorMessage, errorName } from '../../platform/errors';
-import type { AppInstance } from '../core/types';
+import { errorMessage, errorName } from '@/platform/errors';
+import type { AppInstance } from '@/app/core/types';
 import * as Comlink from 'comlink';
-import { getAllCatalogFilters, lookupDevice } from '../../radio/device-catalog';
-import { localUsbIssue } from '../../platform/browser-capabilities';
+import { getAllCatalogFilters, lookupDevice } from '@/radio/device-catalog';
+import { localUsbIssue } from '@/platform/browser-capabilities';
 
 export const connectionMethods = {
 	async connect(this: AppInstance) {

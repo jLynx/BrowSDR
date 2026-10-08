@@ -1,6 +1,6 @@
-import { isRecord } from '../platform/data';
+import { isRecord } from '@/platform/data';
 import type { AppInstance } from './core/types';
-import type { Backend as BackendInstance } from '../worker/runtime/backend';
+import type { Backend as BackendInstance } from '@/worker/runtime/backend';
 import { createApp, markRaw } from 'vue';
 import receiverTemplate from './templates/receiver';
 import { createWorkspace } from './workspace/workspace';
@@ -23,8 +23,8 @@ import { remoteMethods } from './workspace/remote';
 import { autoGainMethods } from './radio/auto-gain';
 import { rtl433Methods } from './decoders/rtl433';
 import { mountHeaderTools } from './workspace/header-tools';
-import * as uiComponents from '../ui';
-import { coreCapabilityIssues } from '../platform/browser-capabilities';
+import * as uiComponents from '@/ui';
+import { coreCapabilityIssues } from '@/platform/browser-capabilities';
 
 // When a new service worker takes control (after update), reload to get fresh assets
 if ('serviceWorker' in navigator) {

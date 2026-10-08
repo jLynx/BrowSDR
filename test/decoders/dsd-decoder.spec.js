@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../src/client/worker/decoders/mbelib-init', () => ({
+vi.mock('@/worker/decoders/mbelib-init', () => ({
 	ensureMbelibInitialized: async () => {},
 	decodeAmbe: () => new Float32Array(160),
 	decodeImbe: () => new Float32Array(160),
@@ -8,9 +8,9 @@ vi.mock('../../src/client/worker/decoders/mbelib-init', () => ({
 	getMbeErrors: () => 0,
 }));
 
-import { DSDDecoder } from '../../src/client/worker/decoders/dsd/dsd-decoder';
-import { FIRFilter, rrcTaps } from '../../src/client/worker/decoders/dsd/dsd-dsp';
-import { RRC_NUM_TAPS, RRC_ALPHA, SYNC_WORDS } from '../../src/client/worker/decoders/dsd/types';
+import { DSDDecoder } from '@/worker/decoders/dsd/dsd-decoder';
+import { FIRFilter, rrcTaps } from '@/worker/decoders/dsd/dsd-dsp';
+import { RRC_NUM_TAPS, RRC_ALPHA, SYNC_WORDS } from '@/worker/decoders/dsd/types';
 
 function randomDibits(length) {
 	let seed = 123456789;

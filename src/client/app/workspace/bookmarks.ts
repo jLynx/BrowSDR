@@ -1,6 +1,6 @@
-import type { AppInstance, Bookmark } from '../core/types';
+import type { AppInstance, Bookmark } from '@/app/core/types';
 import { parseBookmarks } from './bookmark-data';
-import { makeDefaultVfo, BOOKMARK_CATEGORIES } from '../core/constants';
+import { makeDefaultVfo, BOOKMARK_CATEGORIES } from '@/app/core/constants';
 
 export const bookmarkMethods = {
 	categoryLabel(this: AppInstance, value: string | number) {

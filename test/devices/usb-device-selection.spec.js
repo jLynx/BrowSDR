@@ -1,14 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { selectUsbDevice, usbSettingsKey } from '../../src/client/radio/usb-device-selection';
-import { createWorkspace } from '../../src/client/app/workspace/workspace';
-import { connectionMethods } from '../../src/client/app/radio/connection';
-import { settingsMethods } from '../../src/client/app/radio/settings';
-import { vfoMethods } from '../../src/client/app/radio/vfo';
-import { createAppData } from '../../src/client/app/core/state';
-import * as drivers from '../../src/client/radio/sdr-device';
+import { selectUsbDevice, usbSettingsKey } from '@/radio/usb-device-selection';
+import { createWorkspace } from '@/app/workspace/workspace';
+import { connectionMethods } from '@/app/radio/connection';
+import { settingsMethods } from '@/app/radio/settings';
+import { vfoMethods } from '@/app/radio/vfo';
+import { createAppData } from '@/app/core/state';
+import * as drivers from '@/radio/sdr-device';
 
-vi.mock('../../src/client/worker/runtime/wasm-init', () => ({ ensureWasmInitialized: vi.fn(), init: vi.fn() }));
-import { Backend } from '../../src/client/worker/runtime/backend';
+vi.mock('@/worker/runtime/wasm-init', () => ({ ensureWasmInitialized: vi.fn(), init: vi.fn() }));
+import { Backend } from '@/worker/runtime/backend';
 
 afterEach(() => {
 	vi.unstubAllGlobals();

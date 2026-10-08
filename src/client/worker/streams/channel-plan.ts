@@ -1,7 +1,7 @@
-import { IF_RATES } from '../runtime/types';
-import type { VfoParams } from '../runtime/types';
-import { sidebandOffsetHz } from '../decoders/ssb';
-import { rtl433SampleRate } from '../decoders/rtl433';
+import { IF_RATES } from '@/worker/runtime/types';
+import type { VfoParams } from '@/worker/runtime/types';
+import { sidebandOffsetHz } from '@/worker/decoders/ssb';
+import { rtl433SampleRate } from '@/worker/decoders/rtl433';
 
 export interface SharedBand {
 	centerBin: number;

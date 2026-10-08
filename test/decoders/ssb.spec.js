@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { demodulateSideband, sidebandOffsetHz } from '../../src/client/worker/decoders/ssb';
+import { demodulateSideband, sidebandOffsetHz } from '@/worker/decoders/ssb';
 
 describe('streaming sideband product detector', () => {
 	it.each(['usb', 'lsb', 'dsb'])('%s is independent of chunk boundaries', (mode) => {

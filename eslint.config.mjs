@@ -4,6 +4,7 @@ import tseslint from 'typescript-eslint';
 import vue from 'eslint-plugin-vue';
 import globals from 'globals';
 import prettier from 'eslint-config-prettier/flat';
+import imports from './scripts/lint/source-alias.mjs';
 
 export default defineConfig(
 	globalIgnores([
@@ -56,6 +57,11 @@ export default defineConfig(
 			'max-lines-per-function': ['error', { max: 100, skipBlankLines: true, skipComments: true }],
 			complexity: ['error', 20],
 		},
+	},
+	{
+		files: ['src/client/**/*.ts', 'test/**/*.{js,ts}', '.storybook/*.ts'],
+		plugins: { imports },
+		rules: { 'imports/source-alias': 'error' },
 	},
 	{
 		files: ['test/**/*.ts'],

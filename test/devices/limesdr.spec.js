@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { LimeSDRDevice } from '../../src/client/devices/limesdr/device';
+import { LimeSDRDevice } from '@/devices/limesdr/device';
 
 async function createDriver() {
 	const packets = [];

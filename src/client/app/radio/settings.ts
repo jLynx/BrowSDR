@@ -1,7 +1,7 @@
-import type { AppInstance } from '../core/types';
-import { makeDefaultVfo } from '../core/constants';
-import { normalizeSpectrumFps } from '../../display/spectrum-rate';
-import { isRecord, restoreFields, primitiveMap } from '../../platform/data';
+import type { AppInstance } from '@/app/core/types';
+import { makeDefaultVfo } from '@/app/core/constants';
+import { normalizeSpectrumFps } from '@/display/spectrum-rate';
+import { isRecord, restoreFields, primitiveMap } from '@/platform/data';
 
 export const settingsMethods = {
 	saveSetting(this: AppInstance) {

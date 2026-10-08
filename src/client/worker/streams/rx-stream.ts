@@ -3,7 +3,14 @@ import { initializePerformanceReporting } from './performance';
 import { dispatchIqChunk } from './channel-dispatch';
 import { initializeVfoWorkers } from './vfo-workers';
 
-import type { SamplesCallback, WhisperCallback, PocsagCallback, RdsCallback, Rtl433Callback, DsdCallback } from '../runtime/callbacks';
+import type {
+	SamplesCallback,
+	WhisperCallback,
+	PocsagCallback,
+	RdsCallback,
+	Rtl433Callback,
+	DsdCallback,
+} from '@/worker/runtime/callbacks';
 
 /*
 Copyright (c) 2026, jLynx <https://github.com/jLynx>
@@ -26,15 +33,15 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 */
 
 import * as Comlink from 'comlink';
-import { FFT } from '../runtime/wasm-init';
+import { FFT } from '@/worker/runtime/wasm-init';
 
 import type { ChannelPlan } from './channel-plan';
 
-import type { RxStreamOpts, VfoParams } from '../runtime/types';
+import type { RxStreamOpts, VfoParams } from '@/worker/runtime/types';
 
-import type { Backend } from '../runtime/backend';
-import { displayToDeviceFrequencyHz } from '../../radio/frequency-shift';
-import { spectrumSmoothingAlpha } from '../../display/spectrum-rate';
+import type { Backend } from '@/worker/runtime/backend';
+import { displayToDeviceFrequencyHz } from '@/radio/frequency-shift';
+import { spectrumSmoothingAlpha } from '@/display/spectrum-rate';
 
 let _streamStarting = false;
 

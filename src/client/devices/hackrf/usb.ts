@@ -1,4 +1,4 @@
-import { errorMessage } from '../../platform/errors';
+import { errorMessage } from '@/platform/errors';
 /*
 Original: https://github.com/mossmann/hackrf/blob/master/host/libhackrf/src/hackrf.c
 Copyright (c) 2012, Jared Boone <jared@sharebrained.com>

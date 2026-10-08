@@ -1,5 +1,5 @@
-import type { AppInstance } from '../core/types';
-import { makeDefaultVfo, MODE_DEFAULTS } from '../core/constants';
+import type { AppInstance } from '@/app/core/types';
+import { makeDefaultVfo, MODE_DEFAULTS } from '@/app/core/constants';
 
 export const vfoMethods = {
 	clearInactiveSoloAudio(this: AppInstance) {

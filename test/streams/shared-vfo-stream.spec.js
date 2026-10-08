@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('../../src/client/worker/runtime/wasm-init', () => ({
+vi.mock('@/worker/runtime/wasm-init', () => ({
 	FFT: class {
 		set_smoothing_speed() {}
 		fft() {}
 	},
 }));
 
-import { startRxStream } from '../../src/client/worker/streams/rx-stream';
+import { startRxStream } from '@/worker/streams/rx-stream';
 
 afterEach(() => {
 	vi.useRealTimers();

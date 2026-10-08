@@ -1,5 +1,5 @@
-import type { RDSMessage } from '../../worker/runtime/types';
-import type { AppInstance } from '../core/types';
+import type { RDSMessage } from '@/worker/runtime/types';
+import type { AppInstance } from '@/app/core/types';
 
 const EMPTY_STATION = { ps: '', rt: '', pi: '', pty: 0, ptyLabel: '', tp: false, ta: false, freq: '' };
 

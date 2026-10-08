@@ -1,5 +1,5 @@
 import type { WhisperMessage, TranscriptionOptions, BenchmarkResult } from './types';
-import { errorMessage } from '../platform/errors';
+import { errorMessage } from '@/platform/errors';
 /**
  * Whisper Speech-to-Text Web Worker
  *

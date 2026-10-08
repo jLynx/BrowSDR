@@ -1,22 +1,22 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { defineComponent } from 'vue';
-import template from '../../src/client/app/templates/receiver';
-import * as components from '../../src/client/ui';
-import { createAppData } from '../../src/client/app/core/state';
-import { computedProperties } from '../../src/client/app/core/computed';
-import { uiHelperMethods } from '../../src/client/app/core/ui-helpers';
-import { autoGainMethods } from '../../src/client/app/radio/auto-gain';
-import { rdsMethods } from '../../src/client/app/decoders/rds';
-import { rtl433Methods } from '../../src/client/app/decoders/rtl433';
-import { bookmarkMethods } from '../../src/client/app/workspace/bookmarks';
-import { zoomMethods } from '../../src/client/app/display/zoom';
-import { audioMethods } from '../../src/client/app/audio/audio';
-import { whisperMethods } from '../../src/client/app/decoders/whisper';
-import { pocsagMethods } from '../../src/client/app/decoders/pocsag';
-import { vfoMethods } from '../../src/client/app/radio/vfo';
-import { connectionMethods } from '../../src/client/app/radio/connection';
-import { remoteMethods } from '../../src/client/app/workspace/remote';
+import template from '@/app/templates/receiver';
+import * as components from '@/ui';
+import { createAppData } from '@/app/core/state';
+import { computedProperties } from '@/app/core/computed';
+import { uiHelperMethods } from '@/app/core/ui-helpers';
+import { autoGainMethods } from '@/app/radio/auto-gain';
+import { rdsMethods } from '@/app/decoders/rds';
+import { rtl433Methods } from '@/app/decoders/rtl433';
+import { bookmarkMethods } from '@/app/workspace/bookmarks';
+import { zoomMethods } from '@/app/display/zoom';
+import { audioMethods } from '@/app/audio/audio';
+import { whisperMethods } from '@/app/decoders/whisper';
+import { pocsagMethods } from '@/app/decoders/pocsag';
+import { vfoMethods } from '@/app/radio/vfo';
+import { connectionMethods } from '@/app/radio/connection';
+import { remoteMethods } from '@/app/workspace/remote';
 
 let wrapper: VueWrapper;
 const ReceiverView = defineComponent({

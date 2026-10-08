@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { WhisperProgress } from '../../src/client/transcription/whisper-progress';
+import { WhisperProgress } from '@/transcription/whisper-progress';
 
 describe('Whisper download progress', () => {
 	it('combines concurrent files and never shows 100% for an incomplete pipeline', () => {

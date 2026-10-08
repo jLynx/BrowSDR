@@ -1,13 +1,13 @@
-import type { DspStats } from '../../remote/types';
+import type { DspStats } from '@/remote/types';
 import type { Remote } from 'comlink';
-import type { Backend } from '../../worker/runtime/backend';
-import type { DeviceCapabilities } from '../../radio/sdr-device';
+import type { Backend } from '@/worker/runtime/backend';
+import type { DeviceCapabilities } from '@/radio/sdr-device';
 import type { Bookmark, Vfo } from './types';
 import { makeDefaultVfo, BOOKMARK_CATEGORIES } from './constants';
-import type { DSDStatus } from '../../worker/decoders/dsd/types';
-import type { CapabilityIssue } from '../../platform/browser-capabilities';
-import type { RxLevel } from '../../radio/sdr-device';
-import type { Rtl433Status, Rtl433Protocol } from '../../worker/decoders/rtl433';
+import type { DSDStatus } from '@/worker/decoders/dsd/types';
+import type { CapabilityIssue } from '@/platform/browser-capabilities';
+import type { RxLevel } from '@/radio/sdr-device';
+import type { Rtl433Status, Rtl433Protocol } from '@/worker/decoders/rtl433';
 
 export function createAppData() {
 	return {

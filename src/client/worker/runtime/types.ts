@@ -1,7 +1,7 @@
-import type { POCSAGDecoder } from '../decoders/pocsag';
-import type { RDSDecoder } from '../decoders/rds';
-import type { RationalResampler } from '../streams/dsp-pipeline';
-import type { DSDDecoder } from '../decoders/dsd/dsd-decoder';
+import type { POCSAGDecoder } from '@/worker/decoders/pocsag';
+import type { RDSDecoder } from '@/worker/decoders/rds';
+import type { RationalResampler } from '@/worker/streams/dsp-pipeline';
+import type { DSDDecoder } from '@/worker/decoders/dsd/dsd-decoder';
 /*
 Copyright (c) 2026, jLynx <https://github.com/jLynx>
 

@@ -1,5 +1,5 @@
-import type { POCSAGMessage } from '../../worker/runtime/types';
-import type { AppInstance } from '../core/types';
+import type { POCSAGMessage } from '@/worker/runtime/types';
+import type { AppInstance } from '@/app/core/types';
 
 export const pocsagMethods = {
 	togglePocsagPanel(this: AppInstance) {

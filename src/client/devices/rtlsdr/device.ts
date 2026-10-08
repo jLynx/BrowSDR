@@ -1,4 +1,4 @@
-import { errorMessage } from '../../platform/errors';
+import { errorMessage } from '@/platform/errors';
 /*
 RTL-SDR WebUSB driver for BrowSDR
 Copyright (c) 2026, jLynx <https://github.com/jLynx>
@@ -31,7 +31,7 @@ import { E4000 } from './tuners/e4000';
 import { FC0013 } from './tuners/fc0013';
 import { FC2580 } from './tuners/fc2580';
 import type { TunerDriver } from './tuners/types';
-import { registerDriver, type SdrDevice, type SdrDeviceInfo, type GainControl } from '../../radio/sdr-device';
+import { registerDriver, type SdrDevice, type SdrDeviceInfo, type GainControl } from '@/radio/sdr-device';
 
 // ── RTL-SDR Device ────────────────────────────────────────────────
 export class RtlSdrDevice implements SdrDevice {

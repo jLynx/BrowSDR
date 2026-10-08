@@ -6,5 +6,8 @@
 	"editor.formatOnSave": true,
 	"editor.codeActionsOnSave": { "source.fixAll.eslint": "explicit" },
 	"eslint.workingDirectories": [{ "directory": "." }],
+	"eslint.validate": ["javascript", "typescript"],
+	"typescript.tsdk": "node_modules/typescript/lib",
+	"typescript.enablePromptUseWorkspaceTsdk": true,
 	"[html]": { "editor.formatOnSave": false }
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { Waterfall, WaterfallGL } from '../../src/client/display/utils';
+import { Waterfall, WaterfallGL } from '@/display/utils';
 
 function createGlEngine(current = 0) {
 	const engine = Object.create(WaterfallGL.prototype);

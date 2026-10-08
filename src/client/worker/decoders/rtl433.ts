@@ -1,7 +1,7 @@
-import { errorMessage } from '../../platform/errors';
-import type { VfoParams } from '../runtime/types';
+import { errorMessage } from '@/platform/errors';
+import type { VfoParams } from '@/worker/runtime/types';
 import type { DspProcessor } from '/hackrf-web/pkg/hackrf_web.js';
-import { isRecord } from '../../platform/data';
+import { isRecord } from '@/platform/data';
 
 export type Rtl433Message =
 	{ type: 'rtl433_event'; freq: number; event: Record<string, unknown> } | { type: 'rtl433_status'; freq?: number; status: Rtl433Status };

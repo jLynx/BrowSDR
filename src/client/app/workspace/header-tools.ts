@@ -1,4 +1,4 @@
-import type { AppInstance } from '../core/types';
+import type { AppInstance } from '@/app/core/types';
 
 /** Collapse optional tools before they take the room needed by three VFOs. */
 export function mountHeaderTools(app: AppInstance): () => void {

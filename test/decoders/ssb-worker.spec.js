@@ -15,7 +15,7 @@ async function createReceiver(mode, bandwidth = 2800) {
 	vi.resetModules();
 	const messages = [];
 	vi.stubGlobal('self', { postMessage: (message) => messages.push(message) });
-	await import('../../src/client/worker/dsp-worker');
+	await import('@/worker/dsp-worker');
 	const params = { freq: 7.1, mode, bandwidth, enabled: true, squelchEnabled: false };
 	const send = (data) => self.onmessage({ data });
 	await send({ type: 'init', sampleRate: 2000000, centerFreq: 7, params });
