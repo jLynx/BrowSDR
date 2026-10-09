@@ -30,6 +30,8 @@ export class AircraftMap {
 		this.tiles = leaflet
 			.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
 				maxZoom: 19,
+				// CORS-enabled images satisfy the production page's COEP: require-corp policy.
+				crossOrigin: 'anonymous',
 				attribution:
 					'&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors',
 			})

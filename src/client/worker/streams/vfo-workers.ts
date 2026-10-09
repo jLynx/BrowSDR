@@ -1,4 +1,4 @@
-import type { RdsCallback, Rtl433Callback, DsdCallback, AdsbCallback } from '@/worker/runtime/callbacks.types';
+import type { RdsCallback, Rtl433Callback, DsdCallback, AdsbCallback, AisCallback } from '@/worker/runtime/callbacks.types';
 import type { DspOutput } from '@/worker/runtime/dsp-messages.types';
 import type { VfoParams, VfoState } from '@/worker/runtime/types';
 import type { Backend } from '@/worker/runtime/backend';
@@ -12,6 +12,7 @@ export function initializeVfoWorkers(
 	dsdStatusCallback: DsdCallback | null,
 	sampleRate: number,
 	adsbCallback: AdsbCallback | null = null,
+	aisCallback: AisCallback | null = null,
 ) {
 	const initialBandwidth = 150000;
 
@@ -75,7 +76,7 @@ export function initializeVfoWorkers(
 	const spawnWorker = (index: number, params: VfoParams): Worker => {
 		const worker = new globalThis.Worker(new URL('../dsp-worker.ts', import.meta.url), { type: 'module' });
 		worker.onmessage = (e: MessageEvent<DspOutput>) =>
-			routeLocalWorkerMessage(backend, worker, e.data, rtl433Callback, rdsCallback, dsdStatusCallback, adsbCallback);
+			routeLocalWorkerMessage(backend, worker, e.data, rtl433Callback, rdsCallback, dsdStatusCallback, adsbCallback, aisCallback);
 		worker.postMessage({
 			type: 'init',
 			sampleRate: sampleRate,
@@ -102,7 +103,12 @@ export function routeLocalWorkerMessage(
 	rdsCallback: RdsCallback | null,
 	dsdStatusCallback: DsdCallback | null,
 	adsbCallback: AdsbCallback | null = null,
+	aisCallback: AisCallback | null = null,
 ) {
+	if (msg.type === 'ais') {
+		routeAisMessage(backend, worker, msg, aisCallback);
+		return;
+	}
 	if (msg.type === 'adsb') {
 		routeAdsbMessage(backend, worker, msg, adsbCallback);
 		return;
@@ -161,4 +167,10 @@ function routeAdsbMessage(
 	const index = backend.dspWorkers!.indexOf(worker);
 	const params = backend.vfoParams?.[index];
 	if (params && params.freq === msg.freq && params.adsb) callback?.(index, params.freq, msg);
+}
+
+function routeAisMessage(backend: Backend, worker: Worker, msg: Extract<DspOutput, { type: 'ais' }>, callback: AisCallback | null): void {
+	const index = backend.dspWorkers!.indexOf(worker);
+	const params = backend.vfoParams?.[index];
+	if (params?.ais && params.freq === msg.freq) callback?.(index, params.freq, msg);
 }

@@ -43,6 +43,7 @@ TypeScript files are limited to 600 nonblank, noncomment lines, functions to 100
 src/
   server/                     Cloudflare HTTP and scheduled handlers, worker types
     aircraft-db/              streamed metadata build and R2 publication
+    maritime-db/              ITU country allocation parsing and publication
   client/
     app/
       core/                   receiver state, types, computed values
@@ -51,6 +52,7 @@ src/
       audio/                  playback and media session
       decoders/               decoder UI behavior
         adsb/                 aircraft panel and details, grouped database and map helpers
+        ais/                  vessel panel, map and MID country lookup
       workspace/              multiple receivers, bookmarks, sharing
       templates/              receiver HTML partials and assembly
     devices/
@@ -74,6 +76,7 @@ src/
       streams/                RX pipeline, channel plan, remote delivery
       decoders/               RDS, POCSAG, rtl_433, SSB, mbelib
         adsb/                 Mode S messages, pulse demodulation and aircraft tracking
+        ais/                  GMSK/HDLC radio decoding and vessel tracking
         dsd/                  digital voice protocols and error correction
     styles/                   CSS grouped by feature and responsive layout
 test/                         matching feature groups plus server/ and ui/

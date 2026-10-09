@@ -1,3 +1,4 @@
+import type { AisStatus, Vessel } from '@/worker/decoders/ais/types';
 import type { AdsbStatus, Aircraft } from '@/worker/decoders/adsb/types';
 import type { RdsLogEntry, Rtl433LogEntry, PocsagLogEntry, RdsStations } from '@/app/decoders/types';
 import type { WhisperLogEntry } from '@/app/decoders/whisper.types';
@@ -137,6 +138,7 @@ function createDecoderAndBookmarkState() {
 			log: [] as PocsagLogEntry[],
 		},
 		dsdStatus: [] as Array<DSDStatus | null>,
+		ais: { panelOpen: false, status: [] as Array<AisStatus | null>, sources: [] as Vessel[][] },
 		adsb: { panelOpen: false, status: [] as Array<AdsbStatus | null>, sources: [] as Aircraft[][] },
 		rtl433: {
 			panelOpen: false,

@@ -1,5 +1,6 @@
 export interface Vfo {
 	adsb?: boolean;
+	ais?: boolean;
 	rtl433?: boolean;
 	rtl433SampleRate?: number;
 	rtl433Protocols?: string;

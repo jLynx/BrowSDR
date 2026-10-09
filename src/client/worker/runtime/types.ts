@@ -26,6 +26,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 export interface VfoParams {
 	stereo?: boolean;
 	adsb?: boolean;
+	ais?: boolean;
 	rtl433?: boolean;
 	rtl433SampleRate?: number;
 	rtl433Protocols?: string;

@@ -1,3 +1,5 @@
+import AisPanel from '@/app/decoders/ais/panel';
+import { aisMethods } from '@/app/decoders/ais';
 import { defineComponent } from 'vue';
 import template from '@/app/templates/receiver';
 import VfoPanel from '@/app/radio/vfo-panel';
@@ -21,7 +23,7 @@ import { remoteMethods } from '@/app/workspace/remote';
 
 export const ReceiverView = defineComponent({
 	template,
-	components: { ...components, VfoPanel, AdsbPanel },
+	components: { ...components, VfoPanel, AdsbPanel, AisPanel },
 	provide() {
 		return { receiver: this };
 	},
@@ -33,6 +35,7 @@ export const ReceiverView = defineComponent({
 		...rdsMethods,
 		...rtl433Methods,
 		...adsbMethods,
+		...aisMethods,
 		...bookmarkMethods,
 		...zoomMethods,
 		...audioMethods,

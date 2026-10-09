@@ -27,6 +27,8 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
 - **✈️ ADS-B Aircraft and Live Map**
   Decode 1090 MHz aircraft transmissions locally, with callsigns, altitude,
   ground speed, and live positions on an interactive map.
+- **🚢 AIS Vessels and Live Map**
+  Decode Class A/B vessel transmissions on AIS A and AIS B, with vessel details, live positions, and ITU MID country lookup.
 - **📊 Frequency Activity**
   Visually spot active signals and quickly jump to transmissions using the dynamic frequency activity scanner and interactive waterfall display.
 - **🔖 Advanced Bookmarking System**
@@ -51,7 +53,7 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
 ## 🗓️ Planned Features
 
 See the [feature roadmap](docs/roadmap.md) for requested radiosonde, ACARS, APRS,
-AIS, ADS-B, and BLE support.
+and BLE support, alongside completed AIS and ADS-B features.
 
 ---
 

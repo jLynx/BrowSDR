@@ -21,6 +21,9 @@ owner and operator; additional columns such as country and SELCAL are not stored
 This snapshot yields 587,144 usable aircraft records, versus 516,505 previously.
 Offline download size is calculated from the manifest, so it follows database growth.
 
+Shared aircraft and maritime storage and general URL overrides are described in
+[receiver databases](databases.md).
+
 ## Build and publish
 
 ```sh
@@ -30,24 +33,24 @@ npm run publish:aircraft-db
 ```
 
 The builder writes generated files to `public/aircraft-db/` (ignored by Git).
-For a local-only build, set `VITE_AIRCRAFT_DB_URL=/aircraft-db/` before starting
+For a local-only build, set `VITE_DATABASES_URL=/` before starting
 Vite. `--aircraft` and `--airlines` accept local input files for reproducible builds.
 The normal application uses the public R2 endpoint:
-`https://aircraft-db.browsdr.jlynx.net/aircraft-db/`.
-`VITE_AIRCRAFT_DB_URL` can override that endpoint; it contains no credentials.
+`https://db.browser.jlynx.net/aircraft-db/`.
+`VITE_DATABASES_URL` can override the shared database root; it contains no credentials.
 This optional client build setting is passed to the Vite process, for example
-`$env:VITE_AIRCRAFT_DB_URL='/aircraft-db/'` in PowerShell before `npm run dev`.
+`$env:VITE_DATABASES_URL='/'` in PowerShell before `npm run dev`.
 Wrangler's `.dev.vars` supplies Worker secrets and is not read by the Vite client.
 Normal setup needs no database URL override.
 
-The R2 bucket is `browsdr-aircraft-db`, in account
+The R2 bucket is `browsdr-databases`, in account
 `ccd550c603c63502ea824904dd2e5d06`. A custom domain serves the data with read-only
-CORS for GET/HEAD. `aircraft-db.browsdr.jlynx.net` is attached directly to this R2
+CORS for GET/HEAD. `db.browser.jlynx.net` is attached directly to this R2
 bucket and remains independent of the Worker running the scheduled job.
-`scripts/aircraft-db/cors.json` retains the bucket's reusable CORS configuration.
+`scripts/databases/cors.json` retains the bucket's reusable CORS configuration.
 The weekly job uses the main `browsdr` Worker. `publish.mjs` is an optional manual
-publisher for locally built snapshots; `AIRCRAFT_DB_PUBLIC_URL` overrides its
-manifest-check URL and `AIRCRAFT_DB_BUCKET` overrides its upload bucket.
+publisher for locally built snapshots; `DATABASES_PUBLIC_URL` overrides the shared
+public root and `DATABASES_BUCKET` overrides its upload bucket.
 Uploads use Wrangler's authenticated API. The publishing command
 uploads all versioned database files first and the manifest last; a failed upload
 leaves the previously published manifest intact. No receiver application deployment
@@ -77,7 +80,7 @@ Missing records show as unknown; no third-party database fallback is used.
 `wrangler.jsonc` configures the existing `browsdr` Cloudflare Worker, which serves
 the receiver application and runs the database job through its scheduled handler.
 Its Cron Trigger runs weekly on Monday at 03:17 UTC.
-It writes directly through the `AIRCRAFT_DB` R2 binding, with no GitHub schedule
+It writes directly through the `DATABASES` R2 binding, with no GitHub schedule
 or API token required. Deploy and inspect it with the existing Wrangler login:
 
 ```sh
