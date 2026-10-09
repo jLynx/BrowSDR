@@ -15,6 +15,12 @@
 	min-width: 720px;
 	table-layout: auto;
 }
+.ble-panel .adsb-table td:nth-child(2) {
+	min-width: 160px;
+	max-width: 260px;
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
 .ble-panel .adsb-details {
 	overflow: visible;
 }

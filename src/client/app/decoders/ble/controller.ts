@@ -26,8 +26,9 @@ export const bleMethods = {
 			this.showMsg('Tune the host receiver to a BLE channel, then enable decoding.');
 			return false;
 		}
-		if (this.locks.centerFreq || this.autoGain.active) {
-			this.showMsg('Unlock the receiver frequency and finish gain adjustment before tuning BLE.');
+		// Center-frequency locks restrict remote clients; the local receiver owner can still tune.
+		if (this.autoGain.active) {
+			this.showMsg('Finish or cancel automatic gain adjustment before tuning BLE.');
 			return false;
 		}
 		if (this.deviceCapabilities && !['hackrf', 'limesdr'].includes(this.deviceCapabilities.deviceType) && !this.radio.frequencyShift) {
@@ -73,7 +74,7 @@ export const bleMethods = {
 		try {
 			const tuned = await this.tuneBleChannel(37);
 			if (!this.ble.scanning) return;
-			if (!tuned || this.radio.centerFreq !== 2402 || vfo.freq !== 2402 || this.locks.centerFreq || this.autoGain.active) {
+			if (!tuned || this.radio.centerFreq !== 2402 || vfo.freq !== 2402 || this.autoGain.active) {
 				this.stopBleScan();
 				return;
 			}
@@ -114,7 +115,6 @@ function schedule(receiver: AppInstance, channelIndex: number): void {
 					receiver.remoteMode === 'client' ||
 					index < 0 ||
 					!vfo?.ble ||
-					receiver.locks.centerFreq ||
 					receiver.autoGain.active ||
 					vfo.freq !== BLE_CHANNELS[channelIndex].frequency ||
 					receiver.radio.centerFreq !== vfo.freq

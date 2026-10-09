@@ -7,6 +7,8 @@
 		"build": "vite build",
 		"build:aircraft-db": "python scripts/aircraft-db/build.py --output public/aircraft-db",
 		"publish:aircraft-db": "node scripts/aircraft-db/publish.mjs",
+		"build:ble-db": "python scripts/ble-db/build.py",
+		"publish:ble-db": "node scripts/ble-db/publish.mjs",
 		"dev:worker": "wrangler dev --port 8788 --test-scheduled",
 		"types:worker": "wrangler types types/worker.d.ts --env-interface BrowSdrWorkerEnv",
 		"test:aircraft-db": "python -m unittest discover -s test/aircraft-db -p test_*.py",

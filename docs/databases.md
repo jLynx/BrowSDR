@@ -2,10 +2,11 @@
 
 The Worker uses the **DATABASES** R2 binding for independent database namespaces:
 
-| Prefix                  | Contents                                                 | Source                 |
-| ----------------------- | -------------------------------------------------------- | ---------------------- |
-| `aircraft-db/`          | Immutable aircraft and airline shards and their manifest | OpenSky and Planefence |
-| `maritime-db/mids.json` | MID country/administration allocations                   | ITU                    |
+| Prefix                  | Contents                                                 | Source                    |
+| ----------------------- | -------------------------------------------------------- | ------------------------- |
+| `aircraft-db/`          | Immutable aircraft and airline shards and their manifest | OpenSky and Planefence    |
+| `maritime-db/mids.json` | MID country/administration allocations                   | ITU                       |
+| `ble-db/`               | MAC OUI vendor binary and integrity manifest             | IEEE via PortaPack Mayhem |
 
 Aircraft build scripts and binary filenames keep their feature-specific names.
 General storage settings are `DATABASES_BUCKET` for manual uploads and
@@ -41,6 +42,9 @@ The browser tries the hosted table, bundled table and previously cached table;
 cached data can be evicted by the browser.
 
 See [aircraft database builds](aircraft-database.md) for the existing binary format.
+The [BLE vendor database](ble.md#vendor-database) uses a bundled PortaPack binary,
+hosted loading and automatic offline caching. Its pinned snapshot is updated and
+published manually using `build:ble-db` and `publish:ble-db`.
 Cloudflare references checked for this change:
 [R2 Workers API](https://developers.cloudflare.com/r2/api/workers/workers-api-reference/),
 [R2 limits](https://developers.cloudflare.com/r2/platform/limits/),

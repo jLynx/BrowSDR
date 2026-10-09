@@ -4,12 +4,17 @@ import { nextTick, type ComponentPublicInstance } from 'vue';
 import { ReceiverView } from '../helpers/receiver-view';
 import { makeDefaultVfo } from '@/app/core/constants';
 import type { BleMessage } from '@/worker/decoders/ble/types';
+import { loadMacVendors } from '@/app/decoders/ble/database';
+import { parseMacVendors } from '@/app/decoders/ble/vendor-records';
+
+vi.mock('@/app/decoders/ble/database', () => ({ loadMacVendors: vi.fn().mockResolvedValue(undefined) }));
 
 let wrapper: VueWrapper;
 afterEach(() => {
 	wrapper?.vm.stopBleScan();
 	wrapper?.unmount();
 	vi.useRealTimers();
+	vi.mocked(loadMacVendors).mockResolvedValue(undefined);
 });
 const message = (channel = 37): BleMessage => ({
 	type: 'ble',
@@ -46,6 +51,24 @@ async function setup() {
 }
 
 describe('BLE receiver tools', () => {
+	it('shows and searches MAC vendors separately from advertised manufacturers, leaving random addresses unassigned', async () => {
+		const bytes = new Uint8Array(71);
+		bytes.set(new TextEncoder().encode('001122\0Example Vendor\0'));
+		vi.mocked(loadMacVendors).mockResolvedValue(parseMacVendors(bytes));
+		await setup();
+		const packet = { ...message().advertisements[0], address: '00:11:22:33:44:55', addressType: 'public' as const };
+		wrapper.vm._onBleMessage(0, 2402, { ...message(), advertisements: [packet, { ...packet, addressType: 'random' }] });
+		await nextTick();
+		expect(wrapper.findAll('.ble-panel tbody tr')).toHaveLength(2);
+		expect(wrapper.get('.ble-panel tbody').text()).toContain('Random address');
+		await wrapper.get('input[aria-label="Search BLE devices"]').setValue('Example Vendor');
+		expect(wrapper.findAll('.ble-panel tbody tr')).toHaveLength(1);
+		expect(wrapper.get('.ble-panel tbody').text()).toContain('Apple');
+		await wrapper.get('.ble-panel tbody button').trigger('click');
+		const details = wrapper.get('[aria-label="BLE device details"]');
+		expect(details.text()).toContain('MAC vendor (OUI)Example Vendor');
+		expect(details.text()).toContain('BLE manufacturerApple');
+	});
 	it('keeps telemetry out of receiver and VFO control renders, shows names, search and raw details', async () => {
 		let receiverUpdates = 0,
 			vfoUpdates = 0;
@@ -109,11 +132,40 @@ describe('BLE receiver tools', () => {
 		expect(wrapper.vm.backend.setFrequency).toHaveBeenCalledTimes(4);
 		expect(wrapper.vm.vfos[0].ble).toBe(false);
 	});
-	it('does not start scans with frequency locks, insufficient rate or an unsupported tuner', async () => {
+	it('allows local and host tuning while frequency changes are locked for remote clients', async () => {
+		vi.useFakeTimers();
+		await setup();
+		await wrapper.setData({ locks: { centerFreq: true }, view: { ...wrapper.vm.view, locked: false } });
+		expect(await wrapper.vm.tuneBleChannel(38)).toBe(true);
+		expect(wrapper.vm.radio.centerFreq).toBe(2426);
+		await wrapper.setData({ remoteMode: 'host' });
+		await wrapper.vm.startBleScan();
+		expect(wrapper.vm.ble.scanning).toBe(true);
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(wrapper.vm.vfos[0].freq).toBe(2426);
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(wrapper.vm.vfos[0].freq).toBe(2480);
+		expect(wrapper.vm.ble.scanning).toBe(true);
+		expect(wrapper.vm.locks.centerFreq).toBe(true);
+	});
+	it('keeps remote client tuning on the host and reports active gain adjustment accurately', async () => {
+		await setup();
+		wrapper.vm.showMsg = vi.fn();
+		await wrapper.setData({ remoteMode: 'client', locks: { centerFreq: false } });
+		expect(await wrapper.vm.tuneBleChannel(37)).toBe(false);
+		expect(wrapper.vm.showMsg).toHaveBeenLastCalledWith('Tune the host receiver to a BLE channel, then enable decoding.');
+		await wrapper.vm.startBleScan();
+		expect(wrapper.vm.ble.scanning).toBe(false);
+		await wrapper.setData({ remoteMode: 'none', autoGain: { ...wrapper.vm.autoGain, active: true } });
+		expect(await wrapper.vm.tuneBleChannel(37)).toBe(false);
+		expect(wrapper.vm.showMsg).toHaveBeenLastCalledWith('Finish or cancel automatic gain adjustment before tuning BLE.');
+		expect(wrapper.vm.backend.setFrequency).not.toHaveBeenCalled();
+	});
+	it('does not start scans during gain adjustment, with insufficient rate or an unsupported tuner', async () => {
 		await setup();
 		for (const patch of [
-			{ locks: { centerFreq: true } },
-			{ locks: { centerFreq: false }, radio: { ...wrapper.vm.radio, sampleRate: 1000000 } },
+			{ autoGain: { ...wrapper.vm.autoGain, active: true } },
+			{ autoGain: { ...wrapper.vm.autoGain, active: false }, radio: { ...wrapper.vm.radio, sampleRate: 1000000 } },
 			{ radio: { ...wrapper.vm.radio, sampleRate: 8000000 }, deviceCapabilities: { deviceType: 'rtlsdr' } },
 		]) {
 			await wrapper.setData(patch);

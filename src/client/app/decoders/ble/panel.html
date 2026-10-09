@@ -61,7 +61,11 @@
 					<dd>{{ selectedDevice.pduType }}</dd>
 				</div>
 				<div>
-					<dt>Manufacturer</dt>
+					<dt>MAC vendor (OUI)</dt>
+					<dd>{{ vendorText(selectedDevice) }}</dd>
+				</div>
+				<div>
+					<dt>BLE manufacturer</dt>
 					<dd>{{ manufacturerText(selectedDevice.manufacturer) }}</dd>
 				</div>
 				<div>
@@ -87,7 +91,7 @@
 			</dl>
 		</div>
 		<UiInputGroup v-show="!selectedDevice" class="adsb-search"
-			><UiInput v-model="query" aria-label="Search BLE devices" placeholder="Name, address, manufacturer or service UUID"
+			><UiInput v-model="query" aria-label="Search BLE devices" placeholder="Name, address, vendor, manufacturer or service UUID"
 		/></UiInputGroup>
 		<UiEmptyState v-if="!selectedDevice && !devices.length" variant="pocsag"
 			>Waiting for BLE advertisements. Tune a channel and enable decoding, or scan all three channels. Use a 2.4 GHz antenna.</UiEmptyState
@@ -98,7 +102,7 @@
 				<thead>
 					<tr>
 						<th>Device / address</th>
-						<th>Manufacturer</th>
+						<th>MAC vendor / BLE manufacturer</th>
 						<th>Channels</th>
 						<th>Signal</th>
 						<th>Packets</th>
@@ -112,7 +116,7 @@
 								>{{ device.name || device.address }}</UiButton
 							><small>{{ device.address }} · {{ device.addressType }}</small>
 						</td>
-						<td>{{ manufacturerText(device.manufacturer) }}</td>
+						<td>{{ vendorText(device) }}<small>{{ manufacturerText(device.manufacturer) }}</small></td>
 						<td>{{ device.channels.join(', ') }}</td>
 						<td>{{ device.signalDbfs.toFixed(1) }} dBFS</td>
 						<td>{{ device.packets }}</td>
@@ -123,6 +127,7 @@
 		</div>
 	</div>
 	<div class="adsb-footer">
+		<div role="status">{{ databaseStatus }}</div>
 		Passive LE 1M advertisements and overheard scan responses · Entries expire after 5 min · Random addresses can rotate · dBFS is relative,
 		not distance · Extended/coded advertisements are not decoded.
 	</div>

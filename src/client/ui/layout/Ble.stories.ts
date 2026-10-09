@@ -43,7 +43,7 @@ const meta = {
 					panelOpen: true,
 					devices: [
 						packet,
-						{ ...packet, address: '00:11:22:33:44:55', name: undefined, addressType: 'public', manufacturer: 76, signalDbfs: -48.1 },
+						{ ...packet, address: '00:00:0C:33:44:55', name: undefined, addressType: 'public', manufacturer: 76, signalDbfs: -48.1 },
 					],
 				},
 				toggleBlePanel: () => {},
@@ -67,6 +67,11 @@ export const Preview: Story = {};
 export const DeviceList: Story = {
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
+		await expect(await canvas.findByText('MAC vendor database ready', {}, { timeout: 20000 })).toBeVisible();
+		await userEvent.type(canvas.getByLabelText('Search BLE devices'), 'Cisco');
+		await expect(canvas.getAllByRole('row')).toHaveLength(2);
+		await expect(canvas.getByText('Cisco Systems, Inc')).toBeVisible();
+		await userEvent.clear(canvas.getByLabelText('Search BLE devices'));
 		await userEvent.type(canvas.getByLabelText('Search BLE devices'), 'temperature');
 		await expect(canvas.getAllByRole('row')).toHaveLength(2);
 		await userEvent.click(canvas.getByRole('button', { name: 'Demo temperature sensor' }));
