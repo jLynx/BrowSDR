@@ -31,6 +31,7 @@ coverage
 dist/
 storybook-static/
 test-results/
+/public/aircraft-db/
 playwright-report/
 
 # Local instructions and investigation workspace
@@ -55,6 +56,7 @@ Thumbs.db
 # Misc caches
 .cache
 *.tsbuildinfo
+__pycache__/
 *.tgz
 .claude
 .emsdk

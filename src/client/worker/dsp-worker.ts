@@ -7,6 +7,7 @@ import { DSD_IF_RATE } from '@/worker/decoders/dsd/constants';
 import type { DSDStatus } from './decoders/dsd/types';
 import { RDSDecoder } from './decoders/rds';
 import { LatestStatus } from './runtime/latest-status';
+import { AdsbStream } from './decoders/adsb';
 import { Rtl433Stream } from './decoders/rtl433';
 import type { InitOutput } from '/wasm/dsp/browsdr_dsp.js';
 import type { DspInput } from './runtime/dsp-messages.types';
@@ -54,6 +55,7 @@ let inputCenterFreq = 100;
 let channelizer: SharedChannelizer | undefined;
 let channelKey = '';
 let rtl433: Rtl433Stream;
+let adsb: AdsbStream;
 
 const IF_RATES: Record<string, number> = {
 	nfm: 50000,
@@ -74,6 +76,7 @@ async function startup(): Promise<void> {
 			.then((w) => {
 				_wasm = w;
 				rtl433 = new Rtl433Stream(DspProcessor, _wasm.memory, (message) => self.postMessage(message));
+				adsb = new AdsbStream(DspProcessor, _wasm.memory, (message) => self.postMessage(message));
 				set_panic_hook();
 
 				// Allocate Wasm memory for this sub-module
@@ -148,6 +151,7 @@ function decodeRdsChunk(msg: Extract<DspInput, { type: 'process' }>) {
 
 function configureDDC(params: VfoParams, systemCenterFreq: number): void {
 	rtl433.configure(params, systemSampleRate, systemCenterFreq);
+	adsb.configure(params, systemSampleRate, systemCenterFreq);
 	const ifRate = IF_RATES[params.mode];
 	if (ifRate === undefined) {
 		console.error(`[DSP Worker] Unknown mode "${params.mode}" — no IF rate defined. Skipping DDC config.`);
@@ -464,6 +468,7 @@ function handleDspChannelize(msg: Extract<DspInput, { type: 'channelize' }>) {
 
 function handleDspInit(msg: Extract<DspInput, { type: 'init' }>) {
 	rtl433.reset();
+	adsb.reset();
 	inputIsFloat = false;
 	dsdStatus.reset();
 	dsdStream?.reset();
@@ -511,17 +516,16 @@ function handleDspProcess(msg: Extract<DspInput, { type: 'process' }>) {
 	configureInputRate(msg);
 	inputIsFloat = msg.floatIq === true;
 	rtl433.configure(msg.params, systemSampleRate, inputCenterFreq);
+	adsb.configure(msg.params, systemSampleRate, inputCenterFreq);
 	// Audio mute does not stop independent RDS or pager decoding.
-	if (
-		(!msg.params.enabled && !msg.params.pocsag && !(msg.params.rds && msg.params.mode === 'wfm') && !msg.params.rtl433) ||
-		!copyInputPayload(msg)
-	) {
+	if (!needsVfoInput(msg.params) || !copyInputPayload(msg)) {
 		self.postMessage({ type: 'processed', chunkId: msg.chunkId });
 		return;
 	}
 	try {
 		const processStart = performance.now();
 		rtl433.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat);
+		adsb.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat, msg.chunkId);
 		const audioOut = msg.params.enabled || msg.params.pocsag || msg.params.rds ? processVfoAudio(msg.chunkLen, msg.params) : null;
 		// Complete decoder work before acknowledging the input. Otherwise replies
 		// let the sender queue more input while RDS is still using this worker.
@@ -608,4 +612,8 @@ function copyInputPayload(msg: Extract<DspInput, { type: 'process' }>): boolean 
 
 function decodeDigitalAudio(iq: Float32Array, squelched: boolean, count: number) {
 	return dsdStream?.process(iq, squelched) ?? new Float32Array(count);
+}
+
+function needsVfoInput(params: VfoParams): boolean {
+	return params.enabled || params.pocsag || (params.rds && params.mode === 'wfm') || params.rtl433 === true || params.adsb === true;
 }

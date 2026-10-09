@@ -1,16 +1,20 @@
 import type { Env, IceServerEntry } from './types';
-import { isRecord } from './client/platform/data';
+import { isRecord } from '../client/platform/data';
+import { updateDatabase } from './aircraft-db/update';
 /**
  * BrowSDR - Cloudflare Worker
  *
- * Serves the static BrowSDR frontend from the public/ directory.
+ * Serves the static BrowSDR frontend from dist/ and refreshes aircraft metadata weekly.
  * All static assets (HTML, JS, CSS, WASM) are served via the ASSETS binding.
  *
- * - Run `npm run dev` to start a development server on http://localhost:8787/
+ * - Run `npm run dev:worker` to start the Worker on http://localhost:8788/
  * - Run `npm run deploy` to publish to Cloudflare
  */
 
 export default {
+	async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
+		await updateDatabase(env.AIRCRAFT_DB);
+	},
 	async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
 		const url = new URL(request.url);
 

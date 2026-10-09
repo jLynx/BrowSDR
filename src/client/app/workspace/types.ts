@@ -96,6 +96,7 @@ export interface Bookmark {
 	category?: string;
 	id?: string;
 	freq?: number;
+	adsb?: boolean;
 	rtl433?: boolean;
 	rtl433SampleRate?: number;
 	rtl433Protocols?: string;

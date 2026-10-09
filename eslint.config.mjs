@@ -23,6 +23,7 @@ export default defineConfig(
 		'**/target/**',
 		'wasm/rtl433/**',
 		'wasm/mbelib/**',
+		'types/worker.d.ts',
 	]),
 	{
 		files: ['**/*.{js,mjs,ts}'],

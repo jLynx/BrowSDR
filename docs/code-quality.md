@@ -37,7 +37,8 @@ TypeScript files are limited to 600 nonblank, noncomment lines, functions to 100
 
 ```text
 src/
-  index.ts                    Cloudflare HTTP handler
+  server/                     Cloudflare HTTP and scheduled handlers, worker types
+    aircraft-db/              streamed metadata build and R2 publication
   client/
     app/
       core/                   receiver state, types, computed values
@@ -45,6 +46,7 @@ src/
       display/                canvas and zoom orchestration
       audio/                  playback and media session
       decoders/               decoder UI behavior
+        adsb/                 aircraft panel and details, grouped database and map helpers
       workspace/              multiple receivers, bookmarks, sharing
       templates/              receiver HTML partials and assembly
     devices/
@@ -67,12 +69,18 @@ src/
       runtime/                backend, WASM lifecycle, shared types
       streams/                RX pipeline, channel plan, remote delivery
       decoders/               RDS, POCSAG, rtl_433, SSB, mbelib
+        adsb/                 Mode S messages, pulse demodulation and aircraft tracking
         dsd/                  digital voice protocols and error correction
     styles/                   CSS grouped by feature and responsive layout
 test/                         matching feature groups plus server/ and ui/
 ```
 
 `npm run check:structure` enforces at most 14 direct files in each source, test, and script folder. Generated and vendored directories are outside this policy. Prefer descriptive feature groups with a few cohesive files over a new folder for every file. Import concrete modules directly; `ui/index.ts` remains the public component registry.
+
+Decoder entry points sit directly in `app/decoders/` and `worker/decoders/`.
+Larger decoders keep their supporting modules in a matching feature directory.
+ADS-B's `database/` contains snapshot lookup and offline storage; `map/` contains
+Leaflet rendering, icons and tooltips. Panel HTML stays beside its Vue component.
 
 `app/templates/receiver.ts` concatenates the raw HTML partials before Vue compiles them. They share the receiver scope, including refs and slots. Preserve ordering and element boundaries; these are partials rather than standalone components. VFO controls are isolated in `app/radio/vfo-panel.ts`, using `app/templates/vfo-panel.html`, so decoder telemetry does not rerender the receiver or unrelated VFOs. `style.css` imports the feature styles in their original cascade order. Worker URL construction and the Vite post-build entry paths must be updated together whenever workers move.
 

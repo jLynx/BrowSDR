@@ -1,3 +1,4 @@
+import type { AdsbMessage } from '@/worker/decoders/adsb/types';
 import type { DSDStatus } from '@/worker/decoders/dsd/types';
 import type { Rtl433Message, POCSAGMessage, RDSMessage } from '@/worker/decoders/types';
 import type { PerfReport } from './types';
@@ -8,6 +9,7 @@ export type WhisperCallback = (index: number, freq: number, samples: Float32Arra
 export type DecoderCallback<T> = (index: number, freq: number, message: T) => void;
 export type PocsagCallback = DecoderCallback<POCSAGMessage>;
 export type RdsCallback = DecoderCallback<RDSMessage>;
+export type AdsbCallback = DecoderCallback<AdsbMessage>;
 export type Rtl433Callback = DecoderCallback<Rtl433Message>;
 export type DsdCallback = (index: number, status: DSDStatus) => void;
 export type HostCallback<T extends unknown[]> = (clientId: string, ...args: T) => void;

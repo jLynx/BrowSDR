@@ -42,7 +42,7 @@
 
 		<UiFormRow class="squelch-row">
 			<UiCheckbox v-model="vfo.squelchEnabled" label="Squelch"></UiCheckbox>
-			<UiSlider v-model="vfo.squelchLevel" min="-100" max="0" step="0.1" :disabled="!vfo.squelchEnabled" compact style="margin-left: 8px;">{{ vfo.squelchLevel.toFixed(3) }}dB</UiSlider>
+			<UiSlider v-model="vfo.squelchLevel" min="-100" max="0" step="0.1" :disabled="!vfo.squelchEnabled" compact style="margin-left: 8px;">{{ vfo.squelchLevel.toFixed(1) }}dB</UiSlider>
 			<UiButton variant="auto-squelch" @click="receiver.autoSquelch(i)" :disabled="!receiver.running || receiver.autoSquelchActive[i]" title="Sample noise floor and set squelch level automatically">Auto</UiButton>
 		</UiFormRow>
 
@@ -66,30 +66,6 @@
 			<UiCheckbox v-model="vfo.pocsag" label="Decode POCSAG" @change="receiver.updateBackendVfoParams(i)"></UiCheckbox>
 		</UiFormRow>
 
-		<!-- Independent sensor decoding -->
-		<UiFormRow class="full-checkbox-row">
-			<UiCheckbox v-model="vfo.rtl433" label="Decode rtl_433 sensors" @change="receiver.updateBackendVfoParams(i); if (vfo.rtl433) receiver.rtl433.panelOpen = true"></UiCheckbox>
-		</UiFormRow>
-		<div v-if="vfo.rtl433" class="rtl433-vfo-controls">
-			<UiFormRow>
-				<label :for="receiver.receiverId + '-rtl433-rate-' + i">Decoder rate</label>
-				<UiSelect :id="receiver.receiverId + '-rtl433-rate-' + i" v-model.number="vfo.rtl433SampleRate" @change="receiver.updateBackendVfoParams(i)">
-					<option :value="250000">250 kS/s</option>
-					<option :value="500000">500 kS/s</option>
-					<option :value="1000000">1 MS/s</option>
-				</UiSelect>
-			</UiFormRow>
-			<UiFormRow>
-				<label :for="receiver.receiverId + '-rtl433-protocols-' + i">Protocols</label>
-				<UiInputGroup>
-					<UiInput :id="receiver.receiverId + '-rtl433-protocols-' + i" type="text" v-model.trim="vfo.rtl433Protocols" placeholder="Defaults" title="Comma-separated protocol numbers; blank enables upstream defaults"></UiInput>
-				</UiInputGroup>
-			</UiFormRow>
-			<div>
-				<div class="rtl433-status" :class="{ 'rtl433-error': receiver.rtl433.status[i]?.state === 'error' }">{{ receiver.rtl433StatusText(i) }}</div>
-				<div class="rtl433-hint">Decodes sensors while audio is muted.</div>
-			</div>
-		</div>
 		<!-- DSD status display (SDR++ Brown style) -->
 		<div class="dsd-status-panel" v-if="vfo.mode === 'dsd'" style="padding:4px 8px;font-size:11px;font-family:monospace;line-height:1.6;background:rgba(0,0,0,0.3);border-radius:4px;margin:4px 0;">
 			<!-- Mode line -->

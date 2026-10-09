@@ -1,18 +1,35 @@
 /* ────── POCSAG Decoder Panel ────── */
-.rtl433-vfo-controls {
+.decoder-vfo-select {
+	width: 170px;
+	font-size: 11px;
+}
+.rtl433-tool-settings {
 	display: flex;
-	flex-direction: column;
+	flex-wrap: wrap;
+	align-items: center;
 	gap: 12px;
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--border);
+	flex-shrink: 0;
 }
-.rtl433-vfo-controls .input-group,
-.rtl433-vfo-controls select {
-	flex: 0 0 140px;
+.rtl433-tool-settings .form-row {
+	width: 260px;
+	gap: 8px;
 }
-.rtl433-vfo-controls input {
+.rtl433-tool-settings .form-row label {
+	flex: 0 0 85px;
+}
+.rtl433-tool-settings .input-group,
+.rtl433-tool-settings select {
+	flex: 1;
 	min-width: 0;
 }
-.rtl433-vfo-controls .input-group input {
+.rtl433-tool-settings input {
+	min-width: 0;
+}
+.rtl433-tool-settings .input-group input {
 	text-align: left;
+	width: 100%;
 }
 .rtl433-status,
 .rtl433-hint {
@@ -30,8 +47,21 @@
 	color: #ff8888 !important;
 }
 .rtl433-panel {
-	height: 250px !important;
+	height: 320px !important;
 	border-top-color: #4db6ac !important;
+}
+.rtl433-panel .pocsag-controls .custom-checkbox {
+	font-size: 11px;
+	white-space: nowrap;
+}
+@media (max-width: 700px) {
+	.rtl433-panel {
+		height: min(560px, 65vh) !important;
+		min-height: 350px;
+	}
+	.rtl433-tool-settings .form-row {
+		width: 100%;
+	}
 }
 .rtl433-panel .pocsag-header {
 	background: #102a2a;

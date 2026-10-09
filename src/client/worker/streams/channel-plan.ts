@@ -7,7 +7,7 @@ import { rtl433SampleRate } from '@/worker/decoders/rtl433';
 export function planSharedBands(sampleRate: number, centerFreq: number, params: VfoParams[], enabled: boolean): ChannelPlan {
 	const active = params
 		.map((value, index) => ({ value, index }))
-		.filter(({ value }) => value.enabled || value.pocsag || value.rtl433 || (value.rds && value.mode === 'wfm'));
+		.filter(({ value }) => value.enabled || value.pocsag || value.adsb || value.rtl433 || (value.rds && value.mode === 'wfm'));
 	const direct = active.map(({ index }) => index);
 	const fallback = { ratio: 1, sampleRate, bands: [], direct };
 	if (!enabled || active.length < 3 || sampleRate < 4000000) return fallback;
@@ -22,6 +22,7 @@ export function planSharedBands(sampleRate: number, centerFreq: number, params: 
 			value.bandwidth || 150000,
 			IF_RATES[value.mode] || sampleRate,
 			value.rtl433 ? rtl433SampleRate(value.rtl433SampleRate) : 0,
+			value.adsb ? 2000000 : 0,
 		);
 		const offset = (value.freq - centerFreq) * 1000000 + sidebandOffsetHz(value.mode, value.bandwidth);
 		const centerBin = Math.round(offset / (bandRate / 2)) * (8192 / (ratio * 2));

@@ -378,8 +378,9 @@ function createMouseHandlers(this: AppInstance) {
 				this.vfos[idx].freq = parseFloat(f.toFixed(3));
 				this.updateBackendVfoParams(idx);
 			}
-		} else if (e.button === 2) {
-			// Right click: pan
+		} else if (e.button === 1 || e.button === 2) {
+			// Middle/right click: pan without triggering browser autoscroll.
+			e.preventDefault();
 			isPanning = true;
 			lastPanX = e.clientX;
 		}

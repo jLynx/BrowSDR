@@ -5,6 +5,11 @@
 	"type": "module",
 	"scripts": {
 		"build": "vite build",
+		"build:aircraft-db": "python scripts/aircraft-db/build.py --output public/aircraft-db",
+		"publish:aircraft-db": "node scripts/aircraft-db/publish.mjs",
+		"dev:worker": "wrangler dev --port 8788 --test-scheduled",
+		"types:worker": "wrangler types types/worker.d.ts --env-interface BrowSdrWorkerEnv",
+		"test:aircraft-db": "python -m unittest discover -s test/aircraft-db -p test_*.py",
 		"build:dsp": "wasm-pack build wasm/dsp --target web --out-dir pkg",
 		"build:dsp:node": "wasm-pack build wasm/dsp --target nodejs --out-dir node",
 		"test:dsp:bindings": "npm run build:dsp:node && node wasm/dsp/test-js-binding.mjs",
@@ -22,7 +27,7 @@
 		"test:storybook": "vitest run --config vitest.storybook.config.ts",
 		"storybook": "storybook dev -p 6006 --disable-telemetry",
 		"build:storybook": "storybook build --disable-telemetry",
-		"typecheck": "tsc --noEmit",
+		"typecheck": "tsc --noEmit && tsc --noEmit --project src/server/tsconfig.json",
 		"lint": "eslint . --max-warnings 0",
 		"lint:fix": "eslint . --fix --max-warnings 0",
 		"format": "prettier . --write",
@@ -32,6 +37,7 @@
 	},
 	"dependencies": {
 		"comlink": "^4.4.2",
+		"leaflet": "^1.9.4",
 		"peerjs": "^1.5.5",
 		"vue": "^3.5.29"
 	},
@@ -42,6 +48,7 @@
 		"@storybook/addon-vitest": "^10.6.1",
 		"@storybook/vue3-vite": "^10.6.1",
 		"@types/jsdom": "^21.1.7",
+		"@types/leaflet": "^1.9.22",
 		"@types/node": "^22.20.5",
 		"@vitest/browser": "^3.2.7",
 		"@vue/test-utils": "^2.5.1",

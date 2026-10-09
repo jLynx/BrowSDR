@@ -79,7 +79,7 @@ export const Sliders: Story = {
 		components,
 		setup: () => ({ volume: ref(75), squelch: ref(-65) }),
 		template:
-			'<div style="width:320px;display:flex;flex-direction:column;gap:12px"><UiFormRow label="Volume"><UiSlider v-model="volume" :min="0" :max="100" input-label="Volume" :value-text="volume + \'%\'"/></UiFormRow><UiFormRow label="Squelch"><UiSlider v-model="squelch" :min="-100" :max="0" :step="0.1" compact input-label="Squelch" :value-text="squelch.toFixed(3) + \'dB\'"/></UiFormRow><UiSlider :model-value="50" disabled input-label="Disabled"/></div>',
+			'<div style="width:320px;display:flex;flex-direction:column;gap:12px"><UiFormRow label="Volume"><UiSlider v-model="volume" :min="0" :max="100" input-label="Volume" :value-text="volume + \'%\'"/></UiFormRow><UiFormRow label="Squelch"><UiSlider v-model="squelch" :min="-100" :max="0" :step="0.1" compact input-label="Squelch" :value-text="squelch.toFixed(1) + \'dB\'"/></UiFormRow><UiSlider :model-value="50" disabled input-label="Disabled"/></div>',
 	}),
 };
 export const Spinbox: Story = {

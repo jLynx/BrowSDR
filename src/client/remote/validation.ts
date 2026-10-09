@@ -1,3 +1,4 @@
+import { validAdsbMessage } from '@/worker/decoders/adsb/validation';
 import { isRecord, primitiveMap } from '@/platform/data';
 import type { ReceiverCommand } from './types';
 
@@ -43,6 +44,7 @@ const validators: Record<string, (value: Record<string, unknown>) => boolean> = 
 		),
 	vfoUpdate: (value: Record<string, unknown>) => validIndex(value.index) && validVfoParams(value.params),
 	dspStats: (value) => validDspStats(value.stats),
+	adsb: (value: Record<string, unknown>) => validIndex(value.vfoIndex) && numbers(value, ['freq']) && validAdsbMessage(value.msg),
 	rtl433: (value: Record<string, unknown>) => numbers(value, ['vfoIndex', 'freq']) && validSensorMessage(value.msg),
 	pocsag: (value: Record<string, unknown>) =>
 		numbers(value, ['vfoIndex', 'freq']) &&
@@ -84,7 +86,7 @@ function validVfoParams(value: unknown): boolean {
 		isRecord(value) &&
 		typedFields(value, ['mode', 'deEmphasis', 'rdsRegion'], 'string') &&
 		typedFields(value, ['enabled', 'squelchEnabled', 'lowPass', 'highPass', 'pocsag', 'rds'], 'boolean') &&
-		optionalFields(value, ['rtl433', 'audioMuted'], 'boolean') &&
+		optionalFields(value, ['rtl433', 'audioMuted', 'adsb'], 'boolean') &&
 		optionalFields(value, ['rtl433SampleRate'], 'number') &&
 		optionalFields(value, ['rtl433Protocols'], 'string')
 	);

@@ -272,6 +272,8 @@ export const connectionMethods = {
 	},
 	async startStream(this: AppInstance, isRestart = false) {
 		if (this.running) return;
+		this.adsb.sources = [];
+		this.adsb.status = [];
 		const usbOnly = isUsbOnlyDiagnostic(this);
 		this._initAudioCtx();
 		this._resetAudioPlayback(true);
@@ -312,6 +314,9 @@ export const connectionMethods = {
 				Comlink.proxy((vfoIndex: number, status: Parameters<AppInstance['_onDsdStatus']>[1]) => this._onDsdStatus(vfoIndex, status)),
 				Comlink.proxy((vfoIndex: number, freq: number, msg: Parameters<AppInstance['_onRtl433Message']>[2]) =>
 					this._onRtl433Message(vfoIndex, freq, msg),
+				),
+				Comlink.proxy((index: number, freq: number, msg: Parameters<AppInstance['_onAdsbMessage']>[2]) =>
+					this._onAdsbMessage(index, freq, msg),
 				),
 			);
 		} catch (e) {

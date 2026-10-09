@@ -1,3 +1,4 @@
+import type { AdsbMessage } from '@/worker/decoders/adsb/types';
 import type { WhisperChunkMeta, WhisperVfoState } from '@/app/decoders/whisper.types';
 import type { WatchOptions, WatchStopHandle } from 'vue';
 import type { Remote } from 'comlink';
@@ -183,6 +184,10 @@ export interface ReceiverMethods {
 	autoGainControls(): string;
 	cancelAutoGain(): void;
 	autoSetGains(): Promise<void>;
+	toggleAdsbPanel(): void;
+	tuneAdsbVfo(index?: number): void;
+	_onAdsbMessage(index: number, freq: number, msg: AdsbMessage): void;
+	adsbStatusText(index: number): string;
 	toggleRtl433Panel(): void;
 	_onRtl433Message(index: number, freq: number, msg: Rtl433Message): void;
 	rtl433StatusText(index: number): string;
