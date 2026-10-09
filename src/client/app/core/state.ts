@@ -1,3 +1,4 @@
+import type { BleDevice, BleStatus } from '@/worker/decoders/ble/types';
 import type { AisStatus, Vessel } from '@/worker/decoders/ais/types';
 import type { AdsbStatus, Aircraft } from '@/worker/decoders/adsb/types';
 import type { RdsLogEntry, Rtl433LogEntry, PocsagLogEntry, RdsStations } from '@/app/decoders/types';
@@ -138,6 +139,15 @@ function createDecoderAndBookmarkState() {
 			log: [] as PocsagLogEntry[],
 		},
 		dsdStatus: [] as Array<DSDStatus | null>,
+		ble: {
+			panelOpen: false,
+			tuning: false,
+			scanning: false,
+			scanVfo: null as Vfo | null,
+			status: [] as Array<BleStatus | null>,
+			devices: [] as BleDevice[],
+			message: '',
+		},
 		ais: { panelOpen: false, status: [] as Array<AisStatus | null>, sources: [] as Vessel[][] },
 		adsb: { panelOpen: false, status: [] as Array<AdsbStatus | null>, sources: [] as Aircraft[][] },
 		rtl433: {

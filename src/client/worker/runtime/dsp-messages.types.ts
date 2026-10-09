@@ -1,3 +1,4 @@
+import type { BleMessage } from '@/worker/decoders/ble/types';
 import type { AisMessage } from '@/worker/decoders/ais/types';
 import type { AdsbMessage } from '@/worker/decoders/adsb/types';
 import type { VfoParams } from './types';
@@ -9,6 +10,7 @@ export type DspOutput =
 	| Rtl433Message
 	| AdsbMessage
 	| AisMessage
+	| BleMessage
 	| { type: 'rds'; msg: RDSMessage }
 	| { type: 'dsd_status'; status: DSDStatus }
 	| { type: 'dsp_debug_log'; level: 'log' | 'warn' | 'error'; message: string }

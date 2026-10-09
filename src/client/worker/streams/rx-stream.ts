@@ -12,6 +12,7 @@ import type {
 	Rtl433Callback,
 	AdsbCallback,
 	AisCallback,
+	BleCallback,
 	DsdCallback,
 } from '@/worker/runtime/callbacks.types';
 
@@ -57,6 +58,7 @@ export async function startRxStream(
 	rtl433Callback: Rtl433Callback | null = null,
 	adsbCallback: AdsbCallback | null = null,
 	aisCallback: AisCallback | null = null,
+	bleCallback: BleCallback | null = null,
 ): Promise<void> {
 	if (_streamStarting) return;
 	_streamStarting = true;
@@ -108,7 +110,7 @@ export async function startRxStream(
 		// ── Audio DDC setup ───────────────────────────────────────────
 		// Full SDR++ pipeline in Rust: NCO → polyphase resampler (→50kHz)
 		// → channel FIR → squelch → FM demod → post-demod FIR → audio resampler (→48kHz)
-		initializeVfoWorkers(backend, centerFreq, rtl433Callback, rdsCallback, dsdStatusCallback, sampleRate, adsbCallback, aisCallback);
+		initializeWorkers(backend, opts, { rtl433Callback, rdsCallback, dsdStatusCallback, adsbCallback, aisCallback, bleCallback });
 
 		// ── DSP Performance Counters ──────────────────────────────────
 		const perf = initializePerformanceReporting(backend, channel.perf, sampleRate);
@@ -128,6 +130,10 @@ export async function startRxStream(
 		// Matches librtlsdr / SDR++ which configure everything before streaming.
 		await device.startRx((data: ArrayBufferView) => {
 			if (backend._streamGeneration !== generation) return;
+			if (skipRetuningInput(backend)) {
+				chunkCounter++;
+				return;
+			}
 			perf.usbCallbacks++;
 
 			const signed = new Int8Array(data.buffer, data.byteOffset, data.byteLength);
@@ -243,4 +249,33 @@ function processSpectrumChunk(
 		}
 	}
 	return { iqBufferPos, lastSpectrumTime, useFlip, specFlip, specFlop };
+}
+
+function skipRetuningInput(backend: Backend): boolean {
+	return backend._retuning || performance.now() < backend._settleUntil;
+}
+
+function initializeWorkers(
+	backend: Backend,
+	opts: RxStreamOpts,
+	callbacks: {
+		rtl433Callback: Rtl433Callback | null;
+		rdsCallback: RdsCallback | null;
+		dsdStatusCallback: DsdCallback | null;
+		adsbCallback: AdsbCallback | null;
+		aisCallback: AisCallback | null;
+		bleCallback: BleCallback | null;
+	},
+): void {
+	initializeVfoWorkers(
+		backend,
+		opts.centerFreq,
+		callbacks.rtl433Callback,
+		callbacks.rdsCallback,
+		callbacks.dsdStatusCallback,
+		opts.sampleRate,
+		callbacks.adsbCallback,
+		callbacks.aisCallback,
+		callbacks.bleCallback,
+	);
 }

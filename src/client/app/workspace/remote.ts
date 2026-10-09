@@ -254,6 +254,7 @@ export const remoteMethods = {
 			cmd = cmdOrUndefined;
 		}
 
+		if (handlePacketTelemetry.call(this, cmd)) return;
 		switch (cmd.type) {
 			case 'sync':
 				handleSync.call(this, cmd, clientId);
@@ -278,9 +279,6 @@ export const remoteMethods = {
 				break;
 			case 'removeRemoteVfo':
 				handleRemoveRemoteVfo.call(this, cmd, clientId);
-				break;
-			case 'ais':
-				handleAis.call(this, cmd);
 				break;
 			case 'adsb':
 				if (this.remoteMode === 'client') this._onAdsbMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
@@ -385,6 +383,11 @@ async function installHostStreamCallbacks(this: AppInstance) {
 	await this.backend.setRemoteHostRtl433Callback(
 		Comlink.proxy((clientId: string, vfoIndex: number, freq: number, msg: Parameters<AppInstance['_onRtl433Message']>[2]) => {
 			this._webrtc?.sendCommandTo(clientId, { type: 'rtl433', vfoIndex, freq, msg });
+		}),
+	);
+	await this.backend.setRemoteHostBleCallback(
+		Comlink.proxy((clientId: string, index: number, freq: number, msg: Parameters<AppInstance['_onBleMessage']>[2]) => {
+			this._webrtc?.sendCommandTo(clientId, { type: 'ble', vfoIndex: index, freq, msg });
 		}),
 	);
 	await this.backend.setRemoteHostAisCallback(
@@ -577,4 +580,14 @@ function validRemoteGain(app: AppInstance, property: string, value: number): boo
 
 function handleAis(this: AppInstance, cmd: Extract<ReceiverCommand, { type: 'ais' }>): void {
 	if (this.remoteMode === 'client') this._onAisMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
+}
+
+function handlePacketTelemetry(this: AppInstance, cmd: ReceiverCommand): boolean {
+	if (cmd.type === 'ais') {
+		handleAis.call(this, cmd);
+		return true;
+	}
+	if (cmd.type !== 'ble') return false;
+	if (this.remoteMode === 'client') this._onBleMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
+	return true;
 }

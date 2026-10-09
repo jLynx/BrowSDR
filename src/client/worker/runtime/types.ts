@@ -27,6 +27,7 @@ export interface VfoParams {
 	stereo?: boolean;
 	adsb?: boolean;
 	ais?: boolean;
+	ble?: boolean;
 	rtl433?: boolean;
 	rtl433SampleRate?: number;
 	rtl433Protocols?: string;

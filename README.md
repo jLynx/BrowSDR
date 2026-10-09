@@ -29,6 +29,9 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
   ground speed, and live positions on an interactive map.
 - **🚢 AIS Vessels and Live Map**
   Decode Class A/B vessel transmissions on AIS A and AIS B, with vessel details, live positions, and ITU MID country lookup.
+- **🔵 BLE Devices**
+  Passively discover nearby BLE advertisements with channel scanning, advertised
+  names, service UUIDs and a live device list.
 - **📊 Frequency Activity**
   Visually spot active signals and quickly jump to transmissions using the dynamic frequency activity scanner and interactive waterfall display.
 - **🔖 Advanced Bookmarking System**
@@ -52,8 +55,8 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
 
 ## 🗓️ Planned Features
 
-See the [feature roadmap](docs/roadmap.md) for requested radiosonde, ACARS, APRS,
-and BLE support, alongside completed AIS and ADS-B features.
+See the [feature roadmap](docs/roadmap.md) for requested radiosonde, ACARS and APRS
+support, alongside completed AIS, ADS-B and initial BLE features.
 
 ---
 

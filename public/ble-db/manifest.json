@@ -1,0 +1,10 @@
+{
+	"schema": 1,
+	"revision": "2068b5f15b782d90daa00505",
+	"bytes": 2664133,
+	"count": 37523,
+	"sha256": "2068b5f15b782d90daa00505d0af4a7939591219d8dd6050aabe9dbe60da3750",
+	"source": "https://raw.githubusercontent.com/portapack-mayhem/mayhem-firmware/6ea6de6582e0c1cb43aa3d73194505d75bf11f85/sdcard/MACADDRESS/macaddress.db",
+	"upstreamCommit": "6ea6de6582e0c1cb43aa3d73194505d75bf11f85",
+	"allocationSource": "https://standards-oui.ieee.org/oui/oui.txt"
+}

@@ -1,4 +1,4 @@
-import type { RdsCallback, Rtl433Callback, DsdCallback, AdsbCallback, AisCallback } from '@/worker/runtime/callbacks.types';
+import type { RdsCallback, Rtl433Callback, DsdCallback, AdsbCallback, AisCallback, BleCallback } from '@/worker/runtime/callbacks.types';
 import type { DspOutput } from '@/worker/runtime/dsp-messages.types';
 import type { VfoParams, VfoState } from '@/worker/runtime/types';
 import type { Backend } from '@/worker/runtime/backend';
@@ -13,6 +13,7 @@ export function initializeVfoWorkers(
 	sampleRate: number,
 	adsbCallback: AdsbCallback | null = null,
 	aisCallback: AisCallback | null = null,
+	bleCallback: BleCallback | null = null,
 ) {
 	const initialBandwidth = 150000;
 
@@ -76,7 +77,17 @@ export function initializeVfoWorkers(
 	const spawnWorker = (index: number, params: VfoParams): Worker => {
 		const worker = new globalThis.Worker(new URL('../dsp-worker.ts', import.meta.url), { type: 'module' });
 		worker.onmessage = (e: MessageEvent<DspOutput>) =>
-			routeLocalWorkerMessage(backend, worker, e.data, rtl433Callback, rdsCallback, dsdStatusCallback, adsbCallback, aisCallback);
+			routeLocalWorkerMessage(
+				backend,
+				worker,
+				e.data,
+				rtl433Callback,
+				rdsCallback,
+				dsdStatusCallback,
+				adsbCallback,
+				aisCallback,
+				bleCallback,
+			);
 		worker.postMessage({
 			type: 'init',
 			sampleRate: sampleRate,
@@ -104,15 +115,10 @@ export function routeLocalWorkerMessage(
 	dsdStatusCallback: DsdCallback | null,
 	adsbCallback: AdsbCallback | null = null,
 	aisCallback: AisCallback | null = null,
+	bleCallback: BleCallback | null = null,
 ) {
-	if (msg.type === 'ais') {
-		routeAisMessage(backend, worker, msg, aisCallback);
-		return;
-	}
-	if (msg.type === 'adsb') {
-		routeAdsbMessage(backend, worker, msg, adsbCallback);
-		return;
-	}
+	if (routePacketMessage(backend, worker, msg, bleCallback, aisCallback, adsbCallback)) return;
+
 	if (msg.type === 'rtl433_event' || msg.type === 'rtl433_status') {
 		routeSensorMessage(backend, worker, msg, rtl433Callback);
 		return;
@@ -173,4 +179,27 @@ function routeAisMessage(backend: Backend, worker: Worker, msg: Extract<DspOutpu
 	const index = backend.dspWorkers!.indexOf(worker);
 	const params = backend.vfoParams?.[index];
 	if (params?.ais && params.freq === msg.freq) callback?.(index, params.freq, msg);
+}
+
+function routePacketMessage(
+	backend: Backend,
+	worker: Worker,
+	msg: DspOutput,
+	callback: BleCallback | null,
+	aisCallback: AisCallback | null,
+	adsbCallback: AdsbCallback | null,
+): boolean {
+	if (msg.type === 'ais') {
+		routeAisMessage(backend, worker, msg, aisCallback);
+		return true;
+	}
+	if (msg.type === 'adsb') {
+		routeAdsbMessage(backend, worker, msg, adsbCallback);
+		return true;
+	}
+	if (msg.type !== 'ble') return false;
+	const index = backend.dspWorkers!.indexOf(worker);
+	const params = backend.vfoParams?.[index];
+	if (params?.ble && params.freq === msg.freq) callback?.(index, params.freq, msg);
+	return true;
 }

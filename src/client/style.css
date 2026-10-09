@@ -12,3 +12,4 @@
 @import './styles/responsive.css';
 @import './styles/device-picker.css';
 @import './styles/about.css';
+@import './styles/decoders/ble.css';

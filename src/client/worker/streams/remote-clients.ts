@@ -6,6 +6,7 @@ import type {
 	Rtl433Callback,
 	AdsbCallback,
 	AisCallback,
+	BleCallback,
 	HostCallback,
 	HostStats,
 } from '@/worker/runtime/callbacks.types';
@@ -71,6 +72,10 @@ export function setRemoteHostRdsCallback(this: Backend, callback: HostCallback<P
 
 export function setRemoteHostRtl433Callback(this: Backend, callback: HostCallback<Parameters<Rtl433Callback>>): void {
 	this._remoteHostRtl433Cb = callback;
+}
+
+export function setRemoteHostBleCallback(this: Backend, callback: HostCallback<Parameters<BleCallback>>): void {
+	this._remoteHostBleCb = callback;
 }
 
 export function setRemoteHostAisCallback(this: Backend, callback: HostCallback<Parameters<AisCallback>>): void {
@@ -148,6 +153,10 @@ function bindRemoteWorker(backend: Backend, clientId: string, state: RemoteClien
 		const index = state.workers.indexOf(worker);
 		if (index === -1) return;
 		const msg = e.data;
+		if (msg.type === 'ble') {
+			forwardBle(backend, clientId, state, index, msg);
+			return;
+		}
 		if (msg.type === 'ais') {
 			forwardAis(backend, clientId, state, index, msg);
 			return;
@@ -439,4 +448,15 @@ function forwardAis(
 ): void {
 	const params = state.params[index];
 	if (params?.ais && params.freq === message.freq) backend._remoteHostAisCb?.(clientId, index, params.freq, message);
+}
+
+function forwardBle(
+	backend: Backend,
+	clientId: string,
+	state: RemoteClientState,
+	index: number,
+	message: Extract<DspOutput, { type: 'ble' }>,
+): void {
+	const params = state.params[index];
+	if (params?.ble && params.freq === message.freq) backend._remoteHostBleCb?.(clientId, index, params.freq, message);
 }
