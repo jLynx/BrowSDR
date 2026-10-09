@@ -35,6 +35,10 @@ Vite. `--aircraft` and `--airlines` accept local input files for reproducible bu
 The normal application uses the public R2 endpoint:
 `https://aircraft-db.browsdr.jlynx.net/aircraft-db/`.
 `VITE_AIRCRAFT_DB_URL` can override that endpoint; it contains no credentials.
+This optional client build setting is passed to the Vite process, for example
+`$env:VITE_AIRCRAFT_DB_URL='/aircraft-db/'` in PowerShell before `npm run dev`.
+Wrangler's `.dev.vars` supplies Worker secrets and is not read by the Vite client.
+Normal setup needs no database URL override.
 
 The R2 bucket is `browsdr-aircraft-db`, in account
 `ccd550c603c63502ea824904dd2e5d06`. A custom domain serves the data with read-only
