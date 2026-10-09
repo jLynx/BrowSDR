@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/vue3-vite';
+import { expect, userEvent, within } from 'storybook/test';
 import { UiToolHeader, UiButton, UiBadge, UiEmptyState } from '..';
 
 const meta = {
@@ -18,6 +19,21 @@ type Story = StoryObj<typeof meta>;
 export const Pager: Story = {};
 export const Transcript: Story = { args: { variant: 'transcript' } };
 export const Activity: Story = { args: { variant: 'activity' } };
+export const Closable: Story = {
+	args: { closable: true, closeLabel: 'Close decoder' },
+	render: (args) => ({
+		components: { UiToolHeader, UiButton },
+		setup: () => ({ args }),
+		data: () => ({ open: true }),
+		template:
+			'<div style="max-width:360px"><UiToolHeader v-if="open" v-bind="args" @close="open = false">Decoder<template #actions><UiButton variant="transcript">Clear</UiButton><UiButton variant="transcript">Export messages</UiButton><UiButton variant="transcript">Settings</UiButton></template></UiToolHeader></div>',
+	}),
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await userEvent.click(canvas.getByRole('button', { name: 'Close decoder' }));
+		await expect(canvas.queryByRole('button', { name: 'Close decoder' })).not.toBeInTheDocument();
+	},
+};
 export const Sensors: Story = {
 	render: () => ({
 		components: { UiToolHeader, UiButton },

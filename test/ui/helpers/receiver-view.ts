@@ -7,6 +7,8 @@ import { computedProperties } from '@/app/core/computed';
 import { uiHelperMethods } from '@/app/core/ui-helpers';
 import { autoGainMethods } from '@/app/radio/auto-gain';
 import { rdsMethods } from '@/app/decoders/rds';
+import AdsbPanel from '@/app/decoders/adsb/panel';
+import { adsbMethods } from '@/app/decoders/adsb';
 import { rtl433Methods } from '@/app/decoders/rtl433';
 import { bookmarkMethods } from '@/app/workspace/bookmarks';
 import { zoomMethods } from '@/app/display/zoom';
@@ -19,7 +21,7 @@ import { remoteMethods } from '@/app/workspace/remote';
 
 export const ReceiverView = defineComponent({
 	template,
-	components: { ...components, VfoPanel },
+	components: { ...components, VfoPanel, AdsbPanel },
 	provide() {
 		return { receiver: this };
 	},
@@ -30,6 +32,7 @@ export const ReceiverView = defineComponent({
 		...autoGainMethods,
 		...rdsMethods,
 		...rtl433Methods,
+		...adsbMethods,
 		...bookmarkMethods,
 		...zoomMethods,
 		...audioMethods,

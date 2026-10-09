@@ -1,3 +1,4 @@
+import type { AdsbStatus, Aircraft } from '@/worker/decoders/adsb/types';
 import type { RdsLogEntry, Rtl433LogEntry, PocsagLogEntry, RdsStations } from '@/app/decoders/types';
 import type { WhisperLogEntry } from '@/app/decoders/whisper.types';
 import type { VfoConflictSubsetOption, VfoConflictOption, VfoActivityStats } from '@/app/core/types';
@@ -136,6 +137,7 @@ function createDecoderAndBookmarkState() {
 			log: [] as PocsagLogEntry[],
 		},
 		dsdStatus: [] as Array<DSDStatus | null>,
+		adsb: { panelOpen: false, status: [] as Array<AdsbStatus | null>, sources: [] as Aircraft[][] },
 		rtl433: {
 			panelOpen: false,
 			status: [] as Array<Rtl433Status | null>,

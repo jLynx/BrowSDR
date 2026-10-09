@@ -2,6 +2,7 @@ import type { DataConnection } from 'peerjs';
 import type { DeviceCapabilities } from '@/radio/types';
 import type { RadioState } from '@/app/core/types';
 import type { VfoParams, PerfReport } from '@/worker/runtime/types';
+import type { AdsbMessage } from '@/worker/decoders/adsb/types';
 import type { POCSAGMessage, RDSMessage, Rtl433Message } from '@/worker/decoders/types';
 
 export interface ReceiverInventory {
@@ -41,6 +42,7 @@ export type RemoteCommand =
 	| { type: 'resetRemoteVfos' }
 	| { type: 'addRemoteVfo' }
 	| { type: 'removeRemoteVfo'; index: number }
+	| { type: 'adsb'; vfoIndex: number; freq: number; msg: AdsbMessage }
 	| { type: 'rtl433'; vfoIndex: number; freq: number; msg: Rtl433Message }
 	| { type: 'pocsag'; vfoIndex: number; freq: number; msg: POCSAGMessage }
 	| { type: 'rds'; vfoIndex: number; freq: number; msg: RDSMessage }

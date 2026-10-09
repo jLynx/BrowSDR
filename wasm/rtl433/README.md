@@ -50,8 +50,11 @@ and become available to users when the new app build is deployed.
 
 ## Reception
 
-Enable **Decode rtl_433 sensors** on a VFO and tune it to the transmitter's
-frequency (433.92 MHz is a common starting point). Decoder rate controls its
+Open **Tools → rtl_433 Sensor Decoder**, choose a VFO in the dropdown, and enable
+**Decode VFO …**. Tune that VFO to the transmitter's frequency (433.92 MHz is a
+common starting point). Decoder rate and protocol selection are in the tool panel;
+each VFO retains its own choices, and closing the panel keeps decoding running.
+Decoder rate controls its
 received IQ bandwidth independently of the audio bandwidth. Use 1 MS/s for
 protocols requiring wider bandwidth; keep the whole decoder channel inside the
 radio's sampled band. Blank protocol selection enables upstream defaults;

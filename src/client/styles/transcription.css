@@ -93,6 +93,20 @@
 	flex: none;
 }
 
+/* Desktop dismissal shares the action row's vertical alignment. */
+.tool-header-actions {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	margin-left: auto;
+}
+
+.transcript-header.tool-header-closable,
+.pocsag-header.tool-header-closable,
+.activity-header.tool-header-closable {
+	position: relative;
+}
+
 .btn-stop {
 	background: #c62828;
 	border-color: #c62828;

@@ -1,6 +1,6 @@
 	<!-- RDS Panel -->
 	<div class="pocsag-panel" v-if="rds.panelOpen">
-		<UiToolHeader variant="pocsag">
+		<UiToolHeader variant="pocsag" closable close-label="Close RDS panel" @close="toggleRdsPanel">
 				<svg viewBox="0 0 24 24" width="16" height="16" style="vertical-align:middle;margin-right:4px"><path fill="currentColor" d="M20 6H4c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 10H4V8h16v8zM6 10h2v4H6zm3 0h5v4H9z"/></svg>
 			FM RDS Decoder
 			<span class="pocsag-count" v-if="rdsStationList().length">{{ rdsStationList().length }} station{{ rdsStationList().length> 1 ? 's' : '' }}</span>

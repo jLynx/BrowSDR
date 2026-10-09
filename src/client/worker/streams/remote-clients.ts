@@ -4,6 +4,7 @@ import type {
 	PocsagCallback,
 	RdsCallback,
 	Rtl433Callback,
+	AdsbCallback,
 	HostCallback,
 	HostStats,
 } from '@/worker/runtime/callbacks.types';
@@ -69,6 +70,10 @@ export function setRemoteHostRdsCallback(this: Backend, callback: HostCallback<P
 
 export function setRemoteHostRtl433Callback(this: Backend, callback: HostCallback<Parameters<Rtl433Callback>>): void {
 	this._remoteHostRtl433Cb = callback;
+}
+
+export function setRemoteHostAdsbCallback(this: Backend, callback: HostCallback<Parameters<AdsbCallback>>): void {
+	this._remoteHostAdsbCb = callback;
 }
 
 export function setRemoteHostSquelchCallback(this: Backend, callback: HostCallback<[boolean[]]>): void {
@@ -138,6 +143,10 @@ function bindRemoteWorker(backend: Backend, clientId: string, state: RemoteClien
 		const index = state.workers.indexOf(worker);
 		if (index === -1) return;
 		const msg = e.data;
+		if (msg.type === 'adsb') {
+			forwardAdsb(backend, clientId, state, index, msg);
+			return;
+		}
 		if (msg.type === 'rtl433_event' || msg.type === 'rtl433_status') {
 			const params = state.params[index];
 			if (params && params.freq === msg.freq && (msg.type === 'rtl433_status' || params.rtl433)) {
@@ -399,4 +408,15 @@ export function feedRemoteAudioChunk(this: Backend, chunk: ArrayBuffer | Float32
 	}
 
 	return Promise.resolve();
+}
+
+function forwardAdsb(
+	backend: Backend,
+	clientId: string,
+	state: RemoteClientState,
+	index: number,
+	message: Extract<DspOutput, { type: 'adsb' }>,
+): void {
+	const params = state.params[index];
+	if (params?.adsb && params.freq === message.freq) backend._remoteHostAdsbCb?.(clientId, index, params.freq, message);
 }

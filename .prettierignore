@@ -15,3 +15,4 @@ radio-proxy/
 # Raw fragments intentionally share opening/closing tags across files.
 src/client/app/templates/*.html
 AGENTS.md
+types/worker.d.ts

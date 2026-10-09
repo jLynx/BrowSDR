@@ -22,6 +22,8 @@ import { rdsMethods } from './decoders/rds';
 import { zoomMethods } from './display/zoom';
 import { remoteMethods } from './workspace/remote';
 import { autoGainMethods } from './radio/auto-gain';
+import AdsbPanel from './decoders/adsb/panel';
+import { adsbMethods } from './decoders/adsb';
 import { rtl433Methods } from './decoders/rtl433';
 import { mountHeaderTools } from './workspace/header-tools';
 import * as uiComponents from '@/ui';
@@ -36,7 +38,7 @@ if ('serviceWorker' in navigator) {
 
 const Receiver = {
 	template: receiverTemplate,
-	components: { ...uiComponents, VfoPanel },
+	components: { ...uiComponents, VfoPanel, AdsbPanel },
 	provide(this: AppInstance) {
 		return { receiver: this };
 	},
@@ -61,6 +63,7 @@ const Receiver = {
 		...remoteMethods,
 		...autoGainMethods,
 		...rtl433Methods,
+		...adsbMethods,
 	},
 	created: async function (this: AppInstance) {
 		this._cleanup = [];

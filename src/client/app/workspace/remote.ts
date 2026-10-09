@@ -279,6 +279,9 @@ export const remoteMethods = {
 			case 'removeRemoteVfo':
 				handleRemoveRemoteVfo.call(this, cmd, clientId);
 				break;
+			case 'adsb':
+				if (this.remoteMode === 'client') this._onAdsbMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
+				break;
 			case 'rtl433':
 				handleRtl433.call(this, cmd, clientId);
 				break;
@@ -379,6 +382,11 @@ async function installHostStreamCallbacks(this: AppInstance) {
 	await this.backend.setRemoteHostRtl433Callback(
 		Comlink.proxy((clientId: string, vfoIndex: number, freq: number, msg: Parameters<AppInstance['_onRtl433Message']>[2]) => {
 			this._webrtc?.sendCommandTo(clientId, { type: 'rtl433', vfoIndex, freq, msg });
+		}),
+	);
+	await this.backend.setRemoteHostAdsbCallback(
+		Comlink.proxy((clientId: string, index: number, freq: number, msg: Parameters<AppInstance['_onAdsbMessage']>[2]) => {
+			this._webrtc?.sendCommandTo(clientId, { type: 'adsb', vfoIndex: index, freq, msg });
 		}),
 	);
 	// Forward squelch state changes so remote clients can track frequency activity

@@ -24,6 +24,9 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
   Live browser-side OOK/FSK decoding for supported weather sensors, remotes, TPMS,
   and other ISM devices. See
   [the decoder build and reception guide](wasm/rtl433/README.md).
+- **✈️ ADS-B Aircraft and Live Map**
+  Decode 1090 MHz aircraft transmissions locally, with callsigns, altitude,
+  ground speed, and live positions on an interactive map.
 - **📊 Frequency Activity**
   Visually spot active signals and quickly jump to transmissions using the dynamic frequency activity scanner and interactive waterfall display.
 - **🔖 Advanced Bookmarking System**
@@ -42,6 +45,13 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
 - **📡 Multiple SDRs at Once**
   Connect any number of compatible SDRs, including mixed device families. Each receiver has independent tuning, sample rate, gains, waterfall, and VFOs. Switch receiver tabs while audio from all enabled VFOs continues playing.
   Device settings stay in separate saved slots when USB serial numbers collide. WebUSB cannot distinguish identical devices across reloads if their enumeration order changes; assign unique serial numbers when possible for reliable physical-device matching.
+
+---
+
+## 🗓️ Planned Features
+
+See the [feature roadmap](docs/roadmap.md) for requested radiosonde, ACARS, APRS,
+AIS, ADS-B, and BLE support.
 
 ---
 
