@@ -13,14 +13,16 @@ export function localUsbIssue(): CapabilityIssue | null {
 		return {
 			title: 'USB connections need a secure connection',
 			message:
-				'Open BrowSDR over HTTPS (or localhost for local development) to connect a USB SDR. You can still use a remote receiver or Mock SDR.',
+				'Open BrowSDR over HTTPS (or localhost for local development) to connect a USB SDR. ' +
+				(import.meta.env.DEV ? 'You can still use a remote receiver or Mock SDR.' : 'You can still use a remote receiver.'),
 			href: 'https://caniuse.com/webusb',
 			linkLabel: 'Learn about WebUSB browser support',
 		};
 	if (!navigator.usb || typeof navigator.usb.getDevices !== 'function' || typeof navigator.usb.requestDevice !== 'function') {
 		return missingFeature(
 			'WebUSB',
-			'This browser cannot connect to USB SDR devices. Use a browser with WebUSB enabled, such as Chrome or Edge. You can still use a remote receiver or Mock SDR.',
+			'This browser cannot connect to USB SDR devices. Use a browser with WebUSB enabled, such as Chrome or Edge. ' +
+				(import.meta.env.DEV ? 'You can still use a remote receiver or Mock SDR.' : 'You can still use a remote receiver.'),
 			'webusb',
 		);
 	}
@@ -32,7 +34,8 @@ export function remoteConnectionIssue(): CapabilityIssue | null {
 		? null
 		: missingFeature(
 				'WebRTC',
-				'This browser cannot connect to or share a remote receiver. Use a browser with WebRTC enabled. Local USB receivers and Mock SDR remain available.',
+				'This browser cannot connect to or share a remote receiver. Use a browser with WebRTC enabled. ' +
+					(import.meta.env.DEV ? 'Local USB receivers and Mock SDR remain available.' : 'Local USB receivers remain available.'),
 				'rtcpeerconnection',
 			);
 }
