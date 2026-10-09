@@ -119,12 +119,13 @@ export const connectionMethods = {
 	},
 
 	async connectMock(this: AppInstance) {
+		if (!import.meta.env.DEV) return;
 		this.devicePicker.show = false;
 		if (this.workspace) return this.workspace.connectDevice(this, 'mock');
 		return this._connectMock();
 	},
 	async _connectMock(this: AppInstance) {
-		if (!this.backend) return;
+		if (!import.meta.env.DEV || !this.backend) return;
 		this._initAudioCtx(); // create AudioContext within user gesture
 		this.showMsg('Connecting Mock SDR...');
 		try {

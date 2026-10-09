@@ -4,6 +4,9 @@ import type { AppInstance } from '@/app/core/receiver.types';
 import { BOOKMARK_CATEGORIES } from './constants';
 
 export const computedProperties = {
+	isDevelopment() {
+		return import.meta.env.DEV;
+	},
 	gainControlGroups(this: AppInstance) {
 		const controls = (this.deviceCapabilities?.gainControls || []).filter(
 			(control) => control.name !== 'Receive Mode' || (import.meta.env.DEV && this.remoteMode === 'none'),

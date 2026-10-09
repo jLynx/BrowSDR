@@ -109,6 +109,7 @@ describe('receiver uses the shared UI', () => {
 		expect(panels[0].get('input[aria-label="Bandwidth"]').element).toHaveProperty('value', '15000');
 	});
 	it('shows USB guidance only when Add SDR is opened, with pairing disabled and Mock SDR available', async () => {
+		vi.stubEnv('DEV', true);
 		vi.stubGlobal('isSecureContext', true);
 		wrapper = mount(ReceiverView, { attachTo: document.body });
 		expect(wrapper.find('.ui-notice').exists()).toBe(false);
@@ -132,6 +133,21 @@ describe('receiver uses the shared UI', () => {
 			.trigger('click');
 		expect(demo).toHaveBeenCalledOnce();
 		expect(wrapper.vm.devicePicker.show).toBe(false);
+	});
+	it('hides Mock SDR and prevents mock connections in production', async () => {
+		vi.stubEnv('DEV', false);
+		vi.stubGlobal('isSecureContext', true);
+		wrapper = mount(ReceiverView);
+		await wrapper.vm.connect();
+		expect(wrapper.get('[role=dialog]').text()).not.toContain('Mock SDR');
+		expect(wrapper.findAll('button').some((button) => button.text() === 'Pair New Device')).toBe(true);
+		const connectDevice = vi.fn();
+		const open = vi.fn();
+		await wrapper.setData({ workspace: { connectDevice }, backend: { open } });
+		await wrapper.vm.connectMock();
+		await wrapper.vm._connectMock();
+		expect(connectDevice).not.toHaveBeenCalled();
+		expect(open).not.toHaveBeenCalled();
 	});
 	it('does not open the USB picker for remote clients', async () => {
 		wrapper = mount(ReceiverView, { attachTo: document.body });

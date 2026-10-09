@@ -10,7 +10,7 @@
 				<div class="device-picker-meta">{{ entry.productName || 'USB ' + entry.device.vendorId.toString(16) + ':' + entry.device.productId.toString(16) }}</div>
 				<div class="device-picker-meta" v-if="entry.device.serialNumber">Serial: {{ entry.device.serialNumber }}</div>
 			</div>
-			<UiButton variant="device" @click="connectMock">
+			<UiButton v-if="isDevelopment" variant="device" @click="connectMock">
 				<span class="device-picker-name">Mock SDR</span>
 				<span class="device-picker-meta">Simulated receiver for testing</span>
 			</UiButton>
