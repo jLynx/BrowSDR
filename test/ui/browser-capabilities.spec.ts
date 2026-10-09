@@ -6,10 +6,21 @@ import { createWorkspace } from '@/app/workspace/workspace';
 
 afterEach(() => {
 	vi.unstubAllGlobals();
+	vi.unstubAllEnvs();
 	vi.restoreAllMocks();
 });
 
 describe('browser capability checks', () => {
+	it.each([true, false])('only recommends Mock SDR in development (DEV=%s)', (development) => {
+		vi.stubEnv('DEV', development);
+		vi.stubGlobal('navigator', {});
+		vi.stubGlobal('RTCPeerConnection', undefined);
+		vi.stubGlobal('isSecureContext', false);
+		const secureMessage = localUsbIssue()?.message;
+		vi.stubGlobal('isSecureContext', true);
+		const messages = [secureMessage, localUsbIssue()?.message, remoteConnectionIssue()?.message];
+		for (const message of messages) expect(message?.includes('Mock SDR')).toBe(development);
+	});
 	it('distinguishes HTTPS requirements from missing WebUSB', () => {
 		vi.stubGlobal('isSecureContext', false);
 		expect(localUsbIssue()?.title).toContain('secure connection');
