@@ -1,3 +1,4 @@
+import type { BleMessage } from '@/worker/decoders/ble/types';
 import type { AisMessage } from '@/worker/decoders/ais/types';
 import type { DataConnection } from 'peerjs';
 import type { DeviceCapabilities } from '@/radio/types';
@@ -43,6 +44,7 @@ export type RemoteCommand =
 	| { type: 'resetRemoteVfos' }
 	| { type: 'addRemoteVfo' }
 	| { type: 'removeRemoteVfo'; index: number }
+	| { type: 'ble'; vfoIndex: number; freq: number; msg: BleMessage }
 	| { type: 'ais'; vfoIndex: number; freq: number; msg: AisMessage }
 	| { type: 'adsb'; vfoIndex: number; freq: number; msg: AdsbMessage }
 	| { type: 'rtl433'; vfoIndex: number; freq: number; msg: Rtl433Message }

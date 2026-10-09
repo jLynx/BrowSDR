@@ -1,0 +1,129 @@
+<section v-if="receiver.ble.panelOpen" class="adsb-panel ble-panel" aria-label="BLE devices">
+	<UiToolHeader variant="pocsag" closable close-label="Close BLE panel" @close="receiver.toggleBlePanel">
+		BLE Devices <span class="pocsag-count">{{ devices.length }} addresses</span>
+		<template #actions>
+			<UiSelect v-model.number="receiver.activeVfoIndex" aria-label="BLE VFO" :disabled="receiver.ble.scanning">
+				<option v-for="(vfo, i) in receiver.vfos" :key="i" :value="i">VFO {{ i + 1 }} · {{ vfo.freq.toFixed(3) }} MHz</option>
+			</UiSelect>
+			<UiCheckbox
+				v-if="selectedVfo"
+				v-model="selectedVfo.ble"
+				label="Decode selected VFO"
+				input-label="BLE decoding"
+				:disabled="receiver.ble.scanning || !channels.some(c => c.frequency === selectedVfo.freq)"
+				@change="receiver.updateBackendVfoParams(receiver.activeVfoIndex)"
+			/>
+			<UiButton
+				v-for="channel in channels"
+				:key="channel.channel"
+				variant="transcript"
+				:disabled="receiver.ble.scanning || receiver.ble.tuning || receiver.remoteMode === 'client'"
+				@click="receiver.tuneBleChannel(channel.channel).catch(error => receiver.showMsg(String(error)))"
+				>Tune {{ channel.channel }}</UiButton
+			>
+			<UiButton
+				variant="transcript"
+				:disabled="!receiver.running || receiver.remoteMode === 'client' || receiver.ble.tuning"
+				@click="receiver.ble.scanning ? receiver.stopBleScan() : receiver.startBleScan()"
+				>{{ receiver.ble.scanning ? 'Stop scan' : 'Scan all channels' }}</UiButton
+			>
+			<UiButton variant="transcript" @click="receiver.clearBleDevices(); selected = ''">Clear devices</UiButton>
+		</template>
+	</UiToolHeader>
+	<div class="adsb-summary">
+		<span v-if="!receiver.running">Start reception to decode BLE advertisements.</span>
+		<span v-if="receiver.ble.scanning">Cycling channels 37 → 38 → 39 · 1 second per channel</span>
+		<template v-for="(vfo, i) in receiver.vfos" :key="i"
+			><span v-if="vfo.ble" :class="{ 'rtl433-error': receiver.ble.status[i]?.state === 'error' }"
+				>VFO {{ i + 1 }} · {{ receiver.ble.status[i]?.message || 'Starting decoder…' }} · {{ receiver.ble.status[i]?.frames || 0 }} valid
+				frames</span
+			></template
+		>
+		<span v-if="receiver.ble.message" class="rtl433-error" role="status">{{ receiver.ble.message }}</span>
+	</div>
+	<p class="ble-notice">
+		Scanning retunes this whole receiver and mutes the selected VFO. Other VFOs follow the received band. Use HackRF, LimeSDR, or a suitable
+		2.4 GHz converter at ≥2 MSPS. Fixed channels can decode while audio is muted.
+	</p>
+	<div class="ble-list">
+		<div v-if="selectedDevice" class="adsb-details" aria-label="BLE device details">
+			<div class="adsb-details-heading">
+				<strong>{{ selectedDevice.name || selectedDevice.address }}</strong
+				><UiButton variant="transcript" @click="selected = ''">Back to devices</UiButton>
+			</div>
+			<dl class="adsb-detail-grid">
+				<div>
+					<dt>Address</dt>
+					<dd>{{ selectedDevice.address }} · {{ selectedDevice.addressType }}</dd>
+				</div>
+				<div>
+					<dt>Packet</dt>
+					<dd>{{ selectedDevice.pduType }}</dd>
+				</div>
+				<div>
+					<dt>Manufacturer</dt>
+					<dd>{{ manufacturerText(selectedDevice.manufacturer) }}</dd>
+				</div>
+				<div>
+					<dt>Services (UUIDs)</dt>
+					<dd>{{ selectedDevice.services.join(', ') || '—' }}</dd>
+				</div>
+				<div>
+					<dt>Advertised TX power</dt>
+					<dd>{{ selectedDevice.txPower == null ? '—' : selectedDevice.txPower + ' dBm' }}</dd>
+				</div>
+				<div>
+					<dt>Manufacturer data</dt>
+					<dd>{{ selectedDevice.manufacturerData || '—' }}</dd>
+				</div>
+				<div>
+					<dt>Service data</dt>
+					<dd>{{ selectedDevice.serviceData.join('; ') || '—' }}</dd>
+				</div>
+				<div>
+					<dt>Latest payload (hex)</dt>
+					<dd>{{ selectedDevice.data || '—' }}</dd>
+				</div>
+			</dl>
+		</div>
+		<UiInputGroup v-show="!selectedDevice" class="adsb-search"
+			><UiInput v-model="query" aria-label="Search BLE devices" placeholder="Name, address, manufacturer or service UUID"
+		/></UiInputGroup>
+		<UiEmptyState v-if="!selectedDevice && !devices.length" variant="pocsag"
+			>Waiting for BLE advertisements. Tune a channel and enable decoding, or scan all three channels. Use a 2.4 GHz antenna.</UiEmptyState
+		>
+		<UiEmptyState v-else-if="!selectedDevice && !filtered.length" variant="pocsag">No devices match your search.</UiEmptyState>
+		<div v-if="filtered.length" v-show="!selectedDevice" class="adsb-table-wrap">
+			<table class="adsb-table">
+				<thead>
+					<tr>
+						<th>Device / address</th>
+						<th>Manufacturer</th>
+						<th>Channels</th>
+						<th>Signal</th>
+						<th>Packets</th>
+						<th>Seen</th>
+					</tr>
+				</thead>
+				<tbody>
+					<tr v-for="device in filtered" :key="device.addressType + ':' + device.address">
+						<td>
+							<UiButton variant="transcript" @click="selected = device.addressType + ':' + device.address"
+								>{{ device.name || device.address }}</UiButton
+							><small>{{ device.address }} · {{ device.addressType }}</small>
+						</td>
+						<td>{{ manufacturerText(device.manufacturer) }}</td>
+						<td>{{ device.channels.join(', ') }}</td>
+						<td>{{ device.signalDbfs.toFixed(1) }} dBFS</td>
+						<td>{{ device.packets }}</td>
+						<td>{{ Math.max(0, Math.floor((now - device.lastSeen) / 1000)) }}s</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+	</div>
+	<div class="adsb-footer">
+		Passive LE 1M advertisements and overheard scan responses · Entries expire after 5 min · Random addresses can rotate · dBFS is relative,
+		not distance · Extended/coded advertisements are not decoded.
+	</div>
+</section>

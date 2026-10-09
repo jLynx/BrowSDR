@@ -161,6 +161,7 @@ export const connectionMethods = {
 		return this._disconnectReceiver();
 	},
 	async _disconnectReceiver(this: AppInstance) {
+		this.stopBleScan();
 		if (this.autoGain.active) this.cancelAutoGain();
 		if (this.workspace) {
 			this.stopWhisper();
@@ -226,6 +227,7 @@ export const connectionMethods = {
 	async _togglePlay(this: AppInstance, isRestart = false) {
 		if (this.running) {
 			if (this.autoGain.active) this.cancelAutoGain();
+			this.stopBleScan();
 			await this.backend.stopRx();
 			this.running = false;
 			if (this._statsTimer) {
@@ -272,10 +274,7 @@ export const connectionMethods = {
 	},
 	async startStream(this: AppInstance, isRestart = false) {
 		if (this.running) return;
-		this.adsb.sources = [];
-		this.adsb.status = [];
-		this.ais.sources = [];
-		this.ais.status = [];
+		clearDecoderSources(this);
 		const usbOnly = isUsbOnlyDiagnostic(this);
 		this._initAudioCtx();
 		this._resetAudioPlayback(true);
@@ -323,6 +322,7 @@ export const connectionMethods = {
 				Comlink.proxy((index: number, freq: number, msg: Parameters<AppInstance['_onAisMessage']>[2]) =>
 					this._onAisMessage(index, freq, msg),
 				),
+				Comlink.proxy(this._onBleMessage.bind(this)),
 			);
 		} catch (e) {
 			console.error('Error starting RX stream:', e);
@@ -460,4 +460,12 @@ function updateReceiverActivity(this: AppInstance, now: number) {
 	}
 	// Bump reactive tick so sortedVfoActivity recomputes
 	this.activityNow = now;
+}
+
+function clearDecoderSources(receiver: AppInstance): void {
+	receiver.adsb.sources = [];
+	receiver.adsb.status = [];
+	receiver.ais.sources = [];
+	receiver.ais.status = [];
+	receiver.ble.status = [];
 }

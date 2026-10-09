@@ -1,0 +1,23 @@
+.ble-notice {
+	margin: 0;
+	padding: 8px 12px;
+	font-size: 12px;
+	color: var(--text-muted, #aaa);
+	border-bottom: 1px solid #333;
+}
+.ble-list {
+	min-width: 0;
+	max-height: 450px;
+	overflow: auto;
+	flex: 1 1 auto;
+}
+.ble-panel .adsb-table {
+	min-width: 720px;
+	table-layout: auto;
+}
+.ble-panel .adsb-details {
+	overflow: visible;
+}
+.ble-panel dd {
+	overflow-wrap: anywhere;
+}

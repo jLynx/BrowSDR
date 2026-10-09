@@ -1,3 +1,4 @@
+import type { BleMessage } from '@/worker/decoders/ble/types';
 import type { AisMessage } from '@/worker/decoders/ais/types';
 import type { AdsbMessage } from '@/worker/decoders/adsb/types';
 import type { DSDStatus } from '@/worker/decoders/dsd/types';
@@ -10,6 +11,7 @@ export type WhisperCallback = (index: number, freq: number, samples: Float32Arra
 export type DecoderCallback<T> = (index: number, freq: number, message: T) => void;
 export type PocsagCallback = DecoderCallback<POCSAGMessage>;
 export type RdsCallback = DecoderCallback<RDSMessage>;
+export type BleCallback = DecoderCallback<BleMessage>;
 export type AisCallback = DecoderCallback<AisMessage>;
 export type AdsbCallback = DecoderCallback<AdsbMessage>;
 export type Rtl433Callback = DecoderCallback<Rtl433Message>;

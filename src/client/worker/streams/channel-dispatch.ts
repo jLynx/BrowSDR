@@ -16,7 +16,9 @@ export function dispatchIqChunk(
 	const targets = collectTargets(backend);
 	backend._iqDispatcher!.retain(new Set(targets.map((target) => target.worker)));
 	const plannedParams = targets.map((target) =>
-		target.shared ? target.params : { ...target.params, enabled: false, pocsag: false, rds: false, rtl433: false, adsb: false, ais: false },
+		target.shared
+			? target.params
+			: { ...target.params, enabled: false, pocsag: false, rds: false, rtl433: false, adsb: false, ais: false, ble: false },
 	);
 	const plan = planSharedBands(sampleRate, backend._centerFreq ?? centerFreq, plannedParams, true);
 	const nextKey = JSON.stringify([backend._centerFreq ?? centerFreq, plan.ratio, plan.bands.map((band) => band.centerBin)]);
@@ -163,6 +165,7 @@ function needsIq(params: VfoParams): boolean {
 		(params.rds && params.mode === 'wfm') ||
 		params.rtl433 === true ||
 		params.adsb === true ||
-		params.ais === true
+		params.ais === true ||
+		params.ble === true
 	);
 }

@@ -7,6 +7,7 @@ import type {
 	Rtl433Callback,
 	AdsbCallback,
 	AisCallback,
+	BleCallback,
 	DsdCallback,
 	HostCallback,
 	HostStats,
@@ -55,6 +56,7 @@ import {
 	setRemoteHostRtl433Callback,
 	setRemoteHostAdsbCallback,
 	setRemoteHostAisCallback,
+	setRemoteHostBleCallback,
 	setRemoteHostSquelchCallback,
 	_ensureRemoteClients,
 	_getOrCreateClientState,
@@ -97,6 +99,8 @@ export class Backend {
 	_spectrumFps = 20;
 	_sharedChannelization = true;
 	_whisperEnabled = false;
+	_retuning = false;
+	_settleUntil = 0;
 	_resetWhisperBatches?: () => void;
 	_disposeChannelization?: () => void;
 	_disposeSpectrum?: () => void;
@@ -120,6 +124,7 @@ export class Backend {
 	_remoteClients?: Map<string, RemoteClientState>;
 	_remoteHostPocsagCb?: HostCallback<Parameters<PocsagCallback>>;
 	_remoteHostRdsCb?: HostCallback<Parameters<RdsCallback>>;
+	_remoteHostBleCb?: HostCallback<Parameters<BleCallback>>;
 	_remoteHostAisCb?: HostCallback<Parameters<AisCallback>>;
 	_remoteHostAdsbCb?: HostCallback<Parameters<AdsbCallback>>;
 	_remoteHostRtl433Cb?: HostCallback<Parameters<Rtl433Callback>>;
@@ -193,6 +198,7 @@ export class Backend {
 	setRemoteHostStatsCallback = setRemoteHostStatsCallback.bind(this);
 	setRemoteHostPocsagCallback = setRemoteHostPocsagCallback.bind(this);
 	setRemoteHostRdsCallback = setRemoteHostRdsCallback.bind(this);
+	setRemoteHostBleCallback = setRemoteHostBleCallback.bind(this);
 	setRemoteHostAisCallback = setRemoteHostAisCallback.bind(this);
 	setRemoteHostAdsbCallback = setRemoteHostAdsbCallback.bind(this);
 	setRemoteHostRtl433Callback = setRemoteHostRtl433Callback.bind(this);
@@ -222,6 +228,7 @@ export class Backend {
 		rtl433Callback: Rtl433Callback | null = null,
 		adsbCallback: AdsbCallback | null = null,
 		aisCallback: AisCallback | null = null,
+		bleCallback: BleCallback | null = null,
 	): Promise<void> {
 		return startRxStream(
 			this,
@@ -235,6 +242,7 @@ export class Backend {
 			rtl433Callback,
 			adsbCallback,
 			aisCallback,
+			bleCallback,
 		);
 	}
 
@@ -341,7 +349,13 @@ export class Backend {
 
 	async setFrequency(centerFreqMhz: number, frequencyShiftMhz = 0): Promise<void> {
 		if (!this.device) throw new Error('No device connected');
-		await this.device.setFrequency(displayToDeviceFrequencyHz(centerFreqMhz, frequencyShiftMhz));
+		this._retuning = true;
+		try {
+			await this.device.setFrequency(displayToDeviceFrequencyHz(centerFreqMhz, frequencyShiftMhz));
+		} finally {
+			this._settleUntil = performance.now() + 50;
+			this._retuning = false;
+		}
 
 		this._centerFreq = centerFreqMhz;
 

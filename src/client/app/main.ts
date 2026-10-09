@@ -1,3 +1,5 @@
+import BlePanel from '@/app/decoders/ble/panel';
+import { bleMethods } from '@/app/decoders/ble/controller';
 import AisPanel from '@/app/decoders/ais/panel';
 import { aisMethods } from '@/app/decoders/ais';
 import { isRecord } from '@/platform/data';
@@ -40,7 +42,7 @@ if ('serviceWorker' in navigator) {
 
 const Receiver = {
 	template: receiverTemplate,
-	components: { ...uiComponents, VfoPanel, AdsbPanel, AisPanel },
+	components: { ...uiComponents, VfoPanel, AdsbPanel, AisPanel, BlePanel },
 	provide(this: AppInstance) {
 		return { receiver: this };
 	},
@@ -67,6 +69,7 @@ const Receiver = {
 		...rtl433Methods,
 		...adsbMethods,
 		...aisMethods,
+		...bleMethods,
 	},
 	created: async function (this: AppInstance) {
 		this._cleanup = [];
@@ -119,6 +122,7 @@ const Receiver = {
 		this._disposeHeaderTools = mountHeaderTools(this);
 	},
 	beforeUnmount(this: AppInstance) {
+		this.stopBleScan();
 		this._disposed = true;
 		this._disposeHeaderTools?.();
 		this._cleanup?.forEach((cleanup: () => void) => cleanup());
@@ -305,6 +309,12 @@ function watchRadioFrequency(this: AppInstance) {
 		() => this.radio.centerFreq,
 		(newVal: number, _oldVal: number) => {
 			this.saveSetting();
+			if (freqDebounce) {
+				clearTimeout(freqDebounce);
+				freqDebounce = null;
+			}
+			if (this.ble.tuning) return;
+			if (this.ble.scanning) this.stopBleScan();
 			// Reset zoom on radio change
 			this.view.zoomScale = 1.0;
 			this.view.zoomOffset = 0.0;

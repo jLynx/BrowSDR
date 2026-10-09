@@ -1,3 +1,4 @@
+import type { BleMessage } from '@/worker/decoders/ble/types';
 import type { AisMessage } from '@/worker/decoders/ais/types';
 import type { AdsbMessage } from '@/worker/decoders/adsb/types';
 import type { WhisperChunkMeta, WhisperVfoState } from '@/app/decoders/whisper.types';
@@ -185,6 +186,12 @@ export interface ReceiverMethods {
 	autoGainControls(): string;
 	cancelAutoGain(): void;
 	autoSetGains(): Promise<void>;
+	toggleBlePanel(): void;
+	_onBleMessage(index: number, freq: number, msg: BleMessage): void;
+	tuneBleChannel(channel: number, index?: number): Promise<boolean>;
+	startBleScan(): Promise<void>;
+	stopBleScan(): void;
+	clearBleDevices(): void;
 	toggleAisPanel(): void;
 	tuneAisVfo(frequency: number, index?: number): void;
 	_onAisMessage(index: number, freq: number, msg: AisMessage): void;
