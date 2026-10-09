@@ -311,6 +311,22 @@
 		gap: 4px;
 	}
 
+	.transcript-header.tool-header-closable,
+	.pocsag-header.tool-header-closable,
+	.activity-header.tool-header-closable {
+		padding-right: 50px;
+	}
+
+	.tool-header-close {
+		position: absolute;
+		top: 8px;
+		right: 10px;
+	}
+
+	.tool-header-actions {
+		display: contents;
+	}
+
 	.transcript-select {
 		font-size: 10px;
 		max-width: 120px;
@@ -438,6 +454,60 @@
 	.vfo-remove-btn {
 		width: 28px;
 		height: 28px;
+	}
+}
+
+@media (max-width: 768px) and (hover: none) and (pointer: coarse) {
+	.transcript-controls,
+	.pocsag-controls,
+	.activity-controls {
+		gap: 6px;
+		min-width: 0;
+		max-width: 100%;
+	}
+
+	/* Tool actions stay compact instead of inheriting sidebar-sized buttons. */
+	.transcript-btn,
+	.transcript-controls .btn,
+	.pocsag-controls .btn,
+	.activity-controls .btn {
+		flex: none;
+		min-height: 28px;
+		padding: 4px 8px;
+		font-size: 11px;
+		line-height: 1.2;
+	}
+
+	.transcript-controls select,
+	.pocsag-controls select,
+	.activity-controls select {
+		min-height: 28px;
+		max-width: 100%;
+		padding: 4px 6px;
+		font-size: 11px;
+	}
+
+	.transcript-controls .custom-checkbox,
+	.pocsag-controls .custom-checkbox,
+	.activity-controls .custom-checkbox {
+		min-height: 28px;
+		font-size: 11px;
+	}
+
+	.transcript-controls .checkmark,
+	.pocsag-controls .checkmark,
+	.activity-controls .checkmark {
+		width: 16px;
+		height: 16px;
+	}
+
+	.transcript-controls .checkmark:after,
+	.pocsag-controls .checkmark:after,
+	.activity-controls .checkmark:after {
+		left: 5px;
+		top: 2px;
+		width: 3px;
+		height: 7px;
 	}
 }
 

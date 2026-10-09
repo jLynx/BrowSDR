@@ -1,5 +1,5 @@
 <section v-if="receiver.adsb.panelOpen" class="adsb-panel" :class="{ 'adsb-fullscreen': fullscreen }" aria-label="ADS-B aircraft">
-	<UiToolHeader variant="pocsag">
+	<UiToolHeader variant="pocsag" closable close-label="Close ADS-B panel" @close="receiver.toggleAdsbPanel">
 		ADS-B Aircraft <span class="pocsag-count">{{ aircraft.length }} aircraft · {{ positioned.length }} located</span>
 		<template #actions>
 			<UiSelect v-model.number="receiver.activeVfoIndex" aria-label="ADS-B VFO" class="decoder-vfo-select">
@@ -22,7 +22,6 @@
 				>{{ fullscreen ? 'Exit fullscreen' : 'Fullscreen map' }}</UiButton
 			>
 			<UiButton variant="transcript" @click="fit" :disabled="!showMap || !positioned.length">Fit aircraft</UiButton>
-			<UiButton variant="transcript" @click="receiver.toggleAdsbPanel" aria-label="Close ADS-B panel">×</UiButton>
 		</template>
 	</UiToolHeader>
 	<div class="adsb-summary">

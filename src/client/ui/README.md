@@ -64,6 +64,11 @@ the old native elements. Attributes and native input events pass through; the
 input/select components use Vue's own model directives to preserve conversion,
 composition, and event ordering.
 
+Tool headers accept `closable` and `closeLabel` and emit `close`. Use these for
+panel dismissal; the close button aligns with desktop actions and stays pinned
+at the top right on mobile, outside the wrapping actions slot. Closing a tool
+should preserve its decoder settings.
+
 Dialog body layout is separate from the dialog's visual variant. The default
 `bodyVariant="padded"` retains the normal responsive form spacing. Use
 `bodyVariant="flush"` for lists whose rows provide their own padding, such as Add

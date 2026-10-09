@@ -106,6 +106,23 @@ describe('native control contracts', () => {
 });
 
 describe('composed UI behavior', () => {
+	it('keeps tool dismissal separate from actions and emits a close event', async () => {
+		const wrapper = render(
+			'<UiToolHeader :closable="closable" close-label="Close decoder" @close="closed = true">Decoder<template #actions><UiButton>Clear</UiButton></template></UiToolHeader>',
+			{
+				closable: false,
+				closed: false,
+			},
+		);
+		expect(wrapper.find('[aria-label="Close decoder"]').exists()).toBe(false);
+		await wrapper.setData({ closable: true });
+		const close = wrapper.get('[aria-label="Close decoder"]');
+		expect(wrapper.get('.pocsag-controls').element.contains(close.element)).toBe(false);
+		await wrapper.get('.pocsag-controls button').trigger('click');
+		expect(wrapper.vm.closed).toBe(false);
+		await close.trigger('click');
+		expect(wrapper.vm.closed).toBe(true);
+	});
 	it('preserves button classes, slot markup and native disabled behavior', async () => {
 		const click = vi.fn();
 		const wrapper = mount(ui.UiButton, {

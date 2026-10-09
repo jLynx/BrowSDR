@@ -1,6 +1,6 @@
 	<!-- POCSAG Panel -->
 	<div class="pocsag-panel" v-if="pocsag.panelOpen">
-		<UiToolHeader variant="pocsag">
+		<UiToolHeader variant="pocsag" closable close-label="Close POCSAG panel" @close="togglePocsagPanel">
 				<svg viewBox="0 0 24 24" width="16" height="16" style="vertical-align:middle;margin-right:4px"><path fill="currentColor" d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-3 12H7v-2h10v2zm0-3H7V9h10v2zm0-3H7V6h10v2z"/></svg>
 			POCSAG Decoder
 			<span class="pocsag-count" v-if="pocsag.log.length">{{ pocsag.log.length }} msg{{ pocsag.log.length !== 1 ? 's' : '' }}</span>

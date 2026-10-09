@@ -1,6 +1,6 @@
 	<!-- rtl_433 live sensor events -->
 	<section class="pocsag-panel rtl433-panel" v-if="rtl433.panelOpen" aria-label="rtl_433 live events">
-			<UiToolHeader variant="pocsag">rtl_433 Sensors <span class="pocsag-count">{{ rtl433.log.length }} events</span><template #actions>
+			<UiToolHeader variant="pocsag" closable close-label="Close rtl_433 panel" @close="toggleRtl433Panel">rtl_433 Sensors <span class="pocsag-count">{{ rtl433.log.length }} events</span><template #actions>
 				<UiSelect v-model.number="activeVfoIndex" aria-label="rtl_433 VFO" class="decoder-vfo-select">
 					<option v-for="(vfo, i) in vfos" :key="i" :value="i">VFO {{ i + 1 }} · {{ vfo.freq.toFixed(3) }} MHz</option>
 				</UiSelect>
@@ -8,7 +8,6 @@
 				<UiButton variant="transcript" @click="rtl433.showProtocols = !rtl433.showProtocols">{{ rtl433.showProtocols ? 'Events' : 'Protocols' }}</UiButton>
 				<UiButton variant="transcript" @click="clearRtl433">Clear</UiButton>
 				<UiButton variant="transcript" @click="exportRtl433" :disabled="!rtl433.log.length">Export JSONL</UiButton>
-				<UiButton variant="transcript" @click="toggleRtl433Panel" aria-label="Close rtl_433 panel">×</UiButton>
 			</template>
 		</UiToolHeader>
 		<div v-if="vfos[activeVfoIndex]" class="rtl433-tool-settings">

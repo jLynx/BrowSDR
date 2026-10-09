@@ -1,6 +1,6 @@
 	<!-- Frequency Activity Panel -->
 	<div class="activity-panel" v-if="showActivity">
-		<UiToolHeader variant="activity">
+		<UiToolHeader variant="activity" closable close-label="Close activity panel" @close="showActivity = false">
 				<svg viewBox="0 0 24 24" width="15" height="15" style="vertical-align:middle;margin-right:4px"><path fill="currentColor" d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99l1.5 1.5z"/></svg>
 			Frequency Activity
 			<span class="activity-count" v-if="sortedVfoActivity.some(a => a.totalMs> 0 || a.isLive)">
