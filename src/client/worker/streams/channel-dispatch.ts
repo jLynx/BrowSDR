@@ -12,9 +12,9 @@ export function dispatchIqChunk(
 	perf: PerfCounters,
 	signed: Int8Array<ArrayBufferLike>,
 	chunkCounter: number,
-	SAB_POOL_SIZE: number,
 ) {
 	const targets = collectTargets(backend);
+	backend._iqDispatcher!.retain(new Set(targets.map((target) => target.worker)));
 	const plannedParams = targets.map((target) =>
 		target.shared ? target.params : { ...target.params, enabled: false, pocsag: false, rds: false, rtl433: false },
 	);
@@ -40,7 +40,7 @@ export function dispatchIqChunk(
 		};
 	}
 	if (plan.bands.length) {
-		ensureChannelWorker(channel, perf);
+		ensureChannelWorker(backend, channel, perf);
 		if (channel.pending < sampleRate * 0.1) {
 			const buffer = signed.slice().buffer;
 			channel.pending += signed.length / 2;
@@ -61,24 +61,31 @@ export function dispatchIqChunk(
 	} else if (channel.worker) {
 		backend._disposeChannelization?.();
 	}
-	for (let index = 0; index < targets.length; index++) {
-		const { worker, params, shared } = targets[index];
-		if (shared && !plan.direct.includes(index)) continue;
-		if (!needsIq(params)) continue;
-		if (typeof SharedArrayBuffer !== 'undefined') {
-			worker.postMessage({
+	const direct = targets.filter(({ params, shared }, index) => (!shared || plan.direct.includes(index)) && needsIq(params));
+	const ready = direct.filter(({ worker }) => backend._iqDispatcher!.canSend(worker));
+	perf.droppedChunks += direct.length - ready.length;
+	const useSab = typeof SharedArrayBuffer !== 'undefined';
+	const slot = useSab && ready.length ? backend._iqDispatcher!.reserve(signed) : undefined;
+	if (useSab && ready.length && slot === undefined) {
+		perf.droppedChunks += ready.length;
+		return;
+	}
+	for (const { worker, params } of ready) {
+		if (useSab) {
+			backend._iqDispatcher!.send(worker, {
 				type: 'process',
 				params: params,
 				sampleRate,
 				centerFreq: backend._centerFreq ?? centerFreq,
 				useSab: true,
-				sabIndex: backend.sabPoolIndex,
+				sabIndex: slot,
 				chunkLen: signed.length,
 				chunkId: chunkCounter,
 			});
 		} else {
 			const cloneBuf = signed.slice().buffer;
-			worker.postMessage(
+			backend._iqDispatcher!.send(
+				worker,
 				{
 					type: 'process',
 					params: params,
@@ -93,11 +100,9 @@ export function dispatchIqChunk(
 			);
 		}
 	}
-
-	backend.sabPoolIndex = (backend.sabPoolIndex! + 1) % SAB_POOL_SIZE;
 }
 
-export function ensureChannelWorker(channel: ChannelState, perf: PerfCounters) {
+export function ensureChannelWorker(backend: Backend, channel: ChannelState, perf: PerfCounters) {
 	if (!channel.worker) {
 		channel.worker = new globalThis.Worker(new URL('../dsp-worker.ts', import.meta.url), { type: 'module' });
 		channel.worker.onmessage = ({ data: message }: MessageEvent<DspOutput>) => {
@@ -118,7 +123,7 @@ export function ensureChannelWorker(channel: ChannelState, perf: PerfCounters) {
 				for (const index of band.vfos) {
 					const target = channel.targets[index];
 					if (!target) continue;
-					target.worker.postMessage({
+					const sent = backend._iqDispatcher!.send(target.worker, {
 						type: 'process',
 						floatIq: true,
 						chunk: result.buffer,
@@ -128,6 +133,7 @@ export function ensureChannelWorker(channel: ChannelState, perf: PerfCounters) {
 						params: target.params,
 						chunkId: message.chunkId,
 					});
+					if (!sent) perf.droppedChunks++;
 				}
 			}
 		};

@@ -1,4 +1,5 @@
 import type { RxLevel } from '@/radio/types';
+import { readStreamComponent, streamSamplesPerPacket } from './stream-pcm';
 
 /** Sample the original 12-bit ADC words before the driver reduces them to int8. */
 export class LimeRxLevel {
@@ -15,14 +16,14 @@ export class LimeRxLevel {
 		this.count = this.power = this.peak = this.clipped = 0;
 		this.latest = null;
 	}
-	observe(data: DataView, now = Date.now()): void {
+	observe(data: DataView, now = Date.now(), packed = false): void {
 		if (!this.started) this.started = now;
 		for (let packet = 0; packet + 4096 <= data.byteLength; packet += 4096) {
 			// Rotate the sampled positions to avoid locking onto a periodic tone.
 			for (let sample = 0; sample < 4; sample++) {
-				const offset = packet + 16 + ((this.phase++ * 251) % 1020) * 4;
+				const offset = packet + 16 + ((this.phase++ * 251) % streamSamplesPerPacket(packed)) * (packed ? 3 : 4);
 				for (let component = 0; component < 2; component++) {
-					const value = Math.abs(data.getInt16(offset + component * 2, true)) / 32768;
+					const value = Math.abs(readStreamComponent(data, offset, component as 0 | 1, packed)) / 32768;
 					this.power += value * value;
 					this.peak = Math.max(this.peak, value);
 					if (value >= 0.98) this.clipped++;

@@ -8,7 +8,8 @@ export type DspOutput =
 	| { type: 'rds'; msg: RDSMessage }
 	| { type: 'dsd_status'; status: DSDStatus }
 	| { type: 'dsp_debug_log'; level: 'log' | 'warn' | 'error'; message: string }
-	| { type: 'error'; error: string; inputSamples?: number }
+	| { type: 'error'; error: string; inputSamples?: number; chunkId?: number }
+	| { type: 'processed'; chunkId: number }
 	| { type: 'channel_error'; error: string; inputSamples: number }
 	| { type: 'init_done' | 'config_done' }
 	| {
@@ -42,7 +43,7 @@ export type DspInput =
 			useSab?: boolean;
 			sabIndex?: number;
 			chunkLen: number;
-			chunk?: ArrayBuffer;
+			chunk?: ArrayBuffer | SharedArrayBuffer;
 			chunkId: number;
 	  };
 

@@ -50,13 +50,13 @@ async function createStream(vfoCount = 1) {
 }
 
 describe('RX audio delivery batching', () => {
-	it('batches small mixer outputs into a 50 ms delivery', async () => {
+	it('batches small mixer outputs into a minimum 5 ms delivery', async () => {
 		const { backend, audio, feed } = await createStream();
-		for (let chunk = 0; chunk < 47; chunk++) feed(0, 51);
+		for (let chunk = 0; chunk < 4; chunk++) feed(0, 51);
 		expect(audio).not.toHaveBeenCalled();
 		feed(0, 51);
 		expect(audio).toHaveBeenCalledTimes(1);
-		expect(audio.mock.calls[0][0].length).toBe(2448);
+		expect(audio.mock.calls[0][0].length).toBe(255);
 		expect(backend._perf.msgsSent).toBe(1);
 	});
 	it('batches isolated transcription audio for all nineteen VFOs', async () => {
@@ -65,7 +65,7 @@ describe('RX audio delivery batching', () => {
 		for (let chunk = 0; chunk < 48; chunk++) {
 			for (let index = 0; index < 19; index++) feed(index, 51);
 		}
-		expect(audio).toHaveBeenCalledTimes(1);
+		expect(audio).toHaveBeenCalledTimes(9);
 		expect(whisper).toHaveBeenCalledTimes(19);
 		expect(backend._perf.whisperMsgsSent).toBe(19);
 		whisper.mock.calls.forEach(([index, freq, samples]) => {

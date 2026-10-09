@@ -158,7 +158,7 @@ export function createAudioBatchers(
 	perf: PerfCounters,
 	audioCallback: AudioCallback,
 ) {
-	const AUDIO_BATCH_THRESHOLD = 2400; // 50ms at 48kHz
+	const AUDIO_BATCH_THRESHOLD = 240; // Minimum 5ms; device bursts remain intact.
 	const audioBatchBuf = new Float32Array(9600); // 100ms stereo capacity
 	let audioBatchPos = 0;
 	let audioChannels: AudioChannels = 1;

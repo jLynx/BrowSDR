@@ -35,6 +35,9 @@ export interface ReceiverInternals {
 	audioRingSize: string;
 	queuedAudioSched: string;
 	nextPlayTime: number;
+	_audioWorklet?: AudioWorkletNode | null;
+	_audioWorkletReady?: Promise<void> | null;
+	_audioPlaybackPaused?: boolean;
 	renderSize: number;
 	_fftCtx: CanvasRenderingContext2D;
 	_waterfallEngine: (Waterfall | WaterfallGL) & { destroy?: () => void };
@@ -111,6 +114,9 @@ export interface ReceiverMethods {
 	drawSpectrum(data: Float32Array): void;
 	playAudio(samples: Float32Array | Record<number, number>, channels?: 1 | 2): void;
 	_scheduleAudioChunk(floats: Float32Array, channels?: 1 | 2): void;
+	_prepareAudioWorklet(): Promise<void>;
+	_resetAudioPlayback(clearCounters?: boolean): void;
+	_disposeAudioWorklet(): void;
 	clearInactiveSoloAudio(): void;
 	toggleSoloAudio(index: number): void;
 	toggleVfoCheckbox(index: number): void;

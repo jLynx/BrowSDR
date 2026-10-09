@@ -51,17 +51,17 @@ describe('stereo PCM delivery', () => {
 		expect(whisper.mock.calls[0][2].length).toBe(2400);
 		expect(whisper.mock.calls[0][2][0]).toBeCloseTo(0.4);
 	});
-	it('keeps batching at 50 ms and flushes a partial batch before changing channel format', () => {
+	it('uses a 5 ms minimum and flushes a partial batch before changing channel format', () => {
 		const audio = vi.fn();
 		const batch = createAudioBatchers({}, null, { msgsSent: 0 }, audio);
-		batch.pushAudio(interleave(1200, 0.1, 0.2), 2);
+		batch.pushAudio(interleave(120, 0.1, 0.2), 2);
 		expect(audio).not.toHaveBeenCalled();
-		batch.pushAudio(new Float32Array(1200), 1);
+		batch.pushAudio(new Float32Array(120), 1);
 		expect(audio.mock.calls[0][1]).toBe(2);
-		expect(audio.mock.calls[0][0].length).toBe(2400);
-		batch.pushAudio(new Float32Array(1200), 1);
+		expect(audio.mock.calls[0][0].length).toBe(240);
+		batch.pushAudio(new Float32Array(120), 1);
 		expect(audio.mock.calls[1][1]).toBe(1);
-		expect(audio.mock.calls[1][0].length).toBe(2400);
+		expect(audio.mock.calls[1][0].length).toBe(240);
 	});
 	it('round-trips stereo packets and still accepts legacy mono and array views', () => {
 		const samples = new Float32Array([0.2, 0.6, 0.4, 0.8]);
@@ -130,6 +130,58 @@ describe('stereo PCM delivery', () => {
 		expect(context.createBuffer).toHaveBeenCalledWith(2, 2400, 48000);
 		expect(channels[0][0]).toBeCloseTo(0.2);
 		expect(channels[1][0]).toBeCloseTo(0.6);
-		expect(app.nextPlayTime).toBeCloseTo(1.06);
+		expect(app.nextPlayTime).toBeCloseTo(1.15);
+	});
+	it('counts exhausted playback schedules cumulatively without counting startup or reset', () => {
+		const context = {
+			currentTime: 1,
+			createBuffer: () => ({ duration: 0.05, getChannelData: () => new Float32Array(2400) }),
+			createBufferSource: () => ({ connect() {}, start() {} }),
+		};
+		const app = { ...audioMethods, audioCtx: context, gainNode: {}, nextPlayTime: 0, audioGapCount: 0, audioGapMs: 0 };
+		const pcm = new Float32Array(2400);
+		app._scheduleAudioChunk(pcm);
+		expect(app.audioGapCount).toBe(0);
+		context.currentTime = 1.16;
+		app._scheduleAudioChunk(pcm);
+		expect(app.audioGapCount).toBe(1);
+		expect(app.audioGapMs).toBeCloseTo(110);
+		context.currentTime = 1.17;
+		app._scheduleAudioChunk(pcm);
+		expect(app.audioGapCount).toBe(1);
+		context.currentTime = 1.4;
+		app._scheduleAudioChunk(pcm);
+		expect(app.audioGapCount).toBe(2);
+		expect(app.audioGapMs).toBeCloseTo(250);
+		app.nextPlayTime = 0;
+		context.currentTime = 3;
+		app._scheduleAudioChunk(pcm);
+		expect(app.audioGapCount).toBe(2);
+	});
+	it('absorbs repeated 80ms delivery delays without gaps or growing playback latency', () => {
+		const starts = [];
+		const context = {
+			currentTime: 0,
+			createBuffer: () => ({ duration: 0.05, getChannelData: () => new Float32Array(2400) }),
+			createBufferSource: () => ({
+				connect() {},
+				start(time) {
+					starts.push(time);
+				},
+			}),
+		};
+		const app = { ...audioMethods, audioCtx: context, gainNode: {}, nextPlayTime: 0, audioGapCount: 0, audioGapMs: 0 };
+		const pcm = new Float32Array(2400);
+		app._scheduleAudioChunk(pcm);
+		for (let batch = 1; batch <= 100; batch++) {
+			// Delayed tasks catch up on the following batch; input rate stays 48kHz.
+			context.currentTime = batch * 0.05 + (batch % 2 ? 0.08 : 0);
+			context.currentTime = Math.max(context.currentTime, (batch - 1) * 0.05 + 0.08);
+			app._scheduleAudioChunk(pcm);
+		}
+		expect(app.audioGapCount).toBe(0);
+		expect(app.audioGapMs).toBe(0);
+		expect(starts[0]).toBeCloseTo(0.1);
+		expect(starts[100]).toBeCloseTo(5.1);
 	});
 });

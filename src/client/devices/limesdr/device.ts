@@ -35,15 +35,32 @@ export class LimeSDRDevice implements SdrDevice {
 		{ name: 'TIA', min: 0, max: 2, step: 1, default: 2, labels: ['0 dB', '9 dB', '12 dB'], type: 'select' },
 		{ name: 'PGA', min: 0, max: 31, step: 1, default: 16, type: 'slider' },
 		{ name: 'Antenna', min: 0, max: 2, step: 1, default: 1, labels: ['LNAH', 'LNAL', 'LNAW'], type: 'select' },
+		{ name: 'USB Format', min: 0, max: 1, step: 1, default: 0, labels: ['16-bit', 'Packed 12-bit'], type: 'select' },
+		...(import.meta.env.DEV
+			? [
+					{
+						name: 'Receive Mode',
+						min: 0,
+						max: 1,
+						step: 1,
+						default: 0,
+						labels: ['Normal', 'USB only (diagnostic)'],
+						type: 'select',
+					} as GainControl,
+				]
+			: []),
 	];
 
 	private lime = new LimeSDR();
 	getRxLevel() {
 		return this.lime.rxLevel.level;
 	}
+	getRxStreamStats() {
+		return this.lime.streamStats.report;
+	}
 	private operationQueue: Promise<void> = Promise.resolve();
 	private rxCallback: ((data: ArrayBufferView) => void) | null = null;
-	private gains: Record<string, number> = { 'RX Channel': 0, LNA: 14, TIA: 2, PGA: 16, Antenna: 1 };
+	private gains: Record<string, number> = { 'RX Channel': 0, LNA: 14, TIA: 2, PGA: 16, Antenna: 1, 'USB Format': 0, 'Receive Mode': 0 };
 
 	private runExclusive<Result>(operation: () => Promise<Result>): Promise<Result> {
 		const result = this.operationQueue.then(operation);
@@ -106,30 +123,49 @@ export class LimeSDRDevice implements SdrDevice {
 		}
 	}
 
+	private async applyRfGains(gains: Record<string, number>): Promise<void> {
+		for (const [name, value] of Object.entries(gains)) {
+			if (name !== 'RX Channel' && name !== 'USB Format' && name !== 'Receive Mode') await this.applyGain(name, value);
+		}
+	}
+
+	private async restoreReceiveConfig(gains: Record<string, number>, callback: ((data: ArrayBufferView) => void) | null) {
+		await this.lime.stopStreaming();
+		this.lime.setLinkFormat(gains['USB Format'] === 1 ? 12 : 16);
+		await this.lime.setRxChannel(gains['RX Channel']);
+		await this.applyRfGains(gains);
+		if (callback) await this.startReceive(callback, gains);
+	}
+
+	private validateReceiveConfig(next: Record<string, number>, previous: Record<string, number>): void {
+		if (next['RX Channel'] !== 0 && next['RX Channel'] !== 1) throw new Error(`LimeSDR: unsupported RX channel ${next['RX Channel']}`);
+		if (next['USB Format'] !== 0 && next['USB Format'] !== 1) throw new Error('LimeSDR: unsupported USB format');
+		if (next['Receive Mode'] !== 0 && next['Receive Mode'] !== 1) throw new Error('LimeSDR: unsupported receive mode');
+		if (!import.meta.env.DEV && next['Receive Mode'] === 1) throw new Error('LimeSDR: USB-only reception requires a development build');
+		if (this.rxCallback && next['Receive Mode'] !== previous['Receive Mode'])
+			throw new Error('LimeSDR: stop reception before changing receive mode');
+	}
+
 	async setGains(gains: Record<string, number>): Promise<void> {
 		await this.runExclusive(async () => {
 			const previous = this.gains;
 			const next = { ...previous, ...gains };
 			const channel = next['RX Channel'];
-			if (channel !== 0 && channel !== 1) throw new Error(`LimeSDR: unsupported RX channel ${channel}`);
+			this.validateReceiveConfig(next, previous);
 			const switching = channel !== previous['RX Channel'];
-			const callback = switching ? this.rxCallback : null;
+			const changingFormat = next['USB Format'] !== previous['USB Format'];
+			const callback = switching || changingFormat ? this.rxCallback : null;
 			try {
 				if (callback) await this.lime.stopStreaming();
 				if (switching) await this.lime.setRxChannel(channel);
-				for (const [name, value] of Object.entries(switching ? next : gains)) {
-					if (name !== 'RX Channel') await this.applyGain(name, value);
-				}
-				if (callback) await this.lime.startStreaming(callback);
+				if (changingFormat) this.lime.setLinkFormat(next['USB Format'] === 1 ? 12 : 16);
+				await this.applyRfGains(switching ? next : gains);
+				if (callback) await this.startReceive(callback, next);
 				this.gains = next;
 			} catch (error) {
-				if (switching) {
+				if (switching || changingFormat) {
 					try {
-						await this.lime.setRxChannel(previous['RX Channel']);
-						for (const [name, value] of Object.entries(previous)) {
-							if (name !== 'RX Channel') await this.applyGain(name, value);
-						}
-						if (callback) await this.lime.startStreaming(callback);
+						await this.restoreReceiveConfig(previous, callback);
 					} catch (recoveryError) {
 						console.error('LimeSDR: failed to restore previous receiver', recoveryError);
 					}
@@ -139,9 +175,14 @@ export class LimeSDRDevice implements SdrDevice {
 		});
 	}
 
+	private async startReceive(callback: (data: ArrayBufferView) => void, gains = this.gains): Promise<void> {
+		if (gains['Receive Mode'] === 1) await this.lime.startStreaming(callback, true);
+		else await this.lime.startStreaming(callback);
+	}
+
 	async startRx(callback: (data: ArrayBufferView) => void): Promise<void> {
 		await this.runExclusive(async () => {
-			await this.lime.startStreaming(callback);
+			await this.startReceive(callback);
 			this.rxCallback = callback;
 		});
 	}

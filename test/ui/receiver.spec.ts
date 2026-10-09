@@ -11,10 +11,43 @@ let wrapper: VueWrapper;
 afterEach(() => {
 	wrapper?.unmount();
 	vi.unstubAllGlobals();
+	vi.unstubAllEnvs();
 	vi.restoreAllMocks();
 });
 
 describe('receiver uses the shared UI', () => {
+	it('shows source loss separately from DSP drops and playback gaps', async () => {
+		wrapper = mount(ReceiverView);
+		await wrapper.setData({
+			showStats: true,
+			dspStats: {
+				usbFps: 470,
+				audioFps: 470,
+				audioRate: 48000,
+				inputRate: 61440000,
+				dspAvgMs: 1.5,
+				dspMaxMs: 2,
+				dropped: 0,
+				droppedTotal: 0,
+				chunkSize: 261120,
+				sourceGapCount: 2,
+				sourceMissingSamples: 2040,
+				sourceDiscontinuities: 0,
+			},
+		});
+		const overlay = wrapper.find('.dsp-stats-overlay');
+		expect(overlay.findComponent(components.UiButton).props('variant')).toBe('secondary');
+		expect(overlay.text()).toContain('IQ drops: 0 total');
+		expect(overlay.text()).toContain('Source gaps: 2 total');
+		expect(overlay.text()).toContain('Playback gaps: 0 total');
+		expect(overlay.text()).not.toContain('Missing:');
+		expect(overlay.text()).not.toContain('calls/s');
+		await overlay.get('button').trigger('click');
+		expect(overlay.get('button').attributes('aria-expanded')).toBe('true');
+		expect(overlay.text()).toContain('Missing: 2040 samples | Discontinuities: 0');
+		await overlay.get('button').trigger('click');
+		expect(overlay.find('.dsp-stats-details').exists()).toBe(false);
+	});
 	it('preserves paired USB device identity through the reactive picker', async () => {
 		const device = { vendorId: 0x04b4, productId: 0x00f1, productName: 'LimeSDR', serialNumber: 'test' } as USBDevice;
 		vi.stubGlobal('isSecureContext', true);
@@ -150,6 +183,90 @@ describe('receiver uses the shared UI', () => {
 		expect(wrapper.vm.bookmarkModal.name).toBe('New station');
 		await wrapper.find('.bookmark-overlay').trigger('click');
 		expect(wrapper.vm.bookmarkModal.show).toBe(false);
+	});
+	it('requires stopped reception to change the USB format and keeps the saved numeric choice', async () => {
+		wrapper = mount(ReceiverView, { attachTo: document.body });
+		await wrapper.setData({
+			connected: true,
+			running: true,
+			deviceCapabilities: {
+				deviceType: 'limesdr',
+				sampleRates: [61440000],
+				gainControls: [{ name: 'USB Format', type: 'select', labels: ['16-bit', 'Packed 12-bit'] }],
+			},
+			gains: { 'USB Format': 0 },
+		});
+		const format = wrapper.get('select[aria-label="USB Format"]');
+		expect(wrapper.get('.radio-advanced').findComponent(components.UiPanelHeader).props('label')).toBe('Advanced');
+		expect(wrapper.get('.radio-advanced .panel-body').isVisible()).toBe(false);
+		await wrapper.get('.radio-advanced [role=button]').trigger('keydown', { key: 'Enter' });
+		expect(wrapper.vm.radioAdvanced).toBe(true);
+		expect(wrapper.get('.radio-advanced .panel-body').isVisible()).toBe(true);
+		expect(format.attributes('disabled')).toBeDefined();
+		await wrapper.setData({ running: false });
+		expect(format.attributes('disabled')).toBeUndefined();
+		await format.setValue('1');
+		expect(wrapper.vm.gains['USB Format']).toBe(1);
+		await wrapper.setData({ running: true });
+		expect(format.attributes('disabled')).toBeDefined();
+		expect(wrapper.vm.gains['USB Format']).toBe(1);
+	});
+	it('labels USB-only reception, locks mode while running, and omits playback results', async () => {
+		wrapper = mount(ReceiverView);
+		await wrapper.setData({
+			connected: true,
+			running: true,
+			showStats: true,
+			showStatsDetails: true,
+			deviceCapabilities: {
+				deviceType: 'limesdr',
+				sampleRates: [61440000],
+				gainControls: [{ name: 'Receive Mode', type: 'select', labels: ['Normal', 'USB only (diagnostic)'] }],
+			},
+			gains: { 'Receive Mode': 1 },
+			dspStats: {
+				usbDiagnosticMode: 1,
+				usbTransferCount: 470,
+				usbElapsedMs: 1000,
+				usbReceivedBytes: 184811520,
+				sourceGapCount: 0,
+				sourceMissingSamples: 0,
+			},
+		});
+		expect(wrapper.get('select[aria-label="Receive Mode"]').attributes('disabled')).toBeDefined();
+		expect(wrapper.find('.dsp-stats-overlay').text()).toContain('USB-only diagnostic');
+		expect(wrapper.find('.dsp-stats-overlay').text()).toContain('470 transfers');
+		expect(wrapper.find('.dsp-stats-overlay').text()).not.toContain('Playback gaps');
+		expect(wrapper.find('.active-audio-overlay').exists()).toBe(false);
+		expect(wrapper.vm.autoGainSupported()).toBe(false);
+		vi.stubGlobal(
+			'AudioContext',
+			vi.fn(() => {
+				throw new Error('USB diagnostic initialized audio');
+			}),
+		);
+		wrapper.vm._initAudioCtx();
+		expect(AudioContext).not.toHaveBeenCalled();
+		await wrapper.setData({ running: false });
+		expect(wrapper.get('select[aria-label="Receive Mode"]').attributes('disabled')).toBeUndefined();
+	});
+	it('hides diagnostic reception in production and remote sessions, retaining advanced USB format', async () => {
+		vi.stubEnv('DEV', false);
+		wrapper = mount(ReceiverView);
+		await wrapper.setData({
+			deviceCapabilities: {
+				deviceType: 'limesdr',
+				gainControls: [
+					{ name: 'USB Format', type: 'select', labels: ['16-bit', 'Packed 12-bit'] },
+					{ name: 'Receive Mode', type: 'select', labels: ['Normal', 'USB only (diagnostic)'] },
+				],
+			},
+		});
+		expect(wrapper.find('select[aria-label="Receive Mode"]').exists()).toBe(false);
+		expect(wrapper.find('select[aria-label="USB Format"]').exists()).toBe(true);
+		vi.stubEnv('DEV', true);
+		await wrapper.setData({ remoteMode: 'client' });
+		expect(wrapper.find('select[aria-label="Receive Mode"]').exists()).toBe(false);
 	});
 	it('updates numeric gain switches and keeps client locks read-only', async () => {
 		wrapper = mount(ReceiverView, { attachTo: document.body });

@@ -4,6 +4,7 @@ vi.mock('@/worker/runtime/wasm-init', () => ({
 	FFT: class {
 		set_smoothing_speed() {}
 		fft() {}
+		free() {}
 	},
 }));
 
@@ -20,11 +21,21 @@ async function createStream(rdsCallback = null, dsdStatusCallback = null, rtl433
 	const workers = [];
 	vi.stubGlobal(
 		'Worker',
-		class {
+		class extends EventTarget {
 			messages = [];
 			terminate = vi.fn();
 			constructor() {
+				super();
 				workers.push(this);
+			}
+			set onmessage(handler) {
+				this.handler = handler;
+			}
+			get onmessage() {
+				return (event) => {
+					this.dispatchEvent(new MessageEvent('message', { data: event.data }));
+					this.handler?.(event);
+				};
 			}
 			postMessage(message) {
 				this.messages.push(message);
@@ -66,7 +77,7 @@ async function createStream(rdsCallback = null, dsdStatusCallback = null, rtl433
 		backend.dspWorkers.push(backend._spawnWorker(backend.vfoParams.length - 1, params));
 	}
 	backend.vfoParams[0].enabled = true;
-	return { backend, workers, receive: () => receive(new Int8Array(130560)) };
+	return { backend, workers, receive: (input = new Int8Array(130560)) => receive(input) };
 }
 
 describe('shared VFO worker routing', () => {
@@ -98,6 +109,9 @@ describe('shared VFO worker routing', () => {
 					bands: request.centers.map((centerBin) => ({ centerBin, buffer: new ArrayBuffer(128), length: 32 })),
 				},
 			});
+			for (const worker of backend.dspWorkers) {
+				worker.onmessage({ data: { type: 'audio', chunkId: request.chunkId, samples: null, dspTime: 0 } });
+			}
 		}
 		expect(workers).toHaveLength(28);
 		for (const [index, worker] of backend.dspWorkers.entries()) {
@@ -342,5 +356,43 @@ describe('shared VFO worker routing', () => {
 		for (let index = 0; index < 200; index++) receive();
 		expect(workers[3].messages.length).toBeLessThan(100);
 		expect(backend._perf.droppedChunks).toBeGreaterThan(0);
+	});
+	it('bounds direct input, preserves leased IQ, and lets healthy VFOs continue when another stalls', async () => {
+		const { backend, receive } = await createStream();
+		backend._sharedChannelization = false;
+		const slow = backend.dspWorkers[0];
+		const fast = backend.dspWorkers[1];
+		backend.vfoParams[2].enabled = false;
+		for (let id = 1; id <= 1000; id++) {
+			receive(new Int8Array(130560).fill(id % 127));
+			const request = fast.messages.at(-1);
+			fast.onmessage({ data: { type: 'audio', chunkId: request.chunkId, samples: null, dspTime: 0 } });
+		}
+		const queued = slow.messages.filter((message) => message.type === 'process');
+		expect(queued).toHaveLength(32);
+		for (const message of queued) expect(backend.sharedIqViews[message.sabIndex][0]).toBe(message.chunkId);
+		expect(fast.messages.filter((message) => message.type === 'process')).toHaveLength(1000);
+		expect(backend._perf.droppedChunks).toBe(968);
+		slow.onmessage({ data: { type: 'processed', chunkId: queued[0].chunkId } });
+		receive(new Int8Array(130560).fill(42));
+		expect(slow.messages.at(-1).chunkId).toBe(1001);
+		expect(backend.sharedIqViews[slow.messages.at(-1).sabIndex][0]).toBe(42);
+	});
+	it('absorbs a 25 ms completion delay without dropping normal 61.44 MSPS input', async () => {
+		const { backend, receive } = await createStream();
+		backend._sharedChannelization = false;
+		for (let burst = 0; burst < 10; burst++) {
+			for (let chunk = 0; chunk < 24; chunk++) {
+				vi.advanceTimersByTime(1.0625);
+				receive();
+			}
+			for (const worker of backend.dspWorkers) {
+				const requests = worker.messages.filter((message) => message.type === 'process').slice(-24);
+				expect(requests).toHaveLength(24);
+				for (const request of requests) worker.onmessage({ data: { type: 'processed', chunkId: request.chunkId } });
+			}
+		}
+		expect(backend._perf.droppedChunks).toBe(0);
+		for (const worker of backend.dspWorkers) expect(worker.messages.filter((message) => message.type === 'process')).toHaveLength(240);
 	});
 });

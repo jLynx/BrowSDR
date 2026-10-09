@@ -22,6 +22,9 @@ export const vfoMethods = {
 		const anyEnabled = this.vfos.some((v) => v.enabled);
 		if (anyEnabled) {
 			this._initAudioCtx();
+		} else {
+			// Intentional silence must not become a playback gap on unmute.
+			this._resetAudioPlayback();
 		}
 		// When muting a VFO, flush any partially-filled whisper buffer so the
 		// recording doesn't hang waiting for samples that will never arrive.

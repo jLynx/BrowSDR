@@ -444,13 +444,24 @@ describe('LimeSDR receive configuration', () => {
 		expect(write.mock.calls).toEqual([[0x0005, 3]]);
 	});
 
-	it.each([0, 1])('waits for RX channel %i samples and preserves I/Q order without live-packet calibration', async (channel) => {
+	it.each([
+		[0, 4096, false],
+		[1, 4096, false],
+		[0, 524288, false],
+		[1, 524288, false],
+		[0, 4096, true],
+		[1, 393216, true],
+		[0, 524288, false, true],
+		[1, 393216, true, true],
+	])('waits for RX channel %i samples with %i-byte reads (packed=%s, usbOnly=%s)', async (channel, size, packed, usbOnly = false) => {
 		const { driver, usb } = await createDriver();
 		driver.rxChannel = channel;
-		vi.spyOn(driver, 'readFPGA').mockResolvedValue(0);
+		driver.setLinkFormat(packed ? 12 : 16);
+		vi.spyOn(driver, 'readFPGA').mockImplementation(async (address) => (address === 0x0008 && packed ? 0x0102 : 0));
 		const fpgaWrite = vi.spyOn(driver, 'writeFPGA').mockResolvedValue(undefined);
 		vi.spyOn(driver, 'readLMS7002').mockResolvedValue(0xff15);
 		const lmsWrite = vi.spyOn(driver, 'writeLMS7002').mockResolvedValue(undefined);
+		const meter = vi.spyOn(driver.rxLevel, 'observe');
 		const readResolvers = [];
 		usb.transferIn.mockImplementation((endpoint) => {
 			if (endpoint === 15) {
@@ -461,25 +472,52 @@ describe('LimeSDR receive configuration', () => {
 			}
 			return new Promise((resolve) => readResolvers.push(resolve));
 		});
-		const callback = vi.fn();
+		const callback = vi.fn(() => expect(readResolvers).toHaveLength(16));
 		let active = false;
-		const starting = driver.startStreaming(callback).then(() => {
+		const starting = driver.startStreaming(callback, usbOnly).then(() => {
 			active = true;
 		});
-		await vi.waitFor(() => expect(readResolvers).toHaveLength(8));
+		await vi.waitFor(() => expect(readResolvers).toHaveLength(16));
 		expect(active).toBe(false);
-		const packet = new DataView(new ArrayBuffer(4096));
-		for (let offset = 16; offset < 4096; offset += 4) {
-			packet.setInt16(offset, 16384, true);
-			packet.setInt16(offset + 2, -2048, true);
+		const packet = new DataView(new ArrayBuffer(size));
+		for (let base = 0; base < size; base += 4096) {
+			packet.setBigUint64(base + 8, BigInt((base / 4096) * (packed ? 1360 : 1020)), true);
+			for (let offset = base + 16; offset < base + 4096; offset += packed ? 3 : 4) {
+				if (packed) {
+					// I=1024, Q=-128 in signed12, equivalent to 16384/-2048 left-aligned.
+					packet.setUint8(offset, 0);
+					packet.setUint8(offset + 1, 4);
+					packet.setUint8(offset + 2, 248);
+				} else {
+					packet.setInt16(offset, 16384, true);
+					packet.setInt16(offset + 2, -2048, true);
+				}
+			}
 		}
 		readResolvers.shift()({ status: 'ok', data: packet });
 		await starting;
 		expect(fpgaWrite).toHaveBeenCalledWith(0x0007, 1 << channel);
+		expect(fpgaWrite).toHaveBeenCalledWith(0x0008, packed ? 0x0102 : 0x0100);
+		expect(usb.transferIn).toHaveBeenCalledWith(1, packed ? 393216 : 524288);
 		expect(active).toBe(true);
-		expect(callback).toHaveBeenCalledOnce();
-		expect(callback.mock.calls[0][0]).toHaveLength(2040);
-		expect(Array.from(callback.mock.calls[0][0].slice(0, 4))).toEqual([64, -8, 64, -8]);
+		if (usbOnly) {
+			expect(callback).not.toHaveBeenCalled();
+			expect(meter).not.toHaveBeenCalled();
+		} else {
+			expect(callback).toHaveBeenCalledOnce();
+			expect(callback.mock.calls[0][0]).toHaveLength((size / 4096) * (packed ? 2720 : 2040));
+			expect(Array.from(callback.mock.calls[0][0].slice(0, 4))).toEqual([64, -8, 64, -8]);
+		}
+		expect(driver.streamStats.report).toMatchObject({
+			sourceGapCount: 0,
+			sourceMissingSamples: 0,
+			sourceDiscontinuities: 0,
+			usbOutOfOrderTransfers: 0,
+			usbDiagnosticMode: usbOnly ? 1 : 0,
+			usbReceivedBytes: size,
+			usbReceivedSamples: (size / 4096) * (packed ? 1360 : 1020),
+		});
+		expect(driver.streamStats.report.usbServiceAvgMs).toBeGreaterThanOrEqual(0);
 		expect(lmsWrite.mock.calls).toEqual([
 			[0x0020, 0x5515],
 			[0x0020, 0xff15],
@@ -487,8 +525,18 @@ describe('LimeSDR receive configuration', () => {
 		const stopping = driver.stopStreaming();
 		for (const resolve of readResolvers) resolve({ status: 'ok', data: packet });
 		await stopping;
-		expect(callback).toHaveBeenCalledOnce();
+		expect(callback).toHaveBeenCalledTimes(usbOnly ? 0 : 1);
 		expect(usb.close).not.toHaveBeenCalled();
+	});
+
+	it('rejects packed mode when the FPGA format register does not agree', async () => {
+		const { driver, usb } = await createDriver();
+		driver.setLinkFormat(12);
+		vi.spyOn(driver, 'readFPGA').mockResolvedValue(0);
+		vi.spyOn(driver, 'writeFPGA').mockResolvedValue(undefined);
+		await expect(driver.startStreaming(vi.fn())).rejects.toThrow('did not enable packed');
+		expect(driver.rxRunning).toBeNull();
+		expect(usb.transferIn.mock.calls.filter(([endpoint]) => endpoint === 1)).toHaveLength(0);
 	});
 
 	it('reports missing USB data and cancels blocked transfers instead of hanging', async () => {
@@ -515,7 +563,7 @@ describe('LimeSDR receive configuration', () => {
 		const starting = driver.startStreaming(callback);
 		const failure = expect(starting).rejects.toThrow('no USB IQ samples received');
 		await vi.advanceTimersByTimeAsync(0);
-		expect(readResolvers).toHaveLength(8);
+		expect(readResolvers).toHaveLength(16);
 		await vi.advanceTimersByTimeAsync(4000);
 		await failure;
 		expect(usb.close).toHaveBeenCalledOnce();
@@ -603,6 +651,7 @@ describe('LimeSDR RX channel selection', () => {
 			'setTIAGain',
 			'setPGAGain',
 			'setAntennaPath',
+			'setLinkFormat',
 			'setFrequencySXR',
 		]) {
 			vi.spyOn(device.lime, method).mockImplementation(async (value) => {
@@ -611,6 +660,55 @@ describe('LimeSDR RX channel selection', () => {
 		}
 		return { device, events };
 	}
+	it('starts USB-only mode without treating it as RF gain and rejects a live mode change', async () => {
+		const { device } = createWrapper();
+		await device.setGains({ 'Receive Mode': 1, 'USB Format': 1 });
+		const callback = vi.fn();
+		await device.startRx(callback);
+		expect(device.lime.startStreaming).toHaveBeenCalledWith(callback, true);
+		await expect(device.setGains({ 'Receive Mode': 0 })).rejects.toThrow('stop reception');
+		await device.stopRx();
+		await device.setGains({ 'Receive Mode': 0 });
+		await device.startRx(callback);
+		expect(device.lime.startStreaming).toHaveBeenLastCalledWith(callback);
+	});
+
+	it('retains the 16-bit default and offers packed 12-bit as a transport option', () => {
+		expect(new LimeSDRDevice().gainControls.find((control) => control.name === 'USB Format')).toMatchObject({
+			default: 0,
+			labels: ['16-bit', 'Packed 12-bit'],
+			type: 'select',
+		});
+	});
+	it('omits USB-only reception from production capabilities and rejects attempts to enable it', async () => {
+		vi.stubEnv('DEV', false);
+		try {
+			const { device } = createWrapper();
+			expect(device.gainControls.some((control) => control.name === 'Receive Mode')).toBe(false);
+			await expect(device.setGain('Receive Mode', 1)).rejects.toThrow('development build');
+			expect(device.lime.startStreaming).not.toHaveBeenCalled();
+		} finally {
+			vi.unstubAllEnvs();
+		}
+	});
+	it('stops and restarts the same callback when changing USB format, and restores on failure', async () => {
+		const { device, events } = createWrapper();
+		const callback = vi.fn();
+		await device.startRx(callback);
+		events.length = 0;
+		await device.setGain('USB Format', 1);
+		expect(events).toEqual([
+			['stopStreaming', undefined],
+			['setLinkFormat', 12],
+			['startStreaming', callback],
+		]);
+		device.lime.startStreaming.mockRejectedValueOnce(new Error('Format failed'));
+		await expect(device.setGain('USB Format', 0)).rejects.toThrow('Format failed');
+		expect(device.lime.setLinkFormat).toHaveBeenLastCalledWith(12);
+		expect(device.gains['USB Format']).toBe(1);
+		expect(device.lime.startStreaming).toHaveBeenLastCalledWith(callback);
+		await expect(device.setGain('USB Format', 2)).rejects.toThrow('unsupported');
+	});
 
 	it('stops reception, applies retained gains and path to RX2, then restarts the same callback', async () => {
 		const { device, events } = createWrapper();

@@ -135,6 +135,7 @@ export const uiHelperMethods = {
 		this._initAudioCtx();
 	},
 	_initAudioCtx(this: AppInstance) {
+		if (this.deviceCapabilities?.deviceType === 'limesdr' && this.gains['Receive Mode'] === 1) return;
 		if (!this.audioCtx) {
 			const AudioContext = window.AudioContext || window.webkitAudioContext;
 			this.audioCtx = new AudioContext({ sampleRate: 48000 });
@@ -157,6 +158,7 @@ export const uiHelperMethods = {
 			this.audioCtx.resume().catch((e) => console.warn('AudioContext resume blocked:', e));
 			if (this._mediaAudioEl) this._mediaAudioEl.play().catch(() => {});
 		}
+		void this._prepareAudioWorklet();
 	},
 	_createSilentAudioEl(this: AppInstance): HTMLAudioElement {
 		const el = document.createElement('audio');

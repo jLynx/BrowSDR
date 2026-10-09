@@ -4,6 +4,16 @@ import type { AppInstance } from '@/app/core/receiver.types';
 import { BOOKMARK_CATEGORIES } from './constants';
 
 export const computedProperties = {
+	gainControlGroups(this: AppInstance) {
+		const controls = (this.deviceCapabilities?.gainControls || []).filter(
+			(control) => control.name !== 'Receive Mode' || (import.meta.env.DEV && this.remoteMode === 'none'),
+		);
+		const advanced = new Set(['USB Format', 'Receive Mode']);
+		return [
+			{ name: '', controls: controls.filter((control) => !advanced.has(control.name)) },
+			{ name: 'Advanced', controls: controls.filter((control) => advanced.has(control.name)) },
+		].filter((group) => group.controls.length);
+	},
 	isLocal(this: AppInstance) {
 		const host = window.location.hostname;
 		return host === 'localhost' || host === '127.0.0.1';

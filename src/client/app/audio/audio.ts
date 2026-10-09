@@ -1,9 +1,19 @@
 import type { AppInstance } from '@/app/core/receiver.types';
+import { workletMethods } from './worklet';
+
+// Fallback playback schedules 50ms chunks. Keep two chunks of headroom
+// for short UI/background delays when AudioWorklet is unavailable.
+const AUDIO_SCHEDULE_LEAD_SECONDS = 0.1;
 
 export const audioMethods = {
+	...workletMethods,
 	playAudio(this: AppInstance, samples: Float32Array | Record<number, number>, channels: 1 | 2 = 1) {
-		if (!this.vfos.some((v) => v.enabled) || !this.audioCtx) return;
+		if (!this.vfos.some((v) => v.enabled) || !this.audioCtx) {
+			if (!this._audioPlaybackPaused) this._resetAudioPlayback();
+			return;
+		}
 		if (this.audioCtx.state === 'suspended') {
+			if (!this._audioPlaybackPaused) this._resetAudioPlayback();
 			this.audioCtx.resume().catch(() => {});
 			return;
 		}
@@ -18,6 +28,12 @@ export const audioMethods = {
 
 		if (!floats.length) return;
 		if (floats.length % channels) return;
+		this._audioPlaybackPaused = false;
+		if (this._audioWorklet) {
+			// Comlink delivered an owned buffer; transfer it straight to the audio thread.
+			this._audioWorklet.port.postMessage({ type: 'pcm', samples: floats, channels }, [floats.buffer]);
+			return;
+		}
 		if (this.audioRingChannels !== channels) {
 			this.audioRingPos = 0;
 			this.audioRingChannels = channels;
@@ -59,9 +75,15 @@ export const audioMethods = {
 		src.connect(gain);
 
 		const now = context.currentTime;
-		if (this.nextPlayTime < now) {
-			// Fallen behind — reschedule with minimal gap
-			this.nextPlayTime = now + 0.01;
+		if (this.nextPlayTime === 0 || this.nextPlayTime < now) {
+			// Startup/reset has no preceding audio. Count subsequent exhausted
+			// schedules once when audio resumes, including the recovery padding.
+			if (this.nextPlayTime > 0) {
+				this.audioGapCount = (this.audioGapCount ?? 0) + 1;
+				this.audioGapMs = (this.audioGapMs ?? 0) + (now + AUDIO_SCHEDULE_LEAD_SECONDS - this.nextPlayTime) * 1000;
+			}
+			// Establish a reserve at startup, and rebuild it after an underrun.
+			this.nextPlayTime = now + AUDIO_SCHEDULE_LEAD_SECONDS;
 		}
 		src.start(this.nextPlayTime);
 		this.nextPlayTime += buffer.duration;

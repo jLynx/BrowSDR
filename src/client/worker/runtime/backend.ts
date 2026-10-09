@@ -10,6 +10,7 @@ import type {
 	HostStats,
 } from '@/worker/runtime/callbacks.types';
 import type { DspAudio } from '@/worker/runtime/dsp-messages.types';
+import type { IqDispatcher } from '@/worker/streams/iq-dispatch';
 import type { InitOutput, DspProcessor } from '/wasm/dsp/browsdr_dsp.js';
 /*
 Copyright (c) 2026, jLynx <https://github.com/jLynx>
@@ -84,7 +85,7 @@ export class Backend {
 	// Shared IQ buffers
 	sharedIqPools?: Array<SharedArrayBuffer | ArrayBuffer>;
 	sharedIqViews?: Int8Array[];
-	sabPoolIndex?: number;
+	_iqDispatcher?: IqDispatcher;
 
 	// DSP perf
 	_perf?: PerfCounters;
@@ -398,6 +399,8 @@ export class Backend {
 	}
 
 	private disposeDsp(): void {
+		this._iqDispatcher?.dispose();
+		this._iqDispatcher = undefined;
 		this._disposeSpectrum?.();
 		this._disposeSpectrum = undefined;
 		if (this._perfInterval) {

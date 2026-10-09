@@ -44,11 +44,13 @@ export const EP_CTRL_IN_NUM = 15; // Control response input (endpoint number for
 export const EP_STREAM_IN_NUM = 1; // IQ stream input (endpoint number for transferIn)
 
 // Streaming constants
-export const TRANSFER_SIZE = 262144; // 256 KB per bulk transfer
+// 128 packets yield 130560 IQ samples, within the DSP's 131072-sample capacity.
+// At 61.44 MSPS this halves callbacks compared with 256KB reads.
+export const TRANSFER_SIZE = 524288; // 512 KB per bulk transfer
 export const STREAM_PKT_SIZE = 4096; // FPGA packet size
 export const STREAM_HDR_SIZE = 16; // Packet header bytes
 export const STREAM_PAYLOAD = STREAM_PKT_SIZE - STREAM_HDR_SIZE; // 4080 bytes of IQ data
-export const NUM_TRANSFERS = 8; // Concurrent USB transfers
+export const NUM_TRANSFERS = 16; // ~34ms queued coverage at 61.44 MSPS; matches LimeSuite's FX3 context count
 export const STREAM_START_TIMEOUT_MS = 3000;
 export const STREAM_STOP_TIMEOUT_MS = 1000;
 export const MAX_SAMPLE_RATE = 61.44e6;

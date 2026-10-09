@@ -151,6 +151,18 @@ describe('RTL-SDRs with matching USB identities', () => {
 });
 
 describe('receiver settings and VFO bandwidth', () => {
+	it('keeps USB format but never persists or restores diagnostic reception', () => {
+		const storage = new Map();
+		vi.stubGlobal('localStorage', { getItem: (key) => storage.get(key), setItem: (key, value) => storage.set(key, value) });
+		const app = { ...createAppData(), gains: { 'USB Format': 1, 'Receive Mode': 1, LNA: 14 } };
+		settingsMethods.saveSetting.call(app);
+		expect(JSON.parse(storage.get('SDRSetting')).gains).toEqual({ 'USB Format': 1, LNA: 14 });
+		expect(app.gains['Receive Mode']).toBe(1);
+		storage.set('SDRSetting', JSON.stringify({ gains: { 'USB Format': 1, 'Receive Mode': 1, LNA: 14 } }));
+		const restored = createAppData();
+		settingsMethods.loadSetting.call(restored);
+		expect(restored.gains).toEqual({ 'USB Format': 1, LNA: 14 });
+	});
 	it('restores the latest first-receiver VFO edits on refresh without copying additional or remote receivers', () => {
 		const storage = new Map();
 		vi.stubGlobal('localStorage', { getItem: (key) => storage.get(key), setItem: (key, value) => storage.set(key, value) });

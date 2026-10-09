@@ -23,10 +23,8 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 import {
 	CMD_LMS7002_RST,
 	EP_STREAM_IN_NUM,
-	TRANSFER_SIZE,
 	STREAM_PKT_SIZE,
 	STREAM_HDR_SIZE,
-	STREAM_PAYLOAD,
 	NUM_TRANSFERS,
 	STREAM_START_TIMEOUT_MS,
 	STREAM_STOP_TIMEOUT_MS,
@@ -60,10 +58,20 @@ import {
 	lnaGainToReg,
 } from './protocol';
 import { LimeRxLevel } from './rx-level';
+import { LimeStreamStats } from './stream-stats';
 import { LimeSDRClocks } from './clocks';
+import { decodeStreamPcm, readStreamComponent, streamSamplesPerPacket, streamTransferSize } from './stream-pcm';
 
 export class LimeSDR extends LimeSDRClocks {
 	readonly rxLevel = new LimeRxLevel();
+	readonly streamStats = new LimeStreamStats();
+	private packed = false;
+
+	setLinkFormat(bits: number): void {
+		if (bits !== 12 && bits !== 16) throw new Error('LimeSDR: unsupported USB sample width');
+		if (this.rxRunning) throw new Error('LimeSDR: stop reception before changing USB sample width');
+		this.packed = bits === 12;
+	}
 
 	override async close(): Promise<void> {
 		if (this.rxRunning) await this.stopStreaming();
@@ -172,6 +180,7 @@ export class LimeSDR extends LimeSDRClocks {
 	// ── Register Diagnostics ────────────────────────────────────
 
 	private async dumpRegisters(): Promise<void> {
+		if (!import.meta.env.DEV) return;
 		const regs: Array<[string, number]> = [
 			['RESET (0x0020)', REG_RESET],
 			['DIQ_PAD (0x0022)', 0x0022],
@@ -320,16 +329,22 @@ export class LimeSDR extends LimeSDRClocks {
 
 	// ── Streaming ───────────────────────────────────────────────
 
-	async startStreaming(callback: (data: ArrayBufferView) => void): Promise<void> {
+	async startStreaming(callback: (data: ArrayBufferView) => void, usbOnly = false): Promise<void> {
 		if (this.rxRunning) return;
 		this.rxLevel.reset();
+		const packed = this.packed;
+		const transferSize = streamTransferSize(packed);
+		const samplesPerPacket = streamSamplesPerPacket(packed);
+		this.streamStats.reset(samplesPerPacket, packed ? 12 : 16, transferSize, usbOnly);
 
 		// Follow exact LimeSuite Streamer::Start() sequence:
 
 		// 1. Select FPGA chip
 		await this.enableFpgaStreaming();
 
-		console.log(`LimeSDR: RX enabled; waiting for USB samples (${NUM_TRANSFERS} transfers, ${TRANSFER_SIZE} bytes each)`);
+		console.log(
+			`LimeSDR: RX enabled; waiting for USB samples (${NUM_TRANSFERS} transfers, ${transferSize} bytes each, ${packed ? 12 : 16}-bit link)`,
+		);
 
 		let firstPacketLogged = false;
 		let resolveStarted!: () => void;
@@ -345,47 +360,52 @@ export class LimeSDR extends LimeSDRClocks {
 		}, STREAM_START_TIMEOUT_MS);
 		const transfers: Array<Promise<void>> = [];
 		this.rxRunning = transfers;
+		let nextSequence = 0;
 
 		const transfer = async (): Promise<void> => {
 			// Each concurrent transfer gets its own output buffer (avoids race condition)
-			const samplesPerTransfer = Math.floor(TRANSFER_SIZE / STREAM_PKT_SIZE) * (STREAM_PAYLOAD / 4);
-			const outBuf = new Int8Array(samplesPerTransfer * 2);
+			const samplesPerTransfer = (transferSize / STREAM_PKT_SIZE) * samplesPerPacket;
+			const outBuf = new Int8Array(usbOnly ? 0 : samplesPerTransfer * 2);
 
 			await Promise.resolve(); // Yield to event loop
+			let pendingSequence = 0;
+			const read = () => {
+				pendingSequence = nextSequence++;
+				return this.dev.transferIn(EP_STREAM_IN_NUM, transferSize);
+			};
+			let pending = read();
 			while (this.rxRunning === transfers) {
 				try {
-					const result = await this.dev.transferIn(EP_STREAM_IN_NUM, TRANSFER_SIZE);
+					const result = await pending;
 					if (this.rxRunning !== transfers) break;
 					if (result.status !== 'ok' || !result.data) {
 						throw new Error(`USB IQ transfer failed (status=${result.status})`);
 					}
+					const serviceStart = performance.now();
+					this.streamStats.observeArrival(serviceStart, pendingSequence);
+					// Keep the endpoint fed while conversion, FFT and DSP dispatch run.
+					// Handle a rejection immediately; await below still reports the error.
+					pending = read();
+					pending.catch(() => {});
 
 					const raw = new Uint8Array(result.data.buffer, result.data.byteOffset, result.data.byteLength);
-					if (raw.length < STREAM_PKT_SIZE) continue;
+					if (raw.length < STREAM_PKT_SIZE || raw.length % STREAM_PKT_SIZE) throw new Error('Incomplete FPGA packet in USB transfer');
 
 					// Log first packet for diagnostics
-					if (!firstPacketLogged) {
+					if (import.meta.env.DEV && !firstPacketLogged && !usbOnly) {
 						firstPacketLogged = true;
-						logFirstPacket(raw);
+						logFirstPacket(raw, packed);
 					}
 
-					const numPackets = Math.floor(raw.length / STREAM_PKT_SIZE);
 					const dv = new DataView(raw.buffer, raw.byteOffset, raw.byteLength);
-					this.rxLevel.observe(dv);
-
-					let outPos = 0;
-					for (let pkt = 0; pkt < numPackets; pkt++) {
-						const base = pkt * STREAM_PKT_SIZE + STREAM_HDR_SIZE;
-						for (let j = 0; j < STREAM_PAYLOAD; j += 4) {
-							outBuf[outPos++] = dv.getInt16(base + j, true) >> 8; // I
-							outBuf[outPos++] = dv.getInt16(base + j + 2, true) >> 8; // Q
-						}
+					this.streamStats.observe(dv);
+					if (!usbOnly) {
+						this.rxLevel.observe(dv, Date.now(), packed);
+						const outPos = decodeStreamPcm(dv, outBuf, packed);
+						if (outPos > 0) callback(outBuf.subarray(0, outPos));
 					}
-
-					if (outPos > 0) {
-						callback(outBuf.subarray(0, outPos));
-						resolveStarted();
-					}
+					resolveStarted();
+					this.streamStats.observeService(performance.now() - serviceStart);
 				} catch (e: unknown) {
 					if (this.rxRunning === transfers) {
 						const msg = e instanceof Error ? errorMessage(e) : String(e);
@@ -395,6 +415,9 @@ export class LimeSDR extends LimeSDRClocks {
 					break;
 				}
 			}
+			// A callback can stop reception after the replacement read was queued.
+			// Keep that read owned by this generation until it settles or is cancelled.
+			await pending.catch(() => {});
 		};
 
 		for (let index = 0; index < NUM_TRANSFERS; index++) transfers.push(transfer());
@@ -462,7 +485,11 @@ export class LimeSDR extends LimeSDRClocks {
 
 		// 5. Configure interface mode: MIMO (0x0100)
 		// MIMO mode properly captures I/Q from separate DDR edges
-		await this.writeFPGA(FPGA_REG_IFACE, 0x0100);
+		const mode = this.packed ? 0x0102 : 0x0100;
+		await this.writeFPGA(FPGA_REG_IFACE, mode);
+		if (this.packed && (await this.readFPGA(FPGA_REG_IFACE)) !== mode) {
+			throw new Error('LimeSDR: FPGA did not enable packed 12-bit USB samples; select 16-bit USB format');
+		}
 		await this.writeFPGA(FPGA_REG_CH_EN, 1 << this.rxChannel);
 
 		// 6. Enable RX streaming only (per LimeSuite StartStreaming — TX_EN not needed)
@@ -479,7 +506,7 @@ export class LimeSDR extends LimeSDRClocks {
 	}
 }
 
-function logFirstPacket(raw: Uint8Array<ArrayBufferLike>) {
+function logFirstPacket(raw: Uint8Array<ArrayBufferLike>, packed: boolean) {
 	const hdr = Array.from(raw.slice(0, 16))
 		.map((b) => b.toString(16).padStart(2, '0'))
 		.join(' ');
@@ -492,11 +519,12 @@ function logFirstPacket(raw: Uint8Array<ArrayBufferLike>) {
 		sumQQ = 0,
 		sumIQ = 0;
 	const pairs: string[] = [];
-	const numDiag = Math.min(500, Math.floor((raw.length - STREAM_HDR_SIZE) / 4));
+	const stride = packed ? 3 : 4;
+	const numDiag = Math.min(500, Math.floor((raw.length - STREAM_HDR_SIZE) / stride));
 	for (let k = 0; k < numDiag; k++) {
-		const off = STREAM_HDR_SIZE + k * 4;
-		const iVal = diagDV.getInt16(off, true); // word[0] = I
-		const qVal = diagDV.getInt16(off + 2, true); // word[1] = Q
+		const off = STREAM_HDR_SIZE + k * stride;
+		const iVal = readStreamComponent(diagDV, off, 0, packed);
+		const qVal = readStreamComponent(diagDV, off, 1, packed);
 		sumII += iVal * iVal;
 		sumQQ += qVal * qVal;
 		sumIQ += iVal * qVal;

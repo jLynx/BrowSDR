@@ -2,6 +2,7 @@ import type { POCSAGDecoder } from '@/worker/decoders/pocsag';
 import type { RDSDecoder } from '@/worker/decoders/rds';
 import type { RationalResampler } from '@/worker/streams/dsp-pipeline';
 import type { DSDDecoder } from '@/worker/decoders/dsd/dsd-decoder';
+import type { RxStreamStats } from '@/radio/types';
 /*
 Copyright (c) 2026, jLynx <https://github.com/jLynx>
 
@@ -89,7 +90,7 @@ export interface PerfCounters {
 	report: PerfReport;
 }
 
-export interface PerfReport {
+export interface PerfReport extends Partial<RxStreamStats> {
 	usbFps: number;
 	audioFps: number;
 	dspAvgMs: number | string;
@@ -97,6 +98,8 @@ export interface PerfReport {
 	audioRate: number;
 	inputRate: number;
 	dropped: number;
+	/** Cumulative skipped IQ consumer deliveries since this stream started. */
+	droppedTotal?: number;
 	chunkSize: number;
 	msgRate?: number;
 	whisperMsgRate?: number;
