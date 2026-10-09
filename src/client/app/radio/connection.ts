@@ -274,6 +274,8 @@ export const connectionMethods = {
 		if (this.running) return;
 		this.adsb.sources = [];
 		this.adsb.status = [];
+		this.ais.sources = [];
+		this.ais.status = [];
 		const usbOnly = isUsbOnlyDiagnostic(this);
 		this._initAudioCtx();
 		this._resetAudioPlayback(true);
@@ -317,6 +319,9 @@ export const connectionMethods = {
 				),
 				Comlink.proxy((index: number, freq: number, msg: Parameters<AppInstance['_onAdsbMessage']>[2]) =>
 					this._onAdsbMessage(index, freq, msg),
+				),
+				Comlink.proxy((index: number, freq: number, msg: Parameters<AppInstance['_onAisMessage']>[2]) =>
+					this._onAisMessage(index, freq, msg),
 				),
 			);
 		} catch (e) {

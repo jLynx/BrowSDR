@@ -1,3 +1,4 @@
+import type { AisMessage } from '@/worker/decoders/ais/types';
 import type { AdsbMessage } from '@/worker/decoders/adsb/types';
 import type { WhisperChunkMeta, WhisperVfoState } from '@/app/decoders/whisper.types';
 import type { WatchOptions, WatchStopHandle } from 'vue';
@@ -184,6 +185,10 @@ export interface ReceiverMethods {
 	autoGainControls(): string;
 	cancelAutoGain(): void;
 	autoSetGains(): Promise<void>;
+	toggleAisPanel(): void;
+	tuneAisVfo(frequency: number, index?: number): void;
+	_onAisMessage(index: number, freq: number, msg: AisMessage): void;
+	aisStatusText(index: number): string;
 	toggleAdsbPanel(): void;
 	tuneAdsbVfo(index?: number): void;
 	_onAdsbMessage(index: number, freq: number, msg: AdsbMessage): void;

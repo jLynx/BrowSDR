@@ -279,6 +279,9 @@ export const remoteMethods = {
 			case 'removeRemoteVfo':
 				handleRemoveRemoteVfo.call(this, cmd, clientId);
 				break;
+			case 'ais':
+				handleAis.call(this, cmd);
+				break;
 			case 'adsb':
 				if (this.remoteMode === 'client') this._onAdsbMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
 				break;
@@ -382,6 +385,11 @@ async function installHostStreamCallbacks(this: AppInstance) {
 	await this.backend.setRemoteHostRtl433Callback(
 		Comlink.proxy((clientId: string, vfoIndex: number, freq: number, msg: Parameters<AppInstance['_onRtl433Message']>[2]) => {
 			this._webrtc?.sendCommandTo(clientId, { type: 'rtl433', vfoIndex, freq, msg });
+		}),
+	);
+	await this.backend.setRemoteHostAisCallback(
+		Comlink.proxy((clientId: string, index: number, freq: number, msg: Parameters<AppInstance['_onAisMessage']>[2]) => {
+			this._webrtc?.sendCommandTo(clientId, { type: 'ais', vfoIndex: index, freq, msg });
 		}),
 	);
 	await this.backend.setRemoteHostAdsbCallback(
@@ -565,4 +573,8 @@ function validRemoteGain(app: AppInstance, property: string, value: number): boo
 	if (!control || value < control.min || value > control.max) return false;
 	const steps = (value - control.min) / control.step;
 	return Number.isFinite(steps) && Math.abs(steps - Math.round(steps)) <= 1e-9;
+}
+
+function handleAis(this: AppInstance, cmd: Extract<ReceiverCommand, { type: 'ais' }>): void {
+	if (this.remoteMode === 'client') this._onAisMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
 }

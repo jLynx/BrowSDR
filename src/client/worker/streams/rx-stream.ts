@@ -11,6 +11,7 @@ import type {
 	RdsCallback,
 	Rtl433Callback,
 	AdsbCallback,
+	AisCallback,
 	DsdCallback,
 } from '@/worker/runtime/callbacks.types';
 
@@ -55,6 +56,7 @@ export async function startRxStream(
 	dsdStatusCallback: DsdCallback | null = null,
 	rtl433Callback: Rtl433Callback | null = null,
 	adsbCallback: AdsbCallback | null = null,
+	aisCallback: AisCallback | null = null,
 ): Promise<void> {
 	if (_streamStarting) return;
 	_streamStarting = true;
@@ -106,7 +108,7 @@ export async function startRxStream(
 		// ── Audio DDC setup ───────────────────────────────────────────
 		// Full SDR++ pipeline in Rust: NCO → polyphase resampler (→50kHz)
 		// → channel FIR → squelch → FM demod → post-demod FIR → audio resampler (→48kHz)
-		initializeVfoWorkers(backend, centerFreq, rtl433Callback, rdsCallback, dsdStatusCallback, sampleRate, adsbCallback);
+		initializeVfoWorkers(backend, centerFreq, rtl433Callback, rdsCallback, dsdStatusCallback, sampleRate, adsbCallback, aisCallback);
 
 		// ── DSP Performance Counters ──────────────────────────────────
 		const perf = initializePerformanceReporting(backend, channel.perf, sampleRate);

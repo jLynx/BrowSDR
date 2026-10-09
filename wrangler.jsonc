@@ -13,7 +13,8 @@
 	"compatibility_flags": ["nodejs_compat"],
 	"limits": { "cpu_ms": 300000 },
 	"triggers": { "crons": ["17 3 * * MON"] },
-	"r2_buckets": [{ "binding": "AIRCRAFT_DB", "bucket_name": "browsdr-aircraft-db" }],
+	// Shared databases: aircraft-db/ and maritime-db/. Keep the existing physical bucket until migration.
+	"r2_buckets": [{ "binding": "DATABASES", "bucket_name": "browsdr-aircraft-db" }],
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement

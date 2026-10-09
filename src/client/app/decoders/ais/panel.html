@@ -1,0 +1,136 @@
+<section v-if="receiver.ais.panelOpen" class="adsb-panel ais-panel" :class="{ 'adsb-fullscreen': fullscreen }" aria-label="AIS vessels">
+	<UiToolHeader variant="pocsag" closable close-label="Close AIS panel" @close="receiver.toggleAisPanel">
+		AIS Vessels <span class="pocsag-count">{{ vessels.length }} vessels · {{ positioned.length }} located</span>
+		<template #actions>
+			<UiSelect v-model.number="receiver.activeVfoIndex" aria-label="AIS VFO" class="decoder-vfo-select">
+				<option v-for="(vfo, i) in receiver.vfos" :key="i" :value="i">VFO {{ i + 1 }} · {{ vfo.freq.toFixed(3) }} MHz</option>
+			</UiSelect>
+			<UiCheckbox
+				v-if="selectedVfo"
+				class="adsb-decode-control"
+				v-model="selectedVfo.ais"
+				:label="'Decode VFO ' + (receiver.activeVfoIndex + 1)"
+				:input-label="'AIS decoding for VFO ' + (receiver.activeVfoIndex + 1)"
+				:disabled="![161.975, 162.025].includes(selectedVfo.freq) && !selectedVfo.ais"
+				@change="receiver.updateBackendVfoParams(receiver.activeVfoIndex)"
+			></UiCheckbox>
+			<UiButton variant="transcript" @click="receiver.tuneAisVfo(161.975)">Tune AIS A</UiButton>
+			<UiButton variant="transcript" @click="receiver.tuneAisVfo(162.025)">Tune AIS B</UiButton>
+			<UiButton variant="transcript" @click="showMap = !showMap" :aria-expanded="showMap">{{ showMap ? 'Hide map' : 'Show map' }}</UiButton>
+			<UiButton variant="transcript" @click="setFullscreen(!fullscreen)" :aria-pressed="fullscreen"
+				>{{ fullscreen ? 'Exit fullscreen' : 'Fullscreen map' }}</UiButton
+			>
+			<UiButton variant="transcript" @click="fit" :disabled="!showMap || !positioned.length">Fit vessels</UiButton>
+		</template>
+	</UiToolHeader>
+	<div class="adsb-summary">
+		<span v-if="!receiver.running">Reception stopped</span>
+		<template v-for="(vfo, i) in receiver.vfos" :key="i"
+			><span v-if="vfo.ais" :class="{ 'rtl433-error': receiver.ais.status[i]?.state === 'error' }"
+				>VFO {{ i + 1 }} · {{ receiver.aisStatusText(i) }}</span
+			></template
+		>
+		<span v-if="!active">Tune a VFO to AIS A or B, then enable decoding here. Audio can stay muted.</span>
+	</div>
+	<div class="adsb-content" :class="{ 'adsb-list-only': !showMap }">
+		<div v-if="showMap" class="adsb-map-wrap">
+			<div ref="mapElement" class="adsb-map" aria-label="Live vessels map"></div>
+			<div v-if="!positioned.length" class="adsb-map-message">Waiting for vessel position reports…</div>
+			<div v-if="error" class="adsb-map-error" role="status">{{ error }}</div>
+		</div>
+		<div class="adsb-list">
+			<div v-if="selectedVessel" class="adsb-details" aria-label="Vessel details">
+				<div class="adsb-details-heading">
+					<strong>{{ selectedVessel.name || selected }}</strong
+					><UiButton variant="transcript" @click="selected = ''">Back to vessels</UiButton>
+				</div>
+				<dl class="adsb-detail-grid">
+					<div>
+						<dt>MMSI</dt>
+						<dd>{{ selected }}</dd>
+					</div>
+					<div>
+						<dt>Country / administration</dt>
+						<dd>{{ country(selected) }}</dd>
+					</div>
+					<div>
+						<dt>Callsign</dt>
+						<dd>{{ selectedVessel.callsign || 'Unknown' }}</dd>
+					</div>
+					<div>
+						<dt>IMO</dt>
+						<dd>{{ selectedVessel.imo || 'Unknown' }}</dd>
+					</div>
+					<div>
+						<dt>Ship type code</dt>
+						<dd>{{ selectedVessel.shipType || 'Unknown' }}</dd>
+					</div>
+					<div>
+						<dt>Navigation</dt>
+						<dd>{{ navigationText(selectedVessel.navigationStatus) }}</dd>
+					</div>
+					<div>
+						<dt>Destination</dt>
+						<dd>{{ selectedVessel.destination || 'Unknown' }}</dd>
+					</div>
+					<div>
+						<dt>Draught</dt>
+						<dd>{{ selectedVessel.draught ? selectedVessel.draught + ' m' : 'Unknown' }}</dd>
+					</div>
+					<div>
+						<dt>Position</dt>
+						<dd>
+							{{ hasLiveVesselPosition(selectedVessel, now) ? selectedVessel.latitude.toFixed(5) + ', ' +
+							selectedVessel.longitude.toFixed(5) : 'No current position' }}
+						</dd>
+					</div>
+					<div>
+						<dt>Speed</dt>
+						<dd>{{ selectedVessel.speed == null ? 'Unknown' : selectedVessel.speed + ' kt' }}</dd>
+					</div>
+					<div>
+						<dt>Course / heading</dt>
+						<dd>{{ selectedVessel.course ?? '—' }}° / {{ selectedVessel.heading ?? '—' }}°</dd>
+					</div>
+				</dl>
+			</div>
+			<UiInputGroup v-show="!selectedVessel" class="adsb-search"
+				><UiInput v-model="query" aria-label="Search vessels" placeholder="Vessel name, callsign or MMSI"></UiInput
+			></UiInputGroup>
+			<UiEmptyState v-if="!selectedVessel && !vessels.length" variant="pocsag"
+				>Waiting for vessel transmissions. Use an SDR and antenna covering 162 MHz. Use two VFOs to receive both AIS channels.</UiEmptyState
+			>
+			<UiEmptyState v-else-if="!selectedVessel && !filtered.length" variant="pocsag">No vessels match your search.</UiEmptyState>
+			<div class="adsb-table-wrap" v-show="!selectedVessel" v-if="filtered.length">
+				<table class="adsb-table">
+					<thead>
+						<tr>
+							<th>Vessel</th>
+							<th>Country</th>
+							<th>Speed</th>
+							<th>Course</th>
+							<th>Seen</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr v-for="item in filtered" :key="item.mmsi" :class="{ selected: selected === item.mmsi }">
+							<td>
+								<UiButton variant="transcript" @click="select(item.mmsi)" :aria-pressed="selected === item.mmsi"
+									>{{ item.name || item.callsign || item.mmsi }}</UiButton
+								><small>{{ item.mmsi }} · {{ hasLiveVesselPosition(item, now) ? 'Located' : 'No current position' }}</small>
+							</td>
+							<td>{{ country(item.mmsi) }}</td>
+							<td>{{ item.speed == null ? '—' : item.speed + ' kt' }}</td>
+							<td>{{ item.course == null ? '—' : Math.round(item.course) + '°' }}</td>
+							<td>{{ Math.max(0, Math.floor((now - item.lastSeen) / 1000)) }}s</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+	<div class="adsb-footer">
+		<span>{{ databaseStatus }}</span>
+		<span>AIS A/B · Positions expire after 3min; vessels after 10min. Map tiles need internet.</span>
+	</div>
+</section>

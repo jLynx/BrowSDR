@@ -1,3 +1,5 @@
+import AisPanel from '@/app/decoders/ais/panel';
+import { aisMethods } from '@/app/decoders/ais';
 import { isRecord } from '@/platform/data';
 import type { AppInstance } from '@/app/core/receiver.types';
 import type { Backend as BackendInstance } from '@/worker/runtime/backend';
@@ -38,7 +40,7 @@ if ('serviceWorker' in navigator) {
 
 const Receiver = {
 	template: receiverTemplate,
-	components: { ...uiComponents, VfoPanel, AdsbPanel },
+	components: { ...uiComponents, VfoPanel, AdsbPanel, AisPanel },
 	provide(this: AppInstance) {
 		return { receiver: this };
 	},
@@ -64,6 +66,7 @@ const Receiver = {
 		...autoGainMethods,
 		...rtl433Methods,
 		...adsbMethods,
+		...aisMethods,
 	},
 	created: async function (this: AppInstance) {
 		this._cleanup = [];

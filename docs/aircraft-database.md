@@ -21,6 +21,9 @@ owner and operator; additional columns such as country and SELCAL are not stored
 This snapshot yields 587,144 usable aircraft records, versus 516,505 previously.
 Offline download size is calculated from the manifest, so it follows database growth.
 
+Shared aircraft and maritime storage, general URL overrides and the staged bucket
+naming migration are described in [receiver databases](databases.md).
+
 ## Build and publish
 
 ```sh
@@ -77,7 +80,7 @@ Missing records show as unknown; no third-party database fallback is used.
 `wrangler.jsonc` configures the existing `browsdr` Cloudflare Worker, which serves
 the receiver application and runs the database job through its scheduled handler.
 Its Cron Trigger runs weekly on Monday at 03:17 UTC.
-It writes directly through the `AIRCRAFT_DB` R2 binding, with no GitHub schedule
+It writes directly through the `DATABASES` R2 binding, with no GitHub schedule
 or API token required. Deploy and inspect it with the existing Wrangler login:
 
 ```sh

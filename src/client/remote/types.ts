@@ -1,3 +1,4 @@
+import type { AisMessage } from '@/worker/decoders/ais/types';
 import type { DataConnection } from 'peerjs';
 import type { DeviceCapabilities } from '@/radio/types';
 import type { RadioState } from '@/app/core/types';
@@ -42,6 +43,7 @@ export type RemoteCommand =
 	| { type: 'resetRemoteVfos' }
 	| { type: 'addRemoteVfo' }
 	| { type: 'removeRemoteVfo'; index: number }
+	| { type: 'ais'; vfoIndex: number; freq: number; msg: AisMessage }
 	| { type: 'adsb'; vfoIndex: number; freq: number; msg: AdsbMessage }
 	| { type: 'rtl433'; vfoIndex: number; freq: number; msg: Rtl433Message }
 	| { type: 'pocsag'; vfoIndex: number; freq: number; msg: POCSAGMessage }

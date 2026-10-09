@@ -1,3 +1,4 @@
+import { MID_TABLE } from '../../../src/server/maritime-db/mids';
 import { env, fetchMock, createScheduledController } from 'cloudflare:test';
 import { beforeAll, afterEach, describe, it, expect } from 'vitest';
 import worker from '../../../src/server';
@@ -43,56 +44,60 @@ afterEach(() => fetchMock.assertNoPendingInterceptors());
 describe('Cloudflare aircraft database cron', () => {
 	it('skips all writes when source hashes match', async () => {
 		const value = { schema: 1, revision: 'a'.repeat(24), sources, files: {} };
-		const before = await env.AIRCRAFT_DB.put(manifestKey, JSON.stringify(value));
+		const before = await env.DATABASES.put(manifestKey, JSON.stringify(value));
 		mockListing();
 		mockSource(aircraftUrl, aircraft);
 		mockSource(airlinesUrl, airlines);
-		expect(await updateDatabase(env.AIRCRAFT_DB)).toEqual({ changed: false, revision: value.revision });
-		expect((await env.AIRCRAFT_DB.head(manifestKey)).etag).toBe(before.etag);
-		expect((await env.AIRCRAFT_DB.list()).objects).toHaveLength(1);
+		expect(await updateDatabase(env.DATABASES)).toEqual({ changed: false, revision: value.revision });
+		expect((await env.DATABASES.head(manifestKey)).etag).toBe(before.etag);
+		expect((await env.DATABASES.list()).objects).toHaveLength(1);
 	});
 
 	it('scheduled handler publishes readable files, then manifest, and removes staging', async () => {
+		mockSource(
+			MID_TABLE,
+			'<table>' + Array.from({ length: 292 }, (_, i) => `<tr><td>${200 + i}</td><td>Administration ${i}</td></tr>`).join('') + '</table>',
+		);
 		mockListing();
 		mockSource(aircraftUrl, aircraft, 2);
 		mockSource(airlinesUrl, airlines, 2);
 		await worker.scheduled(createScheduledController({ cron: '17 3 * * MON' }), env);
-		const manifest = await (await env.AIRCRAFT_DB.get(manifestKey)).json();
+		const manifest = await (await env.DATABASES.get(manifestKey)).json();
 		expect(manifest.sources).toEqual(sources);
 		expect(manifest.files['aircraft-C8.db'].count).toBe(1);
 		expect(manifest.files['aircraft-A4.db'].count).toBe(1);
 		expect(manifest.files['airlines.db'].count).toBe(2);
 		const file = manifest.files['aircraft-C8.db'];
-		const data = new Uint8Array(await (await env.AIRCRAFT_DB.get(`aircraft-db/${file.path}`)).arrayBuffer());
+		const data = new Uint8Array(await (await env.DATABASES.get(`aircraft-db/${file.path}`)).arrayBuffer());
 		expect(digest(data)).toBe(file.sha256);
 		expect(new TextDecoder().decode(data.slice(0, 16))).toBe('C827EE\0ZK-NNF\0\0\0');
 		expect(data.byteLength).toBe(153);
-		expect((await env.AIRCRAFT_DB.list({ prefix: 'aircraft-db-staging/' })).objects).toHaveLength(0);
+		expect((await env.DATABASES.list({ prefix: 'aircraft-db-staging/' })).objects).toHaveLength(0);
 	});
 
 	it('retains manifest and immutable objects when only source ordering changes', async () => {
 		mockListing();
 		mockSource(aircraftUrl, aircraft, 2);
 		mockSource(airlinesUrl, airlines, 2);
-		await updateDatabase(env.AIRCRAFT_DB);
-		const before = await env.AIRCRAFT_DB.get(manifestKey);
+		await updateDatabase(env.DATABASES);
+		const before = await env.DATABASES.get(manifestKey);
 		const manifest = await before.json();
-		const oldObject = await env.AIRCRAFT_DB.head(`aircraft-db/${manifest.files['airlines.db'].path}`);
+		const oldObject = await env.DATABASES.head(`aircraft-db/${manifest.files['airlines.db'].path}`);
 		const reordered = airlines.trim().split('\r\n').reverse().join('\n');
 		mockListing();
 		mockSource(aircraftUrl, aircraft, 2);
 		mockSource(airlinesUrl, reordered, 2);
-		expect(await updateDatabase(env.AIRCRAFT_DB)).toEqual({ changed: false, revision: manifest.revision });
-		expect((await env.AIRCRAFT_DB.head(manifestKey)).etag).toBe(before.etag);
-		expect((await env.AIRCRAFT_DB.head(oldObject.key)).etag).toBe(oldObject.etag);
+		expect(await updateDatabase(env.DATABASES)).toEqual({ changed: false, revision: manifest.revision });
+		expect((await env.DATABASES.head(manifestKey)).etag).toBe(before.etag);
+		expect((await env.DATABASES.head(oldObject.key)).etag).toBe(oldObject.etag);
 	});
 
 	it('leaves the published manifest intact if a source fails', async () => {
-		const before = await env.AIRCRAFT_DB.put(manifestKey, JSON.stringify({ schema: 1, revision: 'a'.repeat(24), sources, files: {} }));
+		const before = await env.DATABASES.put(manifestKey, JSON.stringify({ schema: 1, revision: 'a'.repeat(24), sources, files: {} }));
 		mockListing();
 		mockSource(aircraftUrl, 'Unavailable', 1, 503);
-		await expect(updateDatabase(env.AIRCRAFT_DB)).rejects.toThrow('HTTP 503');
-		expect((await env.AIRCRAFT_DB.head(manifestKey)).etag).toBe(before.etag);
+		await expect(updateDatabase(env.DATABASES)).rejects.toThrow('HTTP 503');
+		expect((await env.DATABASES.head(manifestKey)).etag).toBe(before.etag);
 	});
 
 	it('discovers the latest complete release across listing pages, ignoring incomplete dumps and timestamps', async () => {
@@ -121,10 +126,10 @@ describe('Cloudflare aircraft database cron', () => {
 	});
 
 	it('keeps the saved manifest if discovery fails instead of choosing an old incomplete dump', async () => {
-		const before = await env.AIRCRAFT_DB.put(manifestKey, JSON.stringify({ schema: 1, revision: 'a'.repeat(24), sources, files: {} }));
+		const before = await env.DATABASES.put(manifestKey, JSON.stringify({ schema: 1, revision: 'a'.repeat(24), sources, files: {} }));
 		mockSource(metadataListUrl, listing([['metadata/aircraftDatabase.csv', 1000]]));
-		await expect(updateDatabase(env.AIRCRAFT_DB)).rejects.toThrow('No complete');
-		expect((await env.AIRCRAFT_DB.head(manifestKey)).etag).toBe(before.etag);
+		await expect(updateDatabase(env.DATABASES)).rejects.toThrow('No complete');
+		expect((await env.DATABASES.head(manifestKey)).etag).toBe(before.etag);
 	});
 
 	it('stops if the newest complete release is too large instead of silently selecting an older one', async () => {
@@ -144,9 +149,9 @@ describe('Cloudflare aircraft database cron', () => {
 		mockListing();
 		mockSource(aircraftUrl, complete, 2);
 		mockSource(airlinesUrl, airlines, 2);
-		await updateDatabase(env.AIRCRAFT_DB);
-		const manifest = await (await env.AIRCRAFT_DB.get(manifestKey)).json();
-		const data = await (await env.AIRCRAFT_DB.get(`aircraft-db/${manifest.files['aircraft-C8.db'].path}`)).text();
+		await updateDatabase(env.DATABASES);
+		const manifest = await (await env.DATABASES.get(manifestKey)).json();
+		const data = await (await env.DATABASES.get(`aircraft-db/${manifest.files['aircraft-C8.db'].path}`)).text();
 		expect(data).toContain('A320, test\0');
 		expect(data).toContain("Owner's aircraft\0");
 		expect(data).toContain('L2J\0');
@@ -154,8 +159,8 @@ describe('Cloudflare aircraft database cron', () => {
 	});
 
 	it('fails closed for malformed published metadata and malformed CSV', async () => {
-		await env.AIRCRAFT_DB.put(manifestKey, '{}');
-		await expect(updateDatabase(env.AIRCRAFT_DB)).rejects.toThrow('Invalid published manifest');
+		await env.DATABASES.put(manifestKey, '{}');
+		await expect(updateDatabase(env.DATABASES)).rejects.toThrow('Invalid published manifest');
 		const rows = [];
 		const parser = new CsvReader((row) => rows.push(row));
 		for (const chunk of ['"one, two","quoted "', '"text""\nnext"\r', '\nplain,end']) parser.write(chunk);

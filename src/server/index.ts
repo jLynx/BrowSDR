@@ -1,10 +1,11 @@
 import type { Env, IceServerEntry } from './types';
 import { isRecord } from '../client/platform/data';
+import { updateMaritimeDatabase } from './maritime-db/update';
 import { updateDatabase } from './aircraft-db/update';
 /**
  * BrowSDR - Cloudflare Worker
  *
- * Serves the static BrowSDR frontend from dist/ and refreshes aircraft metadata weekly.
+ * Serves the static BrowSDR frontend from dist/ and refreshes aircraft and maritime metadata weekly.
  * All static assets (HTML, JS, CSS, WASM) are served via the ASSETS binding.
  *
  * - Run `npm run dev:worker` to start the Worker on http://localhost:8788/
@@ -13,7 +14,13 @@ import { updateDatabase } from './aircraft-db/update';
 
 export default {
 	async scheduled(_controller: ScheduledController, env: Env): Promise<void> {
-		await updateDatabase(env.AIRCRAFT_DB);
+		const results = await Promise.allSettled([updateDatabase(env.DATABASES), updateMaritimeDatabase(env.DATABASES)]);
+		const failures = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected');
+		if (failures.length)
+			throw new AggregateError(
+				failures.map((result) => String(result.reason)),
+				'Database refresh failed',
+			);
 	},
 	async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
 		const url = new URL(request.url);

@@ -5,6 +5,7 @@ import type {
 	RdsCallback,
 	Rtl433Callback,
 	AdsbCallback,
+	AisCallback,
 	HostCallback,
 	HostStats,
 } from '@/worker/runtime/callbacks.types';
@@ -70,6 +71,10 @@ export function setRemoteHostRdsCallback(this: Backend, callback: HostCallback<P
 
 export function setRemoteHostRtl433Callback(this: Backend, callback: HostCallback<Parameters<Rtl433Callback>>): void {
 	this._remoteHostRtl433Cb = callback;
+}
+
+export function setRemoteHostAisCallback(this: Backend, callback: HostCallback<Parameters<AisCallback>>): void {
+	this._remoteHostAisCb = callback;
 }
 
 export function setRemoteHostAdsbCallback(this: Backend, callback: HostCallback<Parameters<AdsbCallback>>): void {
@@ -143,6 +148,10 @@ function bindRemoteWorker(backend: Backend, clientId: string, state: RemoteClien
 		const index = state.workers.indexOf(worker);
 		if (index === -1) return;
 		const msg = e.data;
+		if (msg.type === 'ais') {
+			forwardAis(backend, clientId, state, index, msg);
+			return;
+		}
 		if (msg.type === 'adsb') {
 			forwardAdsb(backend, clientId, state, index, msg);
 			return;
@@ -419,4 +428,15 @@ function forwardAdsb(
 ): void {
 	const params = state.params[index];
 	if (params?.adsb && params.freq === message.freq) backend._remoteHostAdsbCb?.(clientId, index, params.freq, message);
+}
+
+function forwardAis(
+	backend: Backend,
+	clientId: string,
+	state: RemoteClientState,
+	index: number,
+	message: Extract<DspOutput, { type: 'ais' }>,
+): void {
+	const params = state.params[index];
+	if (params?.ais && params.freq === message.freq) backend._remoteHostAisCb?.(clientId, index, params.freq, message);
 }
