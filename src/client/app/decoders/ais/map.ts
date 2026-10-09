@@ -1,5 +1,6 @@
 import type * as Leaflet from 'leaflet';
 import type { Vessel } from '@/worker/decoders/ais/types';
+import { vesselIconElement } from './icon';
 
 export class VesselMap {
 	private map: Leaflet.Map;
@@ -31,10 +32,7 @@ export class VesselMap {
 			}
 		for (const vessel of vessels) {
 			const location: Leaflet.LatLngTuple = [vessel.latitude!, vessel.longitude!];
-			const element = document.createElement('span');
-			element.className = `ais-vessel-marker${selected === vessel.mmsi ? ' selected' : ''}`;
-			element.textContent = '▲';
-			element.style.transform = `rotate(${vessel.heading ?? vessel.course ?? 0}deg)`;
+			const element = vesselIconElement(vessel, selected === vessel.mmsi);
 			const icon = this.leaflet.divIcon({ html: element, className: 'adsb-map-icon', iconSize: [28, 28], iconAnchor: [14, 14] });
 			let marker = this.markers.get(vessel.mmsi);
 			if (!marker) {
