@@ -9,6 +9,7 @@ import { interpretEvent } from './events';
 import { labelDescription } from './catalogue';
 import { interpretTagged } from './tagged';
 import { interpretText } from './protocols/text';
+import { interpretAcm } from './protocols/monitoring';
 
 const links: Record<string, string> = {
 	V: 'VHF ACARS',
@@ -23,7 +24,7 @@ const links: Record<string, string> = {
 const linkName = (code: string) => links[code] ?? `Unknown link (${code})`;
 
 function interpretAdvisory(message: AcarsRecord): AcarsInterpretation | undefined {
-	const match = /^0([EL])([A-Z0-9])(\d{6})([A-Z0-9]*)\/([^]*)$/.exec(message.text.trim());
+	const match = /^0([EL])([A-Z0-9])(\d{6})([A-Z0-9]*)(?:\/([^]*))?$/.exec(message.text.trim());
 	if (!match) return;
 	const [, state, current, clock, available, trailing] = match;
 	const time = timeFields(clock, message.receivedAt, 'HHMMSS');
@@ -86,7 +87,7 @@ function interpretApplication(message: AcarsRecord): AcarsInterpretation {
 	if (mfi) text = text.slice(mfi[0].length);
 	const result =
 		interpretArinc(text, message.direction) ??
-		(sublabel?.[1] === 'DF' ? interpretAirbus(text, message.receivedAt) : undefined) ??
+		(sublabel?.[1] === 'DF' ? (interpretAirbus(text, message.receivedAt) ?? interpretAcm(text)) : undefined) ??
 		interpretText({ ...message, text }) ??
 		interpretCommunity(message, text, sublabel?.[1]) ??
 		(sublabel?.[1] === 'DF' ? interpretDf(text) : undefined) ??

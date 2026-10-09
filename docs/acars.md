@@ -116,7 +116,12 @@ two minutes. These fields are explicitly attributed to the first block. This
 association does not prove that every intermediate block was received and does
 not decode numeric sections. It remains useful when reassembly is unavailable.
 Compressed MIAM (label MA) and OHMA transfers are identified but not expanded.
-Proprietary maintenance numeric columns remain undecoded. The A380 semicolon
+Proprietary maintenance numeric columns remain undecoded. Airbus report headers
+and ACM-prefixed Chinese aircraft monitoring headers can identify
+the aircraft, flight and route. ACM configuration/report codes and numeric columns
+remain raw; their date/time codes have no verified format or timezone. A fully
+reassembled unsupported DF report is identified as a complete report rather than
+a fragment, without claiming its measurements were decoded. The A380 semicolon
 report 020 header/event text is recognized, but none of the inspected reusable
 sources supplies its A20/A21/etc. measurement dictionary. Application checksums
 outside the binary ARINC parser remain extracted values rather than verified checks.

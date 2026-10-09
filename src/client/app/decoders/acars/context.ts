@@ -1,6 +1,6 @@
 import type { AcarsRecord } from '@/worker/decoders/acars/types';
 import { interpretAcars } from './interpret';
-import type { InterpretedAcarsRecord } from './types';
+import type { AcarsInterpretation, InterpretedAcarsRecord } from './types';
 import { assembleAcars } from './protocols/assembly';
 
 const contextLabels = new Set([
@@ -11,7 +11,17 @@ const contextLabels = new Set([
 	'Departure',
 	'Destination',
 	'Reported event',
+	'Report format',
+	'Report code (raw)',
 ]);
+
+function markCompleteReport(interpretation: AcarsInterpretation): void {
+	if (interpretation.title !== 'Aircraft report fragment') return;
+	interpretation.title = 'Aircraft report';
+	interpretation.summary = 'Complete DF report received · payload measurements remain undecoded.';
+	interpretation.notes = interpretation.notes.filter((note) => !note.startsWith('This block has no recognized report header.'));
+	interpretation.notes.push('All consecutive blocks were received, but this report header and numeric layout are unsupported.');
+}
 
 /** Decodes complete assemblies and associates available header context within one VFO log. */
 export function interpretAcarsLog(records: readonly AcarsRecord[]): InterpretedAcarsRecord[] {
@@ -26,6 +36,7 @@ export function interpretAcarsLog(records: readonly AcarsRecord[]): InterpretedA
 		};
 		if (assembly) {
 			result.assembledText = assembly.text;
+			markCompleteReport(result.interpretation);
 			result.interpretation.notes.push(
 				`Reassembled ${assembly.blocks.length} consecutive blocks: ${assembly.blocks.join(', ')}. Original received blocks remain available separately.`,
 			);
@@ -36,7 +47,8 @@ export function interpretAcarsLog(records: readonly AcarsRecord[]): InterpretedA
 		const header = headers.get(key);
 		if (number[2] === 'A') {
 			headers.delete(key);
-			if (message.continuation && result.interpretation.fields.some((field) => field.label === 'Aircraft type')) headers.set(key, result);
+			if (message.continuation && result.interpretation.fields.some((field) => ['Aircraft type', 'Report format'].includes(field.label)))
+				headers.set(key, result);
 			return result;
 		}
 		if (
