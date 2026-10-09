@@ -1,11 +1,11 @@
 import { env, fetchMock, createScheduledController } from 'cloudflare:test';
 import { beforeAll, afterEach, describe, it, expect } from 'vitest';
-import worker from '../../src/server';
-import { updateDatabase } from '../../src/server/aircraft-db/update';
-import { CsvReader } from '../../src/server/aircraft-db/csv';
-import { digest } from '../../src/server/aircraft-db/format';
-import { airlinesUrl } from '../../src/server/aircraft-db/sources';
-import { metadataListUrl, resolveAircraftUrl } from '../../src/server/aircraft-db/discovery';
+import worker from '../../../src/server';
+import { updateDatabase } from '../../../src/server/aircraft-db/update';
+import { CsvReader } from '../../../src/server/aircraft-db/csv';
+import { digest } from '../../../src/server/aircraft-db/format';
+import { airlinesUrl } from '../../../src/server/aircraft-db/sources';
+import { metadataListUrl, resolveAircraftUrl } from '../../../src/server/aircraft-db/discovery';
 
 const aircraftUrl = 'https://s3.opensky-network.org/data-samples/metadata/aircraft-database-complete-2025-08.csv';
 const listing = (entries, extra = '<IsTruncated>false</IsTruncated>') =>

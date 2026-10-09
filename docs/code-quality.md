@@ -27,6 +27,10 @@ Use `npm run lint:fix` for safe lint fixes and `npm run format` for formatting. 
 
 Build before running the full test suite on a fresh checkout. The Cloudflare Worker tests use the configured `ASSETS` binding to serve `dist`, so that directory must exist before Vitest starts. The UI and performance suites can run independently without a build.
 
+Tests using the Cloudflare runtime and bindings belong under `test/server/`,
+matching the `src/server/` feature structure. Vitest discovers them by folder;
+Node tests for local database scripts stay under `test/aircraft-db/`.
+
 ## Lint enforcement
 
 `npm run lint` reports every finding in maintained source, tests, and configuration, including existing code. There is no suppression baseline or separate debt command. VS Code and the CLI use the same flat configuration. Run **ESLint: Restart ESLint Server** if the editor retains old diagnostics after this migration.
