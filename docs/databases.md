@@ -9,30 +9,21 @@ The Worker uses the **DATABASES** R2 binding for independent database namespaces
 
 Aircraft build scripts and binary filenames keep their feature-specific names.
 General storage settings are `DATABASES_BUCKET` for manual uploads and
-`DATABASES_PUBLIC_URL` for the public root. Existing `AIRCRAFT_DB_BUCKET` and
-`AIRCRAFT_DB_PUBLIC_URL` publisher overrides remain supported.
-The client accepts `VITE_DATABASES_URL` as the root for all hosted databases;
-`VITE_AIRCRAFT_DB_URL` remains an aircraft-only override.
+`DATABASES_PUBLIC_URL` for the public root. The client accepts `VITE_DATABASES_URL`
+as the root for all hosted databases. Feature-specific URL and bucket overrides
+have been removed; each feature appends its namespace to the shared root.
 
-The current physical bucket remains `browsdr-aircraft-db`, served by
-`https://aircraft-db.browsdr.jlynx.net/`. Changing the code binding does not move
-objects or rename this bucket. It is already able to hold multiple prefixes.
-Retaining the physical name keeps existing deployments, public URLs and offline
-aircraft snapshots usable while a migration is prepared.
+The physical bucket is **`browsdr-databases`**, in account
+`ccd550c603c63502ea824904dd2e5d06`, served by
+**`https://db.browser.jlynx.net/`**. The domain is attached directly to R2 and
+is independent of the Worker running the scheduled database refresh.
+The bucket uses the read-only GET/HEAD CORS policy in `scripts/databases/cors.json`.
+Normal setup needs no URL override.
 
-For a future physical migration to `browsdr-databases` and a general database domain:
-
-1. Create the destination bucket and copy all published prefixes, including old
-   immutable aircraft revisions needed by cached clients.
-2. Apply the existing GET/HEAD CORS policy from
-   `scripts/aircraft-db/cors.json` and attach the new custom domain.
-3. Verify manifest and shard downloads and MID lookup through the new domain.
-4. Switch Wrangler's `DATABASES` bucket name, publisher settings and
-   `VITE_DATABASES_URL`, then deploy together when authorized.
-5. Retain the old bucket/domain while old clients still reference it. Do not delete
-   old objects or cached browser data as part of a naming change.
-
-No infrastructure migration or deployment is performed just by editing these files.
+For a local-only client build, set `VITE_DATABASES_URL=/` before starting Vite.
+For a different hosted database root, set `VITE_DATABASES_URL` before building
+the client and `DATABASES_PUBLIC_URL` before manually publishing snapshots.
+These roots contain no credentials; authenticated uploads use Wrangler.
 
 The weekly scheduled handler refreshes aircraft and MID data independently. Either
 source can publish even if the other fails; the handler reports any failures.

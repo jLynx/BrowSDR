@@ -1,8 +1,7 @@
 import { DATABASES_BASE } from '@/platform/databases';
 import type { SnapshotManifest, SnapshotFile, OfflineSnapshotState, DatabaseFormat } from './types';
 
-const configuredBase: unknown = import.meta.env.VITE_AIRCRAFT_DB_URL;
-export const SNAPSHOT_BASE = (typeof configuredBase === 'string' ? configuredBase : `${DATABASES_BASE}aircraft-db/`).replace(/\/?$/, '/');
+export const SNAPSHOT_BASE = `${DATABASES_BASE}aircraft-db/`;
 const CACHE = 'browsdr-aircraft-snapshots-v1';
 let manifest: Promise<SnapshotManifest | undefined> | undefined;
 let refresh: Promise<SnapshotManifest | undefined> | undefined;

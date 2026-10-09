@@ -103,7 +103,7 @@ describe('BrowSDR hosted aircraft snapshots', () => {
 		const database = await import('@/app/decoders/adsb/database/lookup');
 		await expect(database.lookupAircraft('C827EE')).rejects.toThrow('unavailable');
 		expect((await database.lookupAircraft('C827EE'))?.registration).toBe('ZK-NNF');
-		expect(fetch.mock.calls.every(([url]) => url.startsWith('https://aircraft-db.browsdr.jlynx.net/'))).toBe(true);
+		expect(fetch.mock.calls.every(([url]) => url.startsWith('https://db.browser.jlynx.net/'))).toBe(true);
 		expect(manifest.revision).toBe('a'.repeat(24));
 	});
 	it('does not mark a snapshot saved when storage quota is exhausted', async () => {
