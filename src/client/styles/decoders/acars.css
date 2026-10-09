@@ -1,6 +1,9 @@
 .acars-panel .adsb-table th {
 	text-align: left;
 }
+.acars-panel .adsb-table {
+	min-width: 760px;
+}
 .acars-panel .adsb-table th:first-child {
 	width: 110px;
 }
@@ -19,7 +22,7 @@
 .acars-panel .adsb-table td {
 	vertical-align: top;
 }
-.acars-preview,
+.acars-raw-preview,
 .acars-message-text {
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
@@ -27,6 +30,30 @@
 }
 .acars-preview {
 	max-width: 500px;
+	min-width: 240px;
+}
+.acars-preview > strong,
+.acars-preview > span {
+	display: block;
+	white-space: normal;
+}
+.acars-panel .acars-raw-preview {
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+	margin-top: 4px;
+}
+.acars-interpretation {
+	margin: 12px 0;
+}
+.acars-coverage {
+	display: block;
+	color: var(--text-muted);
+	margin-top: 4px;
+}
+.acars-interpretation dd {
+	overflow-wrap: anywhere;
 }
 .acars-message-text {
 	margin: 12px 0;

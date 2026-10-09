@@ -119,4 +119,46 @@ describe('ACARS receiver tools', () => {
 		expect(receiverUpdates).toBe(0);
 		expect(vfoUpdates).toBe(0);
 	});
+	it('searches decoded airport names and displays readable fields alongside the original report', async () => {
+		wrapper = mount(ReceiverView);
+		await wrapper.setData({
+			running: true,
+			vfos: [{ ...makeDefaultVfo(131.55), acars: true }],
+			acars: { panelOpen: true, sources: [], status: [] },
+		});
+		const update = message();
+		const raw = 'OFF090746,NZAA,ZBAA,190700,*,LT,0800,090736';
+		Object.assign(update.messages[0], { label: '10', text: raw, receivedAt: Date.parse('2026-10-09T07:50:00Z') });
+		wrapper.vm._onAcarsMessage(0, 131.55, update);
+		await nextTick();
+		expect(wrapper.get('.acars-preview strong').text()).toBe('Wheels-off report');
+		await wrapper.get('input[aria-label="Search ACARS messages"]').setValue('Auckland');
+		expect(wrapper.findAll('.acars-panel tbody tr')).toHaveLength(1);
+		await wrapper.get('.acars-panel tbody button').trigger('click');
+		const interpretation = wrapper.get('[aria-label="Message interpretation"]');
+		expect(interpretation.text()).toContain('Partially decoded');
+		expect(interpretation.text()).toContain('2026-10-09 07:46:00 UTC');
+		expect(interpretation.text()).toContain('Beijing Capital Airport');
+		expect(interpretation.findAll('dl > div')).toHaveLength(5);
+		expect(wrapper.get('.acars-message-text').text()).toBe(raw);
+	});
+	it('renders ARINC application data safely and clearly marks the undecoded binary payload', async () => {
+		wrapper = mount(ReceiverView);
+		await wrapper.setData({
+			running: true,
+			vfos: [{ ...makeDefaultVfo(131.55), acars: true }],
+			acars: { panelOpen: true, sources: [], status: [] },
+		});
+		const update = message();
+		const raw = '- #MD/AA AKLCDYA.CR1.NZ7013209F14E8E75AB53C06BF';
+		Object.assign(update.messages[0], { direction: 'uplink', flight: undefined, registration: 'NZ7013', text: raw });
+		wrapper.vm._onAcarsMessage(0, 131.55, update);
+		await nextTick();
+		await wrapper.get('input[aria-label="Search ACARS messages"]').setValue('CPDLC');
+		expect(wrapper.findAll('.acars-panel tbody tr')).toHaveLength(1);
+		await wrapper.get('.acars-panel tbody button').trigger('click');
+		expect(wrapper.get('[aria-label="Message interpretation"]').text()).toContain('CPDLC connection request');
+		expect(wrapper.get('[aria-label="Message interpretation"]').text()).toContain('inner CRC is not checked');
+		expect(wrapper.get('.acars-message-text').text()).toBe(raw);
+	});
 });

@@ -23,15 +23,34 @@ IQ discontinuities discard partial packets. VDL Mode 2, HFDL and satellite
 ACARS are outside this implementation.
 
 The panel combines up to 200 recent messages across enabled VFOs, newest first.
-Search accepts registration, flight, label or message text. Select a registration
+Search accepts registration, flight, label, message text or decoded fields. Select a registration
 to see receipt time, frequency, direction, mode, acknowledgement, block ID,
 message number and the full text, preserving line breaks. Aircraft-to-ground
 blocks include message number and flight ID; ground-to-air blocks do not use
 that header. These values come from radio messages and may be blank. No external
 aircraft feed or database is required.
 
-ETB continuation blocks are marked and displayed separately; application payload
-interpretation and multi-block reassembly are outside the initial scope.
+The list includes readable summaries; details distinguish decoded, partially
+decoded and unparsed formats and retain the complete raw message. Supported
+interpretations include `_d` acknowledgements, version-0 `SA` media/link
+advisories, a recognized label-10 `OFF` takeoff report layout, label-49 report
+headers, and H1 `DF` report headers. NZAA and ZBAA have built-in airport names;
+other airports keep their ICAO codes. Airline-specific numeric measurements
+and undocumented fields are not assigned meanings or units.
+
+ARINC 622 envelopes identify CPDLC connection/control messages and ADS-C data,
+including ground/aircraft addresses and hexadecimal application data. The binary
+application payload is not decoded and its inner CRC is not checked; reception's
+outer ACARS CRC/parity checks still apply. H1 sublabels and message function
+identifiers are shown when present. A label alone does not guarantee a particular
+airline payload format. Unsupported or malformed formats remain unparsed.
+
+Recognized time codes are shown in UTC and the viewer's local timezone. Dates
+omitted from messages are inferred using the closest valid date to reception;
+they are not authoritative dates supplied by the aircraft.
+
+ETB continuation blocks are marked and displayed separately; multi-block
+reassembly remains outside the implementation.
 Retransmissions are retained. Retuning or restarting a decoder resets its log.
 Remote receivers decode on the host and forward results only to the requesting
 client's VFO, including muted VFOs. Removed, restarted and retuned workers cannot
@@ -44,4 +63,6 @@ UI controls. Synthetic verification does not establish actual aircraft reception
 or receiver sensitivity; live radio verification remains necessary.
 
 Protocol references: ARINC 618 air/ground character-oriented protocol;
-[acarsdec framing and field definitions](https://github.com/TLeconte/acarsdec).
+[acarsdec framing and field definitions](https://github.com/TLeconte/acarsdec),
+[libacars ARINC 622 and media advisory decoders](https://github.com/szpajder/libacars),
+and [Airframes message-format research](https://github.com/airframesio/acars-message-documentation).

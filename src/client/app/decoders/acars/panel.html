@@ -36,29 +36,62 @@
 					<UiButton variant="transcript" @click="selected = ''">Back to messages</UiButton>
 					<strong>{{ selectedMessage.registration }} · {{ selectedMessage.flight || 'Unknown flight' }}</strong>
 				</div>
+				<div class="acars-interpretation" aria-label="Message interpretation">
+					<strong>{{ selectedMessage.interpretation.title }}</strong>
+					<small class="acars-coverage"
+						>{{ selectedMessage.interpretation.coverage === 'decoded' ? 'Decoded format' : selectedMessage.interpretation.coverage ===
+						'partial' ? 'Partially decoded' : 'Unparsed format' }}</small
+					>
+					<p>{{ selectedMessage.interpretation.summary }}</p>
+					<dl v-if="selectedMessage.interpretation.fields.length" class="adsb-detail-grid">
+						<div v-for="field in selectedMessage.interpretation.fields" :key="field.label">
+							<dt>{{ field.label }}</dt>
+							<dd>{{ field.value }}</dd>
+						</div>
+					</dl>
+					<p v-for="note in selectedMessage.interpretation.notes" :key="note" class="adsb-detail-note">{{ note }}</p>
+				</div>
+				<strong>ACARS envelope</strong>
 				<dl class="adsb-detail-grid">
-					<dt>Received</dt>
-					<dd>{{ time(selectedMessage.receivedAt) }}</dd>
-					<dt>Channel</dt>
-					<dd>VFO {{ selectedMessage.vfoIndex + 1 }} · {{ selectedMessage.frequency.toFixed(3) }} MHz</dd>
-					<dt>Direction</dt>
-					<dd>{{ selectedMessage.direction === 'downlink' ? 'Aircraft to ground' : 'Ground to aircraft' }}</dd>
-					<dt>Label</dt>
-					<dd>{{ selectedMessage.label }}</dd>
-					<dt>Mode / block</dt>
-					<dd>{{ selectedMessage.mode }} / {{ selectedMessage.blockId }}</dd>
-					<dt>Acknowledgement</dt>
-					<dd>{{ selectedMessage.acknowledgement }}</dd>
-					<dt>Message number</dt>
-					<dd>{{ selectedMessage.messageNumber || '—' }}</dd>
-					<dt>Block ending</dt>
-					<dd>{{ selectedMessage.continuation ? 'Continued (ETB)' : 'Final (ETX)' }}</dd>
+					<div>
+						<dt>Received</dt>
+						<dd>{{ time(selectedMessage.receivedAt) }}</dd>
+					</div>
+					<div>
+						<dt>Channel</dt>
+						<dd>VFO {{ selectedMessage.vfoIndex + 1 }} · {{ selectedMessage.frequency.toFixed(3) }} MHz</dd>
+					</div>
+					<div>
+						<dt>Direction</dt>
+						<dd>{{ selectedMessage.direction === 'downlink' ? 'Aircraft to ground' : 'Ground to aircraft' }}</dd>
+					</div>
+					<div>
+						<dt>Label</dt>
+						<dd>{{ selectedMessage.label }}</dd>
+					</div>
+					<div>
+						<dt>Mode / block</dt>
+						<dd>{{ selectedMessage.mode }} / {{ selectedMessage.blockId }}</dd>
+					</div>
+					<div>
+						<dt>Acknowledgement</dt>
+						<dd>{{ selectedMessage.acknowledgement }}</dd>
+					</div>
+					<div>
+						<dt>Message number</dt>
+						<dd>{{ selectedMessage.messageNumber || '—' }}</dd>
+					</div>
+					<div>
+						<dt>Block ending</dt>
+						<dd>{{ selectedMessage.continuation ? 'Continued (ETB)' : 'Final (ETX)' }}</dd>
+					</div>
 				</dl>
+				<strong>Raw message</strong>
 				<pre class="acars-message-text">{{ selectedMessage.text || '(No message text)' }}</pre>
 			</div>
 			<template v-else>
 				<UiInputGroup class="adsb-search"
-					><UiInput v-model="query" aria-label="Search ACARS messages" placeholder="Search registration, flight, label or text"
+					><UiInput v-model="query" aria-label="Search ACARS messages" placeholder="Search aircraft, flight, message or decoded fields"
 				/></UiInputGroup>
 				<div v-if="filtered.length" class="adsb-table-wrap">
 					<table class="adsb-table">
@@ -79,7 +112,11 @@
 								<td>
 									{{ time(message.receivedAt) }}<small>VFO {{ message.vfoIndex + 1 }} · {{ message.frequency.toFixed(3) }} MHz</small>
 								</td>
-								<td class="acars-preview">{{ message.text || '(No message text)' }}</td>
+								<td class="acars-preview">
+									<strong>{{ message.interpretation.title }}</strong>
+									<span>{{ message.interpretation.summary }}</span>
+									<small class="acars-raw-preview">{{ message.text || '(No message text)' }}</small>
+								</td>
 							</tr>
 						</tbody>
 					</table>

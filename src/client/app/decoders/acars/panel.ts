@@ -3,6 +3,7 @@ import type { AppInstance } from '@/app/core/receiver.types';
 import { ACARS_CHANNELS, isAcarsFrequency } from '@/worker/decoders/acars';
 import * as components from '@/ui';
 import template from './panel.html?raw';
+import { interpretAcars } from './interpret';
 
 export default defineComponent({
 	name: 'AcarsPanel',
@@ -19,14 +20,22 @@ export default defineComponent({
 				.flatMap((source, index) => {
 					const vfo = receiver.vfos[index];
 					if (!vfo?.acars || !source || source.freq !== vfo.freq || !isAcarsFrequency(vfo.freq)) return [];
-					return source.messages.map((message) => ({ ...message, key: `${index}:${message.id}`, vfoIndex: index, frequency: vfo.freq }));
+					return source.messages.map((message) => ({
+						...message,
+						key: `${index}:${message.id}`,
+						vfoIndex: index,
+						frequency: vfo.freq,
+						interpretation: interpretAcars(message),
+					}));
 				})
 				.sort((a, b) => b.receivedAt - a.receivedAt || a.vfoIndex - b.vfoIndex || b.id - a.id)
 				.slice(0, 200),
 		);
 		const filtered = computed(() =>
 			messages.value.filter((item) =>
-				`${item.registration} ${item.flight ?? ''} ${item.label} ${item.text}`.toLowerCase().includes(query.value.toLowerCase()),
+				`${item.registration} ${item.flight ?? ''} ${item.label} ${item.text} ${item.interpretation.title} ${item.interpretation.summary} ${item.interpretation.fields.map((field) => field.value).join(' ')}`
+					.toLowerCase()
+					.includes(query.value.toLowerCase()),
 			),
 		);
 		return {
