@@ -1,4 +1,12 @@
-import type { RdsCallback, Rtl433Callback, DsdCallback, AdsbCallback, AisCallback, BleCallback } from '@/worker/runtime/callbacks.types';
+import type {
+	RdsCallback,
+	Rtl433Callback,
+	DsdCallback,
+	AdsbCallback,
+	AisCallback,
+	BleCallback,
+	AcarsCallback,
+} from '@/worker/runtime/callbacks.types';
 import type { DspOutput } from '@/worker/runtime/dsp-messages.types';
 import type { VfoParams, VfoState } from '@/worker/runtime/types';
 import type { Backend } from '@/worker/runtime/backend';
@@ -14,6 +22,7 @@ export function initializeVfoWorkers(
 	adsbCallback: AdsbCallback | null = null,
 	aisCallback: AisCallback | null = null,
 	bleCallback: BleCallback | null = null,
+	acarsCallback: AcarsCallback | null = null,
 ) {
 	const initialBandwidth = 150000;
 
@@ -87,6 +96,7 @@ export function initializeVfoWorkers(
 				adsbCallback,
 				aisCallback,
 				bleCallback,
+				acarsCallback,
 			);
 		worker.postMessage({
 			type: 'init',
@@ -116,8 +126,9 @@ export function routeLocalWorkerMessage(
 	adsbCallback: AdsbCallback | null = null,
 	aisCallback: AisCallback | null = null,
 	bleCallback: BleCallback | null = null,
+	acarsCallback: AcarsCallback | null = null,
 ) {
-	if (routePacketMessage(backend, worker, msg, bleCallback, aisCallback, adsbCallback)) return;
+	if (routePacketMessage(backend, worker, msg, bleCallback, aisCallback, adsbCallback, acarsCallback)) return;
 
 	if (msg.type === 'rtl433_event' || msg.type === 'rtl433_status') {
 		routeSensorMessage(backend, worker, msg, rtl433Callback);
@@ -139,9 +150,8 @@ export function routeLocalWorkerMessage(
 		const currentIndex = backend.dspWorkers!.indexOf(worker);
 		if (currentIndex === -1) return;
 		if (dsdStatusCallback) dsdStatusCallback(currentIndex, msg.status);
-	} else if (msg.type === 'dsp_debug_log' && import.meta.env.DEV) {
-		const currentIndex = backend.dspWorkers!.indexOf(worker);
-		if (currentIndex !== -1) console[msg.level](`[DSP VFO ${currentIndex + 1}] ${msg.message}`);
+	} else if (msg.type === 'dsp_debug_log') {
+		logWorkerMessage(backend, worker, msg);
 	} else if (msg.type === 'error') {
 		const currentIndex = backend.dspWorkers!.indexOf(worker);
 		console.error(`[DSP Worker ${currentIndex}] Error:`, msg.error);
@@ -181,6 +191,17 @@ function routeAisMessage(backend: Backend, worker: Worker, msg: Extract<DspOutpu
 	if (params?.ais && params.freq === msg.freq) callback?.(index, params.freq, msg);
 }
 
+function routeAcarsMessage(
+	backend: Backend,
+	worker: Worker,
+	msg: Extract<DspOutput, { type: 'acars' }>,
+	callback: AcarsCallback | null,
+): void {
+	const index = backend.dspWorkers!.indexOf(worker);
+	const params = backend.vfoParams?.[index];
+	if (params?.acars && params.freq === msg.freq) callback?.(index, params.freq, msg);
+}
+
 function routePacketMessage(
 	backend: Backend,
 	worker: Worker,
@@ -188,7 +209,12 @@ function routePacketMessage(
 	callback: BleCallback | null,
 	aisCallback: AisCallback | null,
 	adsbCallback: AdsbCallback | null,
+	acarsCallback: AcarsCallback | null,
 ): boolean {
+	if (msg.type === 'acars') {
+		routeAcarsMessage(backend, worker, msg, acarsCallback);
+		return true;
+	}
 	if (msg.type === 'ais') {
 		routeAisMessage(backend, worker, msg, aisCallback);
 		return true;
@@ -202,4 +228,10 @@ function routePacketMessage(
 	const params = backend.vfoParams?.[index];
 	if (params?.ble && params.freq === msg.freq) callback?.(index, params.freq, msg);
 	return true;
+}
+
+function logWorkerMessage(backend: Backend, worker: Worker, msg: Extract<DspOutput, { type: 'dsp_debug_log' }>): void {
+	if (!import.meta.env.DEV) return;
+	const currentIndex = backend.dspWorkers!.indexOf(worker);
+	if (currentIndex !== -1) console[msg.level](`[DSP VFO ${currentIndex + 1}] ${msg.message}`);
 }

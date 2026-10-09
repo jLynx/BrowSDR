@@ -1,0 +1,35 @@
+.acars-panel .adsb-table th {
+	text-align: left;
+}
+.acars-panel .adsb-table th:first-child {
+	width: 110px;
+}
+.acars-panel .adsb-table th:not(:first-child) {
+	width: auto;
+}
+.acars-panel .adsb-table th:nth-child(2) {
+	width: 100px;
+}
+.acars-panel .adsb-table th:nth-child(3) {
+	width: 60px;
+}
+.acars-panel .adsb-table th:nth-child(4) {
+	width: 170px;
+}
+.acars-panel .adsb-table td {
+	vertical-align: top;
+}
+.acars-preview,
+.acars-message-text {
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	font-family: var(--font-mono, monospace);
+}
+.acars-preview {
+	max-width: 500px;
+}
+.acars-message-text {
+	margin: 12px 0;
+	padding: 12px;
+	background: var(--bg-panel);
+}

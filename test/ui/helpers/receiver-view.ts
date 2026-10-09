@@ -1,5 +1,7 @@
 import BlePanel from '@/app/decoders/ble/panel';
 import { bleMethods } from '@/app/decoders/ble/controller';
+import AcarsPanel from '@/app/decoders/acars/panel';
+import { acarsMethods } from '@/app/decoders/acars';
 import AisPanel from '@/app/decoders/ais/panel';
 import { aisMethods } from '@/app/decoders/ais';
 import { defineComponent } from 'vue';
@@ -25,7 +27,7 @@ import { remoteMethods } from '@/app/workspace/remote';
 
 export const ReceiverView = defineComponent({
 	template,
-	components: { ...components, VfoPanel, AdsbPanel, AisPanel, BlePanel },
+	components: { ...components, VfoPanel, AdsbPanel, AisPanel, BlePanel, AcarsPanel },
 	provide() {
 		return { receiver: this };
 	},
@@ -39,6 +41,7 @@ export const ReceiverView = defineComponent({
 		...adsbMethods,
 		...aisMethods,
 		...bleMethods,
+		...acarsMethods,
 		...bookmarkMethods,
 		...zoomMethods,
 		...audioMethods,

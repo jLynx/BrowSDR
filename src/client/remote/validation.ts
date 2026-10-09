@@ -1,5 +1,6 @@
 import { validBleMessage } from '@/worker/decoders/ble/validation';
 import { validAisMessage } from '@/worker/decoders/ais/validation';
+import { validAcarsMessage } from '@/worker/decoders/acars/validation';
 import { validAdsbMessage } from '@/worker/decoders/adsb/validation';
 import { isRecord, primitiveMap } from '@/platform/data';
 import type { ReceiverCommand } from './types';
@@ -48,6 +49,7 @@ const validators: Record<string, (value: Record<string, unknown>) => boolean> = 
 	dspStats: (value) => validDspStats(value.stats),
 	ble: (value: Record<string, unknown>) => validIndex(value.vfoIndex) && numbers(value, ['freq']) && validBleMessage(value.msg),
 	ais: (value: Record<string, unknown>) => validIndex(value.vfoIndex) && numbers(value, ['freq']) && validAisMessage(value.msg),
+	acars: (value: Record<string, unknown>) => validIndex(value.vfoIndex) && numbers(value, ['freq']) && validAcarsMessage(value.msg),
 	adsb: (value: Record<string, unknown>) => validIndex(value.vfoIndex) && numbers(value, ['freq']) && validAdsbMessage(value.msg),
 	rtl433: (value: Record<string, unknown>) => numbers(value, ['vfoIndex', 'freq']) && validSensorMessage(value.msg),
 	pocsag: (value: Record<string, unknown>) =>
@@ -90,7 +92,7 @@ function validVfoParams(value: unknown): boolean {
 		isRecord(value) &&
 		typedFields(value, ['mode', 'deEmphasis', 'rdsRegion'], 'string') &&
 		typedFields(value, ['enabled', 'squelchEnabled', 'lowPass', 'highPass', 'pocsag', 'rds'], 'boolean') &&
-		optionalFields(value, ['rtl433', 'audioMuted', 'adsb', 'ais', 'ble'], 'boolean') &&
+		optionalFields(value, ['rtl433', 'audioMuted', 'adsb', 'ais', 'ble', 'acars'], 'boolean') &&
 		optionalFields(value, ['rtl433SampleRate'], 'number') &&
 		optionalFields(value, ['rtl433Protocols'], 'string')
 	);
