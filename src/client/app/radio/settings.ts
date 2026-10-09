@@ -10,7 +10,7 @@ export const settingsMethods = {
 			spectrumRangeVersion: SPECTRUM_RANGE_VERSION,
 			radio: this.radio,
 			display: this.display,
-			gains: this.gains,
+			gains: Object.fromEntries(Object.entries(this.gains || {}).filter(([name]) => name !== 'Receive Mode')),
 			locks: this.locks,
 			vfos: this.vfos,
 			view: this.view,
@@ -41,7 +41,11 @@ export const settingsMethods = {
 					}
 				}
 				restoreDisplaySettings.call(this, setting);
-				if (primitiveMap<number>(setting.gains, 'number')) Object.assign(this.gains, setting.gains);
+				if (primitiveMap<number>(setting.gains, 'number')) {
+					Object.assign(this.gains, setting.gains);
+					// Diagnostic reception is temporary and must never survive a reload.
+					delete this.gains['Receive Mode'];
+				}
 				if (primitiveMap<boolean>(setting.locks, 'boolean')) Object.assign(this.locks, setting.locks);
 				// Handle new format (vfos array) or legacy format (audio/audio2)
 				restoreVfoSettings.call(this, setting);

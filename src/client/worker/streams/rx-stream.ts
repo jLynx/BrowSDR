@@ -2,6 +2,7 @@ import { installWorkerAudioHandler, createAudioBatchers } from './local-audio';
 import { initializePerformanceReporting } from './performance';
 import { dispatchIqChunk } from './channel-dispatch';
 import { initializeVfoWorkers } from './vfo-workers';
+import { configureReceiveGains, startUsbOnlyStream } from './usb-diagnostic';
 import type {
 	SamplesCallback,
 	AudioCallback,
@@ -65,6 +66,11 @@ export async function startRxStream(
 
 		await device.setSampleRate(sampleRate);
 		await device.setFrequency(displayToDeviceFrequencyHz(centerFreq, frequencyShift));
+		await configureReceiveGains(device, gains);
+		if (import.meta.env.DEV && device.deviceType === 'limesdr' && gains?.['Receive Mode'] === 1) {
+			await startUsbOnlyStream(backend, sampleRate);
+			return;
+		}
 
 		// ── Spectrum FFT setup ────────────────────────────────────────
 		const { spectrumFft, spectrumOutput } = initializeSpectrum(fftSize, backend);
@@ -98,15 +104,14 @@ export async function startRxStream(
 		// ── Audio DDC setup ───────────────────────────────────────────
 		// Full SDR++ pipeline in Rust: NCO → polyphase resampler (→50kHz)
 		// → channel FIR → squelch → FM demod → post-demod FIR → audio resampler (→48kHz)
-		const SAB_POOL_SIZE = initializeVfoWorkers(backend, centerFreq, rtl433Callback, rdsCallback, dsdStatusCallback, sampleRate);
+		initializeVfoWorkers(backend, centerFreq, rtl433Callback, rdsCallback, dsdStatusCallback, sampleRate);
 
 		// ── DSP Performance Counters ──────────────────────────────────
 		const perf = initializePerformanceReporting(backend, channel.perf, sampleRate);
 
 		// ── Audio Batching Buffer ─────────────────────────────────────
-		// At high sample rates (20 MHz), USB delivers 152+ chunks/s.
-		// Each produces ~315 audio samples. Sending 152 Comlink messages/s
-		// floods the main thread. Instead, batch audio and flush at ~20/s.
+		// Batch local PCM over at least 5ms to feed adaptive playback promptly.
+		// Remote PCM uses larger batches to limit transport message overhead.
 		const { pushWhisper, pushAudio } = createAudioBatchers(backend, whisperCallback, perf, audioCallback);
 
 		// ── Audio Processing — helper processes a single VFO ──────────
@@ -117,16 +122,6 @@ export async function startRxStream(
 		// Apply initial gains BEFORE starting bulk reads to avoid
 		// control transfer conflicts with in-flight bulk transfers.
 		// Matches librtlsdr / SDR++ which configure everything before streaming.
-		if (gains) {
-			if (device.setGains) {
-				await device.setGains(gains);
-			} else {
-				for (const [name, value] of Object.entries(gains)) {
-					await device.setGain(name, value);
-				}
-			}
-		}
-
 		await device.startRx((data: ArrayBufferView) => {
 			if (backend._streamGeneration !== generation) return;
 			perf.usbCallbacks++;
@@ -135,8 +130,6 @@ export async function startRxStream(
 			perf.lastChunkSize = signed.length;
 			perf.inputSamplesSum += signed.length / 2;
 
-			// Write USB chunk directly to WASM memory shared buffer if using SAB
-			backend.sharedIqViews![backend.sabPoolIndex!].set(signed);
 			chunkCounter++;
 
 			// Bulk copy for spectrum buffer
@@ -156,7 +149,7 @@ export async function startRxStream(
 			));
 
 			// Broadcast to DSP workers
-			dispatchIqChunk(backend, sampleRate, centerFreq, channel, perf, signed, chunkCounter, SAB_POOL_SIZE);
+			dispatchIqChunk(backend, sampleRate, centerFreq, channel, perf, signed, chunkCounter);
 		});
 
 		// Reinitialize all remote client DSP workers with the new sample rate

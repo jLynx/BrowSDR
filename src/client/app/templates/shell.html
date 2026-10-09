@@ -136,10 +136,12 @@
 							<p role="status">{{ autoGain.status }}<template v-if="autoGain.level"> · RMS {{ autoGain.level.rmsDbfs.toFixed(1) }} dBFS · peak {{ autoGain.level.peakDbfs.toFixed(1) }} dBFS · {{ (autoGain.level.clippedFraction * 100).toFixed(3) }}% clipped</template></p>
 					</div>
 					<template v-if="deviceCapabilities">
-						<UiFormRow v-for="gc in deviceCapabilities.gainControls" :key="gc.name">
+						<component v-for="group in gainControlGroups" :key="group.name" :is="group.name ? 'UiPanel' : 'div'" v-bind="group.name ? { label: group.name, collapsed: !radioAdvanced } : {}" @update:collapsed="radioAdvanced = !$event" :class="group.name ? 'radio-advanced' : 'gain-controls'">
+						<p v-if="group.name">Stop reception before changing transport options.</p>
+						<UiFormRow v-for="gc in group.controls" :key="gc.name">
 							<template v-if="gc.type === 'select'">
 								<label>{{ gc.name }}</label>
-								<UiSelect v-model.number="gains[gc.name]" :aria-label="gc.name" :disabled="autoGain.active || (remoteMode === 'client' && locks[gc.name])" style="flex:1; background:#1a1a2e; color:#e0e0e0; border:1px solid #333; border-radius:4px; padding:4px 8px;">
+								<UiSelect v-model.number="gains[gc.name]" :aria-label="gc.name" :disabled="autoGain.active || ((gc.name === 'USB Format' || gc.name === 'Receive Mode') && running) || (gc.name === 'Receive Mode' && remoteMode !== 'none') || (remoteMode === 'client' && locks[gc.name])" style="flex:1; background:#1a1a2e; color:#e0e0e0; border:1px solid #333; border-radius:4px; padding:4px 8px;">
 									<option v-for="(lbl, idx) in gc.labels" :key="idx" :value="idx">{{ lbl }}</option>
 								</UiSelect>
 							</template>
@@ -152,7 +154,10 @@
 							</template>
 							<UiLock v-if="remoteMode === 'host' || (remoteMode === 'client' && locks[gc.name])" :locked="locks[gc.name]" :host="remoteMode === 'host'" @toggle="locks[gc.name] = !locks[gc.name]"></UiLock>
 						</UiFormRow>
+						<p v-if="group.name">Packed 12-bit reduces USB traffic. Use 16-bit unless you need to compare transport performance.</p>
+						</component>
 					</template>
+					<p v-if="deviceCapabilities?.deviceType === 'limesdr' && gains['Receive Mode'] === 1" role="status">USB-only diagnostic: source counters remain active; spectrum and audio are disabled.</p>
 				</UiPanel>
 
 				<VfoPanel v-for="(vfo, i) in vfos" :key="'vfo-panel-' + i" :vfo="vfo" :i="i" />
@@ -160,7 +165,7 @@
 				<!-- Add VFO button -->
 				<div class="panel" :class="{ disabled: !connected }">
 					<div class="panel-body" style="padding: 8px 12px;">
-						<UiButton variant="primary" @click="addVfo">+ Add VFO</UiButton>
+					<UiButton variant="primary" @click="addVfo" :disabled="gains['Receive Mode'] === 1">+ Add VFO</UiButton>
 					</div>
 				</div>
 
@@ -246,9 +251,6 @@
 				</div>
 
 				<UiPanel label="Display" :id="receiverId + '-display-panel'" v-model:collapsed="collapsedPanels['display']">
-					<UiFormRow class="full-checkbox-row">
-						<UiCheckbox v-model="display.sharedChannelization" label="Shared VFO DSP" title="Share filtered sub-bands between VFOs to reduce repeated high-rate DSP work. On a remote connection, applies only to your VFOs on the host. Disable to compare direct DSP."></UiCheckbox>
-					</UiFormRow>
 					<UiFormRow>
 						<label :for="receiverId + '-spectrum-fps'">Spectrum FPS</label>
 						<UiSelect :id="receiverId + '-spectrum-fps'" v-model.number="display.spectrumFps" title="Spectrum and waterfall display update rate; does not change radio settings or audio. Higher rates use more CPU. Remote reception is capped locally and cannot exceed the host's rate.">
@@ -257,6 +259,11 @@
 							<option :value="60">60 FPS</option>
 						</UiSelect>
 					</UiFormRow>
+					<UiPanel label="Advanced" class="radio-advanced" :collapsed="!displayAdvanced" @update:collapsed="displayAdvanced = !$event">
+						<UiFormRow class="full-checkbox-row">
+							<UiCheckbox v-model="display.sharedChannelization" label="Shared VFO DSP" title="Share filtered sub-bands between VFOs to reduce repeated high-rate DSP work. On a remote connection, applies only to your VFOs on the host."></UiCheckbox>
+						</UiFormRow>
+					</UiPanel>
 				</UiPanel>
 			</div>
 			<!-- Sidebar Footer -->
@@ -282,24 +289,40 @@
 				</div>
 				<div class="hover-tick" ref="hoverTick" style="display: none">{{ hoverFreqText }}</div>
 				<!-- DSP Performance Stats Overlay -->
-				<div v-if="showStats && dspStats" class="dsp-stats-overlay">
-					<div style="display: flex; justify-content: space-between;">
+				<div v-if="showStats && dspStats" class="dsp-stats-overlay" @pointerdown.stop @click.stop @dblclick.stop @wheel.stop>
+					<div class="dsp-stats-heading">
 						<b>{{ remoteMode === 'client' ? 'Host DSP Stats' : 'DSP Stats' }}</b>
 						<span style="color: #0f0;">{{ fps }} FPS</span>
 					</div>
 					<div v-if="remoteMode === 'client'">DSP / audio: your VFOs | USB / drops: host source</div>
+					<div v-if="dspStats.usbDiagnosticMode === 1">USB-only diagnostic | no IQ conversion, spectrum or audio DSP</div>
+					<div>Input: {{ (dspStats.inputRate/1e6).toFixed(2) }} MSa/s | DSP: {{ dspStats.dspAvgMs }}ms avg</div>
+					<div title="Skipped IQ deliveries to DSP workers. Total resets when reception restarts.">IQ drops: {{ dspStats.droppedTotal ?? '—' }} total</div>
+					<div v-if="dspStats.sourceGapCount !== undefined" title="Gaps in LimeSDR sample counters before DSP. See More info for missing samples and counter discontinuities.">Source gaps: {{ dspStats.sourceGapCount }} total</div>
+					<div v-if="dspStats.usbDiagnosticMode !== 1" title="Audio ran out during playback. Excludes startup and intentional resets. Resets when reception restarts.">Playback gaps: {{ audioGapCount }} total | {{ audioGapMs.toFixed(0) }}ms</div>
+					<div v-if="dspStats.usbDiagnosticMode !== 1" title="PCM waiting on the audio thread. Excludes USB, DSP and audio device latency.">Playback buffer: {{ (Number(queuedAudioSched || 0) * 1000).toFixed(0) }}ms <template v-if="audioPlaybackEngine === 'worklet'">| target {{ audioTargetMs.toFixed(0) }}ms</template></div>
+					<UiButton variant="secondary" class="dsp-stats-toggle" :aria-expanded="showStatsDetails" :aria-controls="receiverId + '-stats-details'" @click.stop="showStatsDetails = !showStatsDetails">{{ showStatsDetails ? 'Less info' : 'More info' }}</UiButton>
+					<div v-if="showStatsDetails" :id="receiverId + '-stats-details'" class="dsp-stats-details">
+					<div v-if="dspStats.usbTransferCount !== undefined">Capture: {{ ((dspStats.usbElapsedMs || 0) / 1000).toFixed(1) }}s | {{ dspStats.usbTransferCount }} transfers | {{ ((dspStats.usbReceivedBytes || 0) / 1e9).toFixed(3) }} GB received</div>
 					<div>USB: {{ dspStats.usbFps }} cb/s | Chunk: {{ dspStats.chunkSize }} B</div>
 					<div>DSP: {{ dspStats.dspAvgMs }}ms avg / {{ dspStats.dspMaxMs }}ms max</div>
 					<div>Audio: {{ dspStats.audioFps }} calls/s | {{ dspStats.audioRate }} samp/s</div>
 					<div v-if="remoteMode !== 'client'">Audio queue: {{ (dspStats.audioQueueMs || 0).toFixed(0) }}ms | Whisper: {{ dspStats.whisperEnabled ? (dspStats.whisperMsgRate || 0) + ' msgs/s' : 'off' }}</div>
-					<div>Msgs: {{ dspStats.msgRate }} /s | Input: {{ (dspStats.inputRate/1e6).toFixed(2) }} MSa/s</div>
-					<div>Dropped: {{ dspStats.dropped }}</div>
+					<div>Msgs: {{ dspStats.msgRate }} /s | IQ drops: {{ dspStats.dropped }} recent</div>
+					<div v-if="dspStats.sourceGapCount !== undefined" title="Missing samples are forward jumps in LimeSDR FPGA counters. Discontinuities include duplicate/backwards counters or resets.">Missing: {{ dspStats.sourceMissingSamples }} samples | Discontinuities: {{ dspStats.sourceDiscontinuities }}</div>
+					<div v-if="dspStats.sourceGapWithinTransfer !== undefined" title="Counter jumps inside one returned USB buffer versus between buffers. Largest is missing radio time in one jump. These do not identify the faulty component.">Source gap location: {{ dspStats.sourceGapWithinTransfer }} within / {{ dspStats.sourceGapBetweenTransfers }} between | largest {{ ((dspStats.sourceLargestGapSamples || 0) / radio.sampleRate * 1000).toFixed(2) }}ms</div>
+					<div v-if="dspStats.usbServiceAvgMs !== undefined" title="Synchronous receive-worker processing, including conversion, FFT and dispatch. Average and maximum since reception started; separate from VFO DSP timing.">USB service: {{ dspStats.usbServiceAvgMs.toFixed(2) }}ms avg / {{ (dspStats.usbServiceMaxMs || 0).toFixed(2) }}ms max</div>
+					<div v-if="dspStats.usbArrivalMaxMs !== undefined" title="Longest gap between USB completions observed by JavaScript since reception started. Includes USB and scheduling delays. Reordered counts completions observed behind a later submitted read.">USB arrival: {{ dspStats.usbArrivalMaxMs.toFixed(2) }}ms max | reordered {{ dspStats.usbOutOfOrderTransfers }}</div>
+					<div v-if="dspStats.usbLinkBits !== undefined" title="Wire sample width and USB read size. Packed 12-bit preserves the ADC bits while reducing USB traffic; DSP still receives int8 IQ.">USB link: {{ dspStats.usbLinkBits }}-bit | {{ ((dspStats.usbTransferBytes || 0) / 1024).toFixed(0) }}KiB transfers</div>
+					<div v-if="dspStats.sourceGapCount && dspStats.sourceLastGapArrivalMs !== undefined" title="Completion interval and preceding synchronous processing duration when the latest source-counter gap was observed. Correlation does not prove cause.">Last source gap: {{ dspStats.sourceLastGapArrivalMs.toFixed(2) }}ms arrival / {{ (dspStats.sourceLastGapPreviousServiceMs || 0).toFixed(2) }}ms prior service</div>
+					<div v-if="audioPlaybackEngine === 'worklet' && dspStats.usbDiagnosticMode !== 1" title="Smooth rate correction is limited to ±0.5% to control gradual buffer drift. Discarded PCM frames count separately from source/IQ losses.">Playback rate: {{ (audioPlaybackRate * 100).toFixed(2) }}% | PCM discarded: {{ audioDroppedFrames }} frames</div>
 					<div v-if="dspStats.channelization && dspStats.channelization.bands">Shared: {{ dspStats.channelization.vfos }} VFOs / {{ dspStats.channelization.bands }} bands @ {{ (dspStats.channelization.sampleRate / 1e6).toFixed(2) }} MSPS</div>
 					<div v-if="dspStats.channelization && dspStats.channelization.bands">{{ remoteMode === 'client' ? 'Host channelizer' : 'Channelizer' }}: {{ (dspStats.channelAvgMs || 0).toFixed(2) }}ms avg / {{ (dspStats.channelMaxMs || 0).toFixed(2) }}ms max | {{ (dspStats.channelCpuMs || 0).toFixed(0) }}ms CPU/s</div>
+					</div>
 				</div>
 			</div>
 			<!-- Active Audio VFOs Overlay -->
-			<div class="active-audio-overlay" v-if="activeAudioVfos.length> 0">
+			<div class="active-audio-overlay" v-if="activeAudioVfos.length> 0 && gains['Receive Mode'] !== 1">
 				<div class="active-audio-title">Active Audio</div>
 				<div class="active-audio-chips">
 					<div v-for="item in activeAudioVfos" :key="'active-vfo-' + item.index"

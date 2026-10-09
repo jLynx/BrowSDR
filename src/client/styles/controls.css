@@ -250,12 +250,48 @@ canvas {
 	font-family: 'Roboto Mono', monospace;
 	color: #ccc;
 	line-height: 1.6;
-	pointer-events: none;
 	z-index: 50;
-	white-space: nowrap;
+	max-width: calc(100% - 16px);
+	max-height: calc(100% - 16px);
+	overflow: auto;
+	overflow-wrap: anywhere;
 }
 .dsp-stats-overlay b {
 	color: #00ffea;
+}
+
+.dsp-stats-heading {
+	display: flex;
+	justify-content: space-between;
+	gap: 16px;
+}
+
+.dsp-stats-toggle {
+	background: none;
+	border: 0;
+	padding: 4px 0;
+	color: #00ffea;
+	font: inherit;
+	cursor: pointer;
+	text-decoration: underline;
+}
+
+.dsp-stats-details {
+	border-top: 1px solid var(--border);
+	padding-top: 4px;
+}
+
+.gain-controls {
+	display: contents;
+}
+
+.radio-advanced {
+	margin: 0 -12px -12px;
+}
+
+.radio-advanced p {
+	color: var(--text-muted);
+	font-size: 11px;
 }
 
 .active-audio-overlay {

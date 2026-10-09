@@ -88,9 +88,15 @@ impl ComplexDecimatingFIR {
         while self.offset < count {
             let mut sum_i = 0.0f32;
             let mut sum_q = 0.0f32;
-            for j in 0..self.tap_count {
-                sum_i += self.buffer_i[self.offset + j] * self.taps[j];
-                sum_q += self.buffer_q[self.offset + j] * self.taps[j];
+            // Validate each convolution window once. Iterator traversal avoids
+            // repeated indexed bounds checks in V8's baseline WASM compiler,
+            // which Chrome uses while DevTools is open. Preserve tap order.
+            let end = self.offset + self.tap_count;
+            let window_i = &self.buffer_i[self.offset..end];
+            let window_q = &self.buffer_q[self.offset..end];
+            for ((&i, &q), &tap) in window_i.iter().zip(window_q).zip(&self.taps) {
+                sum_i += i * tap;
+                sum_q += q * tap;
             }
             out_i[out_count] = sum_i;
             out_q[out_count] = sum_q;
@@ -265,4 +271,50 @@ pub(crate) fn split_decim_ratio(total_ratio: usize) -> (usize, usize) {
     // No CIC stages — PowerDecimator handles all decimation with proper
     // anti-aliasing FIR filters matching SDR++ power_decimator.h
     (0, total_ratio)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn convolution_matches_scalar_reference_across_chunk_boundaries() {
+        let input_i: Vec<f32> = (0..2049).map(|i| (i as f32 * 0.17).sin()).collect();
+        let input_q: Vec<f32> = (0..2049).map(|i| (i as f32 * 0.31).cos()).collect();
+        for ratio in [2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096] {
+            for stage in get_decim_plan(ratio) {
+                let mut filter = ComplexDecimatingFIR::new(stage.taps, stage.decimation);
+                let mut actual = Vec::new();
+                let mut offset = 0;
+                for count in [1, 17, 653, 2, 997, 379] {
+                    let mut out_i = vec![0.0; count];
+                    let mut out_q = vec![0.0; count];
+                    let length = filter.process(count, &input_i[offset..offset + count],
+                        &input_q[offset..offset + count], &mut out_i, &mut out_q);
+                    actual.extend(out_i[..length].iter().copied().zip(out_q[..length].iter().copied()));
+                    offset += count;
+                }
+                let mut expected = Vec::new();
+                for position in (0..input_i.len()).step_by(stage.decimation) {
+                    let mut sum_i = 0.0f32;
+                    let mut sum_q = 0.0f32;
+                    for (j, &tap) in stage.taps.iter().enumerate() {
+                        let index = position as isize + j as isize - (stage.taps.len() - 1) as isize;
+                        let i = if index >= 0 { input_i[index as usize] } else { 0.0 };
+                        let q = if index >= 0 { input_q[index as usize] } else { 0.0 };
+                        sum_i += i * tap;
+                        sum_q += q * tap;
+                    }
+                    expected.push((sum_i, sum_q));
+                }
+                assert_eq!(actual, expected, "ratio {ratio}, decimation {}", stage.decimation);
+                filter.reset();
+                let mut out_i = vec![0.0; input_i.len()];
+                let mut out_q = vec![0.0; input_q.len()];
+                let length = filter.process(input_i.len(), &input_i, &input_q, &mut out_i, &mut out_q);
+                assert_eq!(out_i[..length].iter().copied().zip(out_q[..length].iter().copied())
+                    .collect::<Vec<_>>(), expected);
+            }
+        }
+    }
 }

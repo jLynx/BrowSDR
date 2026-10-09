@@ -23,6 +23,7 @@ export const Disabled: Story = { args: { disabled: true } };
 export const OutOfBand: Story = { args: { outOfBand: true, label: 'VFO 1' } };
 export const Condensed: Story = { args: { condensed: true } };
 export const Static: Story = { args: { collapsible: false } };
+export const Advanced: Story = { args: { label: 'Advanced', collapsed: true } };
 export const KeyboardToggle: Story = {
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);

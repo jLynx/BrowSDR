@@ -110,23 +110,16 @@ self.onmessage = async (e: MessageEvent<DspInput>) => {
 			handleDspConfigure(msg);
 			break;
 		case 'process':
-			handleDspProcess(msg);
+			try {
+				handleDspProcess(msg);
+			} catch (err) {
+				self.postMessage({ type: 'error', error: errorMessage(err), chunkId: msg.chunkId });
+			}
 			break;
 	}
 };
 
-function decodeRdsChunk(msg: {
-	type: 'process';
-	sampleRate?: number;
-	centerFreq?: number;
-	params: VfoParams;
-	floatIq?: boolean;
-	useSab?: boolean;
-	sabIndex?: number;
-	chunkLen: number;
-	chunk?: ArrayBuffer;
-	chunkId: number;
-}) {
+function decodeRdsChunk(msg: Extract<DspInput, { type: 'process' }>) {
 	if (rdsDdc && rdsDecoder && msg.params.rds && msg.params.mode === 'wfm') {
 		const chunkLen = msg.chunkLen;
 		if (chunkLen > 0) {
@@ -511,6 +504,7 @@ function handleDspConfigure(msg: Extract<DspInput, { type: 'configure' }>) {
 function handleDspProcess(msg: Extract<DspInput, { type: 'process' }>) {
 	if (!ddc || !vfoState) {
 		console.log('DSP Worker: ddc/vfoState unavailable');
+		self.postMessage({ type: 'processed', chunkId: msg.chunkId });
 		return;
 	}
 
@@ -518,12 +512,20 @@ function handleDspProcess(msg: Extract<DspInput, { type: 'process' }>) {
 	inputIsFloat = msg.floatIq === true;
 	rtl433.configure(msg.params, systemSampleRate, inputCenterFreq);
 	// Audio mute does not stop independent RDS or pager decoding.
-	if (!msg.params.enabled && !msg.params.pocsag && !(msg.params.rds && msg.params.mode === 'wfm') && !msg.params.rtl433) return;
-	if (!copyInputPayload(msg)) return;
+	if (
+		(!msg.params.enabled && !msg.params.pocsag && !(msg.params.rds && msg.params.mode === 'wfm') && !msg.params.rtl433) ||
+		!copyInputPayload(msg)
+	) {
+		self.postMessage({ type: 'processed', chunkId: msg.chunkId });
+		return;
+	}
 	try {
 		const processStart = performance.now();
 		rtl433.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat);
 		const audioOut = msg.params.enabled || msg.params.pocsag || msg.params.rds ? processVfoAudio(msg.chunkLen, msg.params) : null;
+		// Complete decoder work before acknowledging the input. Otherwise replies
+		// let the sender queue more input while RDS is still using this worker.
+		decodeRdsChunk(msg);
 		const processEnd = performance.now();
 		const dspTime = processEnd - processStart;
 
@@ -552,26 +554,12 @@ function handleDspProcess(msg: Extract<DspInput, { type: 'process' }>) {
 				dspTime: dspTime,
 			});
 		}
-
-		// RDS: extract MPX and decode in-worker (avoids blocking the audio mixer thread)
-		decodeRdsChunk(msg);
 	} catch (err) {
-		self.postMessage({ type: 'error', error: errorMessage(err) });
+		self.postMessage({ type: 'error', error: errorMessage(err), chunkId: msg.chunkId });
 	}
 }
 
-function configureInputRate(msg: {
-	type: 'process';
-	sampleRate?: number;
-	centerFreq?: number;
-	params: VfoParams;
-	floatIq?: boolean;
-	useSab?: boolean;
-	sabIndex?: number;
-	chunkLen: number;
-	chunk?: ArrayBuffer;
-	chunkId: number;
-}) {
+function configureInputRate(msg: Extract<DspInput, { type: 'process' }>) {
 	const nextRate = msg.sampleRate ?? systemSampleRate;
 	const nextCenter = msg.centerFreq ?? inputCenterFreq;
 	if (nextRate !== systemSampleRate) {

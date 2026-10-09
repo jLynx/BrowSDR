@@ -56,8 +56,9 @@ impl PolyphaseResamplerF32 {
             // Dot product with current phase taps
             let phase_taps = &self.phases[self.phase];
             let mut sum = 0.0f32;
-            for j in 0..self.taps_per_phase {
-                sum += self.buffer[self.offset + j] * phase_taps[j];
+            let window = &self.buffer[self.offset..self.offset + self.taps_per_phase];
+            for (&sample, &tap) in window.iter().zip(phase_taps) {
+                sum += sample * tap;
             }
             output.push(sum);
 
@@ -141,9 +142,12 @@ impl PolyphaseResamplerComplex {
             let phase_taps = &self.phases[self.phase];
             let mut sum_i = 0.0f32;
             let mut sum_q = 0.0f32;
-            for j in 0..self.taps_per_phase {
-                sum_i += self.buffer_i[self.offset + j] * phase_taps[j];
-                sum_q += self.buffer_q[self.offset + j] * phase_taps[j];
+            let end = self.offset + self.taps_per_phase;
+            let window_i = &self.buffer_i[self.offset..end];
+            let window_q = &self.buffer_q[self.offset..end];
+            for ((&i, &q), &tap) in window_i.iter().zip(window_q).zip(phase_taps) {
+                sum_i += i * tap;
+                sum_q += q * tap;
             }
             out_i.push(sum_i);
             out_q.push(sum_q);
@@ -163,5 +167,58 @@ impl PolyphaseResamplerComplex {
         self.buffer_q.fill(0.0);
         self.phase = 0;
         self.offset = 0;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn mono_and_complex_convolution_match_scalar_reference() {
+        let input: Vec<f32> = (0..2049).map(|i| (i as f32 * 0.19).sin()).collect();
+        let taps: Vec<f32> = (0..157).map(|i| (i as f32 * 0.07).cos() / 157.0).collect();
+        for (interp, decim) in [(1, 1), (4, 5), (25, 24), (24, 125), (125, 192)] {
+            let mut mono = PolyphaseResamplerF32::new(interp, decim, &taps);
+            let mut complex = PolyphaseResamplerComplex::new(interp, decim, &taps);
+            let mut actual = Vec::new();
+            let mut actual_i = Vec::new();
+            let mut actual_q = Vec::new();
+            let mut start = 0;
+            for count in [1, 17, 653, 2, 997, 379] {
+                let chunk = &input[start..start + count];
+                mono.process(chunk, &mut actual);
+                complex.process(chunk, chunk, &mut actual_i, &mut actual_q);
+                start += count;
+            }
+            let mut expected = Vec::new();
+            let mut phase = 0;
+            let mut position = 0;
+            while position < input.len() {
+                let mut sum = 0.0f32;
+                for j in 0..mono.taps_per_phase {
+                    let index = position as isize + j as isize - (mono.taps_per_phase - 1) as isize;
+                    let sample = if index >= 0 { input[index as usize] } else { 0.0 };
+                    let tap_index = j * interp + interp - 1 - phase;
+                    let tap = taps.get(tap_index).copied().unwrap_or(0.0);
+                    sum += sample * tap;
+                }
+                expected.push(sum);
+                phase += decim;
+                position += phase / interp;
+                phase %= interp;
+            }
+            assert_eq!(actual, expected, "mono {interp}/{decim}");
+            assert_eq!(actual_i, expected, "I {interp}/{decim}");
+            assert_eq!(actual_q, expected, "Q {interp}/{decim}");
+            mono.reset();
+            complex.reset();
+            actual.clear(); actual_i.clear(); actual_q.clear();
+            mono.process(&input, &mut actual);
+            complex.process(&input, &input, &mut actual_i, &mut actual_q);
+            assert_eq!(actual, expected);
+            assert_eq!(actual_i, expected);
+            assert_eq!(actual_q, expected);
+        }
     }
 }

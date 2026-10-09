@@ -134,7 +134,7 @@ Use Device Manager to select an already-installed WinUSB driver, or install one 
 
 Changing to WinUSB can affect native SDR applications that require CYUSB3; switch back to the previous driver when those applications need it. See [Chrome's Windows WebUSB requirements](https://developer.chrome.com/docs/capabilities/build-for-webusb#windows).
 
-LimeSDR-USB reception supports sample rates up to **61.44 MSPS**. Higher rates require a USB 3 connection and enough CPU capacity for the selected VFOs; reduce the sample rate if audio breaks up or the browser cannot keep up. The driver uses 2× internal oversampling and adjusts the analog receive filter to match the selected rate.
+LimeSDR-USB reception supports sample rates up to **61.44 MSPS**.
 
 Choose **RX1** or **RX2** using **RX Channel** in the Radio panel, then select **LNAH**, **LNAL**, or **LNAW** under **Antenna** to match the H, L, or W connector in that receiver's antenna group. One receiver is streamed at a time; switching briefly restarts reception while retaining the current frequency, gains, and antenna path. The receiver and antenna selections are saved locally.
 

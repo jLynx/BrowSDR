@@ -3,6 +3,7 @@ import type { DspOutput } from '@/worker/runtime/dsp-messages.types';
 import type { VfoParams, VfoState } from '@/worker/runtime/types';
 import type { Backend } from '@/worker/runtime/backend';
 import { AUDIO_QUEUE_CAPACITY } from './audio-queue';
+import { IqDispatcher } from './iq-dispatch';
 export function initializeVfoWorkers(
 	backend: Backend,
 	centerFreq: number,
@@ -47,8 +48,8 @@ export function initializeVfoWorkers(
 
 	const MAX_USB_SAMPLES = 131072;
 	const SHARED_IQ_CAPACITY = MAX_USB_SAMPLES * 2;
-	const SAB_POOL_SIZE = 8;
-	backend.sabPoolIndex = 0;
+	const SAB_POOL_SIZE = 64;
+	backend._iqDispatcher?.dispose();
 
 	backend.sharedIqPools = [];
 	backend.sharedIqViews = [];
@@ -57,6 +58,7 @@ export function initializeVfoWorkers(
 		backend.sharedIqPools.push(pool);
 		backend.sharedIqViews.push(new Int8Array(pool));
 	}
+	backend._iqDispatcher = new IqDispatcher(backend.sharedIqViews);
 
 	const makeVfoState = (): VfoState => ({
 		squelchOpen: false,

@@ -88,7 +88,7 @@ describe('multi-VFO render isolation', () => {
 				],
 			},
 		});
-		await wrapper.setData({ vfos: makePerformanceVfos(), connected: true, running: true, showStats: true });
+		await wrapper.setData({ vfos: makePerformanceVfos(), connected: true, running: true, showStats: true, showStatsDetails: true });
 		owners.length = 0;
 		for (let frame = 0; frame < 20; frame++) {
 			await wrapper.setData({
@@ -101,5 +101,8 @@ describe('multi-VFO render isolation', () => {
 		}
 		expect(owners).toEqual([]);
 		expect(wrapper.get('.dsp-stats-overlay').text()).toContain('949');
+		await wrapper.get('.dsp-stats-toggle').trigger('click');
+		expect(wrapper.get('.dsp-stats-overlay').text()).not.toContain('949');
+		expect(owners).toEqual([]);
 	});
 });

@@ -16,6 +16,36 @@ const report = {
 };
 
 describe('remote command boundaries', () => {
+	it('accepts source continuity reports and rejects invalid source counters', () => {
+		const stats = { ...report, sourceGapCount: 2, sourceMissingSamples: 2040, sourceDiscontinuities: 0 };
+		expect(isReceiverCommand({ type: 'dspStats', stats })).toBe(true);
+		for (const field of [
+			'sourceGapCount',
+			'sourceMissingSamples',
+			'sourceDiscontinuities',
+			'sourceGapWithinTransfer',
+			'sourceGapBetweenTransfers',
+			'sourceLargestGapSamples',
+			'sourceLastGapArrivalMs',
+			'sourceLastGapPreviousServiceMs',
+			'usbArrivalMaxMs',
+			'usbServiceAvgMs',
+			'usbServiceMaxMs',
+			'usbOutOfOrderTransfers',
+			'usbLinkBits',
+			'usbTransferBytes',
+			'usbDiagnosticMode',
+			'usbTransferCount',
+			'usbReceivedBytes',
+			'usbReceivedSamples',
+			'usbElapsedMs',
+			'usbLastTransferBytes',
+		]) {
+			for (const invalid of [NaN, Infinity, '2']) {
+				expect(isReceiverCommand({ type: 'dspStats', stats: { ...stats, [field]: invalid } })).toBe(false);
+			}
+		}
+	});
 	it.each(['sync', 'receivers'])('requires a finite numeric frequency shift in %s radio state', (type) => {
 		const command = (frequencyShift) => {
 			const radio = { centerFreq: 100, sampleRate: 2000000, fftSize: 65536, frequencyShift };

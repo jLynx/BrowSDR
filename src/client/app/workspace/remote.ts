@@ -397,8 +397,7 @@ function handleSync(this: AppInstance, cmd: Extract<ReceiverCommand, { type: 'sy
 	if (cmd.capabilities) this.deviceCapabilities = cmd.capabilities;
 	if (cmd.radio) {
 		// Flush stale audio to prevent glitches when sample rate or center freq changes
-		this.audioRingPos = 0;
-		this.nextPlayTime = 0;
+		this._resetAudioPlayback();
 		Object.assign(this.radio, cmd.radio);
 	}
 	if (cmd.gains) Object.assign(this.gains, cmd.gains);

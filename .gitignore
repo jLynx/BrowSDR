@@ -33,6 +33,11 @@ storybook-static/
 test-results/
 playwright-report/
 
+# Local instructions and investigation workspace
+/AGENTS.md
+/docs/local/
+/scripts/performance/
+
 # OS files
 .DS_Store
 Thumbs.db

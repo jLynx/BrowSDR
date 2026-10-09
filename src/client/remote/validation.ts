@@ -100,7 +100,39 @@ function validDspStats(value: unknown): boolean {
 		(value.squelchDb === undefined ||
 			(Array.isArray(value.squelchDb) && value.squelchDb.every((item: unknown) => typeof item === 'number' && Number.isFinite(item)))) &&
 		(value.channelization === undefined || numbers(value.channelization, ['bands', 'vfos', 'sampleRate'])) &&
-		optionalFields(value, ['msgRate', 'whisperMsgRate', 'channelAvgMs', 'channelMaxMs', 'channelCpuMs', 'audioQueueMs'], 'number') &&
+		optionalFields(
+			value,
+			[
+				'msgRate',
+				'whisperMsgRate',
+				'channelAvgMs',
+				'channelMaxMs',
+				'channelCpuMs',
+				'audioQueueMs',
+				'droppedTotal',
+				'sourceGapCount',
+				'sourceMissingSamples',
+				'sourceDiscontinuities',
+				'sourceGapWithinTransfer',
+				'sourceGapBetweenTransfers',
+				'sourceLargestGapSamples',
+				'sourceLastGapArrivalMs',
+				'sourceLastGapPreviousServiceMs',
+				'usbArrivalMaxMs',
+				'usbServiceAvgMs',
+				'usbServiceMaxMs',
+				'usbOutOfOrderTransfers',
+				'usbLinkBits',
+				'usbTransferBytes',
+				'usbDiagnosticMode',
+				'usbTransferCount',
+				'usbReceivedBytes',
+				'usbReceivedSamples',
+				'usbElapsedMs',
+				'usbLastTransferBytes',
+			],
+			'number',
+		) &&
 		optionalFields(value, ['whisperEnabled'], 'boolean')
 	);
 }

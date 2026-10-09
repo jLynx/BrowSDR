@@ -93,7 +93,7 @@ export const connectionMethods = {
 						const saved = this.gains[gc.name];
 						newGains[gc.name] =
 							caps.deviceType === 'limesdr' &&
-							(gc.name === 'Antenna' || gc.name === 'RX Channel') &&
+							(gc.name === 'Antenna' || gc.name === 'RX Channel' || gc.name === 'USB Format') &&
 							Number.isInteger(saved) &&
 							saved >= gc.min &&
 							saved <= gc.max
@@ -233,6 +233,7 @@ export const connectionMethods = {
 				this._statsTimer = null;
 			}
 			this.dspStats = null;
+			this._disposeAudioWorklet();
 			if (this._mediaAudioEl) {
 				this._mediaAudioEl.pause();
 				if (this._mediaSource && this._mediaSource.readyState === 'open') {
@@ -271,9 +272,12 @@ export const connectionMethods = {
 	},
 	async startStream(this: AppInstance, isRestart = false) {
 		if (this.running) return;
+		const usbOnly = isUsbOnlyDiagnostic(this);
 		this._initAudioCtx();
+		this._resetAudioPlayback(true);
 
 		this.initCanvas();
+		if (usbOnly) this.fps = 0;
 
 		// Set running=true synchronously so drawSpectrum() isn't blocked by the
 		// `if (!this.running)` guard while we're awaiting startRxStream(). For
@@ -292,6 +296,8 @@ export const connectionMethods = {
 		};
 
 		try {
+			if (!usbOnly) await this._prepareAudioWorklet();
+			this._resetAudioPlayback(true);
 			await this.backend.startRxStream(
 				opts,
 				Comlink.proxy((spectrumData: Float32Array) => this.drawSpectrum(spectrumData)),
@@ -323,6 +329,7 @@ export const connectionMethods = {
 		startReceiverStatsPolling.call(this);
 
 		await this._acquireWakeLock();
+		if (usbOnly) return;
 		if (this.workspace) this.workspace.updateMediaSession();
 		else if ('mediaSession' in navigator) {
 			navigator.mediaSession.metadata = new MediaMetadata({
@@ -375,6 +382,10 @@ export const connectionMethods = {
 		}
 	},
 };
+
+function isUsbOnlyDiagnostic(receiver: AppInstance) {
+	return receiver.deviceCapabilities?.deviceType === 'limesdr' && receiver.gains['Receive Mode'] === 1;
+}
 
 function startReceiverStatsPolling(this: AppInstance) {
 	this._statsTimer = setInterval(() => {

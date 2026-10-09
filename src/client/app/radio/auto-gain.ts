@@ -6,7 +6,7 @@ import { nextHackRFGain } from '@/radio/hackrf-auto-gain';
 
 export const autoGainMethods = {
 	autoGainSupported(this: AppInstance) {
-		return ['limesdr', 'hackrf'].includes(this.deviceCapabilities?.deviceType ?? '');
+		return this.gains['Receive Mode'] !== 1 && ['limesdr', 'hackrf'].includes(this.deviceCapabilities?.deviceType ?? '');
 	},
 	autoGainControls(this: AppInstance) {
 		return this.deviceCapabilities?.deviceType === 'hackrf' ? 'LNA, VGA and RF amplifier' : 'LNA, TIA and PGA';

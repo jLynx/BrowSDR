@@ -40,9 +40,33 @@ export interface SdrDevice {
 	setGains?(gains: Record<string, number>): Promise<void>;
 	setBandwidth?(bwHz: number): Promise<void>;
 	getRxLevel?(): RxLevel | null;
+	getRxStreamStats?(): RxStreamStats;
 
 	startRx(callback: (data: ArrayBufferView) => void): Promise<void>;
 	stopRx(): Promise<void>;
+}
+
+export interface RxStreamStats {
+	sourceGapCount: number;
+	sourceMissingSamples: number;
+	sourceDiscontinuities: number;
+	sourceGapWithinTransfer?: number;
+	sourceGapBetweenTransfers?: number;
+	sourceLargestGapSamples?: number;
+	sourceLastGapArrivalMs?: number;
+	sourceLastGapPreviousServiceMs?: number;
+	usbArrivalMaxMs?: number;
+	usbServiceAvgMs?: number;
+	usbServiceMaxMs?: number;
+	usbOutOfOrderTransfers?: number;
+	usbLinkBits?: number;
+	usbTransferBytes?: number;
+	usbDiagnosticMode?: number;
+	usbTransferCount?: number;
+	usbReceivedBytes?: number;
+	usbReceivedSamples?: number;
+	usbElapsedMs?: number;
+	usbLastTransferBytes?: number;
 }
 
 export interface DeviceCapabilities {
