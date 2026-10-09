@@ -20,6 +20,42 @@ const record = (label, text, extra = {}) => ({
 const field = (result, name) => result.fields.find((item) => item.label === name)?.value;
 
 describe('ACARS payload interpretation', () => {
+	it('decodes the received label-3L decimal position with minute precision and preserves the original payload', () => {
+		const message = record('3L', 'S 37.306/E174.100 /UTC 0809', { receivedAt: Date.parse('2026-10-09T08:09:27Z') });
+		const result = interpretAcars(message);
+		expect(result).toMatchObject({ title: 'Position report', coverage: 'decoded' });
+		expect(result.summary).toBe('Reported position · 37.306° S, 174.100° E · 08:09 UTC.');
+		expect(field(result, 'Latitude')).toBe('37.306° S (-37.306°)');
+		expect(field(result, 'Longitude')).toBe('174.100° E (174.100°)');
+		expect(field(result, 'Event time (UTC)')).toBe('2026-10-09 08:09 UTC');
+		expect(field(result, 'Event time (local)')).toBeTruthy();
+		expect(message.text).toBe('S 37.306/E174.100 /UTC 0809');
+	});
+	it('accepts north/west coordinates, hemisphere spacing and valid pole/dateline limits', () => {
+		const result = interpretAcars(record('3L', ' N 90.000 / W 180.000 / UTC 0001\r\n', { receivedAt: Date.parse('2026-10-09T23:59:27Z') }));
+		expect(field(result, 'Latitude')).toBe('90.000° N (90.000°)');
+		expect(field(result, 'Longitude')).toBe('180.000° W (-180.000°)');
+		expect(field(result, 'Event time (UTC)')).toBe('2026-10-10 00:01 UTC');
+	});
+	it.each([
+		'S 90.001/E174.100 /UTC 0809',
+		'S 37.306/E180.001 /UTC 0809',
+		'S -37.306/E174.100 /UTC 0809',
+		'S 37.306/N174.100 /UTC 0809',
+		'S 37.306/E174.100 /UTC 2400',
+		'S 37.306/E174.100 /UTC 0860',
+		'S 37.306/E174.100 /UTC 809',
+		'S 37.306/E174.100 /UTC 080900',
+		'S 37.306/E174.100 /UTC 0809 extra',
+		'S 37.306/E174.100',
+		'4853GSOIAD11307',
+	])('keeps malformed or other airline label-3L layouts unparsed: %s', (text) => {
+		expect(interpretAcars(record('3L', text)).coverage).toBe('unknown');
+	});
+	it('requires the matching label and downlink direction for the position format', () => {
+		expect(interpretAcars(record('H1', 'S 37.306/E174.100 /UTC 0809')).coverage).toBe('unknown');
+		expect(interpretAcars(record('3L', 'S 37.306/E174.100 /UTC 0809', { direction: 'uplink' })).coverage).toBe('unknown');
+	});
 	it('explains empty frame acknowledgements without treating every empty payload as an ACK', () => {
 		const result = interpretAcars(record('_d', ''));
 		expect(result).toMatchObject({ title: 'Acknowledgement', coverage: 'decoded', summary: 'Acknowledges receipt of block 3.' });
@@ -90,14 +126,15 @@ describe('ACARS payload interpretation', () => {
 		['A6', 'ADS', 'ADS-C message', '07000BCD0C000D010E0110010F01150001080112B2131AA91A13140A28E844'],
 	])('extracts the received ARINC %s envelope with the fixed-length padded address', (mfi, application, title, hex) => {
 		const result = interpretAcars(record('H1', `- #MD/${mfi} AKLCDYA.${application}.NZ7013${hex}`, { direction: 'uplink' }));
-		expect(result).toMatchObject({ title, coverage: 'partial' });
+		expect(result).toMatchObject({ title, coverage: 'decoded' });
 		expect(field(result, 'H1 sublabel')).toBe('MD');
 		expect(field(result, 'Message function')).toBe(mfi);
 		expect(field(result, 'Aircraft address')).toBe('NZ7013');
 		expect(field(result, 'Ground address')).toBe('AKLCDYA');
 		expect(field(result, 'Application data (hex)')).toBe(hex.slice(0, -4));
-		expect(field(result, 'Application CRC (unchecked)')).toBe(hex.slice(-4));
-		expect(result.notes.join(' ')).toContain('not decoded');
+		expect(field(result, 'Application CRC')).toBe(`${hex.slice(-4)} · Verified`);
+		if (application === 'ADS') expect(field(result, 'Periodic contract')).toBe('0');
+		else expect(field(result, 'CPDLC instruction 1')).toBeTruthy();
 	});
 	it.each(['AT1', 'CC1', 'DR1', 'DIS'])('recognizes direct ARINC application %s with a four-character ground address', (application) => {
 		const result = interpretAcars(record('AA', `/ABCD.${application}.ZK-NZE0000`));
@@ -120,6 +157,16 @@ describe('ACARS payload interpretation', () => {
 });
 
 describe('inferred ACARS timestamps', () => {
+	it('validates HHMM codes and infers the nearest day without adding displayed seconds', () => {
+		expect(messageTime('2359', Date.parse('2026-10-10T00:01:00Z'), 'HHMM')).toBe(Date.parse('2026-10-09T23:59:00Z'));
+		for (const value of ['2400', '2360', '080900', '809', '']) expect(messageTime(value, receivedAt, 'HHMM')).toBeUndefined();
+		const timestamp = messageTime('0809', Date.parse('2026-10-09T08:09:27Z'), 'HHMM');
+		expect(
+			new Intl.DateTimeFormat('en-NZ', { timeZone: 'Pacific/Auckland', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(
+				timestamp,
+			),
+		).toBe('21:09');
+	});
 	it('uses the closest UTC day across midnight', () => {
 		expect(messageTime('235959', Date.parse('2026-10-10T00:01:00Z'), 'HHMMSS')).toBe(Date.parse('2026-10-09T23:59:59Z'));
 		expect(messageTime('000100', Date.parse('2026-10-09T23:59:00Z'), 'HHMMSS')).toBe(Date.parse('2026-10-10T00:01:00Z'));

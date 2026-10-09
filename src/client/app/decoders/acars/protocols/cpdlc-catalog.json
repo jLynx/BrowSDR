@@ -1,0 +1,1566 @@
+{
+	"uplink": [
+		{
+			"id": 0,
+			"name": "uM0NULL",
+			"template": "UNABLE"
+		},
+		{
+			"id": 1,
+			"name": "uM1NULL",
+			"template": "STANDBY"
+		},
+		{
+			"id": 2,
+			"name": "uM2NULL",
+			"template": "REQUEST DEFERRED"
+		},
+		{
+			"id": 3,
+			"name": "uM3NULL",
+			"template": "ROGER"
+		},
+		{
+			"id": 4,
+			"name": "uM4NULL",
+			"template": "AFFIRM"
+		},
+		{
+			"id": 5,
+			"name": "uM5NULL",
+			"template": "NEGATIVE"
+		},
+		{
+			"id": 6,
+			"name": "uM6Altitude",
+			"template": "EXPECT [altitude]"
+		},
+		{
+			"id": 7,
+			"name": "uM7Time",
+			"template": "EXPECT CLIMB AT [time]"
+		},
+		{
+			"id": 8,
+			"name": "uM8Position",
+			"template": "EXPECT CLIMB AT [position]"
+		},
+		{
+			"id": 9,
+			"name": "uM9Time",
+			"template": "EXPECT DESCENT AT [time]"
+		},
+		{
+			"id": 10,
+			"name": "uM10Position",
+			"template": "EXPECT DESCENT AT [position]"
+		},
+		{
+			"id": 11,
+			"name": "uM11Time",
+			"template": "EXPECT CRUISE CLIMB AT [time]"
+		},
+		{
+			"id": 12,
+			"name": "uM12Position",
+			"template": "EXPECT CRUISE CLIMB AT [position]"
+		},
+		{
+			"id": 13,
+			"name": "uM13TimeAltitude",
+			"template": "AT [time] EXPECT CLIMB TO [altitude]"
+		},
+		{
+			"id": 14,
+			"name": "uM14PositionAltitude",
+			"template": "AT [position] EXPECT CLIMB TO [altitude]"
+		},
+		{
+			"id": 15,
+			"name": "uM15TimeAltitude",
+			"template": "AT [time] EXPECT DESCENT TO [altitude]"
+		},
+		{
+			"id": 16,
+			"name": "uM16PositionAltitude",
+			"template": "AT [position] EXPECT DESCENT TO [altitude]"
+		},
+		{
+			"id": 17,
+			"name": "uM17TimeAltitude",
+			"template": "AT [time] EXPECT CRUISE CLIMB TO [altitude]"
+		},
+		{
+			"id": 18,
+			"name": "uM18PositionAltitude",
+			"template": "AT [position] EXPECT CRUISE CLIMB TO [altitude]"
+		},
+		{
+			"id": 19,
+			"name": "uM19Altitude",
+			"template": "MAINTAIN [altitude]"
+		},
+		{
+			"id": 20,
+			"name": "uM20Altitude",
+			"template": "CLIMB TO AND MAINTAIN [altitude]"
+		},
+		{
+			"id": 21,
+			"name": "uM21TimeAltitude",
+			"template": "AT [time] CLIMB TO AND MAINTAIN [altitude]"
+		},
+		{
+			"id": 22,
+			"name": "uM22PositionAltitude",
+			"template": "AT [position] CLIMB TO AND MAINTAIN [altitude]"
+		},
+		{
+			"id": 23,
+			"name": "uM23Altitude",
+			"template": "DESCEND TO AND MAINTAIN [altitude]"
+		},
+		{
+			"id": 24,
+			"name": "uM24TimeAltitude",
+			"template": "AT [time] DESCEND TO AND MAINTAIN [altitude]"
+		},
+		{
+			"id": 25,
+			"name": "uM25PositionAltitude",
+			"template": "AT [position] DESCEND TO AND MAINTAIN [altitude]"
+		},
+		{
+			"id": 26,
+			"name": "uM26AltitudeTime",
+			"template": "CLIMB TO REACH [altitude] BY [time]"
+		},
+		{
+			"id": 27,
+			"name": "uM27AltitudePosition",
+			"template": "CLIMB TO REACH [altitude] BY [position]"
+		},
+		{
+			"id": 28,
+			"name": "uM28AltitudeTime",
+			"template": "DESCEND TO REACH [altitude] BY [time]"
+		},
+		{
+			"id": 29,
+			"name": "uM29AltitudePosition",
+			"template": "DESCEND TO REACH [altitude] BY [position]"
+		},
+		{
+			"id": 30,
+			"name": "uM30AltitudeAltitude",
+			"template": "MAINTAIN BLOCK [altitude] TO [altitude]"
+		},
+		{
+			"id": 31,
+			"name": "uM31AltitudeAltitude",
+			"template": "CLIMB TO AND MAINTAIN BLOCK [altitude] TO [altitude]"
+		},
+		{
+			"id": 32,
+			"name": "uM32AltitudeAltitude",
+			"template": "DESCEND TO AND MAINTAIN BLOCK [altitude] TO [altitude]"
+		},
+		{
+			"id": 33,
+			"name": "uM33Altitude",
+			"template": "CRUISE [altitude]"
+		},
+		{
+			"id": 34,
+			"name": "uM34Altitude",
+			"template": "CRUISE CLIMB TO [altitude]"
+		},
+		{
+			"id": 35,
+			"name": "uM35Altitude",
+			"template": "CRUISE CLIMB ABOVE [altitude]"
+		},
+		{
+			"id": 36,
+			"name": "uM36Altitude",
+			"template": "EXPEDITE CLIMB TO [altitude]"
+		},
+		{
+			"id": 37,
+			"name": "uM37Altitude",
+			"template": "EXPEDITE DESCENT TO [altitude]"
+		},
+		{
+			"id": 38,
+			"name": "uM38Altitude",
+			"template": "IMMEDIATELY CLIMB TO [altitude]"
+		},
+		{
+			"id": 39,
+			"name": "uM39Altitude",
+			"template": "IMMEDIATELY DESCEND TO [altitude]"
+		},
+		{
+			"id": 40,
+			"name": "uM40Altitude",
+			"template": "IMMEDIATELY STOP CLIMB AT [altitude]"
+		},
+		{
+			"id": 41,
+			"name": "uM41Altitude",
+			"template": "IMMEDIATELY STOP DESCENT AT [altitude]"
+		},
+		{
+			"id": 42,
+			"name": "uM42PositionAltitude",
+			"template": "EXPECT TO CROSS [position] AT [altitude]"
+		},
+		{
+			"id": 43,
+			"name": "uM43PositionAltitude",
+			"template": "EXPECT TO CROSS [position] AT OR ABOVE [altitude]"
+		},
+		{
+			"id": 44,
+			"name": "uM44PositionAltitude",
+			"template": "EXPECT TO CROSS [position] AT OR BELOW [altitude]"
+		},
+		{
+			"id": 45,
+			"name": "uM45PositionAltitude",
+			"template": "EXPECT TO CROSS [position] AT AND MAINTAIN [altitude]"
+		},
+		{
+			"id": 46,
+			"name": "uM46PositionAltitude",
+			"template": "CROSS [position] AT [altitude]"
+		},
+		{
+			"id": 47,
+			"name": "uM47PositionAltitude",
+			"template": "CROSS [position] AT OR ABOVE [altitude]"
+		},
+		{
+			"id": 48,
+			"name": "uM48PositionAltitude",
+			"template": "CROSS [position] AT OR BELOW [altitude]"
+		},
+		{
+			"id": 49,
+			"name": "uM49PositionAltitude",
+			"template": "CROSS [position] AT AND MAINTAIN [altitude]"
+		},
+		{
+			"id": 50,
+			"name": "uM50PositionAltitudeAltitude",
+			"template": "CROSS [position] BETWEEN [altitude] AND [altitude]"
+		},
+		{
+			"id": 51,
+			"name": "uM51PositionTime",
+			"template": "CROSS [position] AT [time]"
+		},
+		{
+			"id": 52,
+			"name": "uM52PositionTime",
+			"template": "CROSS [position] AT OR BEFORE [time]"
+		},
+		{
+			"id": 53,
+			"name": "uM53PositionTime",
+			"template": "CROSS [position] AT OR AFTER [time]"
+		},
+		{
+			"id": 54,
+			"name": "uM54PositionTimeTime",
+			"template": "CROSS [position] BETWEEN [time] AND [time]"
+		},
+		{
+			"id": 55,
+			"name": "uM55PositionSpeed",
+			"template": "CROSS [position] AT [speed]"
+		},
+		{
+			"id": 56,
+			"name": "uM56PositionSpeed",
+			"template": "CROSS [position] AT OR LESS THAN [speed]"
+		},
+		{
+			"id": 57,
+			"name": "uM57PositionSpeed",
+			"template": "CROSS [position] AT OR GREATER THAN [speed]"
+		},
+		{
+			"id": 58,
+			"name": "uM58PositionTimeAltitude",
+			"template": "CROSS [position] AT [time] AT [altitude]"
+		},
+		{
+			"id": 59,
+			"name": "uM59PositionTimeAltitude",
+			"template": "CROSS [position] AT OR BEFORE [time] AT [altitude]"
+		},
+		{
+			"id": 60,
+			"name": "uM60PositionTimeAltitude",
+			"template": "CROSS [position] AT OR AFTER [time] AT [altitude]"
+		},
+		{
+			"id": 61,
+			"name": "uM61PositionAltitudeSpeed",
+			"template": "CROSS [position] AT AND MAINTAIN [altitude] AT [speed]"
+		},
+		{
+			"id": 62,
+			"name": "uM62TimePositionAltitude",
+			"template": "AT [time] CROSS [position] AT AND MAINTAIN [altitude]"
+		},
+		{
+			"id": 63,
+			"name": "uM63TimePositionAltitudeSpeed",
+			"template": "AT [time] CROSS [position] AT AND MAINTAIN [altitude] AT [speed]"
+		},
+		{
+			"id": 64,
+			"name": "uM64DistanceOffsetDirection",
+			"template": "OFFSET [distanceoffset] [direction] OF ROUTE"
+		},
+		{
+			"id": 65,
+			"name": "uM65PositionDistanceOffsetDirection",
+			"template": "AT [position] OFFSET [distanceoffset] [direction] OF ROUTE"
+		},
+		{
+			"id": 66,
+			"name": "uM66TimeDistanceOffsetDirection",
+			"template": "AT [time] OFFSET [distanceoffset] [direction] OF ROUTE"
+		},
+		{
+			"id": 67,
+			"name": "uM67NULL",
+			"template": "PROCEED BACK ON ROUTE"
+		},
+		{
+			"id": 68,
+			"name": "uM68Position",
+			"template": "REJOIN ROUTE BY [position]"
+		},
+		{
+			"id": 69,
+			"name": "uM69Time",
+			"template": "REJOIN ROUTE BY [time]"
+		},
+		{
+			"id": 70,
+			"name": "uM70Position",
+			"template": "EXPECT BACK ON ROUTE BY [position]"
+		},
+		{
+			"id": 71,
+			"name": "uM71Time",
+			"template": "EXPECT BACK ON ROUTE BY [time]"
+		},
+		{
+			"id": 72,
+			"name": "uM72NULL",
+			"template": "RESUME OWN NAVIGATION"
+		},
+		{
+			"id": 73,
+			"name": "uM73Predepartureclearance",
+			"template": "[predepartureclearance]"
+		},
+		{
+			"id": 74,
+			"name": "uM74Position",
+			"template": "PROCEED DIRECT TO [position]"
+		},
+		{
+			"id": 75,
+			"name": "uM75Position",
+			"template": "WHEN ABLE PROCEED DIRECT TO [position]"
+		},
+		{
+			"id": 76,
+			"name": "uM76TimePosition",
+			"template": "AT [time] PROCEED DIRECT TO [position]"
+		},
+		{
+			"id": 77,
+			"name": "uM77PositionPosition",
+			"template": "AT [position] PROCEED DIRECT TO [position]"
+		},
+		{
+			"id": 78,
+			"name": "uM78AltitudePosition",
+			"template": "AT [altitude] PROCEED DIRECT TO [position]"
+		},
+		{
+			"id": 79,
+			"name": "uM79PositionRouteClearance",
+			"template": "CLEARED TO [position] VIA [routeclearance]"
+		},
+		{
+			"id": 80,
+			"name": "uM80RouteClearance",
+			"template": "CLEARED [routeclearance]"
+		},
+		{
+			"id": 81,
+			"name": "uM81ProcedureName",
+			"template": "CLEARED [procedurename]"
+		},
+		{
+			"id": 82,
+			"name": "uM82DistanceOffsetDirection",
+			"template": "CLEARED TO DEVIATE UP TO [distanceoffset] [direction] OF ROUTE"
+		},
+		{
+			"id": 83,
+			"name": "uM83PositionRouteClearance",
+			"template": "AT [position] CLEARED [routeclearance]"
+		},
+		{
+			"id": 84,
+			"name": "uM84PositionProcedureName",
+			"template": "AT [position] CLEARED [procedurename]"
+		},
+		{
+			"id": 85,
+			"name": "uM85RouteClearance",
+			"template": "EXPECT [routeclearance]"
+		},
+		{
+			"id": 86,
+			"name": "uM86PositionRouteClearance",
+			"template": "AT [position] EXPECT [routeclearance]"
+		},
+		{
+			"id": 87,
+			"name": "uM87Position",
+			"template": "EXPECT DIRECT TO [position]"
+		},
+		{
+			"id": 88,
+			"name": "uM88PositionPosition",
+			"template": "AT [position] EXPECT DIRECT TO [position]"
+		},
+		{
+			"id": 89,
+			"name": "uM89TimePosition",
+			"template": "AT [time] EXPECT DIRECT TO [position]"
+		},
+		{
+			"id": 90,
+			"name": "uM90AltitudePosition",
+			"template": "AT [altitude] EXPECT DIRECT TO [position]"
+		},
+		{
+			"id": 91,
+			"name": "uM91HoldClearance",
+			"template": "HOLD AT [position] MAINTAIN [altitude] INBOUND TRACK [degrees] [direction] TURNS [legtype]"
+		},
+		{
+			"id": 92,
+			"name": "uM92PositionAltitude",
+			"template": "HOLD AT [position] AS PUBLISHED MAINTAIN [altitude]"
+		},
+		{
+			"id": 93,
+			"name": "uM93Time",
+			"template": "EXPECT FURTHER CLEARANCE AT [time]"
+		},
+		{
+			"id": 94,
+			"name": "uM94DirectionDegrees",
+			"template": "TURN [direction] HEADING [degrees]"
+		},
+		{
+			"id": 95,
+			"name": "uM95DirectionDegrees",
+			"template": "TURN [direction] GROUND TRACK [degrees]"
+		},
+		{
+			"id": 96,
+			"name": "uM96NULL",
+			"template": "FLY PRESENT HEADING"
+		},
+		{
+			"id": 97,
+			"name": "uM97PositionDegrees",
+			"template": "AT [position] FLY HEADING [degrees]"
+		},
+		{
+			"id": 98,
+			"name": "uM98DirectionDegrees",
+			"template": "IMMEDIATELY TURN [direction] HEADING [degrees]"
+		},
+		{
+			"id": 99,
+			"name": "uM99ProcedureName",
+			"template": "EXPECT [procedurename]"
+		},
+		{
+			"id": 100,
+			"name": "uM100TimeSpeed",
+			"template": "AT [time] EXPECT [speed]"
+		},
+		{
+			"id": 101,
+			"name": "uM101PositionSpeed",
+			"template": "AT [position] EXPECT [speed]"
+		},
+		{
+			"id": 102,
+			"name": "uM102AltitudeSpeed",
+			"template": "AT [altitude] EXPECT [speed]"
+		},
+		{
+			"id": 103,
+			"name": "uM103TimeSpeedSpeed",
+			"template": "AT [time] EXPECT [speed] TO [speed]"
+		},
+		{
+			"id": 104,
+			"name": "uM104PositionSpeedSpeed",
+			"template": "AT [position] EXPECT [speed] TO [speed]"
+		},
+		{
+			"id": 105,
+			"name": "uM105AltitudeSpeedSpeed",
+			"template": "AT [altitude] EXPECT [speed] TO [speed]"
+		},
+		{
+			"id": 106,
+			"name": "uM106Speed",
+			"template": "MAINTAIN [speed]"
+		},
+		{
+			"id": 107,
+			"name": "uM107NULL",
+			"template": "MAINTAIN PRESENT SPEED"
+		},
+		{
+			"id": 108,
+			"name": "uM108Speed",
+			"template": "MAINTAIN [speed] OR GREATER"
+		},
+		{
+			"id": 109,
+			"name": "uM109Speed",
+			"template": "MAINTAIN [speed] OR LESS"
+		},
+		{
+			"id": 110,
+			"name": "uM110SpeedSpeed",
+			"template": "MAINTAIN [speed] TO [speed]"
+		},
+		{
+			"id": 111,
+			"name": "uM111Speed",
+			"template": "INCREASE SPEED TO [speed]"
+		},
+		{
+			"id": 112,
+			"name": "uM112Speed",
+			"template": "INCREASE SPEED TO [speed] OR GREATER"
+		},
+		{
+			"id": 113,
+			"name": "uM113Speed",
+			"template": "REDUCE SPEED TO [speed]"
+		},
+		{
+			"id": 114,
+			"name": "uM114Speed",
+			"template": "REDUCE SPEED TO [speed] OR LESS"
+		},
+		{
+			"id": 115,
+			"name": "uM115Speed",
+			"template": "DO NOT EXCEED [speed]"
+		},
+		{
+			"id": 116,
+			"name": "uM116NULL",
+			"template": "RESUME NORMAL SPEED"
+		},
+		{
+			"id": 117,
+			"name": "uM117ICAOunitnameFrequency",
+			"template": "CONTACT [icaounitname] [frequency]"
+		},
+		{
+			"id": 118,
+			"name": "uM118PositionICAOunitnameFrequency",
+			"template": "AT [position] CONTACT [icaounitname] [frequency]"
+		},
+		{
+			"id": 119,
+			"name": "uM119TimeICAOunitnameFrequency",
+			"template": "AT [time] CONTACT [icaounitname] [frequency]"
+		},
+		{
+			"id": 120,
+			"name": "uM120ICAOunitnameFrequency",
+			"template": "MONITOR [icaounitname] [frequency]"
+		},
+		{
+			"id": 121,
+			"name": "uM121PositionICAOunitnameFrequency",
+			"template": "AT [position] MONITOR [icaounitname] [frequency]"
+		},
+		{
+			"id": 122,
+			"name": "uM122TimeICAOunitnameFrequency",
+			"template": "AT [time] MONITOR [icaounitname] [frequency]"
+		},
+		{
+			"id": 123,
+			"name": "uM123BeaconCode",
+			"template": "SQUAWK [beaconcode]"
+		},
+		{
+			"id": 124,
+			"name": "uM124NULL",
+			"template": "STOP SQUAWK"
+		},
+		{
+			"id": 125,
+			"name": "uM125NULL",
+			"template": "SQUAWK ALTITUDE"
+		},
+		{
+			"id": 126,
+			"name": "uM126NULL",
+			"template": "STOP ALTITUDE SQUAWK"
+		},
+		{
+			"id": 127,
+			"name": "uM127NULL",
+			"template": "REPORT BACK ON ROUTE"
+		},
+		{
+			"id": 128,
+			"name": "uM128Altitude",
+			"template": "REPORT LEAVING [altitude]"
+		},
+		{
+			"id": 129,
+			"name": "uM129Altitude",
+			"template": "REPORT LEVEL [altitude]"
+		},
+		{
+			"id": 130,
+			"name": "uM130Position",
+			"template": "REPORT PASSING [position]"
+		},
+		{
+			"id": 131,
+			"name": "uM131NULL",
+			"template": "REPORT REMAINING FUEL AND SOULS ON BOARD"
+		},
+		{
+			"id": 132,
+			"name": "uM132NULL",
+			"template": "CONFIRM POSITION"
+		},
+		{
+			"id": 133,
+			"name": "uM133NULL",
+			"template": "CONFIRM ALTITUDE"
+		},
+		{
+			"id": 134,
+			"name": "uM134NULL",
+			"template": "CONFIRM SPEED"
+		},
+		{
+			"id": 135,
+			"name": "uM135NULL",
+			"template": "CONFIRM ASSIGNED ALTITUDE"
+		},
+		{
+			"id": 136,
+			"name": "uM136NULL",
+			"template": "CONFIRM ASSIGNED SPEED"
+		},
+		{
+			"id": 137,
+			"name": "uM137NULL",
+			"template": "CONFIRM ASSIGNED ROUTE"
+		},
+		{
+			"id": 138,
+			"name": "uM138NULL",
+			"template": "CONFIRM TIME OVER REPORTED WAYPOINT"
+		},
+		{
+			"id": 139,
+			"name": "uM139NULL",
+			"template": "CONFIRM REPORTED WAYPOINT"
+		},
+		{
+			"id": 140,
+			"name": "uM140NULL",
+			"template": "CONFIRM NEXT WAYPOINT"
+		},
+		{
+			"id": 141,
+			"name": "uM141NULL",
+			"template": "CONFIRM NEXT WAYPOINT ETA"
+		},
+		{
+			"id": 142,
+			"name": "uM142NULL",
+			"template": "CONFIRM ENSUING WAYPOINT"
+		},
+		{
+			"id": 143,
+			"name": "uM143NULL",
+			"template": "CONFIRM REQUEST"
+		},
+		{
+			"id": 144,
+			"name": "uM144NULL",
+			"template": "CONFIRM SQUAWK"
+		},
+		{
+			"id": 145,
+			"name": "uM145NULL",
+			"template": "CONFIRM HEADING"
+		},
+		{
+			"id": 146,
+			"name": "uM146NULL",
+			"template": "CONFIRM GROUND TRACK"
+		},
+		{
+			"id": 147,
+			"name": "uM147NULL",
+			"template": "REQUEST POSITION REPORT"
+		},
+		{
+			"id": 148,
+			"name": "uM148Altitude",
+			"template": "WHEN CAN YOU ACCEPT [altitude]"
+		},
+		{
+			"id": 149,
+			"name": "uM149AltitudePosition",
+			"template": "CAN YOU ACCEPT [altitude] AT [position]"
+		},
+		{
+			"id": 150,
+			"name": "uM150AltitudeTime",
+			"template": "CAN YOU ACCEPT [altitude] AT [time]"
+		},
+		{
+			"id": 151,
+			"name": "uM151Speed",
+			"template": "WHEN CAN YOU ACCEPT [speed]"
+		},
+		{
+			"id": 152,
+			"name": "uM152DistanceOffsetDirection",
+			"template": "WHEN CAN YOU ACCEPT [distanceoffset] [direction] OFFSET"
+		},
+		{
+			"id": 153,
+			"name": "uM153Altimeter",
+			"template": "ALTIMETER [altimeter]"
+		},
+		{
+			"id": 154,
+			"name": "uM154NULL",
+			"template": "RADAR SERVICES TERMINATED"
+		},
+		{
+			"id": 155,
+			"name": "uM155Position",
+			"template": "RADAR CONTACT [position]"
+		},
+		{
+			"id": 156,
+			"name": "uM156NULL",
+			"template": "RADAR CONTACT LOST"
+		},
+		{
+			"id": 157,
+			"name": "uM157Frequency",
+			"template": "CHECK STUCK MICROPHONE [frequency]"
+		},
+		{
+			"id": 158,
+			"name": "uM158ATISCode",
+			"template": "ATIS [atiscode]"
+		},
+		{
+			"id": 159,
+			"name": "uM159ErrorInformation",
+			"template": "ERROR [errorinformation]"
+		},
+		{
+			"id": 160,
+			"name": "uM160ICAOfacilitydesignation",
+			"template": "NEXT DATA AUTHORITY [icaofacilitydesignation]"
+		},
+		{
+			"id": 161,
+			"name": "uM161NULL",
+			"template": "END SERVICE"
+		},
+		{
+			"id": 162,
+			"name": "uM162NULL",
+			"template": "SERVICE UNAVAILABLE"
+		},
+		{
+			"id": 163,
+			"name": "uM163ICAOfacilitydesignationTp4table",
+			"template": "[icaofacilitydesignation] [tp4table]"
+		},
+		{
+			"id": 164,
+			"name": "uM164NULL",
+			"template": "WHEN READY"
+		},
+		{
+			"id": 165,
+			"name": "uM165NULL",
+			"template": "THEN"
+		},
+		{
+			"id": 166,
+			"name": "uM166NULL",
+			"template": "DUE TO TRAFFIC"
+		},
+		{
+			"id": 167,
+			"name": "uM167NULL",
+			"template": "DUE TO AIRSPACE RESTRICTION"
+		},
+		{
+			"id": 168,
+			"name": "uM168NULL",
+			"template": "DISREGARD"
+		},
+		{
+			"id": 169,
+			"name": "uM169FreeText",
+			"template": "[freetext]"
+		},
+		{
+			"id": 170,
+			"name": "uM170FreeText",
+			"template": "[freetext]"
+		},
+		{
+			"id": 171,
+			"name": "uM171VerticalRate",
+			"template": "CLIMB AT [verticalrate] MINIMUM"
+		},
+		{
+			"id": 172,
+			"name": "uM172VerticalRate",
+			"template": "CLIMB AT [verticalrate] MAXIMUM"
+		},
+		{
+			"id": 173,
+			"name": "uM173VerticalRate",
+			"template": "DESCEND AT [verticalrate] MINIMUM"
+		},
+		{
+			"id": 174,
+			"name": "uM174VerticalRate",
+			"template": "DESCEND AT [verticalrate] MAXIMUM"
+		},
+		{
+			"id": 175,
+			"name": "uM175Altitude",
+			"template": "REPORT REACHING [altitude]"
+		},
+		{
+			"id": 176,
+			"name": "uM176NULL",
+			"template": "MAINTAIN OWN SEPARATION AND VMC"
+		},
+		{
+			"id": 177,
+			"name": "uM177NULL",
+			"template": "AT PILOTS DISCRETION"
+		},
+		{
+			"id": 178,
+			"name": "uM178NULL",
+			"template": "[trackdetailmsg-deleted]"
+		},
+		{
+			"id": 179,
+			"name": "uM179NULL",
+			"template": "SQUAWK IDENT"
+		},
+		{
+			"id": 180,
+			"name": "uM180AltitudeAltitude",
+			"template": "REPORT REACHING BLOCK [altitude] TO [altitude]"
+		},
+		{
+			"id": 181,
+			"name": "uM181ToFromPosition",
+			"template": "REPORT DISTANCE [tofrom] [position]"
+		},
+		{
+			"id": 182,
+			"name": "uM182NULL",
+			"template": "CONFIRM ATIS CODE"
+		}
+	],
+	"downlink": [
+		{
+			"id": 0,
+			"name": "dM0NULL",
+			"template": "WILCO"
+		},
+		{
+			"id": 1,
+			"name": "dM1NULL",
+			"template": "UNABLE"
+		},
+		{
+			"id": 2,
+			"name": "dM2NULL",
+			"template": "STANDBY"
+		},
+		{
+			"id": 3,
+			"name": "dM3NULL",
+			"template": "ROGER"
+		},
+		{
+			"id": 4,
+			"name": "dM4NULL",
+			"template": "AFFIRM"
+		},
+		{
+			"id": 5,
+			"name": "dM5NULL",
+			"template": "NEGATIVE"
+		},
+		{
+			"id": 6,
+			"name": "dM6Altitude",
+			"template": "REQUEST [altitude]"
+		},
+		{
+			"id": 7,
+			"name": "dM7AltitudeAltitude",
+			"template": "REQUEST BLOCK [altitude] TO [altitude]"
+		},
+		{
+			"id": 8,
+			"name": "dM8Altitude",
+			"template": "REQUEST CRUISE CLIMB TO [altitude]"
+		},
+		{
+			"id": 9,
+			"name": "dM9Altitude",
+			"template": "REQUEST CLIMB TO [altitude]"
+		},
+		{
+			"id": 10,
+			"name": "dM10Altitude",
+			"template": "REQUEST DESCENT TO [altitude]"
+		},
+		{
+			"id": 11,
+			"name": "dM11PositionAltitude",
+			"template": "AT [position] REQUEST CLIMB TO [altitude]"
+		},
+		{
+			"id": 12,
+			"name": "dM12PositionAltitude",
+			"template": "AT [position] REQUEST DESCENT TO [altitude]"
+		},
+		{
+			"id": 13,
+			"name": "dM13TimeAltitude",
+			"template": "AT [time] REQUEST CLIMB TO [altitude]"
+		},
+		{
+			"id": 14,
+			"name": "dM14TimeAltitude",
+			"template": "AT [time] REQUEST DESCENT TO [altitude]"
+		},
+		{
+			"id": 15,
+			"name": "dM15DistanceOffsetDirection",
+			"template": "REQUEST OFFSET [distanceoffset] [direction] OF ROUTE"
+		},
+		{
+			"id": 16,
+			"name": "dM16PositionDistanceOffsetDirection",
+			"template": "AT [position] REQUEST OFFSET [distanceoffset] [direction] OF ROUTE"
+		},
+		{
+			"id": 17,
+			"name": "dM17TimeDistanceOffsetDirection",
+			"template": "AT [time] REQUEST OFFSET [distanceoffset] [direction] OF ROUTE"
+		},
+		{
+			"id": 18,
+			"name": "dM18Speed",
+			"template": "REQUEST [speed]"
+		},
+		{
+			"id": 19,
+			"name": "dM19SpeedSpeed",
+			"template": "REQUEST [speed] TO [speed]"
+		},
+		{
+			"id": 20,
+			"name": "dM20NULL",
+			"template": "REQUEST VOICE CONTACT"
+		},
+		{
+			"id": 21,
+			"name": "dM21Frequency",
+			"template": "REQUEST VOICE CONTACT [frequency]"
+		},
+		{
+			"id": 22,
+			"name": "dM22Position",
+			"template": "REQUEST DIRECT TO [position]"
+		},
+		{
+			"id": 23,
+			"name": "dM23ProcedureName",
+			"template": "REQUEST [procedurename]"
+		},
+		{
+			"id": 24,
+			"name": "dM24RouteClearance",
+			"template": "REQUEST [routeclearance]"
+		},
+		{
+			"id": 25,
+			"name": "dM25NULL",
+			"template": "REQUEST CLEARANCE"
+		},
+		{
+			"id": 26,
+			"name": "dM26PositionRouteClearance",
+			"template": "REQUEST WEATHER DEVIATION TO [position] VIA [routeclearance]"
+		},
+		{
+			"id": 27,
+			"name": "dM27DistanceOffsetDirection",
+			"template": "REQUEST WEATHER DEVIATION UP TO [distanceoffset] [direction] OF ROUTE"
+		},
+		{
+			"id": 28,
+			"name": "dM28Altitude",
+			"template": "LEAVING [altitude]"
+		},
+		{
+			"id": 29,
+			"name": "dM29Altitude",
+			"template": "CLIMBING TO [altitude]"
+		},
+		{
+			"id": 30,
+			"name": "dM30Altitude",
+			"template": "DESCENDING TO [altitude]"
+		},
+		{
+			"id": 31,
+			"name": "dM31Position",
+			"template": "PASSING [position]"
+		},
+		{
+			"id": 32,
+			"name": "dM32Altitude",
+			"template": "PRESENT ALTITUDE [altitude]"
+		},
+		{
+			"id": 33,
+			"name": "dM33Position",
+			"template": "PRESENT POSITION [position]"
+		},
+		{
+			"id": 34,
+			"name": "dM34Speed",
+			"template": "PRESENT SPEED [speed]"
+		},
+		{
+			"id": 35,
+			"name": "dM35Degrees",
+			"template": "PRESENT HEADING [degrees]"
+		},
+		{
+			"id": 36,
+			"name": "dM36Degrees",
+			"template": "PRESENT GROUND TRACK [degrees]"
+		},
+		{
+			"id": 37,
+			"name": "dM37Altitude",
+			"template": "LEVEL [altitude]"
+		},
+		{
+			"id": 38,
+			"name": "dM38Altitude",
+			"template": "ASSIGNED ALTITUDE [altitude]"
+		},
+		{
+			"id": 39,
+			"name": "dM39Speed",
+			"template": "ASSIGNED SPEED [speed]"
+		},
+		{
+			"id": 40,
+			"name": "dM40RouteClearance",
+			"template": "ASSIGNED ROUTE [routeclearance]"
+		},
+		{
+			"id": 41,
+			"name": "dM41NULL",
+			"template": "BACK ON ROUTE"
+		},
+		{
+			"id": 42,
+			"name": "dM42Position",
+			"template": "NEXT WAYPOINT [position]"
+		},
+		{
+			"id": 43,
+			"name": "dM43Time",
+			"template": "NEXT WAYPOINT ETA [time]"
+		},
+		{
+			"id": 44,
+			"name": "dM44Position",
+			"template": "ENSUING WAYPOINT [position]"
+		},
+		{
+			"id": 45,
+			"name": "dM45Position",
+			"template": "REPORTED WAYPOINT [position]"
+		},
+		{
+			"id": 46,
+			"name": "dM46Time",
+			"template": "REPORTED WAYPOINT [time]"
+		},
+		{
+			"id": 47,
+			"name": "dM47BeaconCode",
+			"template": "SQUAWKING [beaconcode]"
+		},
+		{
+			"id": 48,
+			"name": "dM48PositionReport",
+			"template": "POSITION REPORT [positionreport]"
+		},
+		{
+			"id": 49,
+			"name": "dM49Speed",
+			"template": "WHEN CAN WE EXPECT [speed]"
+		},
+		{
+			"id": 50,
+			"name": "dM50SpeedSpeed",
+			"template": "WHEN CAN WE EXPECT [speed] TO [speed]"
+		},
+		{
+			"id": 51,
+			"name": "dM51NULL",
+			"template": "WHEN CAN WE EXPECT BACK ON ROUTE"
+		},
+		{
+			"id": 52,
+			"name": "dM52NULL",
+			"template": "WHEN CAN WE EXPECT LOWER ALTITUDE"
+		},
+		{
+			"id": 53,
+			"name": "dM53NULL",
+			"template": "WHEN CAN WE EXPECT HIGHER ALTITUDE"
+		},
+		{
+			"id": 54,
+			"name": "dM54Altitude",
+			"template": "WHEN CAN WE EXPECT CRUISE CLIMB TO [altitude]"
+		},
+		{
+			"id": 55,
+			"name": "dM55NULL",
+			"template": "PAN PAN PAN"
+		},
+		{
+			"id": 56,
+			"name": "dM56NULL",
+			"template": "MAYDAY MAYDAY MAYDAY"
+		},
+		{
+			"id": 57,
+			"name": "dM57RemainingFuelRemainingSouls",
+			"template": "[remainingfuel] OF FUEL REMAINING AND [remainingsouls] SOULS ON BOARD"
+		},
+		{
+			"id": 58,
+			"name": "dM58NULL",
+			"template": "CANCEL EMERGENCY"
+		},
+		{
+			"id": 59,
+			"name": "dM59PositionRouteClearance",
+			"template": "DIVERTING TO [position] VIA [routeclearance]"
+		},
+		{
+			"id": 60,
+			"name": "dM60DistanceOffsetDirection",
+			"template": "OFFSETTING [distanceoffset] [direction] OF ROUTE"
+		},
+		{
+			"id": 61,
+			"name": "dM61Altitude",
+			"template": "DESCENDING TO [altitude]"
+		},
+		{
+			"id": 62,
+			"name": "dM62ErrorInformation",
+			"template": "ERROR [errorinformation]"
+		},
+		{
+			"id": 63,
+			"name": "dM63NULL",
+			"template": "NOT CURRENT DATA AUTHORITY"
+		},
+		{
+			"id": 64,
+			"name": "dM64ICAOfacilitydesignation",
+			"template": "[icaofacilitydesignation]"
+		},
+		{
+			"id": 65,
+			"name": "dM65NULL",
+			"template": "DUE TO WEATHER"
+		},
+		{
+			"id": 66,
+			"name": "dM66NULL",
+			"template": "DUE TO AIRCRAFT PERFORMANCE"
+		},
+		{
+			"id": 67,
+			"name": "dM67FreeText",
+			"template": "[freetext]"
+		},
+		{
+			"id": 68,
+			"name": "dM68FreeText",
+			"template": "[freetext]"
+		},
+		{
+			"id": 69,
+			"name": "dM69NULL",
+			"template": "REQUEST VMC DESCENT"
+		},
+		{
+			"id": 70,
+			"name": "dM70Degrees",
+			"template": "REQUEST HEADING [degrees]"
+		},
+		{
+			"id": 71,
+			"name": "dM71Degrees",
+			"template": "REQUEST GROUND TRACK [degrees]"
+		},
+		{
+			"id": 72,
+			"name": "dM72Altitude",
+			"template": "REACHING [altitude]"
+		},
+		{
+			"id": 73,
+			"name": "dM73VersionNumber",
+			"template": "[versionnumber]"
+		},
+		{
+			"id": 74,
+			"name": "dM74NULL",
+			"template": "MAINTAIN OWN SEPARATION AND VMC"
+		},
+		{
+			"id": 75,
+			"name": "dM75NULL",
+			"template": "AT PILOTS DISCRETION"
+		},
+		{
+			"id": 76,
+			"name": "dM76AltitudeAltitude",
+			"template": "REACHING BLOCK [altitude] TO [altitude]"
+		},
+		{
+			"id": 77,
+			"name": "dM77AltitudeAltitude",
+			"template": "ASSIGNED BLOCK [altitude] TO [altitude]"
+		},
+		{
+			"id": 78,
+			"name": "dM78TimeDistanceToFromPosition",
+			"template": "AT [time] [distance] [tofrom] [position]"
+		},
+		{
+			"id": 79,
+			"name": "dM79ATISCode",
+			"template": "ATIS [atiscode]"
+		},
+		{
+			"id": 80,
+			"name": "dM80DistanceOffsetDirection",
+			"template": "DEVIATING [distanceoffset][direction] OF ROUTE"
+		},
+		{
+			"id": 81,
+			"name": "dM81NULL",
+			"template": "(reserved: dM81NULL)"
+		},
+		{
+			"id": 82,
+			"name": "dM82NULL",
+			"template": "(reserved: dM82NULL)"
+		},
+		{
+			"id": 83,
+			"name": "dM83NULL",
+			"template": "(reserved: dM83NULL)"
+		},
+		{
+			"id": 84,
+			"name": "dM84NULL",
+			"template": "(reserved: dM84NULL)"
+		},
+		{
+			"id": 85,
+			"name": "dM85NULL",
+			"template": "(reserved: dM85NULL)"
+		},
+		{
+			"id": 86,
+			"name": "dM86NULL",
+			"template": "(reserved: dM86NULL)"
+		},
+		{
+			"id": 87,
+			"name": "dM87NULL",
+			"template": "(reserved: dM87NULL)"
+		},
+		{
+			"id": 88,
+			"name": "dM88NULL",
+			"template": "(reserved: dM88NULL)"
+		},
+		{
+			"id": 89,
+			"name": "dM89NULL",
+			"template": "(reserved: dM89NULL)"
+		},
+		{
+			"id": 90,
+			"name": "dM90NULL",
+			"template": "(reserved: dM90NULL)"
+		},
+		{
+			"id": 91,
+			"name": "dM91NULL",
+			"template": "(reserved: dM91NULL)"
+		},
+		{
+			"id": 92,
+			"name": "dM92NULL",
+			"template": "(reserved: dM92NULL)"
+		},
+		{
+			"id": 93,
+			"name": "dM93NULL",
+			"template": "(reserved: dM93NULL)"
+		},
+		{
+			"id": 94,
+			"name": "dM94NULL",
+			"template": "(reserved: dM94NULL)"
+		},
+		{
+			"id": 95,
+			"name": "dM95NULL",
+			"template": "(reserved: dM95NULL)"
+		},
+		{
+			"id": 96,
+			"name": "dM96NULL",
+			"template": "(reserved: dM96NULL)"
+		},
+		{
+			"id": 97,
+			"name": "dM97NULL",
+			"template": "(reserved: dM97NULL)"
+		},
+		{
+			"id": 98,
+			"name": "dM98NULL",
+			"template": "(reserved: dM98NULL)"
+		},
+		{
+			"id": 99,
+			"name": "dM99NULL",
+			"template": "(reserved: dM99NULL)"
+		},
+		{
+			"id": 100,
+			"name": "dM100NULL",
+			"template": "(reserved: dM100NULL)"
+		},
+		{
+			"id": 101,
+			"name": "dM101NULL",
+			"template": "(reserved: dM101NULL)"
+		},
+		{
+			"id": 102,
+			"name": "dM102NULL",
+			"template": "(reserved: dM102NULL)"
+		},
+		{
+			"id": 103,
+			"name": "dM103NULL",
+			"template": "(reserved: dM103NULL)"
+		},
+		{
+			"id": 104,
+			"name": "dM104NULL",
+			"template": "(reserved: dM104NULL)"
+		},
+		{
+			"id": 105,
+			"name": "dM105NULL",
+			"template": "(reserved: dM105NULL)"
+		},
+		{
+			"id": 106,
+			"name": "dM106NULL",
+			"template": "(reserved: dM106NULL)"
+		},
+		{
+			"id": 107,
+			"name": "dM107NULL",
+			"template": "(reserved: dM107NULL)"
+		},
+		{
+			"id": 108,
+			"name": "dM108NULL",
+			"template": "(reserved: dM108NULL)"
+		},
+		{
+			"id": 109,
+			"name": "dM109NULL",
+			"template": "(reserved: dM109NULL)"
+		},
+		{
+			"id": 110,
+			"name": "dM110NULL",
+			"template": "(reserved: dM110NULL)"
+		},
+		{
+			"id": 111,
+			"name": "dM111NULL",
+			"template": "(reserved: dM111NULL)"
+		},
+		{
+			"id": 112,
+			"name": "dM112NULL",
+			"template": "(reserved: dM112NULL)"
+		},
+		{
+			"id": 113,
+			"name": "dM113NULL",
+			"template": "(reserved: dM113NULL)"
+		},
+		{
+			"id": 114,
+			"name": "dM114NULL",
+			"template": "(reserved: dM114NULL)"
+		},
+		{
+			"id": 115,
+			"name": "dM115NULL",
+			"template": "(reserved: dM115NULL)"
+		},
+		{
+			"id": 116,
+			"name": "dM116NULL",
+			"template": "(reserved: dM116NULL)"
+		},
+		{
+			"id": 117,
+			"name": "dM117NULL",
+			"template": "(reserved: dM117NULL)"
+		},
+		{
+			"id": 118,
+			"name": "dM118NULL",
+			"template": "(reserved: dM118NULL)"
+		},
+		{
+			"id": 119,
+			"name": "dM119NULL",
+			"template": "(reserved: dM119NULL)"
+		},
+		{
+			"id": 120,
+			"name": "dM120NULL",
+			"template": "(reserved: dM120NULL)"
+		},
+		{
+			"id": 121,
+			"name": "dM121NULL",
+			"template": "(reserved: dM121NULL)"
+		},
+		{
+			"id": 122,
+			"name": "dM122NULL",
+			"template": "(reserved: dM122NULL)"
+		},
+		{
+			"id": 123,
+			"name": "dM123NULL",
+			"template": "(reserved: dM123NULL)"
+		},
+		{
+			"id": 124,
+			"name": "dM124NULL",
+			"template": "(reserved: dM124NULL)"
+		},
+		{
+			"id": 125,
+			"name": "dM125NULL",
+			"template": "(reserved: dM125NULL)"
+		},
+		{
+			"id": 126,
+			"name": "dM126NULL",
+			"template": "(reserved: dM126NULL)"
+		},
+		{
+			"id": 127,
+			"name": "dM127NULL",
+			"template": "(reserved: dM127NULL)"
+		},
+		{
+			"id": 128,
+			"name": "dM128NULL",
+			"template": "(reserved: dM128NULL)"
+		}
+	]
+}

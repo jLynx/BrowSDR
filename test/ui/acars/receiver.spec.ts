@@ -142,7 +142,7 @@ describe('ACARS receiver tools', () => {
 		expect(interpretation.findAll('dl > div')).toHaveLength(5);
 		expect(wrapper.get('.acars-message-text').text()).toBe(raw);
 	});
-	it('renders ARINC application data safely and clearly marks the undecoded binary payload', async () => {
+	it('renders verified ARINC fields and a decoded CPDLC phrase beside the original payload', async () => {
 		wrapper = mount(ReceiverView);
 		await wrapper.setData({
 			running: true,
@@ -158,7 +158,68 @@ describe('ACARS receiver tools', () => {
 		expect(wrapper.findAll('.acars-panel tbody tr')).toHaveLength(1);
 		await wrapper.get('.acars-panel tbody button').trigger('click');
 		expect(wrapper.get('[aria-label="Message interpretation"]').text()).toContain('CPDLC connection request');
-		expect(wrapper.get('[aria-label="Message interpretation"]').text()).toContain('inner CRC is not checked');
+		expect(wrapper.get('[aria-label="Message interpretation"]').text()).toContain('06BF · Verified');
+		expect(wrapper.get('[aria-label="Message interpretation"]').text()).toContain('NZZO Label A');
+		expect(wrapper.get('.acars-message-text').text()).toBe(raw);
+	});
+	it('shows the received label-3L position and UTC minute alongside the raw payload', async () => {
+		wrapper = mount(ReceiverView);
+		await wrapper.setData({
+			running: true,
+			vfos: [{ ...makeDefaultVfo(131.55), acars: true }],
+			acars: { panelOpen: true, sources: [], status: [] },
+		});
+		const update = message();
+		const raw = 'S 37.306/E174.100 /UTC 0809';
+		Object.assign(update.messages[0], { label: '3L', text: raw, receivedAt: Date.parse('2026-10-09T08:09:27Z') });
+		wrapper.vm._onAcarsMessage(0, 131.55, update);
+		await nextTick();
+		expect(wrapper.get('.acars-preview strong').text()).toBe('Position report');
+		await wrapper.get('input[aria-label="Search ACARS messages"]').setValue('position');
+		await wrapper.get('.acars-panel tbody button').trigger('click');
+		const interpretation = wrapper.get('[aria-label="Message interpretation"]');
+		expect(interpretation.text()).toContain('Decoded format');
+		expect(interpretation.text()).toContain('37.306° S (-37.306°)');
+		expect(interpretation.text()).toContain('174.100° E (174.100°)');
+		expect(interpretation.text()).toContain('2026-10-09 08:09 UTC');
+		expect(wrapper.get('.acars-message-text').text()).toBe(raw);
+	});
+	it.each([
+		['1L', 'WX RCVD TXOPS NORMALETA MEL 1130', 'Operations message', '11:30 · timezone unspecified'],
+		[
+			'2L',
+			'DAT 09OCT26 UTC 0810 REG VHX3B FLT JST241 GWT 0 ZFW 595 FOB    87 CAP 129668 FO  435525 LOG 502304 LDR 0 DRT 0753',
+			'Flight/load report',
+			'Fuel on board (FOB, raw)',
+		],
+		[
+			'H1',
+			'#DFBA320,011130,1,1,TB000000/REP004,00,00,1/CCVH-X3B,OCT09,081050,NZAA,NZCH,0241/C0TIA05JST130000/',
+			'A320 aircraft report 004',
+			'NZCH · Christchurch Airport',
+		],
+		[
+			'H1',
+			'#DFBA380000047,1,1,TB000000;REP020,01;H0102001400000005.A6-EVQ10091026082944070;H02NZAA OMDBUAE5AM    S0586S0785RTRRV11D09;H03Normal Landing Gear Retraction;A1008292310;A20+0',
+			'A380 aircraft report 020',
+			'Normal Landing Gear Retraction',
+		],
+	])('shows readable airline fields and preserves the original %s payload', async (label, raw, title, detail) => {
+		wrapper = mount(ReceiverView);
+		await wrapper.setData({
+			running: true,
+			vfos: [{ ...makeDefaultVfo(131.55), acars: true }],
+			acars: { panelOpen: true, sources: [], status: [] },
+		});
+		const update = message();
+		Object.assign(update.messages[0], { label, text: raw, receivedAt: Date.parse('2026-10-09T08:11:23Z') });
+		wrapper.vm._onAcarsMessage(0, 131.55, update);
+		await nextTick();
+		expect(wrapper.get('.acars-preview strong').text()).toBe(title);
+		await wrapper.get('.acars-panel tbody button').trigger('click');
+		const interpretation = wrapper.get('[aria-label="Message interpretation"]');
+		expect(interpretation.text()).toContain(detail);
+		expect(interpretation.text()).toContain(label === 'H1' ? 'measurements undecoded' : 'Partially decoded');
 		expect(wrapper.get('.acars-message-text').text()).toBe(raw);
 	});
 });

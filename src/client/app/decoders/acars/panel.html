@@ -38,13 +38,10 @@
 				</div>
 				<div class="acars-interpretation" aria-label="Message interpretation">
 					<strong>{{ selectedMessage.interpretation.title }}</strong>
-					<small class="acars-coverage"
-						>{{ selectedMessage.interpretation.coverage === 'decoded' ? 'Decoded format' : selectedMessage.interpretation.coverage ===
-						'partial' ? 'Partially decoded' : 'Unparsed format' }}</small
-					>
+					<small class="acars-coverage">{{ coverageText(selectedMessage.interpretation) }}</small>
 					<p>{{ selectedMessage.interpretation.summary }}</p>
 					<dl v-if="selectedMessage.interpretation.fields.length" class="adsb-detail-grid">
-						<div v-for="field in selectedMessage.interpretation.fields" :key="field.label">
+						<div v-for="(field, index) in selectedMessage.interpretation.fields" :key="index">
 							<dt>{{ field.label }}</dt>
 							<dd>{{ field.value }}</dd>
 						</div>
@@ -88,6 +85,10 @@
 				</dl>
 				<strong>Raw message</strong>
 				<pre class="acars-message-text">{{ selectedMessage.text || '(No message text)' }}</pre>
+				<template v-if="selectedMessage.assembledText">
+					<strong>Reassembled message</strong>
+					<pre class="acars-message-text">{{ selectedMessage.assembledText }}</pre>
+				</template>
 			</div>
 			<template v-else>
 				<UiInputGroup class="adsb-search"
@@ -125,5 +126,5 @@
 			</template>
 		</div>
 	</div>
-	<div class="adsb-footer">VHF ACARS · Latest 200 messages · CRC and odd parity checked. Continued blocks are shown separately.</div>
+	<div class="adsb-footer">VHF ACARS · Latest 200 blocks · CRC and odd parity checked. Complete consecutive messages are reassembled.</div>
 </section>
