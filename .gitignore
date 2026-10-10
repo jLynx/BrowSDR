@@ -57,6 +57,7 @@ Thumbs.db
 *.tsbuildinfo
 __pycache__/
 *.tgz
+/vendor/acars-decoder/
 .claude
 .emsdk
 .codex/environments/environment.toml

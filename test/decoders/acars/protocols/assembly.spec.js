@@ -61,7 +61,7 @@ describe('ACARS message reassembly', () => {
 	it('bounds assembled text and requires a final ETX', () => {
 		const [first, last] = messages();
 		expect(interpretAcarsLog([first, { ...last, continuation: true }])[1].assembledText).toBeUndefined();
-		expect(interpretAcarsLog([{ ...first, text: '#MDB' + 'X'.repeat(8192) }, last])[1].assembledText).toBeUndefined();
+		expect(() => interpretAcarsLog([{ ...first, text: '#MDB' + 'X'.repeat(8192) }, last])).toThrow(RangeError);
 	});
 	it('tolerates retransmissions whose transport block IDs change', () => {
 		const [first, last] = messages();

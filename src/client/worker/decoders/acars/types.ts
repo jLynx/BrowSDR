@@ -1,17 +1,5 @@
-export interface AcarsRecord {
-	id: number;
-	receivedAt: number;
-	registration: string;
-	mode: string;
-	acknowledgement: string;
-	label: string;
-	blockId: string;
-	direction: 'downlink' | 'uplink';
-	messageNumber?: string;
-	flight?: string;
-	text: string;
-	continuation: boolean;
-}
+import type { AcarsRecord } from '@jlynx_/acars-decoder';
+export type { AcarsRecord, AcarsReport } from '@jlynx_/acars-decoder';
 
 export interface AcarsStatus {
 	state: 'off' | 'receiving' | 'error';
@@ -26,5 +14,3 @@ export interface AcarsMessage {
 	status: AcarsStatus;
 	messages: AcarsRecord[];
 }
-
-export type AcarsReport = Omit<AcarsRecord, 'id' | 'receivedAt'>;

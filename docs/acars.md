@@ -6,205 +6,102 @@ The shortcuts include common channels such as 131.550 and 131.725 MHz;
 channel usage varies by region and operator. Manual tuning to other VHF channels
 between 118 and 137 MHz works too. Use an airband antenna and a compatible SDR.
 
+## Receiver setup
+
 The independent decoder receives a 25 kHz AM channel at 48 kS/s. The complete
 48 kHz channel must fit inside the radio's received band; higher sample rates
-are channelized by the existing DSP pipeline. Speaker audio, audio mode,
-squelch, and audio bandwidth do not configure this decoder. Audio can stay muted.
+are channelized by the DSP pipeline. Speaker audio, audio mode, squelch and audio
+bandwidth do not configure this decoder. Audio can stay muted.
+
 Tuning follows the normal VFO controls, including radio center changes, conflicts
-with other VFOs and remote host locks. It leaves sample rate and audio settings
-as chosen. Closing the panel preserves decoding; reopen it to disable a VFO.
+with other VFOs and remote host locks. Sample rate and audio settings stay as
+chosen. Closing the panel preserves decoding; reopen it to disable a VFO.
 Decoder enablement is included in saved VFO settings and bookmarks.
 
-The initial decoder supports conventional **2400-baud VHF ACARS**, using AM
-envelope detection, 1200/2400 Hz MSK tone detection, differential bit decoding,
-SYN/SOH framing, odd character parity and ACARS block check sequences
-(CRC-16/KERMIT). Only valid blocks are displayed; no bit repair is performed.
-IQ discontinuities discard partial packets. VDL Mode 2, HFDL and satellite
-ACARS are outside this implementation.
+BrowSDR receives conventional **2400-baud VHF ACARS**. Only blocks passing character
+parity and block checksum validation are displayed; no bit repair is performed.
+IQ discontinuities discard partial packets. VDL Mode 2, HFDL and satellite ACARS
+reception are unsupported.
+
+## Reading messages
 
 The panel combines up to 200 recent messages across enabled VFOs, newest first.
-Search accepts registration, flight, label, message text or decoded fields. Select a registration
-to see receipt time, frequency, direction, mode, acknowledgement, block ID,
-message number and the full text, preserving line breaks. Aircraft-to-ground
-blocks include message number and flight ID; ground-to-air blocks do not use
-that header. These values come from radio messages and may be blank. No external
-aircraft feed or database is required.
+Search accepts registration, flight, label, message text or decoded fields.
+Select a registration to see receipt time, frequency, direction, mode,
+acknowledgement, block ID, message number and the full text with line breaks.
+Aircraft-to-ground blocks include message number and flight ID; ground-to-air
+blocks do not use that header. Received values may be blank. No external aircraft
+feed or database is required.
+
+The list shows readable summaries. Details distinguish decoded, partially decoded
+and unparsed payloads while preserving the complete original message. A recognized
+label identifies a message category; it does not guarantee that the airline's
+payload format is decoded.
+
+Supported interpretations include positions, routes, flight events, operations
+notes, load reports, weather and clearance messages, link controls and aircraft
+report headers. Some application messages contain binary or compressed data;
+supported complete payloads are expanded and interpreted locally. Unknown formats,
+undocumented measurements and unsupported transfer variants remain available as
+raw text. Interpretation runs locally without sending messages to a service.
+
+Examples you may see:
+
+- `_d` with no message text: a link acknowledgement, rather than a readable airline message.
+- `3L` with `S 37.306/E174.100 /UTC 0809`: a position report with a reported UTC time.
+- `OFF` movement reports: reported takeoff information, with flight and route where available.
+- H1 `DF` reports: aircraft monitoring or maintenance data. A recognized header can identify the aircraft, route and report, while numeric measurements remain undecoded.
+
+Airport fields use an offline global ICAO/IATA name lookup. Unknown codes remain
+visible. Arbitrary text and ground-station addresses are not treated as airports.
+Undocumented numeric scales, units and field meanings are not guessed.
+
+Recognized time codes with a documented UTC interpretation can show UTC and the
+viewer's local time. When a date is omitted, an inferred date may use the closest
+valid date to reception; it is not an authoritative date supplied by the aircraft.
+Times without a verified timezone remain unconverted. Position report times retain
+their reported minute precision.
+
+## Continued reports and retransmissions
+
+ETB continuation blocks are retained separately. Complete consecutive downlink
+blocks are reassembled within a VFO log when aircraft, mode, label, message-number
+prefix and letter sequence agree. Transport block IDs can span unrelated messages
+and need not be consecutive within one payload. Exact retransmitted payloads are
+counted once during assembly, while their original received blocks remain in the log.
+
+A missing or conflicting block prevents reassembly; final ETX is required.
+Assemblies are limited to 26 blocks, 8,192 characters, two minutes between blocks
+and five minutes overall. Retransmissions cannot extend the overall time limit.
+The final block shows both its original and assembled text. Details explain
+assembly failures such as missing starts, sequence mismatches or time/size limits.
+
+Later DF blocks can show context from a recognized first block in the same VFO log,
+matched by aircraft, mode and message number within two minutes. These fields are
+explicitly attributed to the first block. This association does not establish that
+every intermediate block was received or decode the numeric measurements.
+A complete unsupported report can therefore still show **Payload undecoded**.
+
+Retuning or restarting a decoder resets its log. Remote receivers decode on the
+host and forward results to the requesting client's VFO, including muted VFOs.
+Removed, restarted and retuned workers cannot forward old results.
+
+## Exporting a reception log
 
 **Export all JSON** downloads every block still retained across the VFO logs,
 including full raw text, line breaks, envelope fields, UTC receipt times,
 decoded fields/notes and available reassembled messages. It includes
 acknowledgements and retransmissions, regardless of search or selected message.
+
 The file records each source frequency and VFO, including retained sources whose
-decoder is currently disabled. Each decoder retains up to 200 blocks; the export
+decoder is currently disabled. Each decoder retains up to 200 blocks. The export
 cannot recover discarded history or logs lost on refresh or retuning. Export
 before refreshing when collecting a batch for analysis.
 
-The list includes readable summaries; details distinguish decoded, partially
-decoded and unparsed formats and retain the complete raw message. A recognized
-label category is shown separately from successful payload decoding. Standard
-labels explain flight events, clearance messages, link controls and aircraft
-application reports even when their payload layout is unknown.
+## Verification
 
-Payload interpretation integrates the MIT-licensed
-[@airframes/acars-decoder 1.9.2](https://github.com/airframesio/acars-decoder-typescript),
-covering dozens of documented formats across airlines and aircraft equipment.
-These include decimal and compact position reports, route/ETA and out/off/on/in
-events, flight briefings, dispatch and door events, load sheets, ATIS
-subscriptions, operational flight plans, ARINC 702 reports, fault logs, warnings
-and ground-station squitters. Fixed-width standard Q-label events have additional
-validation. Explicitly tagged flight, route, time, fuel and measurement fields
-can also be extracted from other reports; this fallback does not infer numeric
-scales or units. Parsed results are cached with a bounded cache. Interpretation
-runs locally without sending messages to Airframes or another service.
-
-The existing specific interpretations include `_d` acknowledgements, version-0 `SA` media/link
-advisories, label-3L decimal-degree position reports such as
-`S 37.306/E174.100 /UTC 0809`, a recognized label-10 `OFF` takeoff report layout, label-49 report
-headers, and H1 `DF` report headers. Identified airport fields use the shared
-offline global ICAO/IATA name reference described below. Airline-specific numeric measurements
-and undocumented fields are not assigned meanings or units.
-
-Recognized airline layouts also include label-1L `WX RCVD TXOPS NORMAL...`
-operations notes, label-2L `DAT ... UTC ... REG ... FLT ...` flight/load reports,
-and Airbus H1 `DF` headers beginning with an aircraft type and `REP.../CC...`.
-Flight/load fields can be separated by spaces or line breaks; truncated reports
-remain unparsed. Uplink C1 `ARRIVAL ACK` messages identify the reported aircraft,
-ground address, LD/RI time codes and remaining fuel. Their date, timezone, LD/RI
-event meanings and fuel units remain unspecified where unverified. Label-41
-`MSG...` payloads with an unknown encoding are preserved without claiming a decode.
-These identify weather receipt, normal operations, reported flight/registration,
-dates and routes where provided. An ETA without a timezone stays unconverted.
-Semicolon-delimited Airbus `REP...;H01...;H02...;H03...` reports identify the
-aircraft/report header, route, flight code and transmitted event text, such as
-“Normal Landing Gear Retraction.” The compact H01 date/time layout remains raw.
-These maintenance reports are handled by the local header parser; the Airframes
-library does not decode their report-specific numeric measurements. Recognition
-of `DF` alone is displayed as **Payload undecoded**, rather than partial decoding.
-Load values and crew identifiers are displayed as transmitted; weight/fuel
-scales and units, LOG/LDR/DRT fields, and Airbus numeric measurements remain
-undecoded. Two-digit report years use 2000–2099; Airbus headers that omit the
-year use the closest valid year to reception. Duplicate reports remain separate.
-
-Additional received layouts include label-80 `MVA` movement messages (flight,
-route, AD departure clocks and EA arrival estimate), label-1L `TAC` headers,
-four-letter airport ATIS requests on label 5D and empty label-5V VDL switch
-advisories. Movement/TAC clocks retain an unspecified timezone, and TAC numeric
-fields remain raw. Multiline Airbus `Rnn/Ann...` / `C1,...` headers and ACM headers
-with alphanumeric registrations identify report, aircraft and route. Their
-measurement sections remain undecoded; R/C1 date/time fields are displayed
-without assigning a timezone.
-
-Label-MA MIAM single-transfer CORE v1 headers decode ASCII85 aircraft identifiers,
-application labels/sublabels, message numbers, compression/encoding and declared
-lengths. CORE v1 acknowledgements identify the acknowledged application message
-and transfer result. Compressed bodies and their inner CRC remain unverified;
-missing ACARS fragments cannot be recovered by decompression.
-
-The combined TypeScript payload parser keeps Airframes airline formats and adds
-logic adapted from the MIT-licensed C [libacars](https://github.com/szpajder/libacars),
-Rust [datalink](https://github.com/xoolive/datalink) and Python
-[Skyshark](https://github.com/ckuethe/skyshark) implementations. License notices are
-included in `public/licenses/acars.txt`. No Python service or external decoding
-API is needed. Additional layouts include general aviation positions, explicit
-decimal positions, frequency-change instructions and named MDC engine trend
-measurements with their transmitted units.
-
-ARINC 622 envelopes identify CPDLC connection/control messages and ADS-C data,
-including ground/aircraft addresses and hexadecimal application data. Binary
-decoding requires a verified inner ARINC CRC. Failed checksums retain the envelope
-and raw data but suppress binary field decoding. ADS-C decodes position, altitude,
-time within the hour, flight/airframe identification, velocity, weather, projected
-waypoints, events, acknowledgements, noncompliance and uplink surveillance contracts.
-FANS CPDLC decodes message headers, catalogue phrases, supported altitude, time,
-position, speed, heading, frequency, free-text, procedure and position-report
-parameters, including consecutive message elements. Unsupported route-clearance
-bodies and other layouts remain partial; catalogue recognition does not imply
-their parameters were decoded. H1 sublabels and message function
-identifiers are shown when present. A label alone does not guarantee a particular
-airline payload format. Unsupported or malformed formats remain unparsed.
-
-The specific parsers show recognized time codes in UTC and the viewer's local
-timezone, inferring omitted dates using the closest valid date to reception.
-These are not authoritative dates supplied by the aircraft. Community formats
-with time-only fields show UTC time without inventing a calendar date. An ETA
-with no documented timezone remains unconverted. Position report times retain
-their reported minute precision.
-
-ETB continuation blocks are retained separately. Complete consecutive downlink
-blocks are reassembled within a VFO log when aircraft, mode, label, message-number
-prefix and letter sequence agree. Numeric block IDs sequence the aircraft's
-transport across unrelated messages; they are not required to be consecutive
-within one payload. Exact retransmitted payloads are counted once; the latest
-matching envelope supplies the last reception time. Retransmissions cannot
-extend the overall assembly time limit. A missing or conflicting block prevents reassembly;
-the final ETX is required. Assemblies are limited to 26 blocks, 8192 characters,
-two minutes between blocks and five minutes overall. The final block displays
-both its original text and the assembled text, interpreted through the same
-combined parser. Community payloads now accept bounded assembled messages beyond
-the single-block 240-character limit.
-When assembly fails, available details explain missing starts, message-letter
-sequence mismatches, incompatible prefixes and time/size limits. A final
-ETX alone does not establish that the complete preceding sequence was received.
-Within each VFO log, later DF blocks can show context from a recognized first
-block, matched by aircraft, mode and the three-character message number within
-two minutes. These fields are explicitly attributed to the first block. This
-association does not prove that every intermediate block was received and does
-not decode numeric sections. It remains useful when reassembly is unavailable.
-Compressed MIAM (label MA) and OHMA transfers are identified but not expanded.
-Proprietary maintenance numeric columns remain undecoded. Airbus report headers
-and ACM-prefixed Chinese aircraft monitoring headers can identify
-the aircraft, flight and route. ACM configuration/report codes and numeric columns
-remain raw; their date/time codes have no verified format or timezone. A fully
-reassembled unsupported DF report is identified as a complete report rather than
-a fragment, without claiming its measurements were decoded. The A380 semicolon
-report 020 header/event text is recognized, but none of the inspected reusable
-sources supplies its A20/A21/etc. measurement dictionary. Application checksums
-outside the binary ARINC parser remain extracted values rather than verified checks.
-Retransmissions are retained. Retuning or restarting a decoder resets its log.
-Remote receivers decode on the host and forward results only to the requesting
-client's VFO, including muted VFOs. Removed, restarted and retuned workers cannot
-forward old results.
-
-Automated verification covers synthetic AM/MSK IQ through the production WASM
-channelizer, byte and float IQ, phase offsets, arbitrary chunk boundaries, IQ
-gaps, CRC/parity rejection, field extraction, bounded logs, remote routing and
-UI controls. A representative corpus from the Airframes tests covers dozens of
-airline formats, alongside standard-label and malformed-payload checks.
-Synthetic verification does not establish actual aircraft reception
-or receiver sensitivity; live radio verification remains necessary.
-
-Protocol references: ARINC 618 air/ground character-oriented protocol;
-[acarsdec framing and field definitions](https://github.com/TLeconte/acarsdec),
-[libacars ARINC 622 and media advisory decoders](https://github.com/szpajder/libacars),
-and [Airframes message-format research](https://github.com/airframesio/acars-message-documentation).
-
-## Reference data and decoding coverage
-
-Airport names come from the public-domain [OurAirports dataset](https://ourairports.com/data/).
-The 10 October 2026 snapshot includes every record with an explicit ICAO or IATA
-code: **11,764 airports, 10,531 ICAO codes and 9,051 IATA codes**. All ACARS route
-and airport fields use this shared lookup, including three-letter IATA codes in
-movement and operations messages. Unknown codes remain visible. Local/GPS
-identifiers are not treated as ICAO codes, and ATC addresses and arbitrary text
-are not looked up as airports. The source and regeneration instructions are in
-`src/client/data/aviation/README.md`. Run `npm run build:airport-db` to download
-and rebuild the reference, or pass `-- --input /path/to/airports.csv` to reproduce
-a saved snapshot. No external request is needed during message interpretation.
-
-The label reference includes all **210 two-character labels** from the pinned
-MIT-licensed Skyshark catalogue, with alternate uses retained in the imported
-data. Existing specific categories take precedence. Source revision and hash are
-recorded in `src/client/app/decoders/acars/reference/labels-source.json`; run
-`npm run build:acars-labels` to reproduce it. Label recognition identifies a
-category, even when no parser supports its airline-specific payload layout.
-
-The reference audit found that the six ARINC application identifiers and eight
-SA media codes already match their source enumerations. The FANS CPDLC phrase
-catalogue already contains 183 uplink and 129 downlink entries; additional
-parameter layouts need binary decoders, rather than more phrases. MIAM
-compressed bodies, CORE v2/file transfers, unknown airline layouts and
-proprietary DF/ACM measurement definitions remain decoding gaps. These cannot be
-completed by expanding airport or label dictionaries. Report-specific numeric
-meanings, scales and units are left unassigned without verified specifications.
-Outside ACARS, the ADS-B aircraft/airline snapshot and AIS MID-country database
-already use full source datasets rather than small sample lists.
+Automated tests cover synthetic AM/MSK IQ through the production WASM channelizer,
+byte and float IQ, phase offsets, chunk boundaries, IQ gaps, CRC/parity rejection,
+message interpretation, bounded logs, remote routing and UI controls.
+Synthetic tests do not establish aircraft reception or receiver sensitivity;
+those require live radio verification.

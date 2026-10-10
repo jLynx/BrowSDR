@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { interpretAcars } from '@/app/decoders/acars/interpret';
-import { interpretCommunity } from '@/app/decoders/acars/community';
-import { ACARS_LABELS, labelDescription } from '@/app/decoders/acars/catalogue';
+import { interpretCommunity } from '@jlynx_/acars-decoder/formats';
+import { ACARS_LABELS, labelDescription } from '@jlynx_/acars-decoder';
 import { corpus } from './community-fixtures';
 
 const record = (label, text, extra = {}) => ({
@@ -90,14 +90,14 @@ describe('documented ACARS format coverage', () => {
 			expect(result.fields).toContainEqual({ label: 'Out time', value: 'Not reported' });
 		}
 	});
-	it('explains compressed-transfer limits without inflating payloads in the receiver UI', () => {
+	it('preserves malformed or unsupported compressed transfers', () => {
 		for (const [label, text] of [
 			['MA', 'T02compressed-data'],
 			['H1', 'OHMAcompressed-data'],
 		]) {
 			const result = interpretAcars(record(label, text));
-			expect(result.coverage).toBe('unknown');
-			expect(result.notes.join(' ')).toContain('not expanded');
+			expect(result.coverage).not.toBe('decoded');
+			expect(result.fields.some((field) => field.label === 'Application JSON')).toBe(false);
 		}
 	});
 	it('ignores oversized and malformed application payloads', () => {

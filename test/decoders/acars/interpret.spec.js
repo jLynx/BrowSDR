@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { interpretAcars } from '@/app/decoders/acars/interpret';
-import { messageTime, timeFields } from '@/app/decoders/acars/time';
+import { messageTime, timeFields } from '@jlynx_/acars-decoder/formats';
 
 const receivedAt = Date.parse('2026-10-09T07:50:00Z');
 const record = (label, text, extra = {}) => ({

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { interpretAcars } from '@/app/decoders/acars/interpret';
-import { interpretText } from '@/app/decoders/acars/protocols/text';
+import { interpretText } from '@jlynx_/acars-decoder/formats';
 
 const record = (label, text, direction = 'downlink') => ({
 	id: 1,
