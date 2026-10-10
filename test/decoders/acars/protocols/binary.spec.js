@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { interpretAcars } from '@/app/decoders/acars/interpret';
-import { interpretArinc } from '@/app/decoders/acars/arinc';
-import { decodeAdsc } from '@/app/decoders/acars/protocols/adsc';
-import { decodeCpdlc } from '@/app/decoders/acars/protocols/cpdlc';
-import { hexBytes } from '@/app/decoders/acars/protocols/bits';
+import { interpretArinc } from '@jlynx_/acars-decoder';
+import { decodeAdsc } from '@jlynx_/acars-decoder';
+import { decodeCpdlc } from '@jlynx_/acars-decoder';
+import { hexBytes } from '@jlynx_/acars-decoder/formats';
 import adscFixtures from './adsc-fixtures.json';
 import cpdlcFixtures from './cpdlc-fixtures.json';
 

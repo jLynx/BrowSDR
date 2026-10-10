@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { Bits } from '@/app/decoders/acars/protocols/bits';
-import { altitude, speed, time, position, frequency, altimeter } from '@/app/decoders/acars/protocols/cpdlc-values';
-import { decodeCpdlc } from '@/app/decoders/acars/protocols/cpdlc';
+import { Bits } from '@jlynx_/acars-decoder/formats';
+import { altitude, speed, time, position, frequency, altimeter } from '@jlynx_/acars-decoder/formats';
+import { decodeCpdlc } from '@jlynx_/acars-decoder';
 
 function packed(...parts) {
 	let binary = parts.map(([width, value]) => value.toString(2).padStart(width, '0')).join('');

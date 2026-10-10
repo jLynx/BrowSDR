@@ -6,9 +6,6 @@
 	"scripts": {
 		"build": "vite build",
 		"build:aircraft-db": "python scripts/aircraft-db/build.py --output public/aircraft-db",
-		"build:airport-db": "python scripts/airport-db/build.py",
-		"build:acars-labels": "python scripts/acars-data/build-labels.py",
-		"test:airport-db": "python -m unittest discover -s test/airport-db -p test_*.py",
 		"publish:aircraft-db": "node scripts/aircraft-db/publish.mjs",
 		"build:ble-db": "python scripts/ble-db/build.py",
 		"publish:ble-db": "node scripts/ble-db/publish.mjs",
@@ -41,7 +38,7 @@
 		"check": "npm run lint && npm run format:check && npm run check:structure && npm run typecheck && npm run test:dsp"
 	},
 	"dependencies": {
-		"@airframes/acars-decoder": "1.9.2",
+		"@jlynx_/acars-decoder": "^0.1.2",
 		"@lucide/vue": "^1.54.0",
 		"comlink": "^4.4.2",
 		"leaflet": "^1.9.4",

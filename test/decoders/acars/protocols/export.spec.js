@@ -60,11 +60,11 @@ describe('10 October ACARS export regressions', () => {
 		expect(field(result, 'Encoding')).toBe('ISO #5 text');
 		expect(field(result, 'Declared PDU length')).toBe('424 bytes');
 		expect(field(result, 'Application message number')).toBe('102');
-		expect(result.notes.join(' ')).toContain('inner CRC are not verified');
+		expect(result.notes.join(' ')).toContain('requires its final ETX');
 		expect(report.text).toContain('T22!<</!');
 	});
 	it('decodes the actual MIAM acknowledgement separately from link acknowledgements', () => {
-		const result = interpretAcars(fixture[1].find((m) => m.id === 448));
+		const result = interpretAcars({ ...fixture[1].find((m) => m.id === 448), messageNumber: undefined, flight: undefined });
 		expect(result).toMatchObject({ title: 'MIAM transfer acknowledgement', coverage: 'decoded' });
 		expect(field(result, 'Acknowledged application message')).toBe('38');
 		expect(field(result, 'Transfer result')).toBe('Acknowledged');

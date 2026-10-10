@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { interpretAcars } from '@/app/decoders/acars/interpret';
-import { datedTime, monthDayTime } from '@/app/decoders/acars/time';
+import { datedTime, monthDayTime } from '@jlynx_/acars-decoder/formats';
 
 const load = 'DAT 09OCT26 UTC 0810 REG VHX3B FLT JST241 GWT 0 ZFW 595 FOB    87 CAP 129668 FO  435525 LOG 502304 LDR 0 DRT 0753';
 const airbus =

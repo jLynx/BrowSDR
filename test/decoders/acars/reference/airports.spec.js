@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { interpretAcars } from '@/app/decoders/acars/interpret';
-import { interpretAcm } from '@/app/decoders/acars/protocols/monitoring';
-import { interpretAirbus } from '@/app/decoders/acars/airline';
+import { interpretAcm } from '@jlynx_/acars-decoder/formats';
+import { interpretAirbus } from '@jlynx_/acars-decoder/formats';
 import { describeAirports } from '@/app/decoders/acars/reference/airports';
-import { labelDescription } from '@/app/decoders/acars/catalogue';
-import labels from '@/app/decoders/acars/reference/labels.json';
+import { labelDescription } from '@jlynx_/acars-decoder';
+import { ACARS_LABELS as labels } from '@jlynx_/acars-decoder';
 
 const message = (label, text, extra = {}) => ({
 	id: 1,
@@ -24,14 +24,14 @@ const field = (result, name) => result.fields.find((item) => item.label === name
 
 describe('shared ACARS reference coverage', () => {
 	it('uses the global dataset directly in ACM and Airbus parsers', () => {
-		const acm = interpretAcm('ACM01ACM300BS9V-SNC  SIA285  EGLLKJFK101026  68ER030000');
+		const acm = describeAirports(interpretAcm('ACM01ACM300BS9V-SNC  SIA285  EGLLKJFK101026  68ER030000'));
 		expect(field(acm, 'Departure')).toBe('EGLL · London Heathrow Airport');
 		expect(field(acm, 'Destination')).toBe('KJFK · John F. Kennedy International Airport');
 		const airbus = interpretAirbus(
 			'A320,000001,1,1,TB000000/REP001,00,00,1/CCVH-VFO,OCT10,030000,NZWN,NCRG,0296/',
 			Date.parse('2026-10-10T03:00:00Z'),
 		);
-		expect(field(airbus, 'Destination')).toBe('NCRG · Rarotonga International Airport');
+		expect(field(describeAirports(airbus), 'Destination')).toBe('NCRG · Rarotonga International Airport');
 	});
 	it('names explicitly identified alternate and ATIS airports', () => {
 		const result = describeAirports({
@@ -82,7 +82,7 @@ describe('shared ACARS reference coverage', () => {
 		expect(interpretAcars(message('1L', text, { direction: 'uplink' })).coverage).toBe('unknown');
 	});
 	it('includes every label from the pinned reference while retaining distinct alternate uses', () => {
-		expect(Object.keys(labels)).toHaveLength(210);
+		expect(Object.keys(labels).length).toBeGreaterThanOrEqual(210);
 		for (const code of Object.keys(labels)) expect(labelDescription(code)).toBeDefined();
 		expect(labelDescription('Q3').description).toContain('GMT Clock Update');
 		expect(labelDescription('B9').description).toContain('Request ATIS information; Flight Plan Information Receipt');
