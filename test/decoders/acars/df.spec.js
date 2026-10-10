@@ -37,7 +37,7 @@ describe('Airbus DF report content and context', () => {
 		});
 		expect(field(result, 'Reported registration')).toBe('A6-EVQ');
 		expect(field(result, 'Reported flight code')).toBe('UAE5AM');
-		expect(field(result, 'Departure')).toBe('NZAA · Auckland Airport');
+		expect(field(result, 'Departure')).toBe('NZAA · Auckland International Airport');
 		expect(field(result, 'Destination')).toBe('OMDB · Dubai International Airport');
 		expect(field(result, 'Reported event')).toBe('Normal Landing Gear Retraction');
 		expect(result.fields.some((item) => /time|pressure|speed|temperature/i.test(item.label))).toBe(false);

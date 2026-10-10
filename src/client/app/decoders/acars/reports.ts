@@ -2,8 +2,8 @@ import type { AcarsRecord } from '@/worker/decoders/acars/types';
 import type { AcarsField, AcarsInterpretation } from './types';
 import { timeFields } from './time';
 
-const airports: Record<string, string> = { NZAA: 'Auckland Airport', ZBAA: 'Beijing Capital Airport' };
-const airport = (code: string) => (airports[code] ? `${code} · ${airports[code]}` : code);
+import { airportDescription as airport } from '@/data/aviation/airports';
+
 const routeFields = (departure: string, destination: string): AcarsField[] => [
 	{ label: 'Departure', value: airport(departure) },
 	{ label: 'Destination', value: airport(destination) },
@@ -71,8 +71,10 @@ export function interpretMonitoring(message: AcarsRecord): AcarsInterpretation |
 }
 
 export function interpretDf(text: string): AcarsInterpretation {
+	// Some reports have a routing address before the report identifier.
+	text = text.replace(/^\/[A-Z0-9]{7}\./, '');
 	const header = /^<(\d+)>([A-Z0-9]+)/.exec(text);
-	const route = header ? /\d([A-Z]{4})([A-Z]{4})\d+\s*$/m.exec(text) : null;
+	const route = header ? /([A-Z]{4})([A-Z]{4})(?=\d+\s*$| \d{3}[A-Z]{2}\d{12})/m.exec(text) : null;
 	const sections = [...text.matchAll(/(?:^|;)A(\d{2})(?=[+-])/g)].map((match) => `A${match[1]}`);
 	return {
 		title: header ? `Aircraft report ${header[2]}` : 'Aircraft report fragment',

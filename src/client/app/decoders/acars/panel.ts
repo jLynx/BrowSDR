@@ -5,6 +5,7 @@ import * as components from '@/ui';
 import template from './panel.html?raw';
 import { interpretAcarsLog } from './context';
 import type { AcarsInterpretation } from './types';
+import { downloadAcarsExport } from './export';
 
 export default defineComponent({
 	name: 'AcarsPanel',
@@ -44,6 +45,8 @@ export default defineComponent({
 			channel,
 			selected,
 			messages,
+			retainedCount: computed(() => receiver.acars.sources.reduce((count, source) => count + (source?.messages.length ?? 0), 0)),
+			exportMessages: () => downloadAcarsExport(receiver),
 			filtered,
 			channels: ACARS_CHANNELS,
 			selectedVfo: computed(() => receiver.vfos[receiver.activeVfoIndex]),

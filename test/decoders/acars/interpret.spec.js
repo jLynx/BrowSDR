@@ -86,8 +86,8 @@ describe('ACARS payload interpretation', () => {
 		const message = record('10', 'OFF090746,NZAA,ZBAA,190700,*,LT,0800,090736');
 		const result = interpretAcars(message);
 		expect(result).toMatchObject({ title: 'Wheels-off report', coverage: 'partial' });
-		expect(field(result, 'Departure')).toBe('NZAA · Auckland Airport');
-		expect(field(result, 'Destination')).toBe('ZBAA · Beijing Capital Airport');
+		expect(field(result, 'Departure')).toBe('NZAA · Auckland International Airport');
+		expect(field(result, 'Destination')).toBe('ZBAA · Beijing Capital International Airport');
 		expect(field(result, 'Event time (UTC)')).toBe('2026-10-09 07:46:00 UTC');
 		expect(message.text).toBe('OFF090746,NZAA,ZBAA,190700,*,LT,0800,090736');
 		expect(result.fields).toHaveLength(5);
@@ -102,7 +102,7 @@ describe('ACARS payload interpretation', () => {
 		const result = interpretAcars(record('49', `01${code}    CCA568/090746NZAAZBAA\r\n+  123191.4+ 21.1`));
 		expect(field(result, 'Report code')).toBe(code);
 		expect(field(result, 'Reported flight')).toBe('CCA568');
-		expect(field(result, 'Destination')).toBe('ZBAA · Beijing Capital Airport');
+		expect(field(result, 'Destination')).toBe('ZBAA · Beijing Capital International Airport');
 		expect(result.coverage).toBe('partial');
 		expect(result.fields.some((item) => item.value.includes('21.1'))).toBe(false);
 	});
@@ -115,7 +115,7 @@ describe('ACARS payload interpretation', () => {
 		expect(result.title).toBe('Aircraft report HER');
 		expect(field(result, 'H1 sublabel')).toBe('DF');
 		expect(field(result, 'Report ID')).toBe('402');
-		expect(field(result, 'Departure')).toBe('NZAA · Auckland Airport');
+		expect(field(result, 'Departure')).toBe('NZAA · Auckland International Airport');
 		expect(result.notes.join(' ')).toContain('not reassembled');
 		const fragment = interpretAcars(record('H1', '#DFB  99  90 22\n 37 38 98 89 22'));
 		expect(fragment.title).toBe('Aircraft report fragment');

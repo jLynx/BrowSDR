@@ -29,7 +29,6 @@ describe('ACARS message reassembly', () => {
 	});
 	it.each([
 		{ messageNumber: 'D15C' },
-		{ blockId: '4' },
 		{ registration: 'OTHER' },
 		{ mode: '1' },
 		{ direction: 'uplink' },
@@ -63,5 +62,38 @@ describe('ACARS message reassembly', () => {
 		const [first, last] = messages();
 		expect(interpretAcarsLog([first, { ...last, continuation: true }])[1].assembledText).toBeUndefined();
 		expect(interpretAcarsLog([{ ...first, text: '#MDB' + 'X'.repeat(8192) }, last])[1].assembledText).toBeUndefined();
+	});
+	it('tolerates retransmissions whose transport block IDs change', () => {
+		const [first, last] = messages();
+		const retransmission = { ...first, id: 2, receivedAt: first.receivedAt + 1000, blockId: '4' };
+		const end = { ...last, id: 3, receivedAt: first.receivedAt + 2000, blockId: '5' };
+		const results = interpretAcarsLog([{ ...first, blockId: '2' }, retransmission, end]);
+		expect(results.at(-1).assembledText).toBe(text);
+		expect(results.at(-1).interpretation.notes.join(' ')).toContain('Reassembled 2 consecutive blocks');
+	});
+	it('does not refresh an expired sequence with a duplicate retransmission', () => {
+		const [first, last] = messages();
+		const late = first.receivedAt + 121000;
+		const results = interpretAcarsLog([first, { ...first, id: 3, receivedAt: late }, { ...last, receivedAt: late + 1000 }]);
+		expect(results.at(-1).assembledText).toBeUndefined();
+		expect(results.at(-1).interpretation.notes.join(' ')).toContain('reassembly time window');
+	});
+	it('explains a missing message letter on the final block after it invalidates an earlier chain', () => {
+		const [first, last] = messages();
+		const results = interpretAcarsLog([
+			first,
+			{ ...last, messageNumber: 'D15C', blockId: '5', continuation: true },
+			{ ...last, id: 3, receivedAt: last.receivedAt + 1000, messageNumber: 'D15D', blockId: '6' },
+		]);
+		expect(results.at(-1).assembledText).toBeUndefined();
+		expect(results.at(-1).interpretation.notes.join(' ')).toContain('Expected message block D15B; received D15C');
+	});
+	it('reassembles consecutive payload letters across unrelated transport messages and numeric gaps', () => {
+		const [first, last] = messages();
+		const unrelated = record(2, 'DAT airline load report', { label: '2L', messageNumber: 'M10A', blockId: '2' });
+		const results = interpretAcarsLog([first, unrelated, { ...last, id: 3, receivedAt: last.receivedAt + 1000, blockId: '3' }]);
+		expect(results.at(-1).assembledText).toBe(text);
+		expect(results[1].assembledText).toBeUndefined();
+		expect(interpretAcarsLog([first, { ...last, blockId: '4' }]).at(-1).assembledText).toBe(text);
 	});
 });

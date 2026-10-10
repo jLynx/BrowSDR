@@ -23,3 +23,8 @@ export interface AcarsAssembly {
 	text: string;
 	blocks: string[];
 }
+
+export interface AcarsAssemblyResult {
+	completed: Map<number, AcarsAssembly>;
+	failures: Map<number, string>;
+}

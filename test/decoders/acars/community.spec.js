@@ -48,8 +48,8 @@ describe('documented ACARS format coverage', () => {
 		expect(result.fields).toEqual(
 			expect.arrayContaining([
 				{ label: 'Altitude', value: '14460 feet' },
-				{ label: 'Origin', value: 'KATL' },
-				{ label: 'Destination', value: 'KPHL' },
+				{ label: 'Origin', value: 'KATL · Hartsfield Jackson Atlanta International Airport' },
+				{ label: 'Destination', value: 'KPHL · Philadelphia International Airport' },
 			]),
 		);
 	});
@@ -117,7 +117,7 @@ describe('documented ACARS format coverage', () => {
 	);
 	it('does not read inherited object properties as labels', () => {
 		expect(labelDescription('constructor')).toBeUndefined();
-		expect(labelDescription('7A').title).toBe('Airline message (7A)');
+		expect(labelDescription('7A').title).toBe('ACARS message (7A)');
 	});
 	it('extracts explicit markers across airlines without guessing measurement units or ETA timezone', () => {
 		const result = interpretAcars(record('3R', 'REG ZK-ABC FLT ANZ123 DEP NZAA DEST NZCH FOB 123 UTC 0809 ETA 0915 ALT 350'));

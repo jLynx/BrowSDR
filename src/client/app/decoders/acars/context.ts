@@ -13,6 +13,7 @@ const contextLabels = new Set([
 	'Reported event',
 	'Report format',
 	'Report code (raw)',
+	'Report code',
 ]);
 
 function markCompleteReport(interpretation: AcarsInterpretation): void {
@@ -27,8 +28,8 @@ function markCompleteReport(interpretation: AcarsInterpretation): void {
 export function interpretAcarsLog(records: readonly AcarsRecord[]): InterpretedAcarsRecord[] {
 	const headers = new Map<string, InterpretedAcarsRecord>();
 	const ordered = [...records].sort((a, b) => a.receivedAt - b.receivedAt || a.id - b.id).slice(-200);
-	const completed = assembleAcars(ordered);
-	return ordered.map((message) => {
+	const { completed, failures } = assembleAcars(ordered);
+	const interpreted = ordered.map((message) => {
 		const assembly = completed.get(message.id);
 		const result: InterpretedAcarsRecord = {
 			...message,
@@ -47,7 +48,10 @@ export function interpretAcarsLog(records: readonly AcarsRecord[]): InterpretedA
 		const header = headers.get(key);
 		if (number[2] === 'A') {
 			headers.delete(key);
-			if (message.continuation && result.interpretation.fields.some((field) => ['Aircraft type', 'Report format'].includes(field.label)))
+			if (
+				message.continuation &&
+				result.interpretation.fields.some((field) => ['Aircraft type', 'Report format', 'Report code'].includes(field.label))
+			)
 				headers.set(key, result);
 			return result;
 		}
@@ -72,4 +76,9 @@ export function interpretAcarsLog(records: readonly AcarsRecord[]): InterpretedA
 		else headers.delete(key);
 		return result;
 	});
+	for (const result of interpreted) {
+		const reason = failures.get(result.id);
+		if (reason) result.interpretation.notes.push(`Reassembly unavailable: ${reason}`);
+	}
+	return interpreted;
 }

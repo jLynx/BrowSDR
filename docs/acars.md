@@ -30,6 +30,15 @@ blocks include message number and flight ID; ground-to-air blocks do not use
 that header. These values come from radio messages and may be blank. No external
 aircraft feed or database is required.
 
+**Export all JSON** downloads every block still retained across the VFO logs,
+including full raw text, line breaks, envelope fields, UTC receipt times,
+decoded fields/notes and available reassembled messages. It includes
+acknowledgements and retransmissions, regardless of search or selected message.
+The file records each source frequency and VFO, including retained sources whose
+decoder is currently disabled. Each decoder retains up to 200 blocks; the export
+cannot recover discarded history or logs lost on refresh or retuning. Export
+before refreshing when collecting a batch for analysis.
+
 The list includes readable summaries; details distinguish decoded, partially
 decoded and unparsed formats and retain the complete raw message. A recognized
 label category is shown separately from successful payload decoding. Standard
@@ -51,13 +60,18 @@ runs locally without sending messages to Airframes or another service.
 The existing specific interpretations include `_d` acknowledgements, version-0 `SA` media/link
 advisories, label-3L decimal-degree position reports such as
 `S 37.306/E174.100 /UTC 0809`, a recognized label-10 `OFF` takeoff report layout, label-49 report
-headers, and H1 `DF` report headers. NZAA and ZBAA have built-in airport names;
-other airports keep their ICAO codes. Airline-specific numeric measurements
+headers, and H1 `DF` report headers. Identified airport fields use the shared
+offline global ICAO/IATA name reference described below. Airline-specific numeric measurements
 and undocumented fields are not assigned meanings or units.
 
 Recognized airline layouts also include label-1L `WX RCVD TXOPS NORMAL...`
 operations notes, label-2L `DAT ... UTC ... REG ... FLT ...` flight/load reports,
 and Airbus H1 `DF` headers beginning with an aircraft type and `REP.../CC...`.
+Flight/load fields can be separated by spaces or line breaks; truncated reports
+remain unparsed. Uplink C1 `ARRIVAL ACK` messages identify the reported aircraft,
+ground address, LD/RI time codes and remaining fuel. Their date, timezone, LD/RI
+event meanings and fuel units remain unspecified where unverified. Label-41
+`MSG...` payloads with an unknown encoding are preserved without claiming a decode.
 These identify weather receipt, normal operations, reported flight/registration,
 dates and routes where provided. An ETA without a timezone stays unconverted.
 Semicolon-delimited Airbus `REP...;H01...;H02...;H03...` reports identify the
@@ -70,6 +84,21 @@ Load values and crew identifiers are displayed as transmitted; weight/fuel
 scales and units, LOG/LDR/DRT fields, and Airbus numeric measurements remain
 undecoded. Two-digit report years use 2000–2099; Airbus headers that omit the
 year use the closest valid year to reception. Duplicate reports remain separate.
+
+Additional received layouts include label-80 `MVA` movement messages (flight,
+route, AD departure clocks and EA arrival estimate), label-1L `TAC` headers,
+four-letter airport ATIS requests on label 5D and empty label-5V VDL switch
+advisories. Movement/TAC clocks retain an unspecified timezone, and TAC numeric
+fields remain raw. Multiline Airbus `Rnn/Ann...` / `C1,...` headers and ACM headers
+with alphanumeric registrations identify report, aircraft and route. Their
+measurement sections remain undecoded; R/C1 date/time fields are displayed
+without assigning a timezone.
+
+Label-MA MIAM single-transfer CORE v1 headers decode ASCII85 aircraft identifiers,
+application labels/sublabels, message numbers, compression/encoding and declared
+lengths. CORE v1 acknowledgements identify the acknowledged application message
+and transfer result. Compressed bodies and their inner CRC remain unverified;
+missing ACARS fragments cannot be recovered by decompression.
 
 The combined TypeScript payload parser keeps Airframes airline formats and adds
 logic adapted from the MIT-licensed C [libacars](https://github.com/szpajder/libacars),
@@ -103,13 +132,19 @@ their reported minute precision.
 
 ETB continuation blocks are retained separately. Complete consecutive downlink
 blocks are reassembled within a VFO log when aircraft, mode, label, message-number
-prefix, letter sequence and numeric block sequence agree. Exact retransmissions
-are ignored during assembly. A missing or conflicting block prevents reassembly;
+prefix and letter sequence agree. Numeric block IDs sequence the aircraft's
+transport across unrelated messages; they are not required to be consecutive
+within one payload. Exact retransmitted payloads are counted once; the latest
+matching envelope supplies the last reception time. Retransmissions cannot
+extend the overall assembly time limit. A missing or conflicting block prevents reassembly;
 the final ETX is required. Assemblies are limited to 26 blocks, 8192 characters,
 two minutes between blocks and five minutes overall. The final block displays
 both its original text and the assembled text, interpreted through the same
 combined parser. Community payloads now accept bounded assembled messages beyond
 the single-block 240-character limit.
+When assembly fails, available details explain missing starts, message-letter
+sequence mismatches, incompatible prefixes and time/size limits. A final
+ETX alone does not establish that the complete preceding sequence was received.
 Within each VFO log, later DF blocks can show context from a recognized first
 block, matched by aircraft, mode and the three-character message number within
 two minutes. These fields are explicitly attributed to the first block. This
@@ -142,3 +177,34 @@ Protocol references: ARINC 618 air/ground character-oriented protocol;
 [acarsdec framing and field definitions](https://github.com/TLeconte/acarsdec),
 [libacars ARINC 622 and media advisory decoders](https://github.com/szpajder/libacars),
 and [Airframes message-format research](https://github.com/airframesio/acars-message-documentation).
+
+## Reference data and decoding coverage
+
+Airport names come from the public-domain [OurAirports dataset](https://ourairports.com/data/).
+The 10 October 2026 snapshot includes every record with an explicit ICAO or IATA
+code: **11,764 airports, 10,531 ICAO codes and 9,051 IATA codes**. All ACARS route
+and airport fields use this shared lookup, including three-letter IATA codes in
+movement and operations messages. Unknown codes remain visible. Local/GPS
+identifiers are not treated as ICAO codes, and ATC addresses and arbitrary text
+are not looked up as airports. The source and regeneration instructions are in
+`src/client/data/aviation/README.md`. Run `npm run build:airport-db` to download
+and rebuild the reference, or pass `-- --input /path/to/airports.csv` to reproduce
+a saved snapshot. No external request is needed during message interpretation.
+
+The label reference includes all **210 two-character labels** from the pinned
+MIT-licensed Skyshark catalogue, with alternate uses retained in the imported
+data. Existing specific categories take precedence. Source revision and hash are
+recorded in `src/client/app/decoders/acars/reference/labels-source.json`; run
+`npm run build:acars-labels` to reproduce it. Label recognition identifies a
+category, even when no parser supports its airline-specific payload layout.
+
+The reference audit found that the six ARINC application identifiers and eight
+SA media codes already match their source enumerations. The FANS CPDLC phrase
+catalogue already contains 183 uplink and 129 downlink entries; additional
+parameter layouts need binary decoders, rather than more phrases. MIAM
+compressed bodies, CORE v2/file transfers, unknown airline layouts and
+proprietary DF/ACM measurement definitions remain decoding gaps. These cannot be
+completed by expanding airport or label dictionaries. Report-specific numeric
+meanings, scales and units are left unassigned without verified specifications.
+Outside ACARS, the ADS-B aircraft/airline snapshot and AIS MID-country database
+already use full source datasets rather than small sample lists.

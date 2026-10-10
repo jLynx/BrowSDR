@@ -1,6 +1,6 @@
 import type { AcarsRecord } from '@/worker/decoders/acars/types';
 import { interpretArinc } from './arinc';
-import { interpretAirbus, interpretLoad, interpretOperations } from './airline';
+import { interpretAirbus, interpretLoad, interpretMovement, interpretOperations } from './airline';
 import { interpretDf, interpretMonitoring, interpretPosition, interpretTakeoff } from './reports';
 import { timeFields } from './time';
 import type { AcarsInterpretation } from './types';
@@ -10,6 +10,9 @@ import { labelDescription } from './catalogue';
 import { interpretTagged } from './tagged';
 import { interpretText } from './protocols/text';
 import { interpretAcm } from './protocols/monitoring';
+import { interpretUplink } from './protocols/uplink';
+import { interpretMiam } from './protocols/miam';
+import { describeAirports } from './reference/airports';
 
 const links: Record<string, string> = {
 	V: 'VHF ACARS',
@@ -63,6 +66,7 @@ function interpretPayload(message: AcarsRecord): AcarsInterpretation {
 	if (message.label === '3L') result = interpretPosition(message);
 	if (message.label === '1L') result = interpretOperations(message);
 	if (message.label === '2L') result = interpretLoad(message);
+	if (message.label === '80') result = interpretMovement(message);
 	if (result) return result;
 	const binary = interpretArinc(message.text, message.direction);
 	if (binary) return binary;
@@ -76,7 +80,22 @@ function interpretPayload(message: AcarsRecord): AcarsInterpretation {
 }
 
 function interpretFallback(message: AcarsRecord): AcarsInterpretation {
-	return interpretText(message) ?? interpretCommunity(message) ?? interpretTagged(message) ?? unknown(message);
+	if (message.label === '5D' && message.direction === 'downlink' && /^[A-Z]{4}$/.test(message.text.trim()))
+		return {
+			title: 'ATIS request',
+			summary: `Terminal information requested for ${message.text.trim()}.`,
+			coverage: 'partial',
+			fields: [{ label: 'Requested airport (ICAO)', value: message.text.trim() }],
+			notes: ['Recognizes the four-letter airport request layout. No ATIS weather or runway information is carried in this request.'],
+		};
+	return (
+		interpretMiam(message) ??
+		interpretUplink(message) ??
+		interpretText(message) ??
+		interpretCommunity(message) ??
+		interpretTagged(message) ??
+		unknown(message)
+	);
 }
 
 function interpretApplication(message: AcarsRecord): AcarsInterpretation {
@@ -135,5 +154,5 @@ export function interpretAcars(message: AcarsRecord): AcarsInterpretation {
 		interpretation.notes.push(
 			'This block continues in another transmission (ETB); blocks are not reassembled until every consecutive block and the final ETX arrive.',
 		);
-	return interpretation;
+	return describeAirports(interpretation);
 }

@@ -36,7 +36,7 @@ describe('ACM monitoring report headers', () => {
 		expect(result).toMatchObject({ title: 'Aircraft monitoring report 51TR', coverage: 'partial' });
 		expect(field(result, 'Reported registration')).toBe('B-2002');
 		expect(field(result, 'Reported flight code')).toBe('CES780');
-		expect(field(result, 'Departure')).toBe('NZAA · Auckland Airport');
+		expect(field(result, 'Departure')).toBe('NZAA · Auckland International Airport');
 		expect(field(result, 'Destination')).toBe('ZSPD · Shanghai Pudong International Airport');
 		expect(field(result, 'Configuration header (raw)')).toBe('ACM211BS');
 		expect(field(result, 'Header date code (raw)')).toBe('091026');

@@ -1,13 +1,14 @@
 import type { AcarsInterpretation } from '@/app/decoders/acars/types';
 
-const airports: Record<string, string> = { NZAA: 'Auckland Airport', ZSPD: 'Shanghai Pudong International Airport' };
-const airport = (code: string) => (airports[code] ? `${code} · ${airports[code]}` : code);
+import { airportDescription as airport } from '@/data/aviation/airports';
 
 /** Identifies the transmitted ACM header; its numeric report dictionary is unavailable. */
 export function interpretAcm(text: string): AcarsInterpretation | undefined {
 	if (text.length > 8192) return;
 	const header =
-		/^(ACM\d{2})(ACM[A-Z0-9]{1,16})(B-\d{4}) +([A-Z]{3}\d{1,4}[A-Z]?) +([A-Z]{4})([A-Z]{4})(\d{6}) +(\d{2}[A-Z]{2})(\d{6})/.exec(text);
+		/^(ACM\d{2})(ACM[A-Z0-9]{1,16}?)(B-\d{4}|[A-Z0-9]{1,2}-[A-Z0-9]{3}) +([A-Z]{3}\d{1,4}[A-Z]?) +([A-Z]{4})([A-Z]{4})(\d{6}) +(\d{2}[A-Z]{2})(\d{6})/.exec(
+			text,
+		);
 	if (!header) return;
 	const [, format, configuration, registration, flight, departure, destination, date, code, clock] = header;
 	return {

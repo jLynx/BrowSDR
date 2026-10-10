@@ -18,6 +18,13 @@
 				<option v-for="frequency in channels" :key="frequency" :value="frequency">{{ frequency.toFixed(3) }} MHz</option>
 			</UiSelect>
 			<UiButton variant="transcript" @click="receiver.tuneAcarsVfo(channel)">Tune ACARS channel</UiButton>
+			<UiButton
+				variant="transcript"
+				@click="exportMessages"
+				:disabled="!retainedCount"
+				title="Download all retained ACARS blocks, envelopes and interpretations as JSON"
+				>Export all JSON</UiButton
+			>
 		</template>
 	</UiToolHeader>
 	<div class="adsb-summary">

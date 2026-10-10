@@ -72,6 +72,17 @@ describe('received airline ACARS reports', () => {
 		expect(interpretAcars(first)).toEqual(interpretAcars(second));
 		expect(first.id).not.toBe(second.id);
 	});
+	it('decodes multiline load reports while preserving their received text', () => {
+		const text =
+			'DAT 09OCT26\nUTC 2024\nREG VHVGA\nFLT JST283\nGWT 0\nZFW 574\nFOB   110\nCAP 163145\nFO  437049\nLOG 513429\nLDR 0\nDRT 2014';
+		const message = record('2L', text);
+		const result = interpretAcars(message);
+		expect(result.title).toBe('Flight/load report');
+		expect(field(result, 'Event time (UTC)')).toBe('2026-10-09 20:24 UTC');
+		expect(field(result, 'Fuel on board (FOB, raw)')).toBe('110');
+		expect(message.text).toBe(text);
+		expect(interpretAcars(record('2L', 'DAT 09OCT26\nUTC 2024\nREG VHVGA')).coverage).toBe('unknown');
+	});
 	it.each([
 		load.replace('09OCT26', '31FEB26'),
 		load.replace('0810', '2460'),
@@ -89,8 +100,8 @@ describe('received airline ACARS reports', () => {
 		expect(field(result, 'H1 sublabel')).toBe('DF');
 		expect(field(result, 'Reported registration')).toBe('VH-X3B');
 		expect(field(result, 'Reported flight code')).toBe('0241');
-		expect(field(result, 'Departure')).toBe('NZAA · Auckland Airport');
-		expect(field(result, 'Destination')).toBe('NZCH · Christchurch Airport');
+		expect(field(result, 'Departure')).toBe('NZAA · Auckland International Airport');
+		expect(field(result, 'Destination')).toBe('NZCH · Christchurch International Airport');
 		expect(field(result, 'Event time (UTC)')).toBe('2026-10-09 08:10:50 UTC');
 		expect(field(result, 'Configuration header (raw)')).toBe('011130,1,1,TB000000');
 		expect(field(result, 'Report header (raw)')).toBe('00,00,1');

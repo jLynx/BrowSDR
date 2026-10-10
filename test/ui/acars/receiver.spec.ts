@@ -138,7 +138,7 @@ describe('ACARS receiver tools', () => {
 		const interpretation = wrapper.get('[aria-label="Message interpretation"]');
 		expect(interpretation.text()).toContain('Partially decoded');
 		expect(interpretation.text()).toContain('2026-10-09 07:46:00 UTC');
-		expect(interpretation.text()).toContain('Beijing Capital Airport');
+		expect(interpretation.text()).toContain('Beijing Capital International Airport');
 		expect(interpretation.findAll('dl > div')).toHaveLength(5);
 		expect(wrapper.get('.acars-message-text').text()).toBe(raw);
 	});
@@ -196,7 +196,7 @@ describe('ACARS receiver tools', () => {
 			'H1',
 			'#DFBA320,011130,1,1,TB000000/REP004,00,00,1/CCVH-X3B,OCT09,081050,NZAA,NZCH,0241/C0TIA05JST130000/',
 			'A320 aircraft report 004',
-			'NZCH · Christchurch Airport',
+			'NZCH · Christchurch International Airport',
 		],
 		[
 			'H1',

@@ -1,5 +1,13 @@
 ACARS interpretation dependencies
 
+OurAirports airport reference data
+https://ourairports.com/data/
+https://davidmegginson.github.io/ourairports-data/airports.csv
+
+Public domain. OurAirports releases all data to the Public Domain with no
+guarantee of accuracy or fitness for use. Source and snapshot hash are recorded
+in src/client/data/aviation/metadata.json.
+
 @airframes/acars-decoder 1.9.2
 https://github.com/airframesio/acars-decoder-typescript
 
@@ -51,7 +59,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-xoolive/datalink (Rust FANS CPDLC catalogue/layouts and ADS-C reference fixtures)
+xoolive/datalink (Rust FANS CPDLC catalogue/layouts, MIAM headers and ADS-C reference fixtures)
 https://github.com/xoolive/datalink
 
 MIT License
@@ -78,7 +86,7 @@ SOFTWARE.
 
 
 
-szpajder/libacars (C ADS-C scales, tag definitions and ARINC CRC)
+szpajder/libacars (C ADS-C scales, tag definitions, ARINC CRC, downlink reassembly and MIAM headers)
 https://github.com/szpajder/libacars
 
 MIT License
@@ -104,7 +112,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-ckuethe/skyshark (Python label-15 position and frequency-change layouts)
+ckuethe/skyshark (Python label catalogue, label-15 position and frequency-change layouts)
 https://github.com/ckuethe/skyshark
 
 MIT License

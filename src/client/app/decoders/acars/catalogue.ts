@@ -1,4 +1,5 @@
 import type { AcarsLabel } from './types';
+import labels from './reference/labels.json';
 
 /** Label categories describe the envelope, not a guaranteed airline payload layout. */
 export const ACARS_LABELS: Record<string, AcarsLabel> = {
@@ -29,6 +30,8 @@ export const ACARS_LABELS: Record<string, AcarsLabel> = {
 	SA: { title: 'Link advisory', description: 'Reports communications link status and available media.' },
 	SQ: { title: 'Ground station squitter', description: 'A ground station broadcast identifying available service.' },
 	MA: { title: 'MIAM message', description: 'An ACARS application transfer or media message; contents may be compressed.' },
+	'5D': { title: 'ATIS request', description: 'Requests airport terminal information; payload layouts vary by application.' },
+	'5V': { title: 'VDL switch advisory', description: 'An advisory about switching the VHF data link. An empty body is normal.' },
 	H1: { title: 'Terminal / aircraft application message', description: 'A message to or from an aircraft terminal or application.' },
 	H2: { title: 'Aircraft application report', description: 'An aircraft application report; layout depends on equipment and airline.' },
 	HX: { title: 'Undelivered message report', description: 'Reports a message that could not be delivered.' },
@@ -49,6 +52,13 @@ export const ACARS_LABELS: Record<string, AcarsLabel> = {
 
 export function labelDescription(label: string): AcarsLabel | undefined {
 	if (Object.hasOwn(ACARS_LABELS, label)) return ACARS_LABELS[label];
+	if (Object.hasOwn(labels, label)) {
+		const uses = labels[label as keyof typeof labels];
+		return {
+			title: `ACARS message (${label})`,
+			description: `Documented label uses: ${uses.join('; ')}. The application defines the payload layout.`,
+		};
+	}
 	if (/^[1-8][0-9A-Z]$/.test(label)) {
 		return { title: `Airline message (${label})`, description: 'The airline or aircraft application defines this label’s payload format.' };
 	}

@@ -6,6 +6,9 @@ coverage/
 test-results/
 .wrangler/
 public/
+# Generated reference assets retain their deterministic compact format.
+src/client/data/aviation/airports.json
+src/client/app/decoders/acars/reference/labels.json
 wasm/
 package-lock.json
 lint-results.json
