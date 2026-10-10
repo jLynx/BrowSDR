@@ -31,7 +31,7 @@ import { autoGainMethods } from './radio/auto-gain';
 import AdsbPanel from './decoders/adsb/panel';
 import { adsbMethods } from './decoders/adsb';
 import { rtl433Methods } from './decoders/rtl433';
-import { mountHeaderTools } from './workspace/header-tools';
+import HeaderTools from './workspace/receiver-tools';
 import * as uiComponents from '@/ui';
 import { coreCapabilityIssues } from '@/platform/browser-capabilities';
 
@@ -44,7 +44,7 @@ if ('serviceWorker' in navigator) {
 
 const Receiver = {
 	template: receiverTemplate,
-	components: { ...uiComponents, VfoPanel, AdsbPanel, AisPanel, BlePanel, AcarsPanel },
+	components: { ...uiComponents, VfoPanel, AdsbPanel, AisPanel, BlePanel, AcarsPanel, HeaderTools },
 	provide(this: AppInstance) {
 		return { receiver: this };
 	},
@@ -122,12 +122,10 @@ const Receiver = {
 	},
 	mounted(this: AppInstance) {
 		mountCanvas.call(this);
-		this._disposeHeaderTools = mountHeaderTools(this);
 	},
 	beforeUnmount(this: AppInstance) {
 		this.stopBleScan();
 		this._disposed = true;
-		this._disposeHeaderTools?.();
 		this._cleanup?.forEach((cleanup: () => void) => cleanup());
 		this._canvasCleanup?.();
 		// Workspace teardown still needs the backend to finish stopping USB/audio.

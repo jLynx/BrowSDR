@@ -73,8 +73,6 @@ export function createAppData() {
 		showStatsDetails: false,
 		radioAdvanced: false,
 		displayAdvanced: false,
-		toolsCompact: true,
-		toolsMenuOpen: false,
 		fps: 0,
 		vfoSquelchOpen: [] as boolean[],
 		vfoSquelchHangUntil: [] as number[],

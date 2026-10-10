@@ -1,10 +1,10 @@
 	<!-- rtl_433 live sensor events -->
-	<section class="pocsag-panel rtl433-panel" v-if="rtl433.panelOpen" aria-label="rtl_433 live events">
-			<UiToolHeader variant="pocsag" closable close-label="Close rtl_433 panel" @close="toggleRtl433Panel">rtl_433 Sensors <span class="pocsag-count">{{ rtl433.log.length }} events</span><template #actions>
-				<UiSelect v-model.number="activeVfoIndex" aria-label="rtl_433 VFO" class="decoder-vfo-select">
+	<section class="pocsag-panel rtl433-panel" v-if="rtl433.panelOpen" aria-label="Wireless sensor events">
+			<UiToolHeader variant="pocsag" closable close-label="Close Wireless Sensors panel" @close="toggleRtl433Panel">Wireless Sensors <span class="pocsag-count">{{ rtl433.log.length }} events</span><template #actions>
+				<UiSelect v-model.number="activeVfoIndex" aria-label="Wireless Sensors VFO" class="decoder-vfo-select">
 					<option v-for="(vfo, i) in vfos" :key="i" :value="i">VFO {{ i + 1 }} · {{ vfo.freq.toFixed(3) }} MHz</option>
 				</UiSelect>
-				<UiCheckbox v-if="vfos[activeVfoIndex]" v-model="vfos[activeVfoIndex].rtl433" :label="'Decode VFO ' + (activeVfoIndex + 1)" :input-label="'rtl_433 decoding for VFO ' + (activeVfoIndex + 1)" @change="updateBackendVfoParams(activeVfoIndex)"></UiCheckbox>
+				<UiCheckbox v-if="vfos[activeVfoIndex]" v-model="vfos[activeVfoIndex].rtl433" :label="'Decode VFO ' + (activeVfoIndex + 1)" :input-label="'Wireless Sensors decoding for VFO ' + (activeVfoIndex + 1)" @change="updateBackendVfoParams(activeVfoIndex)"></UiCheckbox>
 				<UiButton variant="transcript" @click="rtl433.showProtocols = !rtl433.showProtocols">{{ rtl433.showProtocols ? 'Events' : 'Protocols' }}</UiButton>
 				<UiButton variant="transcript" @click="clearRtl433">Clear</UiButton>
 				<UiButton variant="transcript" @click="exportRtl433" :disabled="!rtl433.log.length">Export JSONL</UiButton>
@@ -30,7 +30,7 @@
 		</div>
 		<div v-if="rtl433.showProtocols" class="pocsag-body rtl433-protocols">
 			<UiInputGroup class="rtl433-protocol-search">
-				<UiInput aria-label="Search rtl_433 protocols" v-model="rtl433.filter" placeholder="Search protocol number or device…"></UiInput>
+				<UiInput aria-label="Search wireless sensor protocols" v-model="rtl433.filter" placeholder="Search protocol number or device…"></UiInput>
 			</UiInputGroup>
 			<UiEmptyState v-if="!rtl433.protocols.length" variant="pocsag">Start a decoder to load the protocol list.</UiEmptyState>
 				<div v-for="protocol in filteredRtl433Protocols()" :key="protocol.id">[{{ protocol.id }}] {{ protocol.name }} <span v-if="protocol.disabled" class="rtl433-hint">(enable by number)</span></div>

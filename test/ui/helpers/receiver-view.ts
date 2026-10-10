@@ -24,10 +24,11 @@ import { pocsagMethods } from '@/app/decoders/pocsag';
 import { vfoMethods } from '@/app/radio/vfo';
 import { connectionMethods } from '@/app/radio/connection';
 import { remoteMethods } from '@/app/workspace/remote';
+import HeaderTools from '@/app/workspace/receiver-tools';
 
 export const ReceiverView = defineComponent({
 	template,
-	components: { ...components, VfoPanel, AdsbPanel, AisPanel, BlePanel, AcarsPanel },
+	components: { ...components, VfoPanel, AdsbPanel, AisPanel, BlePanel, AcarsPanel, HeaderTools },
 	provide() {
 		return { receiver: this };
 	},

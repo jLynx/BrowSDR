@@ -5,7 +5,7 @@ This is the shared UI layer for receiver and workspace features. Import from
 `components` option. The receiver already registers the full set.
 
 Components and stories are grouped under `controls/`, `layout/`, `feedback/`,
-`dialogs/`, and `indicators/`. Keep related stories alongside their components.
+`dialogs/`, `indicators/`, and `menus/`. Keep related stories alongside their components.
 See the [code quality guide](../../../docs/code-quality.md) for checks and limits.
 
 The existing `src/client/style.css` supplies all component styling, including
@@ -68,6 +68,27 @@ Tool headers accept `closable` and `closeLabel` and emit `close`. Use these for
 panel dismissal; the close button aligns with desktop actions and stays pinned
 at the top right on mobile, outside the wrapping actions slot. Closing a tool
 should preserve its decoder settings.
+
+`UiMenu` provides a labeled action disclosure using the existing icon button
+treatment. Supply a receiver-specific `id` and groups of items with `id`, `label`,
+`description` and `icon`; handle its `select` event in the application. An item's
+`active` state uses the red tool accent, while `open` describes panel visibility
+through `aria-pressed`. Selection, Escape, outside clicks and focus leaving the
+disclosure close it; selection and Escape restore focus to the trigger. Groups
+use two columns on desktop and one on mobile. See **UI / Menu / Grouped**.
+
+`UiIcon` supplies the approved Lucide tool symbols from `@lucide/vue` with `name` and optional
+`size` (24px by default). It is decorative; put the accessible label on the
+containing control. See **UI / Tool Icons / All**.
+
+The receiver's Tools menu remains available at every width. Enabled decoders
+also appear once each as labeled desktop shortcuts, independent of whether
+their panels are open. These shortcuts open panels without changing decoding
+and are hidden in the mobile header. Closing a panel preserves its shortcut and
+configuration. RDS is active only when a WFM VFO has RDS enabled; its saved setting
+on other modes does not activate the menu item or shortcut. Wireless Sensors is the product label; rtl_433 stays in its menu
+description. Toolbar state belongs to `app/workspace/receiver-tools.ts` so decoder
+telemetry does not invalidate the toolbar or unrelated VFO controls.
 
 Dialog body layout is separate from the dialog's visual variant. The default
 `bodyVariant="padded"` retains the normal responsive form spacing. Use
