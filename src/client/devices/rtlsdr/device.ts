@@ -30,6 +30,7 @@ import { FC0012 } from './tuners/fc0012';
 import { E4000 } from './tuners/e4000';
 import { FC0013 } from './tuners/fc0013';
 import { FC2580 } from './tuners/fc2580';
+import { isNextrtl, Nextrtl } from './nextrtl';
 import type { TunerDriver } from './tuners/types';
 import { registerDriver } from '@/radio/sdr-device';
 import type { SdrDevice, SdrDeviceInfo, GainControl } from '@/radio/types';
@@ -47,6 +48,7 @@ export class RtlSdrDevice implements SdrDevice {
 	private dev!: USBDevice;
 	private com!: RtlCom;
 	private tuner!: TunerDriver;
+	private nextrtl: Nextrtl | null = null;
 	private tunerName = '';
 	private hasIfFreq = true; // R820T uses IF offset, FC0012 does not
 	private conjugateIq = false; // FC0012 (zero-IF) needs spectrum inversion to match R820T
@@ -57,6 +59,8 @@ export class RtlSdrDevice implements SdrDevice {
 
 	async open(device: USBDevice): Promise<void> {
 		this.dev = device;
+		this.nextrtl = null;
+		this.gainControls = this.gainControls.filter((control) => control.name !== 'L-band input');
 		await device.open();
 		await device.selectConfiguration(1);
 		console.log('RTL-SDR: device opened');
@@ -152,8 +156,14 @@ export class RtlSdrDevice implements SdrDevice {
 		this.tunerName = detectedTuner;
 		console.log(`RTL-SDR: detected tuner: ${detectedTuner} at I2C 0x${detectedAddr.toString(16)}`);
 
-		await this.initializeDetectedTuner(detectedAddr, xtalFreq, detectedTuner);
-		await this.com.closeI2C();
+		try {
+			await this.initializeDetectedTuner(detectedAddr, xtalFreq, detectedTuner);
+		} catch (error) {
+			await this.tuner.close();
+			throw error;
+		} finally {
+			await this.com.closeI2C();
+		}
 		console.log('RTL-SDR: device ready');
 	}
 
@@ -186,7 +196,7 @@ export class RtlSdrDevice implements SdrDevice {
 			await this.com.writeDemodReg(1, 0x15, 0x01, 1);
 		} else if (detectedAddr === 0xc6 && detectedTuner === 'FC0013') {
 			// FC0013 — zero-IF, same demod config as FC0012
-			this.tuner = new FC0013(this.com, xtalFreq);
+			this.createFc0013(xtalFreq);
 			this.hasIfFreq = false;
 			this.conjugateIq = false;
 			await this.setGpioOutput(6);
@@ -242,6 +252,17 @@ export class RtlSdrDevice implements SdrDevice {
 		await this.tuner.setAutoGain();
 	}
 
+	private createFc0013(xtalFreq: number): void {
+		if (isNextrtl(this.dev)) {
+			this.nextrtl = new Nextrtl(this.com, xtalFreq);
+			this.tuner = this.nextrtl;
+			this.tunerName = 'nextrtl / FC0013';
+			this.gainControls.push({ name: 'L-band input', min: 0, max: 1, step: 1, default: 0, type: 'checkbox' });
+		} else {
+			this.tuner = new FC0013(this.com, xtalFreq);
+		}
+	}
+
 	private async probeTuner(
 		PHASE1_PROBES: Array<{ name: string; addr: number; checkReg: number; expectVal: number; mask?: number }>,
 		PHASE2_PROBES: Array<{ name: string; addr: number; checkReg: number; expectVal: number; mask?: number }>,
@@ -295,8 +316,11 @@ export class RtlSdrDevice implements SdrDevice {
 		await this.stopRx();
 		try {
 			await this.com.openI2C();
-			await this.tuner.close();
-			await this.com.closeI2C();
+			try {
+				await this.tuner.close();
+			} finally {
+				await this.com.closeI2C();
+			}
 		} catch (_) {
 			/* ignore */
 		}
@@ -378,8 +402,11 @@ export class RtlSdrDevice implements SdrDevice {
 					await this.setGpioBit(6, freqHz > 300000000);
 				}
 				await this.com.openI2C();
-				await this.tuner.setFrequency(freqHz);
-				await this.com.closeI2C();
+				try {
+					await this.tuner.setFrequency(freqHz);
+				} finally {
+					await this.com.closeI2C();
+				}
 			} finally {
 				this.resumeRx();
 			}
@@ -405,6 +432,14 @@ export class RtlSdrDevice implements SdrDevice {
 				}
 				if ('Bias-T' in gains) {
 					await this.setBiasTee(!!gains['Bias-T']);
+				}
+				if (this.nextrtl && 'L-band input' in gains) {
+					await this.com.openI2C();
+					try {
+						await this.nextrtl.setLbandInput(!!gains['L-band input']);
+					} finally {
+						await this.com.closeI2C();
+					}
 				}
 			} finally {
 				this.resumeRx();
@@ -435,28 +470,11 @@ export class RtlSdrDevice implements SdrDevice {
 	}
 
 	private async setGpioOutput(gpioNum: number): Promise<void> {
-		// RTL2832U SYS block GPIO registers (from librtlsdr enum sys_reg):
-		//   GPO  = 0x3001 (output value)
-		//   GPOE = 0x3003 (output enable)
-		//   GPD  = 0x3004 (direction)
-		const GPO = 0x3001;
-		const GPOE = 0x3003;
-		const GPD = 0x3004;
-		const bit = 1 << gpioNum;
-		// Match librtlsdr rtlsdr_set_gpio_output:
-		// 1. Read direction, clear bit in output (set pin low initially)
-		const gpdVal = await this.com.readReg(BLOCK.SYS, GPD, 1);
-		await this.com.writeReg(BLOCK.SYS, GPO, gpdVal & ~bit, 1);
-		// 2. Enable the pin as output via GPOE
-		const gpoeVal = await this.com.readReg(BLOCK.SYS, GPOE, 1);
-		await this.com.writeReg(BLOCK.SYS, GPOE, gpoeVal | bit, 1);
+		await this.com.setGpioOutput(gpioNum);
 	}
 
 	private async setGpioBit(gpioNum: number, on: boolean): Promise<void> {
-		const GPO = 0x3001;
-		const gpoVal = await this.com.readReg(BLOCK.SYS, GPO, 1);
-		const bit = 1 << gpioNum;
-		await this.com.writeReg(BLOCK.SYS, GPO, on ? gpoVal | bit : gpoVal & ~bit, 1);
+		await this.com.setGpioBit(gpioNum, on);
 	}
 
 	private async setBiasTee(enable: boolean): Promise<void> {

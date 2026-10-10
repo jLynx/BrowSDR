@@ -44,6 +44,7 @@ interface USBEndpoint {
 }
 
 interface USBDevice {
+	manufacturerName?: string;
 	open(): Promise<void>;
 	close(): Promise<void>;
 	selectConfiguration(configurationValue: number): Promise<void>;

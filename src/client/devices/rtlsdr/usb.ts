@@ -97,6 +97,18 @@ export class RtlCom {
 		return new Uint8Array(result.data.buffer).buffer as ArrayBuffer;
 	}
 
+	async setGpioOutput(gpio: number): Promise<void> {
+		const direction = await this.readReg(BLOCK.SYS, 0x3004, 1);
+		await this.writeReg(BLOCK.SYS, 0x3004, direction & ~(1 << gpio), 1);
+		const enabled = await this.readReg(BLOCK.SYS, 0x3003, 1);
+		await this.writeReg(BLOCK.SYS, 0x3003, enabled | (1 << gpio), 1);
+	}
+
+	async setGpioBit(gpio: number, on: boolean): Promise<void> {
+		const output = await this.readReg(BLOCK.SYS, 0x3001, 1);
+		await this.writeReg(BLOCK.SYS, 0x3001, on ? output | (1 << gpio) : output & ~(1 << gpio), 1);
+	}
+
 	private async readCtrlMsg(value: number, index: number, length: number): Promise<ArrayBuffer> {
 		const result = await this.dev.controlTransferIn(
 			{
