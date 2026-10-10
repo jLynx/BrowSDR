@@ -18,3 +18,5 @@ export { default as UiFrequencyDisplay } from './indicators/UiFrequencyDisplay';
 export { default as UiToolHeader } from './layout/UiToolHeader';
 export { default as UiEmptyState } from './feedback/UiEmptyState';
 export { default as UiNotice } from './feedback/UiNotice';
+export { default as UiIcon } from './indicators/UiIcon';
+export { default as UiMenu } from './menus/UiMenu';

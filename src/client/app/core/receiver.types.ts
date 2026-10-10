@@ -67,7 +67,6 @@ export interface ReceiverInternals {
 	_receiverTransport: ReceiverTransport | null;
 	_cleanup: Array<() => void>;
 	_canvasCleanup?: () => void;
-	_disposeHeaderTools?: () => void;
 	_disposed?: boolean;
 	_removing?: boolean;
 	_connectingDevice?: boolean;

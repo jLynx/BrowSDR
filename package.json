@@ -42,6 +42,7 @@
 	},
 	"dependencies": {
 		"@airframes/acars-decoder": "1.9.2",
+		"@lucide/vue": "^1.54.0",
 		"comlink": "^4.4.2",
 		"leaflet": "^1.9.4",
 		"peerjs": "^1.5.5",

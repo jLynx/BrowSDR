@@ -38,6 +38,6 @@ export const Sensors: Story = {
 	render: () => ({
 		components: { UiToolHeader, UiButton },
 		template:
-			'<div class="rtl433-panel"><UiToolHeader>rtl_433 Sensors <span class="pocsag-count">0 events</span><template #actions><UiButton variant="transcript">Protocols</UiButton><UiButton variant="transcript">Clear</UiButton><UiButton variant="transcript" disabled>Export JSONL</UiButton></template></UiToolHeader></div>',
+			'<div class="rtl433-panel"><UiToolHeader>Wireless Sensors <span class="pocsag-count">0 events</span><template #actions><UiButton variant="transcript">Protocols</UiButton><UiButton variant="transcript">Clear</UiButton><UiButton variant="transcript" disabled>Export JSONL</UiButton></template></UiToolHeader></div>',
 	}),
 };
