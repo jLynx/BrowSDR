@@ -153,7 +153,7 @@ export const AircraftEvent: Story = {
 		const canvas = within(canvasElement);
 		await userEvent.type(canvas.getByLabelText('Search ACARS messages'), 'Normal Landing Gear Retraction');
 		await userEvent.click(canvas.getAllByRole('button', { name: 'A6-EVQ' })[0]);
-		await expect(canvas.getByText('Related report identified · measurements undecoded', { exact: true })).toBeVisible();
+		await expect(canvas.getByText('Related report identified · application body undecoded', { exact: true })).toBeVisible();
 		await expect(canvas.getByText('Normal Landing Gear Retraction', { exact: true })).toBeVisible();
 		await expect(
 			canvas.getByText(

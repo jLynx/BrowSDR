@@ -66,10 +66,17 @@ describe('combined ACARS binary payload decoders', () => {
 		expect(field(result, 'Application CRC')).toContain('Failed');
 		expect(field(result, 'Latitude')).toBeUndefined();
 	});
-	it('rejects truncated tags, invalid coordinates and missing interval markers', () => {
+	it('rejects truncated tags and invalid coordinates', () => {
 		expect(() => decodeAdsc(hexBytes('0701'), 'downlink')).toThrow();
-		expect(() => decodeAdsc(hexBytes('07010D01'), 'uplink')).toThrow();
 		expect(() => decodeAdsc(hexBytes('077FFFF8000000000000'), 'downlink')).toThrow();
+	});
+	it('retains interval-less contract fields as partial without inventing an interval', () => {
+		const result = decodeAdsc(hexBytes('07010D01'), 'uplink');
+		expect(result.complete).toBe(false);
+		expect(field(result, 'Periodic contract')).toBe('1');
+		expect(field(result, 'Requested Predicted route')).toBe('Reporting modulus 1');
+		expect(field(result, 'Reporting interval')).toBeUndefined();
+		expect(result.notes.join(' ')).toContain('no reporting interval');
 	});
 	it('retains decoded tags before unsupported data, without inventing a length', () => {
 		const result = decodeAdsc(hexBytes('0301FF00'), 'downlink');
