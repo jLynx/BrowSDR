@@ -1,5 +1,6 @@
 import type { BleMessage } from '@/worker/decoders/ble/types';
 import type { AisMessage } from '@/worker/decoders/ais/types';
+import type { AcarsMessage } from '@/worker/decoders/acars/types';
 import type { AdsbMessage } from '@/worker/decoders/adsb/types';
 import type { WhisperChunkMeta, WhisperVfoState } from '@/app/decoders/whisper.types';
 import type { WatchOptions, WatchStopHandle } from 'vue';
@@ -193,9 +194,13 @@ export interface ReceiverMethods {
 	stopBleScan(): void;
 	clearBleDevices(): void;
 	toggleAisPanel(): void;
+	toggleAcarsPanel(): void;
 	tuneAisVfo(frequency: number, index?: number): void;
+	tuneAcarsVfo(frequency: number, index?: number): void;
 	_onAisMessage(index: number, freq: number, msg: AisMessage): void;
+	_onAcarsMessage(index: number, freq: number, msg: AcarsMessage): void;
 	aisStatusText(index: number): string;
+	acarsStatusText(index: number): string;
 	toggleAdsbPanel(): void;
 	tuneAdsbVfo(index?: number): void;
 	_onAdsbMessage(index: number, freq: number, msg: AdsbMessage): void;

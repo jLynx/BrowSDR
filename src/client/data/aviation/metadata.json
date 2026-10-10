@@ -1,0 +1,9 @@
+{
+	"source": "OurAirports",
+	"url": "https://davidmegginson.github.io/ourairports-data/airports.csv",
+	"license": "Public domain",
+	"sourceSha256": "79dd7db7228a12199839aa6acbc2dc1f1e50a4604f14d7f60dceb6983de91906",
+	"airportCount": 11764,
+	"icaoCount": 10531,
+	"iataCount": 9051
+}

@@ -9,7 +9,14 @@ export function planSharedBands(sampleRate: number, centerFreq: number, params: 
 		.map((value, index) => ({ value, index }))
 		.filter(
 			({ value }) =>
-				value.enabled || value.pocsag || value.adsb || value.ais || value.ble || value.rtl433 || (value.rds && value.mode === 'wfm'),
+				value.enabled ||
+				value.pocsag ||
+				value.adsb ||
+				value.ais ||
+				value.ble ||
+				value.acars ||
+				value.rtl433 ||
+				(value.rds && value.mode === 'wfm'),
 		);
 	const direct = active.map(({ index }) => index);
 	const fallback = { ratio: 1, sampleRate, bands: [], direct };
@@ -21,14 +28,7 @@ export function planSharedBands(sampleRate: number, centerFreq: number, params: 
 	const bands = new Map<number, SharedBand>();
 	const remaining: number[] = [];
 	for (const { value, index } of active) {
-		const width = Math.max(
-			value.bandwidth || 150000,
-			IF_RATES[value.mode] || sampleRate,
-			value.rtl433 ? rtl433SampleRate(value.rtl433SampleRate) : 0,
-			value.adsb ? 2000000 : 0,
-			value.ais ? 48000 : 0,
-			value.ble ? 2000000 : 0,
-		);
+		const width = channelWidth(value, sampleRate);
 		const offset = (value.freq - centerFreq) * 1000000 + sidebandOffsetHz(value.mode, value.bandwidth);
 		const centerBin = Math.round(offset / (bandRate / 2)) * (8192 / (ratio * 2));
 		const bandOffset = (centerBin * sampleRate) / 8192;
@@ -50,4 +50,16 @@ export function planSharedBands(sampleRate: number, centerFreq: number, params: 
 	}
 	if (active.length - remaining.length < 3) return fallback;
 	return { ratio, sampleRate: bandRate, bands: [...bands.values()], direct: remaining };
+}
+
+function channelWidth(value: VfoParams, sampleRate: number): number {
+	return Math.max(
+		value.bandwidth || 150000,
+		IF_RATES[value.mode] || sampleRate,
+		value.rtl433 ? rtl433SampleRate(value.rtl433SampleRate) : 0,
+		value.adsb ? 2000000 : 0,
+		value.ais ? 48000 : 0,
+		value.ble ? 2000000 : 0,
+		value.acars ? 48000 : 0,
+	);
 }

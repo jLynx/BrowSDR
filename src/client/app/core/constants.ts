@@ -23,6 +23,7 @@ export const makeDefaultVfo = (freq = 100.0) => ({
 	adsb: false,
 	ais: false,
 	ble: false,
+	acars: false,
 	rtl433: false,
 	rtl433SampleRate: 250000,
 	rtl433Protocols: '',

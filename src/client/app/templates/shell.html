@@ -55,6 +55,10 @@
 						<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M11 2h2v3h5v6l3 2-2 7H5l-2-7 3-2V5h5V2zm-3 5v3l4-2 4 2V7H8zm4 3-7 4 1.5 4h11l1.5-4-7-4z"/></svg>
 						<span class="tool-label">AIS Vessels</span>
 					</UiButton>
+					<UiButton variant="icon" @click="toggleAcarsPanel" :class="{ active: acars.panelOpen }" :aria-pressed="acars.panelOpen" title="ACARS Messages" aria-label="ACARS Messages">
+						<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path fill="currentColor" d="M3 4h18v14H8l-5 3V4zm2 2v11l2-1h12V6H5zm2 3h10v2H7V9zm0 4h7v2H7v-2z"/></svg>
+						<span class="tool-label">ACARS Messages</span>
+					</UiButton>
 					<UiButton variant="icon" @click="showActivity = !showActivity" :class="{ active: showActivity }" :aria-pressed="showActivity" title="Frequency Activity Tracker">
 							<svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M3.5 18.49l6-6.01 4 4L22 6.92l-1.41-1.41-7.09 7.97-4-4L2 16.99l1.5 1.5z"/></svg>
 						<span class="tool-label">Frequency Activity Tracker</span>

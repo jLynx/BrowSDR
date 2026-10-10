@@ -13,6 +13,7 @@ import type {
 	AdsbCallback,
 	AisCallback,
 	BleCallback,
+	AcarsCallback,
 	DsdCallback,
 } from '@/worker/runtime/callbacks.types';
 
@@ -59,6 +60,7 @@ export async function startRxStream(
 	adsbCallback: AdsbCallback | null = null,
 	aisCallback: AisCallback | null = null,
 	bleCallback: BleCallback | null = null,
+	acarsCallback: AcarsCallback | null = null,
 ): Promise<void> {
 	if (_streamStarting) return;
 	_streamStarting = true;
@@ -99,18 +101,21 @@ export async function startRxStream(
 			key: '',
 			perf: { calls: 0, sum: 0, max: 0 },
 		};
-		backend._disposeChannelization?.();
-		backend._disposeChannelization = () => {
-			channel.worker?.terminate();
-			channel.worker = undefined;
-			channel.pending = 0;
-		};
+		installChannelCleanup(backend, channel);
 		let lastSpectrumTime = 0;
 
 		// ── Audio DDC setup ───────────────────────────────────────────
 		// Full SDR++ pipeline in Rust: NCO → polyphase resampler (→50kHz)
 		// → channel FIR → squelch → FM demod → post-demod FIR → audio resampler (→48kHz)
-		initializeWorkers(backend, opts, { rtl433Callback, rdsCallback, dsdStatusCallback, adsbCallback, aisCallback, bleCallback });
+		initializeWorkers(backend, opts, {
+			rtl433Callback,
+			rdsCallback,
+			dsdStatusCallback,
+			adsbCallback,
+			aisCallback,
+			bleCallback,
+			acarsCallback,
+		});
 
 		// ── DSP Performance Counters ──────────────────────────────────
 		const perf = initializePerformanceReporting(backend, channel.perf, sampleRate);
@@ -265,6 +270,7 @@ function initializeWorkers(
 		adsbCallback: AdsbCallback | null;
 		aisCallback: AisCallback | null;
 		bleCallback: BleCallback | null;
+		acarsCallback: AcarsCallback | null;
 	},
 ): void {
 	initializeVfoWorkers(
@@ -277,5 +283,15 @@ function initializeWorkers(
 		callbacks.adsbCallback,
 		callbacks.aisCallback,
 		callbacks.bleCallback,
+		callbacks.acarsCallback,
 	);
+}
+
+function installChannelCleanup(backend: Backend, channel: { worker?: Worker; pending: number }): void {
+	backend._disposeChannelization?.();
+	backend._disposeChannelization = () => {
+		channel.worker?.terminate();
+		channel.worker = undefined;
+		channel.pending = 0;
+	};
 }

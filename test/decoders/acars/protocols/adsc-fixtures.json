@@ -1,0 +1,164 @@
+[
+	{
+		"kind": "message",
+		"name": "opensky_1",
+		"text": "/BDOCAYA.ADS.A7-ANR073759D0C997088B86BC1F0D377770C71C488B805B38E698AB9AC88B80A626",
+		"expect": {
+			"atsu": "BDOCAYA",
+			"registration": "A7-ANR"
+		}
+	},
+	{
+		"kind": "message",
+		"name": "opensky_2",
+		"text": "/YQXE2YA.ADS.N790AN07248C0740BE894706D11D0C041331E798200D238E3F1C71C94707C0222226E38E49470010553D3E2848F8",
+		"expect": {
+			"atsu": "YQXE2YA",
+			"registration": "N790AN"
+		}
+	},
+	{
+		"kind": "message",
+		"name": "opensky_3",
+		"text": "/PIKCPYA.ADS.PH-BKC03030724075FB30FC84C86D89F0C2CC377D778200D23E93FAAAAC84D01C0238E3F8E39084D000E5CA0E4400C104AB93E686A4F",
+		"expect": {
+			"atsu": "PIKCPYA",
+			"registration": "PH-BKC"
+		}
+	},
+	{
+		"kind": "message",
+		"name": "opensky_4",
+		"text": "/PIKCPYA.ADS.A7-BEG142AA9FFAA9A884D07CE1D0D2AAAAF8E39084D043E29F4A75555484D00F331",
+		"expect": {
+			"atsu": "PIKCPYA",
+			"registration": "A7-BEG"
+		}
+	},
+	{
+		"kind": "message",
+		"name": "opensky_5",
+		"text": "/QUKAXBA.ADS.G-XWBM071298A02EA3C98588101F82C2",
+		"expect": {
+			"atsu": "QUKAXBA",
+			"registration": "G-XWBM"
+		}
+	},
+	{
+		"kind": "message",
+		"name": "libacars_adsc_1",
+		"text": "/BOMASAI.ADS.VT-ANB072501A070A988CA73248F0E5DC10200000F5EE1ABC000102B885E0A19F5",
+		"expect": {
+			"atsu": "BOMASAI",
+			"registration": "VT-ANB"
+		}
+	},
+	{
+		"kind": "message",
+		"name": "libacars_adsc_2",
+		"text": "/AUHASMO.ADS.A6-PFE0724D9586A36C92B2DCF1F0E74A8E4807C10422E9E08A1C4",
+		"expect": {
+			"atsu": "AUHASMO",
+			"registration": "A6-PFE"
+		}
+	},
+	{
+		"kind": "message",
+		"name": "libacars_adsc_3",
+		"text": "/YQXE2YA.ADS.SP-LRH1424FD087806C0B527769F0D2500B877ED00B5401E2516707755C01340B768",
+		"expect": {
+			"atsu": "YQXE2YA",
+			"registration": "SP-LRH"
+		}
+	},
+	{
+		"kind": "tag_coverage",
+		"tag": 3,
+		"text": "/PIKCPYA.ADS.PH-BKC03030724075FB30FC84C86D89F0C2CC377D778200D23E93FAAAAC84D01C0238E3F8E39084D000E5CA0E4400C104AB93E686A4F"
+	},
+	{
+		"kind": "tag_coverage",
+		"tag": 4,
+		"text": "/ALGCAYA.ADS.ET-AWM0401069CA4"
+	},
+	{
+		"kind": "tag_coverage",
+		"tag": 5,
+		"text": "/SEZCAYA.ADS.HZ-ARC03010501010B4007F8D93908C88946C9519F0DF8E391086689470027FA7190FA510947000E6E60F30000AD7C"
+	},
+	{
+		"kind": "tag_coverage",
+		"tag": 6,
+		"text": "/PIKCPYA.ADS.G-XLEL0607253D3F652546D4CF641DEA92"
+	},
+	{
+		"kind": "tag_coverage",
+		"tag": 7,
+		"text": "/BDOCAYA.ADS.A7-ANR073759D0C997088B86BC1F0D377770C71C488B805B38E698AB9AC88B80A626"
+	},
+	{
+		"kind": "tag_coverage",
+		"tag": 9,
+		"text": "/PIKCPYA.ADS.F-HMIL092127DFDA9048CB54981F0C197274C038200E54D0D1BFE4AFA3"
+	},
+	{
+		"kind": "tag_coverage",
+		"tag": 10,
+		"text": "/SMACAYA.ADS.A6-EWA030A0A1FDEB76A800908F6551DAE22"
+	},
+	{
+		"kind": "tag_coverage",
+		"tag": 12,
+		"text": "/YQXE2YA.ADS.N790AN07248C0740BE894706D11D0C041331E798200D238E3F1C71C94707C0222226E38E49470010553D3E2848F8"
+	},
+	{
+		"kind": "tag_coverage",
+		"tag": 13,
+		"text": "/BDOCAYA.ADS.A7-ANR073759D0C997088B86BC1F0D377770C71C488B805B38E698AB9AC88B80A626"
+	},
+	{
+		"kind": "tag_coverage",
+		"tag": 14,
+		"text": "/PIKCPYA.ADS.PH-BKC03030724075FB30FC84C86D89F0C2CC377D778200D23E93FAAAAC84D01C0238E3F8E39084D000E5CA0E4400C104AB93E686A4F"
+	},
+	{
+		"kind": "tag_coverage",
+		"tag": 15,
+		"text": "/MGQCAYA.ADS.A6-BLJ0707E9392157890809021F0E0B30E940040F0CD9A280046DD7"
+	},
+	{
+		"kind": "tag_coverage",
+		"tag": 16,
+		"text": "/YQXE2YA.ADS.N790AN07248C0740BE894706D11D0C041331E798200D238E3F1C71C94707C0222226E38E49470010553D3E2848F8"
+	},
+	{
+		"kind": "tag_coverage",
+		"tag": 17,
+		"text": "/CMBCBYA.ADS.A7-ALO070CE8E980FFCA7FA44C1F0C4544B9D798201106A1030E6A510240000D0DE29171C78A7F44B80F14D95EAC0A7F401C6C"
+	},
+	{
+		"kind": "tag_coverage",
+		"tag": 18,
+		"text": "/MGQCAYA.ADS.F-HMIX1204C690FEBB48CD68F41F0E7B38FC00B4D237"
+	},
+	{
+		"kind": "tag_coverage",
+		"tag": 19,
+		"text": "/ALGCAYA.ADS.D-AIKK1310E8C01E0D49B80B201DA3DC"
+	},
+	{
+		"kind": "tag_coverage",
+		"tag": 20,
+		"text": "/PIKCPYA.ADS.A7-BEG142AA9FFAA9A884D07CE1D0D2AAAAF8E39084D043E29F4A75555484D00F331"
+	},
+	{
+		"kind": "tag_coverage",
+		"tag": 22,
+		"text": "/LADCAYA.ADS.G-XLEK07FA11D8725BC90885701D16029C3B592108496017F916407438890842580E3B5900C0000DF91B707427C908424DF6C8507BB18908407FE5"
+	},
+	{
+		"kind": "tag_coverage",
+		"tag": 23,
+		"text": "/TNRCAYA.ADS.HZ-ARC030007F98AC90273094713859F17FB77C0F103494707050E6EC8F30000101202DE6C8FAC"
+	}
+]

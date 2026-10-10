@@ -7,6 +7,7 @@ import type {
 	AdsbCallback,
 	AisCallback,
 	BleCallback,
+	AcarsCallback,
 	HostCallback,
 	HostStats,
 } from '@/worker/runtime/callbacks.types';
@@ -82,6 +83,10 @@ export function setRemoteHostAisCallback(this: Backend, callback: HostCallback<P
 	this._remoteHostAisCb = callback;
 }
 
+export function setRemoteHostAcarsCallback(this: Backend, callback: HostCallback<Parameters<AcarsCallback>>): void {
+	this._remoteHostAcarsCb = callback;
+}
+
 export function setRemoteHostAdsbCallback(this: Backend, callback: HostCallback<Parameters<AdsbCallback>>): void {
 	this._remoteHostAdsbCb = callback;
 }
@@ -153,18 +158,7 @@ function bindRemoteWorker(backend: Backend, clientId: string, state: RemoteClien
 		const index = state.workers.indexOf(worker);
 		if (index === -1) return;
 		const msg = e.data;
-		if (msg.type === 'ble') {
-			forwardBle(backend, clientId, state, index, msg);
-			return;
-		}
-		if (msg.type === 'ais') {
-			forwardAis(backend, clientId, state, index, msg);
-			return;
-		}
-		if (msg.type === 'adsb') {
-			forwardAdsb(backend, clientId, state, index, msg);
-			return;
-		}
+		if (forwardPacketMessage(backend, clientId, state, index, msg)) return;
 		if (msg.type === 'rtl433_event' || msg.type === 'rtl433_status') {
 			const params = state.params[index];
 			if (params && params.freq === msg.freq && (msg.type === 'rtl433_status' || params.rtl433)) {
@@ -459,4 +453,35 @@ function forwardBle(
 ): void {
 	const params = state.params[index];
 	if (params?.ble && params.freq === message.freq) backend._remoteHostBleCb?.(clientId, index, params.freq, message);
+}
+
+function forwardAcars(
+	backend: Backend,
+	clientId: string,
+	state: RemoteClientState,
+	index: number,
+	message: Extract<DspOutput, { type: 'acars' }>,
+): void {
+	const params = state.params[index];
+	if (params?.acars && params.freq === message.freq) backend._remoteHostAcarsCb?.(clientId, index, params.freq, message);
+}
+
+function forwardPacketMessage(backend: Backend, clientId: string, state: RemoteClientState, index: number, msg: DspOutput): boolean {
+	if (msg.type === 'ble') {
+		forwardBle(backend, clientId, state, index, msg);
+		return true;
+	}
+	if (msg.type === 'acars') {
+		forwardAcars(backend, clientId, state, index, msg);
+		return true;
+	}
+	if (msg.type === 'ais') {
+		forwardAis(backend, clientId, state, index, msg);
+		return true;
+	}
+	if (msg.type === 'adsb') {
+		forwardAdsb(backend, clientId, state, index, msg);
+		return true;
+	}
+	return false;
 }

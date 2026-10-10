@@ -1,0 +1,137 @@
+<section v-if="receiver.acars.panelOpen" class="adsb-panel acars-panel" aria-label="ACARS messages">
+	<UiToolHeader variant="pocsag" closable close-label="Close ACARS panel" @close="receiver.toggleAcarsPanel">
+		ACARS Messages <span class="pocsag-count">{{ messages.length }} messages</span>
+		<template #actions>
+			<UiSelect v-model.number="receiver.activeVfoIndex" aria-label="ACARS VFO" class="decoder-vfo-select">
+				<option v-for="(vfo, i) in receiver.vfos" :key="i" :value="i">VFO {{ i + 1 }} · {{ vfo.freq.toFixed(3) }} MHz</option>
+			</UiSelect>
+			<UiCheckbox
+				v-if="selectedVfo"
+				class="adsb-decode-control"
+				v-model="selectedVfo.acars"
+				:label="'Decode VFO ' + (receiver.activeVfoIndex + 1)"
+				:input-label="'ACARS decoding for VFO ' + (receiver.activeVfoIndex + 1)"
+				:disabled="!isAcarsFrequency(selectedVfo.freq) && !selectedVfo.acars"
+				@change="receiver.updateBackendVfoParams(receiver.activeVfoIndex)"
+			/>
+			<UiSelect v-model.number="channel" aria-label="ACARS channel">
+				<option v-for="frequency in channels" :key="frequency" :value="frequency">{{ frequency.toFixed(3) }} MHz</option>
+			</UiSelect>
+			<UiButton variant="transcript" @click="receiver.tuneAcarsVfo(channel)">Tune ACARS channel</UiButton>
+			<UiButton
+				variant="transcript"
+				@click="exportMessages"
+				:disabled="!retainedCount"
+				title="Download all retained ACARS blocks, envelopes and interpretations as JSON"
+				>Export all JSON</UiButton
+			>
+		</template>
+	</UiToolHeader>
+	<div class="adsb-summary">
+		<span v-if="!receiver.running">Reception stopped</span>
+		<template v-for="(vfo, i) in receiver.vfos" :key="i">
+			<span v-if="vfo.acars" :class="{ 'rtl433-error': receiver.acars.status[i]?.state === 'error' }"
+				>VFO {{ i + 1 }} · {{ receiver.acarsStatusText(i) }}</span
+			>
+		</template>
+		<span v-if="!active">Tune a VFO to a local VHF ACARS channel, then enable decoding. Audio can stay muted.</span>
+	</div>
+	<div class="adsb-content adsb-list-only">
+		<div class="adsb-list">
+			<div v-if="selectedMessage" class="adsb-details" aria-label="ACARS message details">
+				<div class="adsb-details-heading">
+					<UiButton variant="transcript" @click="selected = ''">Back to messages</UiButton>
+					<strong>{{ selectedMessage.registration }} · {{ selectedMessage.flight || 'Unknown flight' }}</strong>
+				</div>
+				<div class="acars-interpretation" aria-label="Message interpretation">
+					<strong>{{ selectedMessage.interpretation.title }}</strong>
+					<small class="acars-coverage">{{ coverageText(selectedMessage.interpretation) }}</small>
+					<p>{{ selectedMessage.interpretation.summary }}</p>
+					<dl v-if="selectedMessage.interpretation.fields.length" class="adsb-detail-grid">
+						<div v-for="(field, index) in selectedMessage.interpretation.fields" :key="index">
+							<dt>{{ field.label }}</dt>
+							<dd>{{ field.value }}</dd>
+						</div>
+					</dl>
+					<p v-for="note in selectedMessage.interpretation.notes" :key="note" class="adsb-detail-note">{{ note }}</p>
+				</div>
+				<strong>ACARS envelope</strong>
+				<dl class="adsb-detail-grid">
+					<div>
+						<dt>Received</dt>
+						<dd>{{ time(selectedMessage.receivedAt) }}</dd>
+					</div>
+					<div>
+						<dt>Channel</dt>
+						<dd>VFO {{ selectedMessage.vfoIndex + 1 }} · {{ selectedMessage.frequency.toFixed(3) }} MHz</dd>
+					</div>
+					<div>
+						<dt>Direction</dt>
+						<dd>{{ selectedMessage.direction === 'downlink' ? 'Aircraft to ground' : 'Ground to aircraft' }}</dd>
+					</div>
+					<div>
+						<dt>Label</dt>
+						<dd>{{ selectedMessage.label }}</dd>
+					</div>
+					<div>
+						<dt>Mode / block</dt>
+						<dd>{{ selectedMessage.mode }} / {{ selectedMessage.blockId }}</dd>
+					</div>
+					<div>
+						<dt>Acknowledgement</dt>
+						<dd>{{ selectedMessage.acknowledgement }}</dd>
+					</div>
+					<div>
+						<dt>Message number</dt>
+						<dd>{{ selectedMessage.messageNumber || '—' }}</dd>
+					</div>
+					<div>
+						<dt>Block ending</dt>
+						<dd>{{ selectedMessage.continuation ? 'Continued (ETB)' : 'Final (ETX)' }}</dd>
+					</div>
+				</dl>
+				<strong>Raw message</strong>
+				<pre class="acars-message-text">{{ selectedMessage.text || '(No message text)' }}</pre>
+				<template v-if="selectedMessage.assembledText">
+					<strong>Reassembled message</strong>
+					<pre class="acars-message-text">{{ selectedMessage.assembledText }}</pre>
+				</template>
+			</div>
+			<template v-else>
+				<UiInputGroup class="adsb-search"
+					><UiInput v-model="query" aria-label="Search ACARS messages" placeholder="Search aircraft, flight, message or decoded fields"
+				/></UiInputGroup>
+				<div v-if="filtered.length" class="adsb-table-wrap">
+					<table class="adsb-table">
+						<thead>
+							<tr>
+								<th>Aircraft</th>
+								<th>Flight</th>
+								<th>Label</th>
+								<th>Received / channel</th>
+								<th>Message</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr v-for="message in filtered" :key="message.key">
+								<td><UiButton variant="transcript" @click="selected = message.key">{{ message.registration }}</UiButton></td>
+								<td>{{ message.flight || '—' }}</td>
+								<td>{{ message.label }}</td>
+								<td>
+									{{ time(message.receivedAt) }}<small>VFO {{ message.vfoIndex + 1 }} · {{ message.frequency.toFixed(3) }} MHz</small>
+								</td>
+								<td class="acars-preview">
+									<strong>{{ message.interpretation.title }}</strong>
+									<span>{{ message.interpretation.summary }}</span>
+									<small class="acars-raw-preview">{{ message.text || '(No message text)' }}</small>
+								</td>
+							</tr>
+						</tbody>
+					</table>
+				</div>
+				<p v-else class="adsb-detail-note">{{ messages.length ? 'No matching messages.' : 'Waiting for valid ACARS messages…' }}</p>
+			</template>
+		</div>
+	</div>
+	<div class="adsb-footer">VHF ACARS · Latest 200 blocks · CRC and odd parity checked. Complete consecutive messages are reassembled.</div>
+</section>

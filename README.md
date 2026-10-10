@@ -32,6 +32,9 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
 - **🔵 BLE Devices**
   Passively discover nearby BLE advertisements with channel scanning, advertised
   names, service UUIDs and a live device list.
+- **✉️ ACARS Aircraft Messages**
+  Decode VHF aircraft operational messages with registration, flight, label and
+  searchable text.
 - **📊 Frequency Activity**
   Visually spot active signals and quickly jump to transmissions using the dynamic frequency activity scanner and interactive waterfall display.
 - **🔖 Advanced Bookmarking System**
@@ -55,8 +58,8 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
 
 ## 🗓️ Planned Features
 
-See the [feature roadmap](docs/roadmap.md) for requested radiosonde, ACARS and APRS
-support, alongside completed AIS, ADS-B and initial BLE features.
+See the [feature roadmap](docs/roadmap.md) for requested radiosonde and APRS
+support, alongside completed ACARS, AIS, ADS-B and initial BLE features.
 
 ---
 

@@ -1,5 +1,7 @@
 import BlePanel from '@/app/decoders/ble/panel';
 import { bleMethods } from '@/app/decoders/ble/controller';
+import AcarsPanel from '@/app/decoders/acars/panel';
+import { acarsMethods } from '@/app/decoders/acars';
 import AisPanel from '@/app/decoders/ais/panel';
 import { aisMethods } from '@/app/decoders/ais';
 import { isRecord } from '@/platform/data';
@@ -42,7 +44,7 @@ if ('serviceWorker' in navigator) {
 
 const Receiver = {
 	template: receiverTemplate,
-	components: { ...uiComponents, VfoPanel, AdsbPanel, AisPanel, BlePanel },
+	components: { ...uiComponents, VfoPanel, AdsbPanel, AisPanel, BlePanel, AcarsPanel },
 	provide(this: AppInstance) {
 		return { receiver: this };
 	},
@@ -70,6 +72,7 @@ const Receiver = {
 		...adsbMethods,
 		...aisMethods,
 		...bleMethods,
+		...acarsMethods,
 	},
 	created: async function (this: AppInstance) {
 		this._cleanup = [];
