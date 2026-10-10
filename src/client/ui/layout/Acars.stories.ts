@@ -157,7 +157,7 @@ export const AircraftEvent: Story = {
 		await expect(canvas.getByText('Normal Landing Gear Retraction', { exact: true })).toBeVisible();
 		await expect(
 			canvas.getByText(
-				'Report context comes from separately received block U62A, matched by aircraft, VFO and message number within two minutes.',
+				'Report context comes from separately received block U62A, matched by aircraft, source and message number within two minutes.',
 				{ exact: true },
 			),
 		).toBeVisible();
