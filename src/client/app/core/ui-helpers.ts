@@ -71,28 +71,23 @@ export const uiHelperMethods = {
 	focusVfoFreq(this: AppInstance, index: number) {
 		this.vfos[index].focused = true;
 	},
+	scrollSelectedVfoIntoView(this: AppInstance) {
+		const container = this.$refs.headerVfos;
+		const tab = container?.querySelectorAll<HTMLElement>('.vfo-display')[this.activeVfoIndex];
+		if (!container || !tab || !container.clientWidth) return;
+
+		const containerLeft = container.getBoundingClientRect().left + container.clientLeft;
+		const tabBounds = tab.getBoundingClientRect();
+		const leftOverflow = tabBounds.left - containerLeft;
+		const rightOverflow = tabBounds.right - containerLeft - container.clientWidth;
+		if (leftOverflow < 0 || tabBounds.width > container.clientWidth) {
+			container.scrollTo({ left: container.scrollLeft + leftOverflow - 8, behavior: 'smooth' });
+		} else if (rightOverflow > 0) {
+			container.scrollTo({ left: container.scrollLeft + rightOverflow + 8, behavior: 'smooth' });
+		}
+	},
 	focusActivityVfo(this: AppInstance, index: number) {
 		this.activeVfoIndex = index;
-
-		// Scroll the VFO tab into view within the top-bar (overflow-x: auto container)
-		Promise.resolve(
-			this.$nextTick(() => {
-				const container = this.$el.querySelector('.vfo-displays');
-				const tabs = this.$el.querySelectorAll('.vfo-display');
-				if (container && tabs[index]) {
-					const tab = tabs[index] as HTMLElement;
-					const containerLeft = container.scrollLeft;
-					const containerRight = containerLeft + container.clientWidth;
-					const tabLeft = tab.offsetLeft;
-					const tabRight = tabLeft + tab.offsetWidth;
-					if (tabLeft < containerLeft) {
-						container.scrollTo({ left: tabLeft - 8, behavior: 'smooth' });
-					} else if (tabRight > containerRight) {
-						container.scrollTo({ left: tabRight - container.clientWidth + 8, behavior: 'smooth' });
-					}
-				}
-			}),
-		).catch((error: unknown) => console.error(error));
 
 		// Pan (and optionally zoom) the waterfall to centre on the VFO's frequency
 		const vfo = this.vfos[index];
@@ -207,3 +202,13 @@ export const uiHelperMethods = {
 		return el;
 	},
 };
+
+export function watchVfoSelection(this: AppInstance) {
+	// Measure after Vue updates the header, including newly added VFOs.
+	this.$watch(
+		() => [this.activeVfoIndex, this.vfos.length],
+		() => this.scrollSelectedVfoIntoView(),
+		{ flush: 'post' },
+	);
+	this.scrollSelectedVfoIntoView();
+}

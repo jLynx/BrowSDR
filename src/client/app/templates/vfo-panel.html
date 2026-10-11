@@ -1,5 +1,5 @@
 <div class="panel" :class="{ disabled: !receiver.connected, 'panel-oob': !receiver.isFreqInBandwidth(vfo.freq) }">
-	<UiPanelHeader style="display: flex; justify-content: space-between; align-items: center;" @toggle="receiver.togglePanel('vfo-' + i)" :collapsed="receiver.collapsedPanels['vfo-' + i]" :show-chevron="false">
+	<UiPanelHeader style="display: flex; justify-content: space-between; align-items: center;" @toggle="receiver.activeVfoIndex = i; receiver.togglePanel('vfo-' + i)" :collapsed="receiver.collapsedPanels['vfo-' + i]" :show-chevron="false">
 		<div style="display: flex; align-items: center; gap: 6px;">
 			<span class="vfo-dot" :style="{ background: receiver.vfoColor(i) }"></span>
 			VFO {{ i + 1 }}

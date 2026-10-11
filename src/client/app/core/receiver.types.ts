@@ -94,6 +94,7 @@ export interface ReceiverMethods {
 	vfoTint(index: number): string;
 	vfoBookmarkLabel(i: number): string | null;
 	focusVfoFreq(index: number): void;
+	scrollSelectedVfoIntoView(): void;
 	focusActivityVfo(index: number): void;
 	labelFreq(percent: number): string;
 	showMsg(msg: string): void;

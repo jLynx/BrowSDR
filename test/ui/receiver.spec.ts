@@ -16,6 +16,41 @@ afterEach(() => {
 });
 
 describe('receiver uses the shared UI', () => {
+	it('reveals selected header VFOs without moving the page or scrolling visible tabs', async () => {
+		wrapper = mount(ReceiverView);
+		await wrapper.setData({ connected: true, vfos: Array.from({ length: 10 }, (_, i) => makeDefaultVfo(130 + i)) });
+		const strip = wrapper.get('.vfo-displays').element as HTMLElement;
+		const tabs = wrapper.findAll('.vfo-display');
+		Object.defineProperties(strip, {
+			clientWidth: { value: 400 },
+			scrollLeft: { writable: true, value: 0 },
+		});
+		vi.spyOn(strip, 'getBoundingClientRect').mockReturnValue({ left: 100 } as DOMRect);
+		for (const [i, tab] of tabs.entries()) {
+			vi.spyOn(tab.element, 'getBoundingClientRect').mockImplementation(() => {
+				const left = 100 + i * 200 - strip.scrollLeft;
+				return { left, right: left + 200, width: 200 } as DOMRect;
+			});
+		}
+		const scroll = vi.fn(({ left }: ScrollToOptions) => {
+			strip.scrollLeft = Math.max(0, left ?? 0);
+		});
+		strip.scrollTo = scroll;
+		const pageScroll = vi.spyOn(window, 'scrollTo');
+		const panels = wrapper.findAllComponents(VfoPanel);
+		await panels[9].get('[role=button]').trigger('click');
+		expect(wrapper.vm.activeVfoIndex).toBe(9);
+		expect(tabs[9].element.getBoundingClientRect().right).toBeLessThanOrEqual(500);
+		expect(scroll).toHaveBeenLastCalledWith({ left: 1608, behavior: 'smooth' });
+
+		await panels[0].get('[role=button]').trigger('keydown', { key: 'Enter' });
+		expect(wrapper.vm.activeVfoIndex).toBe(0);
+		expect(tabs[0].element.getBoundingClientRect().left).toBeGreaterThanOrEqual(100);
+		scroll.mockClear();
+		await wrapper.setData({ activeVfoIndex: 1 });
+		expect(scroll).not.toHaveBeenCalled();
+		expect(pageScroll).not.toHaveBeenCalled();
+	});
 	it('keeps the saved waterfall mode control under collapsed Display Advanced', async () => {
 		wrapper = mount(ReceiverView);
 		const advanced = wrapper.find('#test-receiver-display-panel .radio-advanced');

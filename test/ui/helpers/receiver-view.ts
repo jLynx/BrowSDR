@@ -13,7 +13,7 @@ import ContrastControls from '@/app/display/contrast-controls';
 import * as components from '@/ui';
 import { createAppData } from '@/app/core/state';
 import { computedProperties } from '@/app/core/computed';
-import { uiHelperMethods } from '@/app/core/ui-helpers';
+import { uiHelperMethods, watchVfoSelection } from '@/app/core/ui-helpers';
 import { autoGainMethods } from '@/app/radio/auto-gain';
 import { rdsMethods } from '@/app/decoders/rds';
 import AdsbPanel from '@/app/decoders/adsb/panel';
@@ -37,6 +37,9 @@ export const ReceiverView = defineComponent({
 	},
 	data: () => ({ ...createAppData(), receiverId: 'test-receiver', workspace: null }),
 	computed: computedProperties,
+	mounted() {
+		watchVfoSelection.call(this);
+	},
 	methods: {
 		...uiHelperMethods,
 		...autoGainMethods,

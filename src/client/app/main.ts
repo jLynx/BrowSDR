@@ -18,7 +18,7 @@ import { createWorkspace } from './workspace/workspace';
 import * as Comlink from 'comlink';
 import { createAppData } from './core/state';
 import { computedProperties } from './core/computed';
-import { uiHelperMethods } from './core/ui-helpers';
+import { uiHelperMethods, watchVfoSelection } from './core/ui-helpers';
 import { connectionMethods } from './radio/connection';
 import { canvasMethods, mountCanvas } from './display/canvas';
 import { audioMethods } from './audio/audio';
@@ -126,6 +126,7 @@ const Receiver = {
 	},
 	mounted(this: AppInstance) {
 		mountCanvas.call(this);
+		watchVfoSelection.call(this);
 	},
 	beforeUnmount(this: AppInstance) {
 		this.stopBleScan();
