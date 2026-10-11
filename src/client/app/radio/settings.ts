@@ -12,6 +12,7 @@ export const settingsMethods = {
 			radio: this.radio,
 			display: this.display,
 			gains: Object.fromEntries(Object.entries(this.gains || {}).filter(([name]) => name !== 'Receive Mode')),
+			gainDeviceType: this.gainDeviceType,
 			locks: this.locks,
 			vfos: this.vfos,
 			view: this.view,
@@ -42,6 +43,7 @@ export const settingsMethods = {
 					}
 				}
 				restoreDisplaySettings.call(this, setting);
+				if (typeof setting.gainDeviceType === 'string') this.gainDeviceType = setting.gainDeviceType;
 				if (primitiveMap<number>(setting.gains, 'number')) {
 					Object.assign(this.gains, setting.gains);
 					// Diagnostic reception is temporary and must never survive a reload.

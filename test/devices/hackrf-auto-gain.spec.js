@@ -223,3 +223,25 @@ describe('HackRF one-shot automatic gain lifecycle', () => {
 		expect(app.backend.setGains).toHaveBeenCalledOnce();
 	});
 });
+
+describe('HackRF gain preferences', () => {
+	it('redistributes settled levels for sensitivity and strong signals', () => {
+		const starting = { LNA: 16, VGA: 16, 'Amp (14dB)': 0 };
+		const weak = nextHackRFGain(starting, level(-20, -8), 'sensitivity');
+		expect(weak.gains['Amp (14dB)']).toBe(1);
+		expect(weak.gains.LNA).toBeGreaterThan(weak.gains.VGA);
+		expect(hackrfGainTotal(weak.gains)).toBe(32);
+		expect(weak.done).toBe(false);
+		const strong = nextHackRFGain(weak.gains, level(-28, -14), 'strong');
+		expect(strong.gains['Amp (14dB)']).toBe(0);
+		expect(strong.gains.LNA).toBeLessThan(strong.gains.VGA);
+		expect(hackrfGainTotal(strong.gains)).toBe(32);
+	});
+	it('retains clipping protection in sensitivity mode and can inhibit amp retries', () => {
+		const starting = { LNA: 32, VGA: 40, 'Amp (14dB)': 1 };
+		const overloaded = nextHackRFGain(starting, level(-12, -1, 0.01), 'sensitivity');
+		expect(overloaded.gains['Amp (14dB)']).toBe(0);
+		expect(hackrfGainTotal(overloaded.gains)).toBeLessThan(hackrfGainTotal(starting));
+		expect(nextHackRFGain(overloaded.gains, level(-40, -20), 'sensitivity', false).gains['Amp (14dB)']).toBe(0);
+	});
+});

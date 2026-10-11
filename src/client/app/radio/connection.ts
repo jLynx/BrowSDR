@@ -1,4 +1,5 @@
 import { markRaw } from 'vue';
+import { restoreDeviceGains } from './gain-settings';
 import type { PairedSdr } from './types';
 import { errorMessage, errorName } from '@/platform/errors';
 import type { AppInstance } from '@/app/core/receiver.types';
@@ -87,20 +88,9 @@ export const connectionMethods = {
 				const caps = await this.backend.getDeviceCapabilities();
 				this.deviceCapabilities = caps;
 				if (caps) {
-					// Initialize gains from device defaults
-					const newGains: Record<string, number> = {};
-					for (const gc of caps.gainControls) {
-						const saved = this.gains[gc.name];
-						newGains[gc.name] =
-							caps.deviceType === 'limesdr' &&
-							(gc.name === 'Antenna' || gc.name === 'RX Channel' || gc.name === 'USB Format') &&
-							Number.isInteger(saved) &&
-							saved >= gc.min &&
-							saved <= gc.max
-								? saved
-								: gc.default;
-					}
-					this.gains = newGains;
+					const saved = !this.gainDeviceType || this.gainDeviceType === caps.deviceType ? this.gains : {};
+					this.gains = restoreDeviceGains(caps, saved);
+					this.gainDeviceType = caps.deviceType;
 
 					// If current sample rate isn't in the device's supported list, pick the closest
 					if (!caps.sampleRates.includes(this.radio.sampleRate)) {
@@ -138,11 +128,9 @@ export const connectionMethods = {
 				const caps = await this.backend.getDeviceCapabilities();
 				this.deviceCapabilities = caps;
 				if (caps) {
-					const newGains: Record<string, number> = {};
-					for (const gc of caps.gainControls) {
-						newGains[gc.name] = gc.default;
-					}
-					this.gains = newGains;
+					const saved = this.gainDeviceType === caps.deviceType ? this.gains : {};
+					this.gains = restoreDeviceGains(caps, saved);
+					this.gainDeviceType = caps.deviceType;
 				}
 
 				this.showMsg('Connected to Mock SDR');
@@ -273,7 +261,7 @@ export const connectionMethods = {
 			await this.startStream(isRestart);
 		}
 	},
-	async startStream(this: AppInstance, isRestart = false) {
+	async startStream(this: AppInstance, _isRestart = false) {
 		if (this.running) return;
 		clearDecoderSources(this);
 		const usbOnly = isUsbOnlyDiagnostic(this);
@@ -381,11 +369,7 @@ export const connectionMethods = {
 			}
 		}
 
-		// Enable first VFO by default only on initial start (not restart).
-		// During a restart (e.g. center freq change), preserve existing mute states.
-		if (!isRestart) {
-			this.vfos[0].enabled = true;
-		}
+		// Starting reception preserves the user's saved mute states.
 		this.toggleVfoCheckbox(0);
 
 		// Send all VFO params to worker (or host in client mode)

@@ -11,6 +11,7 @@ import { createApp, markRaw } from 'vue';
 import receiverTemplate from './templates/receiver';
 import VfoPanel from './radio/vfo-panel';
 import RxLevel from './radio/rx-level';
+import GainReset from './radio/gain-settings';
 import ContrastControls from './display/contrast-controls';
 import { watchContrast } from './display/contrast';
 import { createWorkspace } from './workspace/workspace';
@@ -47,7 +48,7 @@ if ('serviceWorker' in navigator) {
 
 const Receiver = {
 	template: receiverTemplate,
-	components: { ...uiComponents, VfoPanel, RxLevel, ContrastControls, AdsbPanel, AisPanel, BlePanel, AcarsPanel, HeaderTools },
+	components: { ...uiComponents, VfoPanel, RxLevel, GainReset, ContrastControls, AdsbPanel, AisPanel, BlePanel, AcarsPanel, HeaderTools },
 	provide(this: AppInstance) {
 		return { receiver: this };
 	},

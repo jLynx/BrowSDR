@@ -119,3 +119,11 @@ where applicable. Use a story `play` function for meaningful user interactions,
 and add component tests when state/event contracts need protection. Compare
 desktop and mobile output whenever changing markup or styles; existing styling
 is the reference appearance.
+
+`UiMenu` also supports a split action through `primaryLabel` and the `primary`
+event. The primary button runs the caller's default action; the chevron opens a
+single-column list of alternative actions. `label` names the disclosure for
+assistive technology. `disabled` disables both triggers and the listed actions.
+See **UI / Menu / Split Action** and **Split Disabled**. Auto set gains uses this
+variant: the main button always runs Balanced, while menu choices run once and
+do not change the main button's default.

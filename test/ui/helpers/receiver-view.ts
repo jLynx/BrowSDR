@@ -8,6 +8,7 @@ import { defineComponent } from 'vue';
 import template from '@/app/templates/receiver';
 import VfoPanel from '@/app/radio/vfo-panel';
 import RxLevel from '@/app/radio/rx-level';
+import GainReset from '@/app/radio/gain-settings';
 import ContrastControls from '@/app/display/contrast-controls';
 import * as components from '@/ui';
 import { createAppData } from '@/app/core/state';
@@ -30,7 +31,7 @@ import HeaderTools from '@/app/workspace/receiver-tools';
 
 export const ReceiverView = defineComponent({
 	template,
-	components: { ...components, VfoPanel, RxLevel, ContrastControls, AdsbPanel, AisPanel, BlePanel, AcarsPanel, HeaderTools },
+	components: { ...components, VfoPanel, RxLevel, GainReset, ContrastControls, AdsbPanel, AisPanel, BlePanel, AcarsPanel, HeaderTools },
 	provide() {
 		return { receiver: this };
 	},

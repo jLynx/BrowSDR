@@ -1,3 +1,5 @@
+import type { AutoGainMode } from '@/radio/types';
+import type { UiMenuGroup } from '@/ui/menus/types';
 import type { BleMessage } from '@/worker/decoders/ble/types';
 import type { AisMessage } from '@/worker/decoders/ais/types';
 import type { AcarsMessage } from '@/worker/decoders/acars/types';
@@ -185,7 +187,8 @@ export interface ReceiverMethods {
 	autoGainSupported(): boolean;
 	autoGainControls(): string;
 	cancelAutoGain(): void;
-	autoSetGains(): Promise<void>;
+	autoGainOptions(): UiMenuGroup[];
+	autoSetGains(mode?: AutoGainMode): Promise<void>;
 	toggleBlePanel(): void;
 	_onBleMessage(index: number, freq: number, msg: BleMessage): void;
 	tuneBleChannel(channel: number, index?: number): Promise<boolean>;

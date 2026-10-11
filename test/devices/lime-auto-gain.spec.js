@@ -143,3 +143,21 @@ describe('one-shot gain adjustment lifecycle', () => {
 		expect(app.backend.setGains).toHaveBeenCalledOnce();
 	});
 });
+
+it('keeps all LimeSDR preferences within hardware limits and preserves requested total gain', () => {
+	for (const mode of ['balanced', 'sensitivity', 'strong']) {
+		for (let total = -12; total <= 61; total++) {
+			const gains = limeGainProfile(total, mode);
+			expect(limeGainTotal(gains)).toBe(total);
+			expect(gains.LNA).toBeGreaterThanOrEqual(0);
+			expect(gains.LNA).toBeLessThanOrEqual(30);
+			expect(gains.TIA).toBeGreaterThanOrEqual(0);
+			expect(gains.TIA).toBeLessThanOrEqual(2);
+			expect(gains.PGA).toBeGreaterThanOrEqual(0);
+			expect(gains.PGA).toBeLessThanOrEqual(31);
+		}
+	}
+	expect(limeGainProfile(20, 'sensitivity').LNA).toBeGreaterThan(limeGainProfile(20).LNA);
+	expect(limeGainProfile(20, 'strong').LNA).toBeLessThan(limeGainProfile(20).LNA);
+	expect(nextLimeGain(starting, level(-28, -14), 'strong').done).toBe(false);
+});
