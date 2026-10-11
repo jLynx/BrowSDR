@@ -1,6 +1,7 @@
 import type { AppInstance } from '@/app/core/receiver.types';
 import { VFO_COLORS } from '@/app/core/constants';
-import { Waterfall, WaterfallGL } from '@/display/utils';
+import { WaterfallGL } from '@/display/utils';
+import { HighResolutionWaterfall } from '@/display/waterfall-gl';
 import { SpectrumFrameLimiter, WaterfallClock } from '@/display/spectrum-rate';
 import { sidebandOffsetHz } from '@/worker/decoders/ssb';
 import { updateContrast } from './contrast';
@@ -10,14 +11,20 @@ export const canvasMethods = {
 		const { fftSize } = this.radio;
 		const { waterfall } = this.$refs;
 
-		const renderSize = Math.min(fftSize, 8192);
-		this.renderSize = renderSize;
-		const nx = Math.pow(2, Math.ceil(Math.log2(renderSize)));
-		const useWebGL = nx <= 16384;
 		this._waterfallEngine?.destroy?.();
-
-		// Attach non-reactively to prevent Vue DevTools from deep-inspecting rendering engine objects and freezing
-		this._waterfallEngine = useWebGL ? new WaterfallGL(waterfall, renderSize, 512) : new Waterfall(waterfall, renderSize, 512);
+		this.renderSize = Math.min(fftSize, 8192);
+		if (this.display.highResolutionWaterfall) {
+			try {
+				this._waterfallEngine = new HighResolutionWaterfall(waterfall, fftSize, 512);
+				this.renderSize = fftSize;
+			} catch (error) {
+				console.warn('High-resolution waterfall unavailable; using the standard renderer', error);
+				this.showMsg('High-resolution waterfall unavailable on this device. Using the standard waterfall.');
+				this._waterfallEngine = new WaterfallGL(waterfall, this.renderSize, 512);
+			}
+		} else {
+			this._waterfallEngine = new WaterfallGL(waterfall, this.renderSize, 512);
+		}
 
 		this._waterfallEngine.setRange(this.display.minDB, this.display.maxDB);
 		this._lastSpectrumData = undefined;
@@ -43,6 +50,7 @@ export const canvasMethods = {
 		if (!context) return;
 		this._fftCtx = context;
 		this._fftCtx.scale(dpr, dpr);
+		if (this._waterfallEngine instanceof HighResolutionWaterfall) this._waterfallEngine.render();
 
 		// Redraw spectrum with last frame data if available
 		if (this._lastSpectrumData) {

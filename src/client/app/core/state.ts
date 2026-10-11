@@ -46,6 +46,7 @@ export function createAppData() {
 		},
 		display: {
 			spectrumFps: 20,
+			highResolutionWaterfall: true,
 			sharedChannelization: true,
 			...DEFAULT_SPECTRUM_RANGE,
 		},

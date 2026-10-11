@@ -16,6 +16,21 @@ afterEach(() => {
 });
 
 describe('receiver uses the shared UI', () => {
+	it('keeps the saved waterfall mode control under collapsed Display Advanced', async () => {
+		wrapper = mount(ReceiverView);
+		const advanced = wrapper.find('#test-receiver-display-panel .radio-advanced');
+		const checkbox = advanced
+			.findAll('label')
+			.find((label) => label.text() === 'High-resolution waterfall')!
+			.get('input');
+		expect(advanced.exists()).toBe(true);
+		expect(checkbox.exists()).toBe(true);
+		expect(advanced.get('.panel-body').isVisible()).toBe(false);
+		expect(wrapper.vm.display.highResolutionWaterfall).toBe(true);
+		await wrapper.setData({ displayAdvanced: true });
+		await checkbox.setValue(false);
+		expect(wrapper.vm.display.highResolutionWaterfall).toBe(false);
+	});
 	it('shows source loss separately from DSP drops and playback gaps', async () => {
 		wrapper = mount(ReceiverView);
 		await wrapper.setData({

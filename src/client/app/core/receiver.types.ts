@@ -10,6 +10,7 @@ import type { Remote } from 'comlink';
 import type { Backend } from '@/worker/runtime/backend';
 import type { createAppData } from './state';
 import type { Waterfall, WaterfallGL } from '@/display/utils';
+import type { HighResolutionWaterfall } from '@/display/waterfall-gl';
 import type { SpectrumFrameLimiter, WaterfallClock } from '@/display/spectrum-rate';
 import type { WebRTCHandler } from '@/remote/webrtc';
 import type { ReceiverTransport } from '@/remote/receiver-transport';
@@ -46,7 +47,7 @@ export interface ReceiverInternals {
 	_audioPlaybackPaused?: boolean;
 	renderSize: number;
 	_fftCtx: CanvasRenderingContext2D;
-	_waterfallEngine: (Waterfall | WaterfallGL) & { destroy?: () => void };
+	_waterfallEngine: (Waterfall | WaterfallGL | HighResolutionWaterfall) & { destroy?: () => void };
 	_waterfallClock: WaterfallClock;
 	_remoteSpectrumLimiter: SpectrumFrameLimiter;
 	_lastSpectrumData?: Float32Array;

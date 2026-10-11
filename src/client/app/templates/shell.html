@@ -235,6 +235,9 @@
 					</UiFormRow>
 					<UiPanel label="Advanced" class="radio-advanced" :collapsed="!displayAdvanced" @update:collapsed="displayAdvanced = !$event">
 						<UiFormRow class="full-checkbox-row">
+							<UiCheckbox v-model="display.highResolutionWaterfall" label="High-resolution waterfall" title="Preserve all FFT bins for detailed zooming. Turn off to reduce GPU memory and processing on low-power devices. Switching clears waterfall history."></UiCheckbox>
+						</UiFormRow>
+						<UiFormRow class="full-checkbox-row">
 							<UiCheckbox v-model="display.sharedChannelization" label="Shared VFO DSP" title="Share filtered sub-bands between VFOs to reduce repeated high-rate DSP work. On a remote connection, applies only to your VFOs on the host."></UiCheckbox>
 						</UiFormRow>
 					</UiPanel>

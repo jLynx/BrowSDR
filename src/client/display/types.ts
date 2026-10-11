@@ -3,3 +3,9 @@ export interface RGB {
 	g: number;
 	b: number;
 }
+
+export interface WaterfallLevel {
+	offset: number;
+	bins: number;
+	scale: number;
+}

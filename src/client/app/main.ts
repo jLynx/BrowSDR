@@ -193,6 +193,14 @@ function watchReceiverSettings(this: AppInstance) {
 	);
 
 	this.$watch(
+		() => this.display.highResolutionWaterfall,
+		() => {
+			this.saveSetting();
+			if (this._waterfallEngine) this.initCanvas();
+		},
+	);
+
+	this.$watch(
 		() => this.display.spectrumFps,
 		(value: number) => {
 			this.saveSetting();

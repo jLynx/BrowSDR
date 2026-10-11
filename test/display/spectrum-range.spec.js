@@ -12,6 +12,17 @@ function receiver() {
 }
 
 describe('normalized spectrum display range', () => {
+	it('defaults to full detail and restores a saved low-power waterfall choice', () => {
+		const storage = new Map();
+		vi.stubGlobal('localStorage', { getItem: (key) => storage.get(key), setItem: (key, value) => storage.set(key, value) });
+		const app = receiver();
+		expect(app.display.highResolutionWaterfall).toBe(true);
+		app.display.highResolutionWaterfall = false;
+		settingsMethods.saveSetting.call(app);
+		const restored = receiver();
+		settingsMethods.loadSetting.call(restored);
+		expect(restored.display.highResolutionWaterfall).toBe(false);
+	});
 	it('restores saved gains, their device type and muted VFOs on reload', () => {
 		const storage = new Map();
 		vi.stubGlobal('localStorage', { getItem: (key) => storage.get(key), setItem: (key, value) => storage.set(key, value) });
