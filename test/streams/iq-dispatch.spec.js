@@ -27,6 +27,22 @@ function setup(slots = 64) {
 }
 
 describe('bounded IQ dispatch', () => {
+	it('acknowledges multicast consumers once on completion, removal, and send failure', () => {
+		const { dispatcher, worker } = setup();
+		const completed = vi.fn();
+		dispatcher.send(worker, { type: 'process', chunkId: 1 }, [], completed);
+		worker.reply({ type: 'audio', chunkId: 1 });
+		worker.reply({ type: 'audio', chunkId: 1 });
+		expect(completed).toHaveBeenCalledTimes(1);
+		dispatcher.send(worker, { type: 'process', chunkId: 2 }, [], completed);
+		dispatcher.retain(new Set());
+		expect(completed).toHaveBeenCalledTimes(2);
+		worker.postMessage = () => {
+			throw new Error('Send failed');
+		};
+		expect(() => dispatcher.send(worker, { type: 'process', chunkId: 3 }, [], completed)).toThrow();
+		expect(completed).toHaveBeenCalledTimes(3);
+	});
 	it('retains original IQ during thousands of callbacks with a stalled DSP and resumes with fresh input', () => {
 		const { dispatcher, worker, views, send } = setup();
 		for (let id = 1; id <= 4000; id++) send(id);

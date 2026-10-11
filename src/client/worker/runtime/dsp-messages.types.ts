@@ -6,6 +6,12 @@ import type { VfoParams } from './types';
 import type { RDSMessage, Rtl433Message } from '@/worker/decoders/types';
 import type { DSDStatus } from '@/worker/decoders/dsd/types';
 
+export interface SharedBandOutput {
+	centerBin: number;
+	buffer: ArrayBuffer | SharedArrayBuffer;
+	length: number;
+}
+
 export type DspOutput =
 	| DspAudio
 	| Rtl433Message
@@ -22,7 +28,10 @@ export type DspOutput =
 	| { type: 'init_done' | 'config_done' }
 	| {
 			type: 'bands';
-			bands: Array<{ centerBin: number; buffer: ArrayBuffer | SharedArrayBuffer; length: number }>;
+			bands: SharedBandOutput[];
+			batchId?: number;
+			dropped?: boolean;
+			discontinuity?: boolean;
 			key: string;
 			chunkId: number;
 			inputSamples: number;
@@ -30,6 +39,7 @@ export type DspOutput =
 	  };
 
 export type DspInput =
+	| { type: 'release_bands'; batchId: number }
 	| {
 			type: 'channelize';
 			key: string;
@@ -53,6 +63,7 @@ export type DspInput =
 			chunkLen: number;
 			chunk?: ArrayBuffer | SharedArrayBuffer;
 			chunkId: number;
+			sequence?: number;
 	  };
 
 export interface DspAudio {

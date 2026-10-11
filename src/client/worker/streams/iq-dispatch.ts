@@ -3,10 +3,11 @@ import type { DspInput, DspOutput } from '@/worker/runtime/dsp-messages.types';
 // At 61.44 MSPS, 32 full LimeSDR chunks cover about 68ms of scheduling jitter.
 // Keep half the pool available so a stalled VFO cannot monopolize all slots.
 const MAX_PENDING_CHUNKS = 32;
+const MAX_PENDING_BANDS = 8;
 
 /** Keep input buffers immutable until every consumer finishes its chunk. */
 export class IqDispatcher {
-	private pending = new Map<Worker, Map<number, number | undefined>>();
+	private pending = new Map<Worker, Map<number, { slot?: number; completed?: () => void }>>();
 	private listeners = new Map<Worker, { message: (event: MessageEvent<DspOutput>) => void; error: () => void }>();
 	private failed = new WeakSet<Worker>();
 	private leases: Array<Set<Worker>>;
@@ -16,8 +17,8 @@ export class IqDispatcher {
 		this.leases = views.map(() => new Set());
 	}
 
-	canSend(worker: Worker): boolean {
-		return !this.failed.has(worker) && (this.pending.get(worker)?.size ?? 0) < MAX_PENDING_CHUNKS;
+	canSend(worker: Worker, floatIq = false): boolean {
+		return !this.failed.has(worker) && (this.pending.get(worker)?.size ?? 0) < (floatIq ? MAX_PENDING_BANDS : MAX_PENDING_CHUNKS);
 	}
 
 	reserve(input: Int8Array): number | undefined {
@@ -31,12 +32,12 @@ export class IqDispatcher {
 		return undefined;
 	}
 
-	send(worker: Worker, message: Extract<DspInput, { type: 'process' }>, transfer: Transferable[] = []): boolean {
-		if (!this.canSend(worker)) return false;
+	send(worker: Worker, message: Extract<DspInput, { type: 'process' }>, transfer: Transferable[] = [], completed?: () => void): boolean {
+		if (!this.canSend(worker, message.floatIq) || this.pending.get(worker)?.has(message.chunkId)) return false;
 		this.watch(worker);
 		const requests = this.pending.get(worker)!;
 		const slot = message.useSab ? message.sabIndex : undefined;
-		requests.set(message.chunkId, slot);
+		requests.set(message.chunkId, { slot, completed });
 		if (slot !== undefined) this.leases[slot].add(worker);
 		try {
 			worker.postMessage(message, transfer);
@@ -78,9 +79,10 @@ export class IqDispatcher {
 	private release(worker: Worker, chunkId: number): void {
 		const requests = this.pending.get(worker);
 		if (!requests?.has(chunkId)) return;
-		const slot = requests.get(chunkId);
+		const { slot, completed } = requests.get(chunkId)!;
 		if (slot !== undefined) this.leases[slot].delete(worker);
 		requests.delete(chunkId);
+		completed?.();
 	}
 
 	private remove(worker: Worker): void {

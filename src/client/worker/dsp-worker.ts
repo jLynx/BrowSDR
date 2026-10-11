@@ -1,6 +1,7 @@
 import { BleStream } from './decoders/ble/stream';
 import { AisStream } from './decoders/ais';
 import { AcarsStream } from './decoders/acars';
+import { SharedBandPool } from './streams/shared-band-pool';
 import { errorMessage } from '@/platform/errors';
 import init, { DspProcessor, SharedChannelizer, set_panic_hook, alloc_iq_buffer, alloc_float_buffer } from '/wasm/dsp/browsdr_dsp.js';
 import { RationalResampler } from './streams/dsp-pipeline';
@@ -57,6 +58,9 @@ let inputIsFloat = false;
 let inputCenterFreq = 100;
 let channelizer: SharedChannelizer | undefined;
 let channelKey = '';
+let channelChunkId: number | undefined;
+let configuredParams = '';
+const bandPool = typeof SharedArrayBuffer === 'undefined' ? undefined : new SharedBandPool();
 let rtl433: Rtl433Stream;
 let adsb: AdsbStream;
 let ais: AisStream;
@@ -112,6 +116,9 @@ self.onmessage = async (e: MessageEvent<DspInput>) => {
 	await startup();
 
 	switch (msg.type) {
+		case 'release_bands':
+			bandPool?.release(msg.batchId);
+			break;
 		case 'channelize':
 			handleDspChannelize(msg);
 			break;
@@ -159,6 +166,7 @@ function decodeRdsChunk(msg: Extract<DspInput, { type: 'process' }>) {
 }
 
 function configureDDC(params: VfoParams, systemCenterFreq: number): void {
+	configuredParams = JSON.stringify(params);
 	rtl433.configure(params, systemSampleRate, systemCenterFreq);
 	adsb.configure(params, systemSampleRate, systemCenterFreq);
 	ais.configure(params, systemSampleRate, systemCenterFreq);
@@ -448,31 +456,41 @@ function processFmAudio(chunkLenBytes: number, params: VfoParams): Float32Array 
 function handleDspChannelize(msg: Extract<DspInput, { type: 'channelize' }>) {
 	const started = performance.now();
 	try {
-		if (channelKey !== msg.key) {
+		if (channelKey !== msg.key || (channelChunkId !== undefined && msg.chunkId !== channelChunkId + 1)) {
 			channelizer?.free();
 			channelizer = new SharedChannelizer(msg.ratio, new Int32Array(msg.centers));
 			channelizer.set_batch_samples(Math.min(65536, Math.round(msg.sampleRate * 0.01)));
 			channelKey = msg.key;
 		}
+		const discontinuity = channelChunkId !== undefined && msg.chunkId !== channelChunkId + 1;
+		channelChunkId = msg.chunkId;
 		channelizer!.process(new Int8Array(msg.chunk));
-		const bands = msg.centers
+		const sources = msg.centers
 			.map((centerBin: number, index: number) => {
 				const length = channelizer!.output_len(index);
 				if (!length) return null;
-				const source = new Float32Array(_wasm.memory.buffer, channelizer!.output_ptr(index), length);
-				const buffer = typeof SharedArrayBuffer === 'undefined' ? source.slice().buffer : new SharedArrayBuffer(length * 4);
-				if (typeof SharedArrayBuffer !== 'undefined' && buffer instanceof SharedArrayBuffer) new Float32Array(buffer).set(source);
-				return { centerBin, buffer, length };
+				const samples = new Float32Array(_wasm.memory.buffer, channelizer!.output_ptr(index), length);
+				return { centerBin, samples };
 			})
-			.filter(Boolean);
-		self.postMessage({
-			type: 'bands',
-			bands,
-			key: msg.key,
-			chunkId: msg.chunkId,
-			inputSamples: msg.inputSamples,
-			dspTime: performance.now() - started,
-		});
+			.filter((value) => value !== null);
+		const output =
+			sources.length && bandPool
+				? bandPool.copy(sources)
+				: {
+						bands: sources.map(({ centerBin, samples }) => ({ centerBin, buffer: samples.slice().buffer, length: samples.length })),
+					};
+		self.postMessage(
+			{
+				type: 'bands',
+				discontinuity,
+				...output,
+				key: msg.key,
+				chunkId: msg.chunkId,
+				inputSamples: msg.inputSamples,
+				dspTime: performance.now() - started,
+			},
+			{ transfer: output.bands.flatMap(({ buffer }) => (buffer instanceof ArrayBuffer ? [buffer] : [])) },
+		);
 	} catch (error) {
 		self.postMessage({ type: 'channel_error', error: errorMessage(error), inputSamples: msg.inputSamples });
 	}
@@ -529,6 +547,7 @@ function handleDspProcess(msg: Extract<DspInput, { type: 'process' }>) {
 	}
 
 	configureInputRate(msg);
+	configureInputParams(msg.params);
 	inputIsFloat = msg.floatIq === true;
 	rtl433.configure(msg.params, systemSampleRate, inputCenterFreq);
 	adsb.configure(msg.params, systemSampleRate, inputCenterFreq);
@@ -543,10 +562,11 @@ function handleDspProcess(msg: Extract<DspInput, { type: 'process' }>) {
 	try {
 		const processStart = performance.now();
 		rtl433.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat);
-		adsb.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat, msg.chunkId);
-		ais.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat, msg.chunkId);
-		ble.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat, msg.chunkId);
-		acars.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat, msg.chunkId);
+		const sequence = msg.sequence ?? msg.chunkId;
+		adsb.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat, sequence);
+		ais.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat, sequence);
+		ble.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat, sequence);
+		acars.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat, sequence);
 		const audioOut = msg.params.enabled || msg.params.pocsag || msg.params.rds ? processVfoAudio(msg.chunkLen, msg.params) : null;
 		// Complete decoder work before acknowledging the input. Otherwise replies
 		// let the sender queue more input while RDS is still using this worker.
@@ -609,6 +629,12 @@ function configureInputRate(msg: Extract<DspInput, { type: 'process' }>) {
 		ddc.set_shift(nextRate, (msg.params.freq - nextCenter) * 1e6 + sidebandOffsetHz(msg.params.mode, msg.params.bandwidth));
 		rdsDdc?.set_shift(nextRate, (msg.params.freq - nextCenter) * 1e6);
 	}
+}
+
+function configureInputParams(params: VfoParams): void {
+	// A configure event can overtake a queued channelizer result. Match the
+	// demodulator and squelch to this chunk's parameter snapshot before use.
+	if (JSON.stringify(params) !== configuredParams) configureDDC(params, inputCenterFreq);
 }
 
 function copyInputPayload(msg: Extract<DspInput, { type: 'process' }>): boolean {

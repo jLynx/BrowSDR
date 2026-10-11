@@ -107,10 +107,13 @@ export function dispatchIqChunk(
 export function ensureChannelWorker(backend: Backend, channel: ChannelState, perf: PerfCounters) {
 	if (!channel.worker) {
 		channel.worker = new globalThis.Worker(new URL('../dsp-worker.ts', import.meta.url), { type: 'module' });
+		const worker = channel.worker;
+		let sequence = 0;
 		channel.worker.onmessage = ({ data: message }: MessageEvent<DspOutput>) => {
 			if (message.type !== 'bands' && message.type !== 'channel_error') return;
 			channel.pending -= message.inputSamples || 0;
 			if (message.type === 'channel_error') {
+				sequence++;
 				console.error('Shared channelizer:', message.error);
 				perf.droppedChunks++;
 				return;
@@ -118,25 +121,50 @@ export function ensureChannelWorker(backend: Backend, channel: ChannelState, per
 			channel.perf.calls++;
 			channel.perf.sum += message.dspTime;
 			channel.perf.max = Math.max(channel.perf.max, message.dspTime);
-			if (message.key !== channel.key) return;
-			for (const result of message.bands) {
-				const band = channel.plan?.bands.find((value) => value.centerBin === result.centerBin);
-				if (!band) continue;
-				for (const index of band.vfos) {
-					const target = channel.targets[index];
-					if (!target) continue;
-					const sent = backend._iqDispatcher!.send(target.worker, {
-						type: 'process',
-						floatIq: true,
-						chunk: result.buffer,
-						chunkLen: result.length,
-						sampleRate: channel.plan!.sampleRate,
-						centerFreq: band.centerFreq,
-						params: target.params,
-						chunkId: message.chunkId,
-					});
-					if (!sent) perf.droppedChunks++;
+			if (message.discontinuity) sequence++;
+			if (message.bands.length || message.dropped) sequence++;
+			let consumers = 1;
+			const completed = () => {
+				if (--consumers === 0 && message.batchId !== undefined) worker.postMessage({ type: 'release_bands', batchId: message.batchId });
+			};
+			try {
+				if (message.key !== channel.key) return;
+				if (message.dropped) perf.droppedChunks++;
+				for (const result of message.bands) {
+					const band = channel.plan?.bands.find((value) => value.centerBin === result.centerBin);
+					if (!band) continue;
+					for (const index of band.vfos) {
+						const target = channel.targets[index];
+						if (!target) continue;
+						if (!backend._iqDispatcher!.canSend(target.worker, true)) {
+							perf.droppedChunks++;
+							continue;
+						}
+						consumers++;
+						const sent = backend._iqDispatcher!.send(
+							target.worker,
+							{
+								type: 'process',
+								floatIq: true,
+								chunk: result.buffer,
+								chunkLen: result.length,
+								sampleRate: channel.plan!.sampleRate,
+								centerFreq: band.centerFreq,
+								params: target.params,
+								chunkId: message.chunkId,
+								sequence,
+							},
+							[],
+							completed,
+						);
+						if (!sent) {
+							completed();
+							perf.droppedChunks++;
+						}
+					}
 				}
+			} finally {
+				completed();
 			}
 		};
 	}

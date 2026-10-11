@@ -81,6 +81,45 @@ async function createStream(rdsCallback = null, dsdStatusCallback = null, rtl433
 }
 
 describe('shared VFO worker routing', () => {
+	it('releases each band batch after the slowest VFO and gives decoders contiguous batch numbers', async () => {
+		const { backend, workers, receive } = await createStream();
+		for (const chunkId of [5, 10]) {
+			receive();
+			const channel = workers[3];
+			const request = channel.messages.findLast((message) => message.type === 'channelize');
+			channel.onmessage({
+				data: {
+					type: 'bands',
+					key: request.key,
+					chunkId,
+					batchId: chunkId,
+					inputSamples: request.inputSamples,
+					dspTime: 1,
+					bands: [{ centerBin: request.centers[0], buffer: new SharedArrayBuffer(128), length: 32 }],
+				},
+			});
+			expect(backend.dspWorkers[0].messages.at(-1)).toMatchObject({ chunkId, sequence: chunkId / 5 });
+			backend.dspWorkers[0].onmessage({ data: { type: 'processed', chunkId } });
+			backend.dspWorkers[1].onmessage({ data: { type: 'processed', chunkId } });
+			expect(channel.messages.some((message) => message.type === 'release_bands' && message.batchId === chunkId)).toBe(false);
+			backend.dspWorkers[2].onmessage({ data: { type: 'processed', chunkId } });
+			expect(channel.messages.at(-1)).toEqual({ type: 'release_bands', batchId: chunkId });
+		}
+		receive();
+		const channel = workers[3];
+		const request = channel.messages.findLast((message) => message.type === 'channelize');
+		channel.onmessage({
+			data: {
+				type: 'bands',
+				key: request.key,
+				chunkId: 20,
+				inputSamples: request.inputSamples,
+				discontinuity: true,
+				bands: [{ centerBin: request.centers[0], buffer: new ArrayBuffer(128), length: 32 }],
+			},
+		});
+		expect(backend.dspWorkers[0].messages.at(-1).sequence).toBe(4);
+	});
 	it('keeps the supplied 27 VFOs on 13 narrow bands and bounds spectrum delivery at USB rates', async () => {
 		const spectrum = vi.fn();
 		const { backend, workers, receive } = await createStream(null, null, null, spectrum);

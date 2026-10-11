@@ -29,13 +29,22 @@ describe('ACARS through the production DSP worker', () => {
 		let chunkId = 0;
 		for (let i = 0; i < input.length; i += 65536) {
 			const chunk = input.slice(i, i + 65536);
-			await send({ type: 'process', params, chunk: chunk.buffer, chunkLen: chunk.length, floatIq: float, chunkId: ++chunkId });
+			chunkId++;
+			await send({
+				type: 'process',
+				params,
+				chunk: chunk.buffer,
+				chunkLen: chunk.length,
+				floatIq: float,
+				chunkId: float ? chunkId * 5 : chunkId,
+				sequence: float ? chunkId : undefined,
+			});
 		}
 		expect(messages.find((message) => message.type === 'acars' && message.status.frames === 1)?.messages[0]).toMatchObject({
 			registration: 'ZK-NZE',
 			flight: 'ANZ001',
 		});
-		expect(messages.at(-1)).toMatchObject({ type: 'audio', samples: null, chunkId });
+		expect(messages.at(-1)).toMatchObject({ type: 'audio', samples: null, chunkId: float ? chunkId * 5 : chunkId });
 		await send({ type: 'configure', centerFreq: 131.6, params: { ...params, acars: false } });
 		expect(messages.findLast((message) => message.type === 'acars').status.state).toBe('off');
 	});
