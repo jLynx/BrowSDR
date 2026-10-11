@@ -646,9 +646,10 @@ function copyInputPayload(msg: Extract<DspInput, { type: 'process' }>): boolean 
 		wasmMemView.set(sharedSabViews[msg.sabIndex].subarray(0, msg.chunkLen), sharedIqPtr);
 	} else if (msg.chunk) {
 		if (inputIsFloat) {
-			new Float32Array(_wasm.memory.buffer, sharedFloatPtr, msg.chunkLen).set(new Float32Array(msg.chunk));
+			// Pooled buffers can be larger than the valid band payload.
+			new Float32Array(_wasm.memory.buffer, sharedFloatPtr, msg.chunkLen).set(new Float32Array(msg.chunk, 0, msg.chunkLen));
 		} else {
-			wasmMemView.set(new Int8Array(msg.chunk), sharedIqPtr);
+			wasmMemView.set(new Int8Array(msg.chunk, 0, msg.chunkLen), sharedIqPtr);
 		}
 	} else {
 		return false; // Invalid chunk

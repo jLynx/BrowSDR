@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { SharedBandPool } from '@/worker/streams/shared-band-pool';
 
 const binary = readFileSync(new URL('../../wasm/dsp/pkg/browsdr_dsp_bg.wasm', import.meta.url));
 vi.mock('/wasm/dsp/browsdr_dsp.js', async () => {
@@ -18,6 +19,49 @@ async function receiver() {
 }
 
 describe('live DSP reconfiguration with real WASM', () => {
+	it.each([
+		{ freq: 131.55, mode: 'nfm', bandwidth: 12500, enabled: false, acars: true, squelchEnabled: false },
+		{ freq: 121.475, mode: 'am', bandwidth: 10000, enabled: true, squelchEnabled: true },
+		{ freq: 124.3, mode: 'nfm', bandwidth: 12500, enabled: true, squelchEnabled: true },
+	])('processes valid pooled samples for $mode at $freq MHz (audio enabled: $enabled)', async (vfo) => {
+		const rx = await receiver();
+		const params = {
+			...vfo,
+			squelchLevel: -100,
+			deEmphasis: 'none',
+			lowPass: true,
+		};
+		await rx.send({ type: 'init', sampleRate: 61440000, centerFreq: 131, params });
+		const pool = new SharedBandPool();
+		const large = pool.copy([{ centerBin: 0, samples: new Float32Array(60000).fill(NaN) }]);
+		pool.release(large.batchId);
+		for (const length of [38400, 8192, 38400]) {
+			const samples = new Float32Array(length);
+			for (let i = 0; i < length / 2; i++) {
+				const phase = (2 * Math.PI * (100000 + 2000 * Math.sin((2 * Math.PI * 1000 * i) / 1920000)) * i) / 1920000;
+				samples[2 * i] = 0.05 * Math.cos(phase);
+				samples[2 * i + 1] = 0.05 * Math.sin(phase);
+			}
+			const batch = pool.copy([{ centerBin: 0, samples }]);
+			const band = batch.bands[0];
+			expect(band.buffer.byteLength).toBeGreaterThan(samples.byteLength);
+			await rx.send({
+				type: 'process',
+				params,
+				floatIq: true,
+				sampleRate: 1920000,
+				centerFreq: params.freq - 0.1,
+				chunk: band.buffer,
+				chunkLen: band.length,
+				chunkId: batch.batchId,
+			});
+			const output = rx.messages.at(-1);
+			expect(output.type).toBe('audio');
+			if (params.enabled) expect(new Float32Array(output.samples).length).toBeGreaterThan(0);
+			expect(new Float32Array(output.samples).every(Number.isFinite)).toBe(true);
+			pool.release(batch.batchId);
+		}
+	});
 	it('matches FM squelch to queued input parameters when a newer configure event arrives first', async () => {
 		const rx = await receiver();
 		const params = {
