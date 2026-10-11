@@ -29,6 +29,9 @@ export function nextHackRFGain(gains: HackRFGains, level: RxLevel, mode: AutoGai
 	const amp = gains['Amp (14dB)'] ? 1 : 0;
 	const overloaded = receiverOverloaded(level);
 	const nextAmp = amplifierPreference(gains, mode, change, overloaded || !allowAmp);
+	if (nextAmp && !amp) {
+		return { gains: { LNA: 0, VGA: 0, 'Amp (14dB)': 1 }, done: false, reason: 'Enabling RF amplifier at minimum LNA/VGA gain' };
+	}
 	const next =
 		change || nextAmp !== amp || mode !== 'balanced'
 			? { ...hackrfGainProfile(total + change - nextAmp * ampEstimate, mode), 'Amp (14dB)': nextAmp }
@@ -52,6 +55,22 @@ export function nextHackRFGain(gains: HackRFGains, level: RxLevel, mode: AutoGai
 
 function amplifierPreference(gains: HackRFGains, mode: AutoGainMode, change: number, blocked: boolean) {
 	if (blocked || mode === 'strong') return 0;
-	if (mode === 'sensitivity') return Number(hackrfGainTotal(gains) + change >= ampEstimate);
+	if (mode === 'sensitivity') return 1;
 	return change > 0 && gains.LNA + gains.VGA >= 72 ? 1 : Number(!!gains['Amp (14dB)']);
+}
+
+/** Track actual amp overloads, without treating excessive starting gain as a failed amp trial. */
+export function createHackRFGainAdjustment(mode: AutoGainMode) {
+	let ampOverloads = 0;
+	let retryCeiling = Infinity;
+	return (gains: HackRFGains, level: RxLevel) => {
+		if (gains['Amp (14dB)'] && receiverOverloaded(level)) {
+			ampOverloads++;
+			retryCeiling = hackrfGainTotal(gains) - 6;
+		}
+		const allowAmp = ampOverloads < 2 && (!!gains['Amp (14dB)'] || hackrfGainTotal(gains) <= retryCeiling);
+		const next = nextHackRFGain(gains, level, mode, allowAmp);
+		if (next.done && ampOverloads >= 2 && mode !== 'strong') next.reason += ' · Amp kept off after repeated overload';
+		return next;
+	};
 }

@@ -24,7 +24,7 @@ function isGain(control: GainControl) {
 export default defineComponent({
 	name: 'GainReset',
 	components: { UiButton, UiIcon },
-	template: `<UiButton v-if="changed" variant="secondary" class="gain-reset" :disabled="receiver.autoGain.active"
+	template: `<UiButton v-if="changed && !receiver.autoGain.active" variant="secondary" class="gain-reset"
 		@click="reset" title="Reset all gains to defaults" aria-label="Reset gains"><UiIcon name="reset" :size="16" /></UiButton>`,
 	setup() {
 		const receiver = inject<AppInstance>('receiver');

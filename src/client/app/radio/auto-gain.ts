@@ -1,9 +1,8 @@
-import { receiverOverloaded } from '@/radio/auto-gain-level';
 import { errorMessage } from '@/platform/errors';
 import type { AppInstance } from '@/app/core/receiver.types';
 import { nextLimeGain } from '@/radio/lime-auto-gain';
 import type { LimeGains, HackRFGains, DeviceCapabilities, RxLevel, AutoGainMode } from '@/radio/types';
-import { nextHackRFGain } from '@/radio/hackrf-auto-gain';
+import { createHackRFGainAdjustment } from '@/radio/hackrf-auto-gain';
 
 const gainOptions = [
 	{
@@ -47,17 +46,17 @@ export const autoGainMethods = {
 		try {
 			// Allow any pending manual gain command to finish before sampling.
 			await this.backend.setGains(original);
+			if (startWithMinimumGain(capabilities, applied)) {
+				await applyGainChanges.call(this, names, { ...applied, LNA: 0, VGA: 0 }, applied, valid);
+			}
 			let after = Date.now() + 150;
 			let stable = 0;
-			let allowAmp = true;
+			const adjustHackrf = createHackRFGainAdjustment(mode);
 			const maxSteps = isHackrf ? 40 : 14;
 			for (let step = 0; step < maxSteps; step++) {
 				const level = await measure(after);
 				this.autoGain.level = level;
-				if (receiverOverloaded(level)) allowAmp = false;
-				const next = isHackrf
-					? nextHackRFGain(applied as HackRFGains, level, mode, allowAmp)
-					: nextLimeGain(applied as LimeGains, level, mode);
+				const next = isHackrf ? adjustHackrf(applied as HackRFGains, level) : nextLimeGain(applied as LimeGains, level, mode);
 				const nextGains = next.gains as Record<string, number>;
 				this.autoGain.status = next.reason;
 				if (next.done) {
@@ -144,4 +143,8 @@ async function applyGainChanges(
 
 function canAdjustGains(app: AppInstance): boolean {
 	return !app.autoGain.active && app.running && app.connected && app.remoteMode !== 'client' && app.autoGainSupported();
+}
+
+function startWithMinimumGain(capabilities: DeviceCapabilities | null, gains: Record<string, number>) {
+	return capabilities?.deviceType === 'hackrf' && !!gains['Amp (14dB)'];
 }
