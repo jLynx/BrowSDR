@@ -99,12 +99,16 @@
 					</UiFormRow>
 					<!-- Dynamic gain controls based on connected device -->
 					<div class="auto-gain" v-if="autoGainSupported() && remoteMode !== 'client'">
-						<UiButton variant="secondary" @click="autoSetGains" :disabled="!running || autoGain.active">Auto set gains</UiButton>
+						<div class="gain-actions">
+							<UiMenu :id="receiverId + '-auto-gain-options'" label="Auto gain preferences" primary-label="Auto set gains" :groups="autoGainOptions()" :disabled="!running || autoGain.active" @primary="autoSetGains('balanced')" @select="autoSetGains($event)" />
+							<GainReset />
+						</div>
 						<UiButton v-if="autoGain.active"  @click="cancelAutoGain" :disabled="autoGain.cancelled">Cancel</UiButton>
-							<p>Balances {{ autoGainControls() }} for the whole receiver. Holds the result steady.<template v-if="deviceCapabilities.deviceType === 'hackrf'"> Uses the RF amplifier only when needed for weak input.</template></p>
-							<p role="status">{{ autoGain.status }}<template v-if="autoGain.level"> · RMS {{ autoGain.level.rmsDbfs.toFixed(1) }} dBFS · peak {{ autoGain.level.peakDbfs.toFixed(1) }} dBFS · {{ (autoGain.level.clippedFraction * 100).toFixed(3) }}% clipped</template></p>
+							<p>Click for Balanced, or choose a preference. Adjusts {{ autoGainControls() }} for the whole receiver and holds the result steady.</p>
+							<p role="status"><template v-if="autoGain.status">{{ autoGain.mode === 'sensitivity' ? 'Weak signals' : autoGain.mode === 'strong' ? 'Strong signals' : 'Balanced' }} · </template>{{ autoGain.status }}<template v-if="autoGain.level"> · RMS {{ autoGain.level.rmsDbfs.toFixed(1) }} dBFS · peak {{ autoGain.level.peakDbfs.toFixed(1) }} dBFS · {{ (autoGain.level.clippedFraction * 100).toFixed(3) }}% clipped</template></p>
 					</div>
 					<template v-if="deviceCapabilities">
+						<RxLevel />
 						<component v-for="group in gainControlGroups" :key="group.name" :is="group.name ? 'UiPanel' : 'div'" v-bind="group.name ? { label: group.name, collapsed: !radioAdvanced } : {}" @update:collapsed="radioAdvanced = !$event" :class="group.name ? 'radio-advanced' : 'gain-controls'">
 						<p v-if="group.name">Stop reception before changing transport options.</p>
 						<UiFormRow v-for="gc in group.controls" :key="gc.name">
@@ -220,6 +224,7 @@
 				</div>
 
 				<UiPanel label="Display" :id="receiverId + '-display-panel'" v-model:collapsed="collapsedPanels['display']">
+					<ContrastControls />
 					<UiFormRow>
 						<label :for="receiverId + '-spectrum-fps'">Spectrum FPS</label>
 						<UiSelect :id="receiverId + '-spectrum-fps'" v-model.number="display.spectrumFps" title="Spectrum and waterfall display update rate; does not change radio settings or audio. Higher rates use more CPU. Remote reception is capped locally and cannot exceed the host's rate.">

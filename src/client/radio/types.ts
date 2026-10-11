@@ -92,3 +92,5 @@ export interface DeviceCatalogEntry {
 export type HackRFGains = { LNA: number; VGA: number; 'Amp (14dB)'?: number };
 
 export type LimeGains = { LNA: number; TIA: number; PGA: number };
+
+export type AutoGainMode = 'balanced' | 'sensitivity' | 'strong';

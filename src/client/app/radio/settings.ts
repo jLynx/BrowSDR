@@ -3,6 +3,7 @@ import { makeDefaultVfo } from '@/app/core/constants';
 import { normalizeSpectrumFps } from '@/display/spectrum-rate';
 import { DEFAULT_FFT_SIZE, normalizedSpectrumRange, SPECTRUM_RANGE_VERSION } from '@/display/spectrum-range';
 import { isRecord, restoreFields, primitiveMap } from '@/platform/data';
+import { validContrastRange } from '@/display/contrast';
 
 export const settingsMethods = {
 	saveSetting(this: AppInstance) {
@@ -11,6 +12,7 @@ export const settingsMethods = {
 			radio: this.radio,
 			display: this.display,
 			gains: Object.fromEntries(Object.entries(this.gains || {}).filter(([name]) => name !== 'Receive Mode')),
+			gainDeviceType: this.gainDeviceType,
 			locks: this.locks,
 			vfos: this.vfos,
 			view: this.view,
@@ -41,6 +43,7 @@ export const settingsMethods = {
 					}
 				}
 				restoreDisplaySettings.call(this, setting);
+				if (typeof setting.gainDeviceType === 'string') this.gainDeviceType = setting.gainDeviceType;
 				if (primitiveMap<number>(setting.gains, 'number')) {
 					Object.assign(this.gains, setting.gains);
 					// Diagnostic reception is temporary and must never survive a reload.
@@ -88,6 +91,7 @@ function restoreDisplaySettings(this: AppInstance, setting: Record<string, unkno
 		}
 	}
 	this.display.spectrumFps = normalizeSpectrumFps(this.display.spectrumFps);
+	Object.assign(this.display, validContrastRange(this.display.minDB, this.display.maxDB));
 }
 
 function restoreVfoSettings(this: AppInstance, setting: Record<string, unknown>) {

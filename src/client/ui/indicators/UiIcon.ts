@@ -1,4 +1,4 @@
-import { Activity, Bluetooth, ChartNoAxesColumn, Mail, Mic, Plane, Radio, RadioTower, Ship, Smartphone } from '@lucide/vue';
+import { Activity, Bluetooth, ChartNoAxesColumn, Mail, Mic, Plane, Radio, RadioTower, RotateCcw, Ship, Smartphone } from '@lucide/vue';
 import { defineComponent, h, type PropType } from 'vue';
 import type { UiIconName } from './icons.types';
 
@@ -14,6 +14,7 @@ const icons = {
 	message: Mail,
 	stats: ChartNoAxesColumn,
 	activity: Activity,
+	reset: RotateCcw,
 } satisfies Record<UiIconName, typeof Mic>;
 
 export default defineComponent({

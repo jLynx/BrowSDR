@@ -12,6 +12,20 @@ function receiver() {
 }
 
 describe('normalized spectrum display range', () => {
+	it('restores saved gains, their device type and muted VFOs on reload', () => {
+		const storage = new Map();
+		vi.stubGlobal('localStorage', { getItem: (key) => storage.get(key), setItem: (key, value) => storage.set(key, value) });
+		const app = receiver();
+		app.gains = { LNA: 32, VGA: 22, 'Amp (14dB)': 0 };
+		app.gainDeviceType = 'hackrf';
+		app.vfos[0].enabled = false;
+		settingsMethods.saveSetting.call(app);
+		const restored = receiver();
+		settingsMethods.loadSetting.call(restored);
+		expect(restored.gains).toEqual(app.gains);
+		expect(restored.gainDeviceType).toBe('hackrf');
+		expect(restored.vfos[0].enabled).toBe(false);
+	});
 	it('gives new receivers corrected default bounds', () => {
 		expect(receiver().display).toMatchObject(DEFAULT_SPECTRUM_RANGE);
 		expect(DEFAULT_SPECTRUM_RANGE.minDB).toBeCloseTo(-118.1648, 4);

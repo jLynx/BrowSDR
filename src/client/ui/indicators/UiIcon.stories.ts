@@ -8,7 +8,7 @@ export const All: Story = {
 	render: () => ({
 		components: { UiIcon },
 		setup: () => ({
-			names: ['microphone', 'pager', 'radio', 'sensors', 'aircraft', 'bluetooth', 'vessel', 'message', 'stats', 'activity'],
+			names: ['microphone', 'pager', 'radio', 'sensors', 'aircraft', 'bluetooth', 'vessel', 'message', 'stats', 'activity', 'reset'],
 		}),
 		template:
 			'<div style="display:flex;flex-wrap:wrap;gap:20px"><div v-for="name in names" :key="name" style="display:flex;align-items:center;gap:8px"><UiIcon :name="name"/>{{ name }}</div></div>',

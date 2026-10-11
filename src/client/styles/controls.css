@@ -401,3 +401,41 @@ canvas {
 .snackbar.show {
 	bottom: 24px;
 }
+.contrast-controls {
+	display: contents;
+}
+.contrast-controls .val {
+	white-space: nowrap;
+}
+.rx-level {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+}
+.rx-level-hint {
+	font-size: 10px;
+	color: var(--text-muted);
+	margin: 0;
+}
+.rx-level-warning {
+	color: var(--accent-red, #ff5555);
+}
+.gain-actions {
+	display: flex;
+	align-items: stretch;
+	gap: 6px;
+}
+.gain-actions > .btn {
+	flex: 0 0 auto;
+	white-space: nowrap;
+}
+.gain-actions .gain-reset {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	aspect-ratio: 1;
+	padding: 0;
+	flex: 0 0 auto;
+}

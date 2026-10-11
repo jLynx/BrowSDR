@@ -9,7 +9,7 @@ import type { PairedDevices } from '@/app/radio/types';
 import type { RemoteClients, DspStats } from '@/remote/types';
 import type { Remote } from 'comlink';
 import type { Backend } from '@/worker/runtime/backend';
-import type { DeviceCapabilities, RxLevel } from '@/radio/types';
+import type { DeviceCapabilities, RxLevel, AutoGainMode } from '@/radio/types';
 import type { Bookmark } from '@/app/workspace/types';
 import type { Vfo } from './types';
 import { makeDefaultVfo, BOOKMARK_CATEGORIES } from './constants';
@@ -50,7 +50,14 @@ export function createAppData() {
 			...DEFAULT_SPECTRUM_RANGE,
 		},
 		gains: {} as Record<string, number>,
-		autoGain: { active: false, cancelled: false, status: '', level: null as RxLevel | null },
+		gainDeviceType: '',
+		autoGain: {
+			mode: 'balanced' as AutoGainMode,
+			active: false,
+			cancelled: false,
+			status: '',
+			level: null as RxLevel | null,
+		},
 		deviceCapabilities: null as DeviceCapabilities | null,
 		locks: {
 			centerFreq: false,

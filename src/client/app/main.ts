@@ -10,6 +10,10 @@ import type { Backend as BackendInstance } from '@/worker/runtime/backend';
 import { createApp, markRaw } from 'vue';
 import receiverTemplate from './templates/receiver';
 import VfoPanel from './radio/vfo-panel';
+import RxLevel from './radio/rx-level';
+import GainReset from './radio/gain-settings';
+import ContrastControls from './display/contrast-controls';
+import { watchContrast } from './display/contrast';
 import { createWorkspace } from './workspace/workspace';
 import * as Comlink from 'comlink';
 import { createAppData } from './core/state';
@@ -44,7 +48,7 @@ if ('serviceWorker' in navigator) {
 
 const Receiver = {
 	template: receiverTemplate,
-	components: { ...uiComponents, VfoPanel, AdsbPanel, AisPanel, BlePanel, AcarsPanel, HeaderTools },
+	components: { ...uiComponents, VfoPanel, RxLevel, GainReset, ContrastControls, AdsbPanel, AisPanel, BlePanel, AcarsPanel, HeaderTools },
 	provide(this: AppInstance) {
 		return { receiver: this };
 	},
@@ -150,6 +154,7 @@ if (capabilityIssues.length) {
 }
 
 function watchReceiverSettings(this: AppInstance) {
+	watchContrast.call(this);
 	watchRadioFrequency.call(this);
 
 	watchFrequencyShift.call(this);

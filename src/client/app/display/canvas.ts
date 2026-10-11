@@ -3,6 +3,7 @@ import { VFO_COLORS } from '@/app/core/constants';
 import { Waterfall, WaterfallGL } from '@/display/utils';
 import { SpectrumFrameLimiter, WaterfallClock } from '@/display/spectrum-rate';
 import { sidebandOffsetHz } from '@/worker/decoders/ssb';
+import { updateContrast } from './contrast';
 
 export const canvasMethods = {
 	initCanvas(this: AppInstance) {
@@ -19,6 +20,7 @@ export const canvasMethods = {
 		this._waterfallEngine = useWebGL ? new WaterfallGL(waterfall, renderSize, 512) : new Waterfall(waterfall, renderSize, 512);
 
 		this._waterfallEngine.setRange(this.display.minDB, this.display.maxDB);
+		this._lastSpectrumData = undefined;
 		this._waterfallClock = new WaterfallClock();
 		this._remoteSpectrumLimiter = new SpectrumFrameLimiter();
 
@@ -58,6 +60,7 @@ export const canvasMethods = {
 
 		// FPS calculation
 		const now = performance.now();
+		const range = updateContrast.call(this);
 		if (this.remoteMode === 'client' && !this._zoomRepaint && !this._remoteSpectrumLimiter.shouldDraw(now, this.display.spectrumFps))
 			return;
 		if (!this._zoomRepaint && !this._lastFrameTime) {
@@ -101,7 +104,7 @@ export const canvasMethods = {
 
 		const pointsToDraw = Math.floor(data.length / this.view.zoomScale);
 		const startIdx = Math.floor(data.length * this.view.zoomOffset);
-		const dbRange = this.display.maxDB - this.display.minDB;
+		const dbRange = range.maxDB - range.minDB;
 
 		// Decimate points so we don't draw 65k lines
 		const drawPoints = Math.min(w, pointsToDraw);
@@ -117,10 +120,10 @@ export const canvasMethods = {
 				if (data[j] > valDB) valDB = data[j];
 			}
 
-			valDB = Math.max(this.display.minDB, Math.min(this.display.maxDB, valDB));
+			valDB = Math.max(range.minDB, Math.min(range.maxDB, valDB));
 
 			// 0 is bottom (minDB), 1 is top (maxDB)
-			const n = (valDB - this.display.minDB) / dbRange;
+			const n = (valDB - range.minDB) / dbRange;
 			const y = h - h * n;
 
 			const x = (i / drawPoints) * w;

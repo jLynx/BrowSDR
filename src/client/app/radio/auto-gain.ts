@@ -1,10 +1,24 @@
 import { errorMessage } from '@/platform/errors';
 import type { AppInstance } from '@/app/core/receiver.types';
 import { nextLimeGain } from '@/radio/lime-auto-gain';
-import type { LimeGains, HackRFGains, DeviceCapabilities, RxLevel } from '@/radio/types';
-import { nextHackRFGain } from '@/radio/hackrf-auto-gain';
+import type { LimeGains, HackRFGains, DeviceCapabilities, RxLevel, AutoGainMode } from '@/radio/types';
+import { createHackRFGainAdjustment } from '@/radio/hackrf-auto-gain';
+
+const gainOptions = [
+	{
+		label: 'Auto set gains',
+		items: [
+			{ id: 'balanced', label: 'Balanced', icon: 'radio' as const, description: 'Everyday reception with room for peaks' },
+			{ id: 'sensitivity', label: 'Weak signals', icon: 'radio' as const, description: 'Favor early amplification for distant signals' },
+			{ id: 'strong', label: 'Strong signals', icon: 'radio' as const, description: 'Reduce early gain and leave extra headroom' },
+		],
+	},
+];
 
 export const autoGainMethods = {
+	autoGainOptions() {
+		return gainOptions;
+	},
 	autoGainSupported(this: AppInstance) {
 		return this.gains['Receive Mode'] !== 1 && ['limesdr', 'hackrf'].includes(this.deviceCapabilities?.deviceType ?? '');
 	},
@@ -15,7 +29,7 @@ export const autoGainMethods = {
 		this.autoGain.cancelled = true;
 		this.autoGain.status = 'Finishing…';
 	},
-	async autoSetGains(this: AppInstance) {
+	async autoSetGains(this: AppInstance, mode: AutoGainMode = 'balanced') {
 		if (!canAdjustGains(this)) return;
 		const isHackrf = this.deviceCapabilities?.deviceType === 'hackrf';
 		const names = isHackrf ? ['Amp (14dB)', 'LNA', 'VGA'] : ['LNA', 'TIA', 'PGA'];
@@ -24,6 +38,7 @@ export const autoGainMethods = {
 		const capabilities = this.deviceCapabilities;
 		const valid = createAutoGainGuard.call(this, capabilities);
 		this.autoGain.active = true;
+		this.autoGain.mode = mode;
 		this.autoGain.cancelled = false;
 		this.autoGain.level = null;
 		this.autoGain.status = 'Measuring receiver level…';
@@ -31,13 +46,17 @@ export const autoGainMethods = {
 		try {
 			// Allow any pending manual gain command to finish before sampling.
 			await this.backend.setGains(original);
+			if (startWithMinimumGain(capabilities, applied)) {
+				await applyGainChanges.call(this, names, { ...applied, LNA: 0, VGA: 0 }, applied, valid);
+			}
 			let after = Date.now() + 150;
 			let stable = 0;
+			const adjustHackrf = createHackRFGainAdjustment(mode);
 			const maxSteps = isHackrf ? 40 : 14;
 			for (let step = 0; step < maxSteps; step++) {
 				const level = await measure(after);
 				this.autoGain.level = level;
-				const next = isHackrf ? nextHackRFGain(applied as HackRFGains, level) : nextLimeGain(applied as LimeGains, level);
+				const next = isHackrf ? adjustHackrf(applied as HackRFGains, level) : nextLimeGain(applied as LimeGains, level, mode);
 				const nextGains = next.gains as Record<string, number>;
 				this.autoGain.status = next.reason;
 				if (next.done) {
@@ -124,4 +143,8 @@ async function applyGainChanges(
 
 function canAdjustGains(app: AppInstance): boolean {
 	return !app.autoGain.active && app.running && app.connected && app.remoteMode !== 'client' && app.autoGainSupported();
+}
+
+function startWithMinimumGain(capabilities: DeviceCapabilities | null, gains: Record<string, number>) {
+	return capabilities?.deviceType === 'hackrf' && !!gains['Amp (14dB)'];
 }

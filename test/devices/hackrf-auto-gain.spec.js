@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { reactive, nextTick } from 'vue';
 import { HackRFDevice } from '@/devices/hackrf/device';
 import { HackRFRxLevel } from '@/devices/hackrf/rx-level';
-import { hackrfGainProfile, hackrfGainTotal, nextHackRFGain } from '@/radio/hackrf-auto-gain';
+import { hackrfGainProfile, hackrfGainTotal, nextHackRFGain, createHackRFGainAdjustment } from '@/radio/hackrf-auto-gain';
 import { autoGainMethods } from '@/app/radio/auto-gain';
 
 afterEach(() => vi.useRealTimers());
@@ -160,7 +160,10 @@ describe('HackRF one-shot automatic gain lifecycle', () => {
 		await run;
 		const writes = app.backend.setGain.mock.calls;
 		expect(writes.at(-1)).toEqual(['Amp (14dB)', 1]);
-		expect(writes.slice(0, -1).every(([name]) => name === 'LNA' || name === 'VGA')).toBe(true);
+		expect(writes.slice(0, -1)).toEqual([
+			['LNA', 0],
+			['VGA', 0],
+		]);
 		expect(app.gains['Amp (14dB)']).toBe(1);
 	});
 	it('turns the RF amplifier off before increasing downstream gain after overload', async () => {
@@ -170,7 +173,11 @@ describe('HackRF one-shot automatic gain lifecycle', () => {
 		app.cancelAutoGain();
 		await vi.advanceTimersByTimeAsync(300);
 		await run;
-		expect(app.backend.setGain.mock.calls[0]).toEqual(['Amp (14dB)', 0]);
+		expect(app.backend.setGain.mock.calls.slice(0, 2)).toEqual([
+			['LNA', 0],
+			['VGA', 0],
+		]);
+		expect(app.backend.setGain.mock.calls[2]).toEqual(['Amp (14dB)', 0]);
 		expect(app.gains['Amp (14dB)']).toBe(0);
 	});
 	it('restores the original amplifier setting if a later gain write fails', async () => {
@@ -222,4 +229,93 @@ describe('HackRF one-shot automatic gain lifecycle', () => {
 		await app.autoSetGains();
 		expect(app.backend.setGains).toHaveBeenCalledOnce();
 	});
+});
+
+describe('HackRF gain preferences', () => {
+	it('redistributes settled levels for sensitivity and strong signals', () => {
+		const starting = { LNA: 16, VGA: 16, 'Amp (14dB)': 0 };
+		const weak = nextHackRFGain(starting, level(-20, -8), 'sensitivity');
+		expect(weak.gains['Amp (14dB)']).toBe(1);
+		expect(weak.gains.LNA).toBe(0);
+		expect(weak.gains).toEqual({ LNA: 0, VGA: 0, 'Amp (14dB)': 1 });
+		expect(weak.done).toBe(false);
+		const strong = nextHackRFGain(weak.gains, level(-28, -14), 'strong');
+		expect(strong.gains['Amp (14dB)']).toBe(0);
+		expect(strong.gains.LNA).toBeLessThan(strong.gains.VGA);
+		expect(hackrfGainTotal(strong.gains)).toBe(10);
+	});
+	it('retains clipping protection in sensitivity mode and can inhibit amp retries', () => {
+		const starting = { LNA: 32, VGA: 40, 'Amp (14dB)': 1 };
+		const overloaded = nextHackRFGain(starting, level(-12, -1, 0.01), 'sensitivity');
+		expect(overloaded.gains['Amp (14dB)']).toBe(0);
+		expect(hackrfGainTotal(overloaded.gains)).toBeLessThan(hackrfGainTotal(starting));
+		expect(nextHackRFGain(overloaded.gains, level(-40, -20), 'sensitivity', false).gains['Amp (14dB)']).toBe(0);
+	});
+});
+
+describe('bounded HackRF amplifier trials', () => {
+	it('tries the amp after reducing overload with the amp off', () => {
+		const adjust = createHackRFGainAdjustment('sensitivity');
+		const reduced = adjust({ LNA: 32, VGA: 26, 'Amp (14dB)': 0 }, level(-12, -1, 0.01));
+		expect(reduced.gains['Amp (14dB)']).toBe(0);
+		expect(hackrfGainTotal(reduced.gains)).toBe(52);
+		const trial = adjust(reduced.gains, level(-25, -9));
+		expect(trial.gains['Amp (14dB)']).toBe(1);
+		expect(trial.gains.LNA + trial.gains.VGA).toBeLessThan(reduced.gains.LNA + reduced.gains.VGA);
+	});
+	it('retries once at reduced gain and holds the amp off after a second failure', () => {
+		const adjust = createHackRFGainAdjustment('sensitivity');
+		expect(adjust({ LNA: 32, VGA: 26, 'Amp (14dB)': 0 }, level(-25, -9)).gains).toEqual({ LNA: 0, VGA: 0, 'Amp (14dB)': 1 });
+		const raised = { LNA: 24, VGA: 4, 'Amp (14dB)': 1 };
+		const reduced = adjust(raised, level(-12, -1, 0.01));
+		expect(reduced.gains['Amp (14dB)']).toBe(0);
+		expect(hackrfGainTotal(reduced.gains)).toBe(hackrfGainTotal(raised) - 6);
+		const retry = adjust(reduced.gains, level(-40, -20));
+		expect(retry.gains['Amp (14dB)']).toBe(1);
+		const failed = adjust(retry.gains, level(-12, -1, 0.01));
+		let settled = adjust(failed.gains, level(-20, -8));
+		for (let step = 0; step < 5; step++) {
+			expect(settled.gains['Amp (14dB)']).toBe(0);
+			settled = adjust(settled.gains, level(-20, -8));
+		}
+		expect(settled.done).toBe(true);
+		expect(settled.reason).toContain('Amp kept off after repeated overload');
+	});
+	it('keeps a successful retry enabled and starts each run with a fresh trial budget', () => {
+		const adjust = createHackRFGainAdjustment('sensitivity');
+		const reduced = adjust({ LNA: 32, VGA: 26, 'Amp (14dB)': 1 }, level(-12, -1, 0.01));
+		const retry = adjust(reduced.gains, level(-20, -8));
+		expect(retry.gains['Amp (14dB)']).toBe(1);
+		expect(adjust(retry.gains, level(-20, -8)).gains['Amp (14dB)']).toBe(1);
+		expect(createHackRFGainAdjustment('sensitivity')(reduced.gains, level(-20, -8)).gains['Amp (14dB)']).toBe(1);
+		expect(createHackRFGainAdjustment('strong')(retry.gains, level(-28, -14)).gains['Amp (14dB)']).toBe(0);
+	});
+});
+
+it('uses the bounded amp retry policy through the one-shot receiver lifecycle', async () => {
+	const app = appWithLevel();
+	app.backend.getRxLevel.mockImplementation(() => {
+		const writes = app.backend.setGain.mock.calls;
+		const ampWrites = writes.filter(([name]) => name === 'Amp (14dB)');
+		const overload = writes.length === 0 || [1, 3].includes(ampWrites.length);
+		return { ...level(overload ? -12 : -20, overload ? -1 : -8, overload ? 0.01 : 0), started: Date.now() };
+	});
+	const run = app.autoSetGains('sensitivity');
+	await vi.advanceTimersByTimeAsync(10000);
+	await run;
+	expect(app.backend.setGain.mock.calls.filter(([name]) => name === 'Amp (14dB)').map(([, value]) => value)).toEqual([1, 0, 1, 0]);
+	expect(app.gains['Amp (14dB)']).toBe(0);
+	expect(app.autoGain.status).toContain('Amp kept off after repeated overload');
+});
+
+it('raises gain gradually from minimum after enabling the amp, using fresh measurements', () => {
+	const adjust = createHackRFGainAdjustment('sensitivity');
+	let current = adjust({ LNA: 32, VGA: 26, 'Amp (14dB)': 0 }, level(-25, -9)).gains;
+	expect(current).toEqual({ LNA: 0, VGA: 0, 'Amp (14dB)': 1 });
+	for (let step = 0; step < 10; step++) {
+		const next = adjust(current, level(-45, -20));
+		expect(next.gains['Amp (14dB)']).toBe(1);
+		expect(hackrfGainTotal(next.gains) - hackrfGainTotal(current)).toBe(2);
+		current = next.gains;
+	}
 });
