@@ -3,6 +3,7 @@ import { makeDefaultVfo } from '@/app/core/constants';
 import { normalizeSpectrumFps } from '@/display/spectrum-rate';
 import { DEFAULT_FFT_SIZE, normalizedSpectrumRange, SPECTRUM_RANGE_VERSION } from '@/display/spectrum-range';
 import { isRecord, restoreFields, primitiveMap } from '@/platform/data';
+import { validContrastRange } from '@/display/contrast';
 
 export const settingsMethods = {
 	saveSetting(this: AppInstance) {
@@ -88,6 +89,7 @@ function restoreDisplaySettings(this: AppInstance, setting: Record<string, unkno
 		}
 	}
 	this.display.spectrumFps = normalizeSpectrumFps(this.display.spectrumFps);
+	Object.assign(this.display, validContrastRange(this.display.minDB, this.display.maxDB));
 }
 
 function restoreVfoSettings(this: AppInstance, setting: Record<string, unknown>) {

@@ -105,6 +105,7 @@
 							<p role="status">{{ autoGain.status }}<template v-if="autoGain.level"> · RMS {{ autoGain.level.rmsDbfs.toFixed(1) }} dBFS · peak {{ autoGain.level.peakDbfs.toFixed(1) }} dBFS · {{ (autoGain.level.clippedFraction * 100).toFixed(3) }}% clipped</template></p>
 					</div>
 					<template v-if="deviceCapabilities">
+						<RxLevel />
 						<component v-for="group in gainControlGroups" :key="group.name" :is="group.name ? 'UiPanel' : 'div'" v-bind="group.name ? { label: group.name, collapsed: !radioAdvanced } : {}" @update:collapsed="radioAdvanced = !$event" :class="group.name ? 'radio-advanced' : 'gain-controls'">
 						<p v-if="group.name">Stop reception before changing transport options.</p>
 						<UiFormRow v-for="gc in group.controls" :key="gc.name">
@@ -220,6 +221,7 @@
 				</div>
 
 				<UiPanel label="Display" :id="receiverId + '-display-panel'" v-model:collapsed="collapsedPanels['display']">
+					<ContrastControls />
 					<UiFormRow>
 						<label :for="receiverId + '-spectrum-fps'">Spectrum FPS</label>
 						<UiSelect :id="receiverId + '-spectrum-fps'" v-model.number="display.spectrumFps" title="Spectrum and waterfall display update rate; does not change radio settings or audio. Higher rates use more CPU. Remote reception is capped locally and cannot exceed the host's rate.">
