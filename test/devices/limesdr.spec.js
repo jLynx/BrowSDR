@@ -615,7 +615,7 @@ describe('LimeSDR RX channel selection', () => {
 		const { driver } = await createDriver();
 		driver.rxChannel = 1;
 		const modify = vi.spyOn(driver, 'modifyReg').mockResolvedValue(undefined);
-		vi.spyOn(driver, 'readLMS7002').mockResolvedValue(0);
+		vi.spyOn(driver, 'readLMS7002').mockImplementation(async (address) => (address === 0x0123 ? 0x2000 : 0));
 		vi.spyOn(driver, 'writeLMS7002').mockResolvedValue(undefined);
 		vi.spyOn(driver, 'tuneVCO').mockResolvedValue(!failure);
 		if (failure) await expect(driver.setFrequencySXR(106.4e6)).rejects.toThrow('SX VCO failed to lock');
