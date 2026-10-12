@@ -455,6 +455,10 @@ describe('LimeSDR receive configuration', () => {
 		[1, 393216, true, true],
 	])('waits for RX channel %i samples with %i-byte reads (packed=%s, usbOnly=%s)', async (channel, size, packed, usbOnly = false) => {
 		const { driver, usb } = await createDriver();
+		let releaseLock;
+		const verifyLock = vi
+			.spyOn(driver, 'verifyStreamingSXLock')
+			.mockImplementation(() => new Promise((resolve) => (releaseLock = resolve)));
 		driver.rxChannel = channel;
 		driver.setLinkFormat(packed ? 12 : 16);
 		vi.spyOn(driver, 'readFPGA').mockImplementation(async (address) => (address === 0x0008 && packed ? 0x0102 : 0));
@@ -495,19 +499,16 @@ describe('LimeSDR receive configuration', () => {
 			}
 		}
 		readResolvers.shift()({ status: 'ok', data: packet });
+		await vi.waitFor(() => expect(verifyLock).toHaveBeenCalledOnce());
+		expect(callback).not.toHaveBeenCalled();
+		expect(active).toBe(false);
+		releaseLock();
 		await starting;
 		expect(fpgaWrite).toHaveBeenCalledWith(0x0007, 1 << channel);
 		expect(fpgaWrite).toHaveBeenCalledWith(0x0008, packed ? 0x0102 : 0x0100);
 		expect(usb.transferIn).toHaveBeenCalledWith(1, packed ? 393216 : 524288);
 		expect(active).toBe(true);
-		if (usbOnly) {
-			expect(callback).not.toHaveBeenCalled();
-			expect(meter).not.toHaveBeenCalled();
-		} else {
-			expect(callback).toHaveBeenCalledOnce();
-			expect(callback.mock.calls[0][0]).toHaveLength((size / 4096) * (packed ? 2720 : 2040));
-			expect(Array.from(callback.mock.calls[0][0].slice(0, 4))).toEqual([64, -8, 64, -8]);
-		}
+		expect(verifyLock).toHaveBeenCalledOnce();
 		expect(driver.streamStats.report).toMatchObject({
 			sourceGapCount: 0,
 			sourceMissingSamples: 0,
@@ -522,6 +523,16 @@ describe('LimeSDR receive configuration', () => {
 			[0x0020, 0x5515],
 			[0x0020, 0xff15],
 		]);
+		readResolvers.shift()({ status: 'ok', data: packet });
+		await vi.waitFor(() => expect(driver.streamStats.report.usbTransferCount).toBe(2));
+		if (usbOnly) {
+			expect(callback).not.toHaveBeenCalled();
+			expect(meter).not.toHaveBeenCalled();
+		} else {
+			expect(callback).toHaveBeenCalledOnce();
+			expect(callback.mock.calls[0][0]).toHaveLength((size / 4096) * (packed ? 2720 : 2040));
+			expect(Array.from(callback.mock.calls[0][0].slice(0, 4))).toEqual([64, -8, 64, -8]);
+		}
 		const stopping = driver.stopStreaming();
 		for (const resolve of readResolvers) resolve({ status: 'ok', data: packet });
 		await stopping;

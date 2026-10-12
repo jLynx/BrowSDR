@@ -356,6 +356,7 @@ export class LimeSDR extends LimeSDRClocks {
 		);
 
 		let firstPacketLogged = false;
+		let receiveReady = false;
 		let resolveStarted!: () => void;
 		let rejectStarted!: (error: Error) => void;
 		const started = new Promise<void>((resolve, reject) => {
@@ -411,7 +412,7 @@ export class LimeSDR extends LimeSDRClocks {
 					if (!usbOnly) {
 						this.rxLevel.observe(dv, Date.now(), packed);
 						const outPos = decodeStreamPcm(dv, outBuf, packed);
-						if (outPos > 0) callback(outBuf.subarray(0, outPos));
+						if (receiveReady && outPos > 0) callback(outBuf.subarray(0, outPos));
 					}
 					resolveStarted();
 					this.streamStats.observeService(performance.now() - serviceStart);
@@ -432,12 +433,25 @@ export class LimeSDR extends LimeSDRClocks {
 		for (let index = 0; index < NUM_TRANSFERS; index++) transfers.push(transfer());
 		try {
 			await started;
+			await this.verifyStreamingSXLock();
+			receiveReady = true;
 			console.log('LimeSDR: USB IQ stream active');
 		} catch (error) {
 			await this.stopStreaming();
 			throw error;
 		} finally {
 			clearTimeout(startTimer);
+		}
+	}
+
+	protected async verifyStreamingSXLock(): Promise<void> {
+		try {
+			await this.modifyReg(REG_RESET, 1, 0, 1);
+			if (await this.waitForSXLock()) return;
+			console.warn('LimeSDR: SXR lost lock after RX start; retuning under the active receive clocks');
+			await this.setFrequencySXR(this.currentFrequency);
+		} finally {
+			await this.modifyReg(REG_RESET, 1, 0, this.rxChannel + 1);
 		}
 	}
 
