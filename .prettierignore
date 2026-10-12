@@ -1,0 +1,21 @@
+node_modules/
+**/.vite/
+dist/
+storybook-static/
+coverage/
+test-results/
+.wrangler/
+public/
+# Generated reference assets retain their deterministic compact format.
+src/client/data/aviation/airports.json
+src/client/app/decoders/acars/reference/labels.json
+wasm/
+package-lock.json
+lint-results.json
+.cache/
+.codex/
+radio-proxy/
+# Raw fragments intentionally share opening/closing tags across files.
+src/client/app/templates/*.html
+AGENTS.md
+types/worker.d.ts

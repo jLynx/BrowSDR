@@ -1,0 +1,106 @@
+<div class="adsb-details" aria-label="Aircraft details">
+	<div class="adsb-details-heading">
+		<strong>{{ aircraft?.callsign || icao }}</strong>
+		<UiButton variant="transcript" @click="$emit('close')">Back to aircraft</UiButton>
+	</div>
+	<p v-if="!aircraft" class="adsb-detail-note">No recent transmissions for this aircraft.</p>
+	<dl class="adsb-detail-grid">
+		<div>
+			<dt>ICAO</dt>
+			<dd>{{ icao }}</dd>
+		</div>
+		<div>
+			<dt>Callsign</dt>
+			<dd>{{ aircraft?.callsign || '—' }}</dd>
+		</div>
+		<div>
+			<dt>Last seen</dt>
+			<dd>{{ lastSeen }}<span v-if="aircraft"> · {{ Math.max(0, Math.floor((now - aircraft.lastSeen) / 1000)) }}s ago</span></dd>
+		</div>
+		<div>
+			<dt>Squawk</dt>
+			<dd>{{ aircraft?.squawk ?? '—' }}</dd>
+		</div>
+		<div>
+			<dt>Altitude</dt>
+			<dd>
+				{{ aircraft?.altitude == null ? '—' : aircraft.altitude.toLocaleString() + ' ft' }}<small v-if="aircraft?.altitudeSource"
+					>{{ aircraft.altitudeSource }}</small
+				>
+			</dd>
+		</div>
+		<div>
+			<dt>Ground speed</dt>
+			<dd>{{ aircraft?.speed == null ? '—' : aircraft.speed + ' kt' }}</dd>
+		</div>
+		<div>
+			<dt>Ground track</dt>
+			<dd>{{ aircraft?.heading == null ? '—' : Math.round(aircraft.heading) + '°' }}</dd>
+		</div>
+		<div>
+			<dt>Vertical rate</dt>
+			<dd>{{ aircraft?.verticalRate == null ? '—' : aircraft.verticalRate + ' ft/min' }}</dd>
+		</div>
+		<div>
+			<dt>Latitude</dt>
+			<dd>{{ positioned ? aircraft.latitude.toFixed(5) + '°' : '—' }}</dd>
+		</div>
+		<div>
+			<dt>Longitude</dt>
+			<dd>{{ positioned ? aircraft.longitude.toFixed(5) + '°' : '—' }}</dd>
+		</div>
+	</dl>
+	<p class="adsb-detail-note" v-if="aircraftStatus || airlineStatus" role="status">{{ aircraftStatus }} {{ airlineStatus }}</p>
+	<dl class="adsb-detail-grid">
+		<div>
+			<dt>Registration</dt>
+			<dd>{{ metadata?.registration || '—' }}</dd>
+		</div>
+		<div>
+			<dt>Airline</dt>
+			<dd>{{ airline?.airline || '—' }}</dd>
+		</div>
+		<div>
+			<dt>Airline country</dt>
+			<dd>{{ airline?.country || '—' }}</dd>
+		</div>
+		<div>
+			<dt>Manufacturer</dt>
+			<dd>{{ metadata?.manufacturer || '—' }}</dd>
+		</div>
+		<div>
+			<dt>Model</dt>
+			<dd>{{ metadata?.model || '—' }}</dd>
+		</div>
+		<div>
+			<dt>Type</dt>
+			<dd>
+				{{ classification.type || '—' }}<small v-if="metadata?.type && classification.type !== metadata.type">{{ metadata.type }}</small>
+			</dd>
+		</div>
+		<div>
+			<dt>Number of engines</dt>
+			<dd>{{ classification.engines || '—' }}</dd>
+		</div>
+		<div>
+			<dt>Engine type</dt>
+			<dd>{{ classification.engineType || '—' }}</dd>
+		</div>
+		<div>
+			<dt>Owner</dt>
+			<dd>{{ metadata?.owner || '—' }}</dd>
+		</div>
+		<div>
+			<dt>Operator</dt>
+			<dd>{{ metadata?.operator || '—' }}</dd>
+		</div>
+	</dl>
+	<p class="adsb-detail-note">
+		Aircraft records: OpenSky · Airlines: Planefence.
+		<a :href="databaseSource" target="_blank" rel="noopener noreferrer">Database sources</a>. BrowSDR builds these records into a
+		downloadable database; saved records are used offline. Airline inferred from callsign prefix; records may be incomplete or outdated.
+	</p>
+	<UiButton v-if="aircraftStatus.includes('unavailable') || airlineStatus" variant="transcript" @click="retry++"
+		>Retry database lookup</UiButton
+	>
+</div>

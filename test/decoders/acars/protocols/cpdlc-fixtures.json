@@ -1,0 +1,132 @@
+[
+	{
+		"kind": "body_regression",
+		"expected_element": "uM74Position",
+		"label": "AA",
+		"text": "/YQXD2YA.AT1.N723AN20D85E9284A906346B20E742",
+		"link_direction": "uplink"
+	},
+	{
+		"kind": "body_regression",
+		"expected_element": "uM9Time",
+		"label": "H1",
+		"text": "USADCXA.AT1.N1740622D799C2726C1AF8",
+		"link_direction": null
+	},
+	{
+		"kind": "body_regression",
+		"expected_element": "dM48PositionReport",
+		"label": "BA",
+		"text": "J59ASQ0327/RGNCAYA.AT1.9V-SMJ2080AE0C3D9F3B950A55A93C02B2A82548B0A7D6026253AB369D51A8469205EC54013DCF8245A7127D400F95408F51",
+		"link_direction": "downlink"
+	},
+	{
+		"kind": "body_regression",
+		"expected_element": "uM106Speed",
+		"label": "AA",
+		"text": "/ANCATYA.AT1.JA791A248C37DAB5804DD8",
+		"link_direction": "uplink"
+	},
+	{
+		"kind": "body_regression",
+		"expected_element": "uM121PositionICAOunitnameFrequency",
+		"label": "H1",
+		"text": "- #MD/AA RECOEYA.AT1.CS-TSUA15F791E14E1419E0389CBC8916945A9551E7CF9E02EF7521B4E2C39F3A241A5650366ACDA802946",
+		"link_direction": "uplink"
+	},
+	{
+		"kind": "body_regression",
+		"expected_element": "uM75Position",
+		"label": "AA",
+		"text": "/NIMCAYA.AT1.PH-BVF20DC8052C48B4A2C29E04AF4",
+		"link_direction": "uplink"
+	},
+	{
+		"kind": "body_regression",
+		"expected_element": "uM155Position",
+		"label": "AA",
+		"text": "/RPHIAYA.AT1..B-LMA2159AAA6C489066528203396",
+		"link_direction": "uplink"
+	},
+	{
+		"kind": "body_regression",
+		"expected_element": "dM23ProcedureName",
+		"label": "H1",
+		"text": "USADCXA.AT1.N935HHA4B74A05C258352530664241327C3833104199524CD8B522D241367D28A82A48833904F9D150489F569209F3224CB270E743",
+		"link_direction": null
+	},
+	{
+		"kind": "body_regression",
+		"expected_element": "dM34Speed",
+		"label": "H1",
+		"text": "USADCXA.AT1.N8927Q270ABB88B480BB86",
+		"link_direction": null
+	},
+	{
+		"kind": "body_regression",
+		"expected_element": "uM68Position",
+		"label": "AA",
+		"text": "/FUKJJYA.AT1.JA383AA3924ED104A7160CCA63F8CB00",
+		"link_direction": "uplink"
+	},
+	{
+		"kind": "body_regression",
+		"expected_element": "uM108Speed",
+		"label": "AA",
+		"text": "/BOMCAYA.AT1.A7-ALH81B66C14C00E71",
+		"link_direction": "uplink"
+	},
+	{
+		"kind": "body_regression",
+		"expected_element": "uM109Speed",
+		"label": "AA",
+		"text": "/OAKODYA.AT1.VH-QPG24BC651B7540E692",
+		"link_direction": "uplink"
+	},
+	{
+		"kind": "body_regression",
+		"expected_element": "uM111Speed",
+		"label": "AA",
+		"text": "/PIKCPYA.AT1.N886BRE1B667026FD72A496ACE830A64541667D5A482945A3562D3A9162209B061C84112AC541529418D1A4C30067D",
+		"link_direction": "uplink"
+	},
+	{
+		"kind": "body_regression",
+		"expected_element": "uM151Speed",
+		"label": "AA",
+		"text": "/RECOEYA.AT1.LV-FVI225E2C65F5402DC5",
+		"link_direction": "uplink"
+	},
+	{
+		"kind": "body_regression",
+		"expected_element": "uM152DistanceOffsetDirection",
+		"label": "H1",
+		"text": "USADCXA.AT1.N35236A0AE62AA4AA1CC8B069458882A4F412E2459C820D2A15104D9F3AA4E6481020A9222CE41069A08D2664589548DC3990905693050539311045B10D04D832675440DD830611AA5492C5B1422C3A88234C66DD82062D504E9A820C6A882250588225",
+		"link_direction": null
+	},
+	{
+		"kind": "body_regression",
+		"expected_element": "dM40RouteClearance",
+		"label": "H1",
+		"text": "YEGE2YA.AT1.N618UP2B5DEA8A3BB974E246A106743413B324CCA6C5ACB42A45A54D9CA9262CB9814DA800B2001372962DC004DE000BC00137A003040042549F5A0C409524C59730A0499368458AA41912A498B2E61C732250A91695321901129CB8B3A9E0",
+		"link_direction": null
+	},
+	{
+		"kind": "control",
+		"text": "/RGNCAYA.CR1.A7-BTD20578128EB59B31AA01F",
+		"direction": "uplink",
+		"expect": "connect_request"
+	},
+	{
+		"kind": "control",
+		"text": "/USADCXA.CC1.N7800861055BF6491093E2",
+		"direction": "downlink",
+		"expect": "connect_confirm"
+	},
+	{
+		"kind": "control",
+		"text": "/USADCXA.DR1.N900DU3AED",
+		"direction": "downlink",
+		"expect": "disconnect_request"
+	}
+]

@@ -1,0 +1,93 @@
+<section v-if="receiver.adsb.panelOpen" class="adsb-panel" :class="{ 'adsb-fullscreen': fullscreen }" aria-label="ADS-B aircraft">
+	<UiToolHeader variant="pocsag" closable close-label="Close ADS-B panel" @close="receiver.toggleAdsbPanel">
+		ADS-B Aircraft <span class="pocsag-count">{{ aircraft.length }} aircraft · {{ positioned.length }} located</span>
+		<template #actions>
+			<UiSelect v-model.number="receiver.activeVfoIndex" aria-label="ADS-B VFO" class="decoder-vfo-select">
+				<option v-for="(vfo, i) in receiver.vfos" :key="i" :value="i">VFO {{ i + 1 }} · {{ vfo.freq.toFixed(3) }} MHz</option>
+			</UiSelect>
+			<UiCheckbox
+				v-if="selectedVfo"
+				class="adsb-decode-control"
+				v-model="selectedVfo.adsb"
+				:label="'Decode VFO ' + (receiver.activeVfoIndex + 1)"
+				:input-label="'ADS-B decoding for VFO ' + (receiver.activeVfoIndex + 1)"
+				:disabled="selectedVfo.freq !== 1090 && !selectedVfo.adsb"
+				@change="receiver.updateBackendVfoParams(receiver.activeVfoIndex)"
+			></UiCheckbox>
+			<UiButton v-if="receiver.vfos[receiver.activeVfoIndex]?.freq !== 1090" variant="transcript" @click="receiver.tuneAdsbVfo()"
+				>Tune VFO {{ receiver.activeVfoIndex + 1 }} to 1090 MHz</UiButton
+			>
+			<UiButton variant="transcript" @click="showMap = !showMap" :aria-expanded="showMap">{{ showMap ? 'Hide map' : 'Show map' }}</UiButton>
+			<UiButton variant="transcript" @click="setFullscreen(!fullscreen)" :aria-pressed="fullscreen"
+				>{{ fullscreen ? 'Exit fullscreen' : 'Fullscreen map' }}</UiButton
+			>
+			<UiButton variant="transcript" @click="fit" :disabled="!showMap || !positioned.length">Fit aircraft</UiButton>
+		</template>
+	</UiToolHeader>
+	<div class="adsb-summary">
+		<span v-if="!receiver.running">Reception stopped</span>
+		<template v-for="(vfo, i) in receiver.vfos" :key="i"
+			><span v-if="vfo.adsb" :class="{ 'rtl433-error': receiver.adsb.status[i]?.state === 'error' }"
+				>VFO {{ i + 1 }} · {{ receiver.adsbStatusText(i) }}</span
+			></template
+		>
+		<span v-if="!active">Tune the selected VFO to 1090 MHz, then enable decoding here. Audio can stay muted.</span>
+	</div>
+	<div class="adsb-content" :class="{ 'adsb-list-only': !showMap }">
+		<div v-if="showMap" class="adsb-map-wrap">
+			<div ref="mapElement" class="adsb-map" aria-label="Live aircraft map"></div>
+			<div v-if="!positioned.length" class="adsb-map-message">Waiting for paired airborne position messages…</div>
+			<div v-if="error" class="adsb-map-error" role="status">{{ error }}</div>
+		</div>
+		<div class="adsb-list">
+			<AdsbDetails
+				v-if="selected"
+				:icao="selected"
+				:aircraft="selectedAircraft"
+				:now="now"
+				@close="selected = ''"
+				@metadata="setAircraftType($event)"
+			></AdsbDetails>
+			<UiInputGroup v-show="!selected" class="adsb-search"
+				><UiInput v-model="query" aria-label="Search aircraft" placeholder="Callsign or ICAO address"></UiInput
+				><UiButton v-if="/^[0-9a-f]{6}$/i.test(query.trim())" variant="transcript" @click="select(query.trim().toUpperCase())"
+					>Look up ICAO</UiButton
+				></UiInputGroup
+			>
+			<UiEmptyState v-if="!selected && !aircraft.length" variant="pocsag"
+				>Waiting for aircraft transmissions. Use an SDR and antenna covering 1090 MHz, with at least 2 MS/s.</UiEmptyState
+			>
+			<UiEmptyState v-else-if="!selected && !filtered.length" variant="pocsag">No aircraft match your search.</UiEmptyState>
+			<div class="adsb-table-wrap" v-show="!selected" v-if="filtered.length">
+				<table class="adsb-table">
+					<thead>
+						<tr>
+							<th>Aircraft</th>
+							<th>Altitude</th>
+							<th>Speed</th>
+							<th>Track</th>
+							<th>Seen</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr v-for="item in filtered" :key="item.icao" :class="{ selected: selected === item.icao }">
+							<td>
+								<UiButton variant="transcript" @click="select(item.icao)" :aria-pressed="selected === item.icao"
+									>{{ item.callsign || item.icao }}</UiButton
+								><small>{{ item.icao }} · {{ hasLivePosition(item, now) ? 'Located' : 'No current position' }}</small>
+							</td>
+							<td :title="item.altitudeSource">{{ item.altitude == null ? '—' : item.altitude.toLocaleString() + ' ft' }}</td>
+							<td>{{ item.speed == null ? '—' : item.speed + ' kt' }}</td>
+							<td>{{ item.heading == null ? '—' : Math.round(item.heading) + '°' }}</td>
+							<td>{{ Math.max(0, Math.floor((now - item.lastSeen) / 1000)) }}s</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+	<div class="adsb-footer">
+		<AdsbCacheControl></AdsbCacheControl>
+		<span>1090ES airborne ADS-B · Positions expire after 30s; aircraft after 2min. Map tiles need internet.</span>
+	</div>
+</section>

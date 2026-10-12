@@ -1,0 +1,74 @@
+<section v-if="receiver.discovery.panelOpen" class="adsb-panel discovery-panel" aria-label="Signal Discovery">
+	<UiToolHeader variant="pocsag" closable close-label="Close Signal Discovery" @close="receiver.discovery.panelOpen = false">
+		Signal Discovery <span class="pocsag-count">{{ result.signals.length }} signals</span>
+		<template #actions>
+			<UiCheckbox v-model="receiver.discovery.enabled" label="Discover signals" />
+			<UiButton variant="transcript" @click="reset">Clear history</UiButton>
+		</template>
+	</UiToolHeader>
+	<div class="discovery-controls">
+		<UiFormRow label="Threshold" :input-id="receiver.receiverId + '-discovery-threshold'">
+			<UiSelect :id="receiver.receiverId + '-discovery-threshold'" v-model.number="receiver.discovery.thresholdDb">
+				<option :value="6">6 dB · Sensitive</option>
+				<option :value="10">10 dB · Balanced</option>
+				<option :value="15">15 dB · Strong signals</option>
+				<option :value="20">20 dB</option>
+			</UiSelect>
+		</UiFormRow>
+		<UiFormRow label="Minimum width" :input-id="receiver.receiverId + '-discovery-width'">
+			<UiSelect :id="receiver.receiverId + '-discovery-width'" v-model.number="receiver.discovery.minWidthHz">
+				<option :value="0">Any width</option>
+				<option :value="3000">3 kHz</option>
+				<option :value="6000">6 kHz</option>
+				<option :value="10000">10 kHz</option>
+				<option :value="50000">50 kHz</option>
+			</UiSelect>
+		</UiFormRow>
+		<UiCheckbox v-model="receiver.discovery.excludeDc" label="Ignore centre spike" />
+	</div>
+	<div class="adsb-summary">
+		<span>{{ status }}</span>
+		<span>{{ (receiver.radio.sampleRate / 1e6).toFixed(1) }} MHz span · {{ width(resolution) }} per bin</span>
+		<span v-if="error" role="alert">{{ error }}</span>
+	</div>
+	<div v-if="selected" class="discovery-selection">
+		<strong>{{ (selected.frequencyHz / 1e6).toFixed(6) }} MHz · ~{{ width(selected.widthHz) }}</strong>
+		<span>{{ active(selected) ? 'Detected now' : 'Previously detected · not detected now' }} · {{ age(selected.lastSeen) }}</span>
+		<UiButton variant="transcript" :disabled="!receiver.connected" @click="tune(false)">Tune selected VFO</UiButton>
+		<UiButton variant="transcript" :disabled="!receiver.connected" @click="tune(true)">New VFO</UiButton>
+	</div>
+	<div class="discovery-list">
+		<table v-if="result.signals.length">
+			<thead>
+				<tr>
+					<th scope="col">Frequency (MHz)</th>
+					<th scope="col">Est. width</th>
+					<th scope="col">Above noise</th>
+					<th scope="col">Activity*</th>
+					<th scope="col">Last seen</th>
+				</tr>
+			</thead>
+			<tbody>
+				<tr v-for="signal in result.signals" :key="signal.id" :class="{ selected: selectedId === signal.id }">
+					<td>
+						<UiButton variant="transcript" :aria-pressed="selectedId === signal.id" @click="selectSignal(signal)"
+							>{{ (signal.frequencyHz / 1e6).toFixed(6) }}</UiButton
+						>
+					</td>
+					<td>~{{ width(signal.widthHz) }}</td>
+					<td>{{ signal.aboveNoiseDb.toFixed(1) }} dB</td>
+					<td>{{ active(signal) ? 'Active' : 'History' }} · {{ Math.round(signal.hits / signal.observations * 100) }}%</td>
+					<td>{{ age(signal.lastSeen) }}</td>
+				</tr>
+			</tbody>
+		</table>
+		<UiEmptyState v-else variant="activity"
+			>No signals retained yet. Enable discovery while receiving; lower the threshold or minimum width to include weaker or narrower
+			signals.</UiEmptyState
+		>
+	</div>
+	<div class="adsb-footer">
+		Estimated widths depend on strength and resolution. *Activity is the fraction of analysed frames since first detection; short bursts can
+		be missed. Retains up to 500 signals for 2 minutes since last seen. Receiver spurs may appear. Filter edges (1%) are excluded.
+	</div>
+</section>

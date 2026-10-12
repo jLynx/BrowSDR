@@ -1,0 +1,272 @@
+.adsb-panel {
+	flex-shrink: 0;
+	height: min(440px, 55vh);
+	min-height: 260px;
+	display: flex;
+	flex-direction: column;
+	border-top: 2px solid var(--accent);
+	background: var(--bg-panel);
+}
+.adsb-panel .pocsag-header {
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.adsb-panel.adsb-fullscreen {
+	position: fixed;
+	inset: 0;
+	z-index: 1100;
+	height: 100dvh;
+	min-height: 0;
+}
+.adsb-fullscreen .adsb-content {
+	grid-template-columns: minmax(0, 1fr) minmax(300px, 25%);
+}
+.adsb-fullscreen .adsb-list-only {
+	grid-template-columns: 1fr;
+}
+.adsb-decode-control {
+	font-size: 11px;
+	white-space: nowrap;
+}
+.adsb-summary,
+.adsb-footer {
+	font-size: 11px;
+	line-height: 1.5;
+	padding: 5px 12px;
+	color: var(--text-muted);
+}
+.adsb-summary {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 16px;
+}
+.adsb-cache-control {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px 12px;
+	margin-bottom: 4px;
+}
+.adsb-content {
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(330px, 40%);
+	flex: 1;
+	min-height: 0;
+}
+.adsb-list-only {
+	grid-template-columns: 1fr;
+}
+.adsb-map-wrap {
+	position: relative;
+	min-height: 0;
+}
+.adsb-map {
+	container-type: size;
+	height: 100%;
+	min-height: 160px;
+	background: #18232c;
+	z-index: 0;
+}
+.adsb-map-message,
+.adsb-map-error {
+	position: absolute;
+	z-index: 1;
+	top: 10px;
+	left: 50%;
+	transform: translateX(-50%);
+	background: var(--bg-panel);
+	color: var(--text-main);
+	padding: 8px 12px;
+	border-radius: 4px;
+	font-size: 11px;
+	text-align: center;
+	width: max-content;
+	max-width: calc(100% - 100px);
+	pointer-events: none;
+}
+.adsb-map-error {
+	top: auto;
+	bottom: 30px;
+	color: #ffbf80;
+}
+.adsb-list {
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+}
+.adsb-search {
+	margin: 8px;
+	flex-shrink: 0;
+	width: calc(100% - 16px);
+}
+.adsb-details {
+	overflow: auto;
+	padding: 10px 12px;
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+}
+.adsb-details-heading {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 12px;
+	margin-bottom: 12px;
+}
+.adsb-detail-grid {
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 12px 16px;
+	margin: 0 0 12px;
+}
+.adsb-detail-grid dt,
+.adsb-detail-note,
+.adsb-detail-grid small {
+	color: var(--text-muted);
+}
+.adsb-list-only .adsb-detail-grid {
+	grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
+.adsb-detail-grid dd {
+	margin: 3px 0 0;
+	overflow-wrap: anywhere;
+}
+.adsb-detail-grid small {
+	display: block;
+	margin-top: 2px;
+}
+.adsb-detail-note {
+	line-height: 1.5;
+}
+.adsb-detail-note a {
+	color: var(--accent);
+}
+.adsb-search input {
+	min-width: 0;
+	width: 100%;
+	flex: 1;
+	text-align: left;
+}
+.adsb-table-wrap {
+	overflow: auto;
+	flex: 1;
+}
+.adsb-table {
+	width: 100%;
+	min-width: 430px;
+	table-layout: fixed;
+	border-collapse: collapse;
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.adsb-table th:first-child {
+	width: 36%;
+}
+.adsb-table th:not(:first-child) {
+	width: 16%;
+}
+.adsb-table th {
+	text-align: left;
+	color: var(--text-muted);
+	position: sticky;
+	top: 0;
+	background: var(--bg-header);
+}
+.adsb-table th,
+.adsb-table td {
+	padding: 6px 8px;
+	border-bottom: 1px solid var(--border);
+}
+.adsb-table small {
+	display: block;
+	font-size: 10px;
+	color: var(--text-muted);
+}
+.adsb-table .selected {
+	background: rgba(58, 134, 255, 0.15);
+}
+.adsb-plane {
+	display: block;
+	width: 28px;
+	height: 32px;
+	color: #3a86ff;
+	filter: drop-shadow(0 1px 2px #000);
+}
+.adsb-plane.selected {
+	filter: drop-shadow(0 0 3px #fff);
+}
+.adsb-hover-card {
+	font-size: 10px;
+	line-height: 1.35;
+}
+.adsb-hover-card dl {
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	gap: 2px 12px;
+	margin: 6px 0 0;
+}
+.adsb-hover-card dt {
+	color: var(--text-muted);
+}
+.adsb-hover-card dd {
+	margin: 0;
+	white-space: normal;
+	max-width: 200px;
+}
+.adsb-altitude-legend {
+	width: 230px;
+	padding: 4px 6px;
+	background: var(--bg-panel);
+	color: var(--text-main);
+	font-size: 9px;
+	border-radius: 3px;
+}
+.adsb-altitude-legend div {
+	height: 7px;
+	margin: 3px 0;
+}
+.adsb-altitude-legend small {
+	font-size: 9px;
+}
+.adsb-map .leaflet-tooltip {
+	background: var(--bg-panel);
+	color: var(--text-main);
+	border-color: var(--border);
+}
+.adsb-map .adsb-aircraft-tooltip {
+	box-sizing: border-box;
+	width: 250px;
+	max-width: calc(100cqw - 32px);
+	max-height: min(230px, calc(100cqh - 24px));
+	overflow: auto;
+}
+.adsb-map:has(.adsb-aircraft-tooltip) .adsb-altitude-legend {
+	visibility: hidden;
+}
+.adsb-aircraft-tooltip::before {
+	display: none;
+}
+@media (max-width: 700px) {
+	.adsb-fullscreen .adsb-content {
+		grid-template-columns: 1fr;
+		grid-template-rows: minmax(160px, 3fr) minmax(140px, 1fr);
+	}
+	.adsb-fullscreen .adsb-list-only {
+		grid-template-rows: 1fr;
+	}
+	.adsb-panel {
+		height: min(640px, 70vh);
+		min-height: 440px;
+	}
+	.adsb-content {
+		grid-template-columns: 1fr;
+		grid-template-rows: minmax(160px, 1fr) minmax(160px, 0.8fr);
+	}
+	.adsb-list-only {
+		grid-template-rows: 1fr;
+	}
+	.adsb-footer {
+		font-size: 10px;
+	}
+}

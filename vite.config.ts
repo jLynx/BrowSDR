@@ -1,3 +1,4 @@
+import { sourceAlias } from './source-alias.mjs';
 import { defineConfig, build, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
@@ -23,7 +24,7 @@ function postBuildPlugin(): Plugin {
 				if (!file.endsWith('.ts') && !file.endsWith('.js')) continue;
 
 				const content = fs.readFileSync(filePath, 'utf-8');
-				if (content.includes("from './") || content.includes("from '../")) {
+				if (content.includes("from './") || content.includes("from '../") || content.includes("from '@/")) {
 					console.log(`[post-build] Bundling nested worker: ${file}`);
 					const jsName = file.replace(/\.ts$/, '.js');
 					renames.set(file, jsName);
@@ -35,19 +36,17 @@ function postBuildPlugin(): Plugin {
 							outDir: assetsDir,
 							emptyOutDir: false,
 							lib: {
-								entry: path.resolve(__dirname, 'src/client/dsp-worker.ts'),
+								entry: path.resolve(__dirname, 'src/client/worker/dsp-worker.ts'),
 								formats: ['es'],
 								fileName: () => jsName,
 							},
 							rollupOptions: {
-								external: [/\/hackrf-web\/pkg\//],
+								external: [/^\/wasm\//],
 							},
 							minify: true,
 						},
 						resolve: {
-							alias: {
-								'/hackrf-web/pkg': path.resolve(__dirname, 'hackrf-web/pkg'),
-							},
+							alias: sourceAlias,
 						},
 						logLevel: 'warn',
 					});
@@ -69,40 +68,14 @@ function postBuildPlugin(): Plugin {
 			}
 
 			// --- Update all .ts → .js references in output files ---
-			if (renames.size > 0) {
-				for (const file of fs.readdirSync(assetsDir)) {
-					if (!file.endsWith('.js')) continue;
-					const filePath = path.join(assetsDir, file);
-					let content = fs.readFileSync(filePath, 'utf-8');
-					let changed = false;
-					for (const [oldName, newName] of renames) {
-						if (content.includes(oldName)) {
-							content = content.replaceAll(oldName, newName);
-							changed = true;
-						}
-					}
-					if (changed) fs.writeFileSync(filePath, content);
-				}
-
-				const htmlPath = path.join(distDir, 'index.html');
-				if (fs.existsSync(htmlPath)) {
-					let html = fs.readFileSync(htmlPath, 'utf-8');
-					let changed = false;
-					for (const [oldName, newName] of renames) {
-						if (html.includes(oldName)) {
-							html = html.replaceAll(oldName, newName);
-							changed = true;
-						}
-					}
-					if (changed) fs.writeFileSync(htmlPath, html);
-				}
-			}
+			updateBuiltReferences(renames, assetsDir, distDir);
 
 			// --- Bundle whisper-worker (loaded via plain URL, not Vite worker syntax) ---
-			const whisperEntry = path.resolve(__dirname, 'src/client/whisper-worker.ts');
+			const whisperEntry = path.resolve(__dirname, 'src/client/transcription/whisper-worker.ts');
 			if (fs.existsSync(whisperEntry)) {
 				console.log('[post-build] Bundling whisper-worker');
 				await build({
+					resolve: { alias: sourceAlias },
 					configFile: false,
 					root: path.resolve(__dirname, 'src/client'),
 					build: {
@@ -115,7 +88,7 @@ function postBuildPlugin(): Plugin {
 						},
 						rollupOptions: {
 							external: [
-								/^https?:\/\//,  // CDN imports stay external
+								/^https?:\/\//, // CDN imports stay external
 							],
 						},
 						minify: true,
@@ -125,14 +98,7 @@ function postBuildPlugin(): Plugin {
 			}
 
 			// --- Copy WASM files ---
-			const wasmSrc = path.resolve(__dirname, 'hackrf-web/pkg');
-			const wasmDest = path.resolve(distDir, 'hackrf-web/pkg');
-			if (fs.existsSync(wasmSrc)) {
-				fs.mkdirSync(wasmDest, { recursive: true });
-				for (const file of fs.readdirSync(wasmSrc)) {
-					fs.copyFileSync(path.join(wasmSrc, file), path.join(wasmDest, file));
-				}
-			}
+			copyDecoderAssets(distDir);
 		},
 	};
 }
@@ -143,20 +109,17 @@ export default defineConfig({
 		outDir: path.resolve(__dirname, 'dist'),
 		emptyOutDir: true,
 		rollupOptions: {
-			external: [
-				/\/hackrf-web\/pkg\//,
-			],
+			external: [/^\/wasm\//],
 		},
 	},
 	worker: {
 		format: 'es',
 		rollupOptions: {
-			external: [
-				/\/hackrf-web\/pkg\//,
-			],
+			external: [/^\/wasm\//],
 		},
 	},
 	plugins: [
+		wasmAssetsPlugin(),
 		VitePWA({
 			registerType: 'autoUpdate',
 			injectRegister: 'script',
@@ -202,8 +165,8 @@ export default defineConfig({
 	},
 	resolve: {
 		alias: {
-			'vue': 'vue/dist/vue.esm-bundler.js',
-			'/hackrf-web/pkg': path.resolve(__dirname, 'hackrf-web/pkg'),
+			...sourceAlias,
+			vue: 'vue/dist/vue.esm-bundler.js',
 		},
 	},
 	server: {
@@ -213,3 +176,86 @@ export default defineConfig({
 		},
 	},
 });
+
+const wasmAssets = {
+	dsp: ['browsdr_dsp.js', 'browsdr_dsp_bg.wasm'],
+	mbelib: ['mbelib.js', 'mbelib.wasm', 'COPYRIGHT', 'NOTICE'],
+	rtl433: ['rtl433.js', 'rtl433.wasm', 'COPYING', 'NOTICE'],
+};
+
+function copyDecoderAssets(distDir: string) {
+	for (const [module, files] of Object.entries(wasmAssets)) {
+		const source = path.resolve(__dirname, 'wasm', module, 'pkg');
+		const destination = path.resolve(distDir, 'wasm', module);
+		fs.mkdirSync(destination, { recursive: true });
+		for (const file of files) {
+			if (!fs.existsSync(path.join(source, file))) {
+				throw new Error(`Missing ${module} asset: ${file}. Restore wasm/${module}/pkg or run npm run build:${module}.`);
+			}
+			fs.copyFileSync(path.join(source, file), path.join(destination, file));
+		}
+	}
+}
+
+/** Serve the committed bundles unchanged, including dynamically loaded codecs. */
+function wasmAssetsPlugin(): Plugin {
+	return {
+		name: 'wasm-assets',
+		configureServer(server) {
+			server.middlewares.use((request, response, next) => {
+				const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
+				const match = /^\/wasm\/(dsp|mbelib|rtl433)\/([^/]+)$/.exec(pathname);
+				if (!match) return next();
+				const module = match[1] as keyof typeof wasmAssets;
+				const file = match[2];
+				if (!wasmAssets[module].includes(file)) {
+					response.statusCode = 404;
+					response.end();
+					return;
+				}
+				const source = path.resolve(__dirname, 'wasm', module, 'pkg', file);
+				if (!fs.existsSync(source)) {
+					response.statusCode = 404;
+					response.end();
+					return;
+				}
+				response.setHeader(
+					'Content-Type',
+					file.endsWith('.wasm') ? 'application/wasm' : file.endsWith('.js') ? 'text/javascript' : 'text/plain',
+				);
+				response.end(fs.readFileSync(source));
+			});
+		},
+	};
+}
+
+function updateBuiltReferences(renames: Map<string, string>, assetsDir: string, distDir: string) {
+	if (renames.size > 0) {
+		for (const file of fs.readdirSync(assetsDir)) {
+			if (!file.endsWith('.js')) continue;
+			const filePath = path.join(assetsDir, file);
+			let content = fs.readFileSync(filePath, 'utf-8');
+			let changed = false;
+			for (const [oldName, newName] of renames) {
+				if (content.includes(oldName)) {
+					content = content.replaceAll(oldName, newName);
+					changed = true;
+				}
+			}
+			if (changed) fs.writeFileSync(filePath, content);
+		}
+
+		const htmlPath = path.join(distDir, 'index.html');
+		if (fs.existsSync(htmlPath)) {
+			let html = fs.readFileSync(htmlPath, 'utf-8');
+			let changed = false;
+			for (const [oldName, newName] of renames) {
+				if (html.includes(oldName)) {
+					html = html.replaceAll(oldName, newName);
+					changed = true;
+				}
+			}
+			if (changed) fs.writeFileSync(htmlPath, html);
+		}
+	}
+}

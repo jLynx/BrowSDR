@@ -1,0 +1,7 @@
+*
+!.gitignore
+!browsdr_dsp.js
+!browsdr_dsp.d.ts
+!browsdr_dsp_bg.wasm
+!browsdr_dsp_bg.wasm.d.ts
+!package.json

@@ -1,0 +1,30 @@
+.ais-vessel-marker {
+	display: block;
+	width: 28px;
+	height: 28px;
+	color: #51d7cf;
+	filter: drop-shadow(0 1px 2px #000);
+}
+.ais-vessel-marker svg {
+	display: block;
+}
+.ais-vessel-marker.selected {
+	color: #fff;
+	filter: drop-shadow(0 0 3px #fff);
+}
+.ais-panel .adsb-table th:first-child {
+	width: 42%;
+}
+
+.ais-panel .adsb-table th:not(:first-child) {
+	width: 14.5%;
+}
+.ais-panel .adsb-table td {
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.ais-panel .adsb-footer {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 12px;
+}

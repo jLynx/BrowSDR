@@ -1,0 +1,13 @@
+rtl_433 browser decoder for BrowSDR
+
+Upstream: https://github.com/merbanan/rtl_433
+Revision: fd234e655adce890c91ce95686ab22e90bb9f138
+Source archive SHA-256: 19aa53dd9805075da53d9891624eadb6bd8c032c7c0cc18551e6076ff0432420
+Compiler: Emscripten 4.0.7
+License: GPL-2.0-or-later; see COPYING and upstream per-file copyright notices.
+
+Corresponding source: upstream revision above, wasm/rtl433/wrapper.c and
+wasm/rtl433/build.sh in the BrowSDR source repository. The build script reduces
+MAXIMAL_BUF_LENGTH to 65536 for bounded browser streaming and disables native
+SDR drivers. Network output and CLI teardown are excluded by the adapter and
+linker; no file or socket input is opened. Device protocol code is unchanged.

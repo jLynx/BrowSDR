@@ -1,0 +1,172 @@
+	<!-- Bookmark import mode dialog -->
+	<UiDialog :open="bookmarkImportModal.show" title="Import Bookmarks" @close="bookmarkImportModal.show = false" variant="import" body-class="bm-import-body">
+		<template #title>Import Bookmarks</template>
+
+		<p class="bm-import-desc">How would you like to import?</p>
+		<div class="bm-import-choices">
+			<UiButton variant="import-merge" @click="confirmImport('merge')">
+					<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M17 12h-5v5h5v-5zM16 1v2H8V1H6v2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-1V1h-2zm3 18H5V8h14v11z"/></svg>
+				<span class="bm-import-choice-label">Merge</span>
+				<span class="bm-import-choice-desc">Add new bookmarks, keep existing</span>
+			</UiButton>
+			<UiButton variant="import-replace" @click="confirmImport('replace')">
+					<svg viewBox="0 0 24 24" width="18" height="18"><path fill="currentColor" d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+				<span class="bm-import-choice-label">Replace</span>
+				<span class="bm-import-choice-desc">Delete all existing, import fresh</span>
+			</UiButton>
+		</div>
+
+		<template #footer>
+			<UiButton @click="bookmarkImportModal.show = false">Cancel</UiButton>
+		</template>
+	</UiDialog>
+
+	<!-- Bookmark save dialog -->
+	<UiDialog :open="bookmarkModal.show" title="Save Bookmark" @close="bookmarkModal.show = false">
+		<template #title>
+			Save
+			<span class="bm-badge" :class="bookmarkModal.type === 'individual' ? 'bm-badge-freq' : 'bm-badge-group'">{{ bookmarkModal.type === 'individual' ? 'FREQ' : 'GROUP' }}</span>
+			Bookmark
+		</template>
+
+		<input type="text" v-model="bookmarkModal.name" placeholder="Bookmark name"
+			@keyup.enter="confirmBookmark" @keyup.esc="bookmarkModal.show = false"
+		ref="bookmarkNameInput" class="bookmark-dialog-input">
+		<div class="bm-edit-row">
+			<label class="bm-edit-label">Category</label>
+			<UiSelect v-model="bookmarkModal.category" class="bm-edit-select">
+				<option v-for="cat in bookmarkCategories" :key="cat.value" :value="cat.value">{{ cat.label }}</option>
+			</UiSelect>
+		</div>
+		<!-- Individual preview -->
+		<template v-if="bookmarkModal.type === 'individual'">
+			<div class="bookmark-dialog-info">
+				Freq: <b>{{ (vfos[activeVfoIndex] || vfos[0]).freq }} MHz</b> &bull;
+				Mode: <b>{{ ((vfos[activeVfoIndex] || vfos[0]).mode || '').toUpperCase() }}</b>
+			</div>
+		</template>
+		<!-- Group preview -->
+		<template v-else>
+			<div class="bookmark-dialog-info">
+				Center: <b>{{ radio.centerFreq }} MHz</b> &bull;
+				{{ vfos.length }} VFO{{ vfos.length !== 1 ? 's' : '' }} &bull;
+				{{ (radio.sampleRate / 1e6).toFixed(0) }} MSPS
+			</div>
+			<div class="bookmark-vfo-preview">
+				<div v-for="(v, vi) in vfos" :key="vi" class="bookmark-vfo-chip" :style="{ borderColor: vfoColor(vi) }">
+					<span class="bookmark-vfo-dot" :style="{ background: vfoColor(vi) }"></span>
+					{{ v.freq.toFixed(3) }} MHz &nbsp;<span style="opacity:0.6">{{ v.mode.toUpperCase() }}</span>
+				</div>
+			</div>
+		</template>
+
+		<template #footer>
+			<UiButton @click="bookmarkModal.show = false">Cancel</UiButton>
+			<UiButton variant="primary" @click="confirmBookmark" :disabled="!bookmarkModal.name.trim()">Save</UiButton>
+		</template>
+	</UiDialog>
+
+	<!-- Bookmark edit dialog -->
+	<UiDialog :open="bookmarkEdit.show" title="Edit Bookmark" @close="bookmarkEdit.show = false" variant="edit">
+		<template #title>
+			Edit
+			<span class="bm-badge" :class="bookmarkEdit.type === 'individual' ? 'bm-badge-freq' : 'bm-badge-group'">{{ bookmarkEdit.type === 'individual' ? 'FREQ' : 'GROUP' }}</span>
+			Bookmark
+		</template>
+
+		<div class="bm-edit-row">
+			<label class="bm-edit-label">Name</label>
+			<UiInput type="text" v-model="bookmarkEdit.name" class="bookmark-dialog-input" @keyup.esc="bookmarkEdit.show = false" placeholder="Bookmark name"></UiInput>
+		</div>
+		<div class="bm-edit-row">
+			<label class="bm-edit-label">Category</label>
+			<UiSelect v-model="bookmarkEdit.category" class="bm-edit-select">
+				<option v-for="cat in bookmarkCategories" :key="cat.value" :value="cat.value">{{ cat.label }}</option>
+			</UiSelect>
+		</div>
+
+		<!-- Individual fields -->
+		<template v-if="bookmarkEdit.type === 'individual'">
+			<div class="bm-edit-row">
+				<label class="bm-edit-label">Frequency</label>
+				<UiInputGroup unit="MHz">
+					<UiInput type="number" v-model.number="bookmarkEdit.freq" step="0.001" class="bm-edit-input"></UiInput>
+				</UiInputGroup>
+			</div>
+			<div class="bm-edit-row">
+				<label class="bm-edit-label">Mode</label>
+				<div class="mode-grid bm-mode-grid">
+					<UiRadio v-for="m in ['nfm','am','usb','lsb','wfm','dsb','cw','raw','dsd']" :key="m" :value="m" v-model="bookmarkEdit.mode" :name="receiverId + '-bm-edit-mode'">{{ m.toUpperCase() }}</UiRadio>
+				</div>
+			</div>
+			<div class="bm-edit-row">
+				<label class="bm-edit-label">Bandwidth</label>
+				<UiInput type="number" v-model.number="bookmarkEdit.bandwidth" step="1000" class="bm-edit-input"></UiInput>
+			</div>
+			<div class="bm-edit-row" v-if="bookmarkEdit.mode === 'wfm' || bookmarkEdit.mode === 'nfm'">
+				<label class="bm-edit-label">De-emphasis</label>
+				<UiSelect v-model="bookmarkEdit.deEmphasis" class="bm-edit-select">
+					<option value="none">None</option>
+					<option value="22us">22us</option>
+					<option value="50us">50us</option>
+					<option value="75us">75us</option>
+				</UiSelect>
+			</div>
+			<div class="bm-edit-row">
+				<label class="bm-edit-label">Squelch</label>
+				<UiCheckbox v-model="bookmarkEdit.squelchEnabled" style="margin-right:8px"></UiCheckbox>
+				<UiInput type="number" v-model.number="bookmarkEdit.squelchLevel" step="0.1" min="-100" max="0" :disabled="!bookmarkEdit.squelchEnabled" class="bm-edit-input" style="width:70px"></UiInput>
+				<span style="opacity:0.5;font-size:11px;margin-left:4px">dB</span>
+			</div>
+			<div class="bm-edit-row">
+				<label class="bm-edit-label">Volume</label>
+				<UiInput type="range" v-model.number="bookmarkEdit.volume" min="0" max="100" step="1" style="flex:1"></UiInput>
+				<span style="width:32px;text-align:right;font-size:12px">{{ bookmarkEdit.volume }}%</span>
+			</div>
+		</template>
+
+		<!-- Group fields -->
+		<template v-else>
+			<div class="bm-edit-row">
+				<label class="bm-edit-label">Center Freq</label>
+				<UiInputGroup unit="MHz">
+					<UiInput type="number" v-model.number="bookmarkEdit.centerFreq" step="0.1" class="bm-edit-input"></UiInput>
+				</UiInputGroup>
+			</div>
+			<div class="bm-edit-row">
+				<label class="bm-edit-label">Sample Rate</label>
+				<UiSelect v-model.number="bookmarkEdit.sampleRate" class="bm-edit-select">
+					<template v-if="deviceCapabilities">
+						<option v-for="rate in deviceCapabilities.sampleRates" :key="rate" :value="rate">{{ rate>= 1000000 ? (rate / 1000000) + ' MSPS' : (rate / 1000) + ' kSPS' }}</option>
+					</template>
+					<template v-else>
+						<option value="2000000">2 MSPS</option>
+						<option value="4000000">4 MSPS</option>
+						<option value="8000000">8 MSPS</option>
+						<option value="10000000">10 MSPS</option>
+						<option value="16000000">16 MSPS</option>
+						<option value="20000000">20 MSPS</option>
+					</template>
+				</UiSelect>
+			</div>
+			<div class="bm-edit-section-label">VFOs in group</div>
+			<div class="bm-vfo-list">
+				<div v-for="(v, vi) in bookmarkEdit.vfos" :key="vi" class="bm-vfo-edit-row">
+					<span class="bookmark-vfo-dot" :style="{ background: vfoColor(vi) }"></span>
+					<UiInput type="number" v-model.number="v.freq" step="0.001" class="bm-edit-input" style="width:90px" placeholder="MHz"></UiInput>
+					<span style="opacity:0.5;font-size:11px">MHz</span>
+					<UiSelect v-model="v.mode" class="bm-edit-select" style="width:60px">
+						<option v-for="m in ['nfm','am','usb','lsb','wfm','dsb','cw','raw']" :key="m" :value="m">{{ m.toUpperCase() }}</option>
+					</UiSelect>
+					<UiButton variant="delete" style="flex-shrink:0" @click="bookmarkEdit.vfos.splice(vi,1)" :disabled="bookmarkEdit.vfos.length <= 1" title="Remove VFO">&times;</UiButton>
+				</div>
+			</div>
+			<UiButton style="margin-top:6px;font-size:11px;padding:2px 8px" @click="addVfoToEditGroup">+ Add VFO</UiButton>
+		</template>
+
+		<template #footer>
+			<UiButton @click="bookmarkEdit.show = false">Cancel</UiButton>
+			<UiButton variant="primary" @click="confirmEditBookmark" :disabled="!bookmarkEdit.name.trim()">Save Changes</UiButton>
+		</template>
+	</UiDialog>
+

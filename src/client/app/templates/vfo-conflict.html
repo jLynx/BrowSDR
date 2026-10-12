@@ -1,0 +1,31 @@
+	<!-- VFO conflict resolution dialog -->
+	<UiDialog :open="vfoConflictDialog.show" title="VFO Outside Bandwidth" :dismissible="false">
+		<template #title>VFO Outside Bandwidth</template>
+
+		<p style="margin:0 0 12px">The requested frequency does not fit within this SDR's bandwidth with all its existing VFOs.</p>
+		<p v-if="workspace" style="margin:0 0 12px">VFOs belong to the selected SDR. To receive a separate band at the same time, switch to another SDR tab or use + Add SDR.</p>
+
+		<div v-if="vfoConflictDialog.optionA" style="margin-bottom:8px">
+			<UiButton variant="primary" style="width:100%;text-align:left;white-space:normal"
+				@click="resolveVfoConflict('a')">
+				Re-center to {{ formatFreq(vfoConflictDialog.optionA.centerFreq) }} MHz
+				<br><small>{{ vfoConflictDialog.optionA.description }}</small>
+			</UiButton>
+		</div>
+
+		<div v-if="vfoConflictDialog.optionB" style="margin-bottom:8px">
+			<UiButton style="width:100%;text-align:left;white-space:normal"
+				@click="resolveVfoConflict('b')">
+				Re-center to {{ formatFreq(vfoConflictDialog.optionB.centerFreq) }} MHz
+					<br><small>Only includes VFO {{ vfoConflictDialog.vfoIndex + 1 }}; VFO{{ vfoConflictDialog.optionB.excludedVfos.length> 1 ? 's' : '' }} {{ vfoConflictDialog.optionB.excludedVfos.map(i => i + 1).join(', ') }} will be outside bandwidth</small>
+			</UiButton>
+		</div>
+
+		<template #footer>
+			<UiButton @click="resolveVfoConflict('cancel')">Cancel</UiButton>
+		</template>
+	</UiDialog>
+
+	<!-- Dialogs -->
+	<UiSnackbar :show="snackbar.show" :message="snackbar.message"></UiSnackbar>
+</div>
