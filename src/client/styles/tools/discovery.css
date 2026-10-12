@@ -1,0 +1,68 @@
+.discovery-panel {
+	height: min(440px, 55vh);
+}
+.discovery-controls,
+.discovery-selection {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 12px;
+	padding: 8px 12px;
+	font-size: 11px;
+}
+.discovery-controls .form-row {
+	gap: 8px;
+	margin: 0;
+}
+.discovery-controls select {
+	width: auto;
+}
+.discovery-list {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+}
+.discovery-list table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 11px;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+.discovery-list th,
+.discovery-list td {
+	padding: 5px 12px;
+	text-align: left;
+	border-bottom: 1px solid var(--border);
+}
+.discovery-list th {
+	position: sticky;
+	top: 0;
+	background: var(--bg-panel);
+	z-index: 1;
+}
+.discovery-list tr.selected {
+	background: rgba(0, 210, 210, 0.12);
+}
+.discovery-selection strong {
+	color: #00d2d2;
+}
+@media (max-width: 768px) {
+	.discovery-panel {
+		height: min(560px, 65vh);
+	}
+	.discovery-selection strong {
+		flex-basis: 100%;
+	}
+}
+@media (max-width: 768px) and (hover: none) and (pointer: coarse) {
+	.discovery-controls select,
+	.discovery-selection button,
+	.discovery-list button {
+		min-height: 28px;
+		height: 28px;
+	}
+	.discovery-controls {
+		gap: 8px;
+	}
+}

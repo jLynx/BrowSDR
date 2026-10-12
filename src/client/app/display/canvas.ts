@@ -5,6 +5,7 @@ import { HighResolutionWaterfall } from '@/display/waterfall-gl';
 import { SpectrumFrameLimiter, WaterfallClock } from '@/display/spectrum-rate';
 import { sidebandOffsetHz } from '@/worker/decoders/ssb';
 import { updateContrast } from './contrast';
+import { submitDiscovery, drawDiscovery } from '@/app/discovery/bridge';
 
 export const canvasMethods = {
 	initCanvas(this: AppInstance) {
@@ -65,6 +66,7 @@ export const canvasMethods = {
 
 		// Cache latest frame so zoom/pan can repaint immediately without new data
 		if (!this._zoomRepaint) this._lastSpectrumData = data;
+		if (!this._zoomRepaint) submitDiscovery(this, data);
 
 		// FPS calculation
 		const now = performance.now();
@@ -156,6 +158,7 @@ export const canvasMethods = {
 
 		// Draw VFO highlights
 		drawVfoHighlights.call(this, w, ctx, h);
+		drawDiscovery(this, ctx, w, h);
 	},
 };
 

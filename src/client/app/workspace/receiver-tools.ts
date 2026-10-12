@@ -75,33 +75,46 @@ function toolGroups(receiver: AppInstance): UiMenuGroup[] {
 				},
 			],
 		},
-		{
-			label: 'Utilities',
-			items: [
-				{
-					id: 'stats',
-					label: 'DSP Stats',
-					description: 'Receiver performance',
-					icon: 'stats',
-					active: receiver.showStats,
-					open: receiver.showStats,
-				},
-				{
-					id: 'activity',
-					label: 'Frequency Activity',
-					description: 'Signal activity over time',
-					icon: 'activity',
-					active: receiver.showActivity,
-					open: receiver.showActivity,
-				},
-			],
-		},
+		utilityGroup(receiver),
 	];
+}
+
+function utilityGroup(receiver: AppInstance): UiMenuGroup {
+	return {
+		label: 'Utilities',
+		items: [
+			{
+				id: 'discovery',
+				label: 'Signal Discovery',
+				description: 'Find frequencies & estimate signal widths',
+				icon: 'radio',
+				active: receiver.discovery.enabled,
+				open: receiver.discovery.panelOpen,
+			},
+			{
+				id: 'stats',
+				label: 'DSP Stats',
+				description: 'Receiver performance',
+				icon: 'stats',
+				active: receiver.showStats,
+				open: receiver.showStats,
+			},
+			{
+				id: 'activity',
+				label: 'Frequency Activity',
+				description: 'Signal activity over time',
+				icon: 'activity',
+				active: receiver.showActivity,
+				open: receiver.showActivity,
+			},
+		],
+	};
 }
 
 function selectTool(receiver: AppInstance, id: string, openOnly = false): void {
 	if (id === 'stats') receiver.showStats = !receiver.showStats;
 	else if (id === 'activity') receiver.showActivity = !receiver.showActivity;
+	else if (id === 'discovery') receiver.discovery.panelOpen = !receiver.discovery.panelOpen;
 	else {
 		const panels = {
 			whisper: receiver.whisper,

@@ -1,5 +1,15 @@
 import type { AppInstance } from '@/app/core/receiver.types';
 
+/** Centre a frequency using the same minimum zoom as the active-audio shortcuts. */
+export function focusSpectrumFrequency(receiver: AppInstance, frequencyMHz: number): void {
+	const position = ((frequencyMHz - receiver.radio.centerFreq) * 1e6) / receiver.radio.sampleRate + 0.5;
+	if (!Number.isFinite(position) || position < 0 || position > 1) return;
+	const zoom = Math.max(receiver.view.zoomScale, 32);
+	receiver.view.zoomScale = zoom;
+	receiver.view.zoomOffset = Math.max(0, Math.min(1 - 1 / zoom, position - 0.5 / zoom));
+	receiver.applyZoomToEngine();
+}
+
 export const zoomMethods = {
 	toggleDisplayLock(this: AppInstance) {
 		this.view.locked = !this.view.locked;

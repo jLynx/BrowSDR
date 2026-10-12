@@ -1,5 +1,6 @@
 import type { AppInstance } from '@/app/core/receiver.types';
 import { VFO_COLORS } from './constants';
+import { focusSpectrumFrequency } from '@/app/display/zoom';
 
 export const uiHelperMethods = {
 	copyRemoteLink(this: AppInstance) {
@@ -89,24 +90,9 @@ export const uiHelperMethods = {
 	focusActivityVfo(this: AppInstance, index: number) {
 		this.activeVfoIndex = index;
 
-		// Pan (and optionally zoom) the waterfall to centre on the VFO's frequency
 		const vfo = this.vfos[index];
 		if (!vfo) return;
-		// Normalised position within the full spectrum [0, 1]
-		const normalizedPos = ((vfo.freq - this.radio.centerFreq) * 1e6) / this.radio.sampleRate + 0.5;
-		// Only act if the frequency is within the tuned bandwidth
-		if (normalizedPos < 0 || normalizedPos > 1) return;
-
-		// Ensure we are zoomed in enough to clearly see the signal
-		const targetZoom = Math.max(this.view.zoomScale, 32.0);
-		// Centre the offset on the target frequency
-		let newOffset = normalizedPos - 0.5 / targetZoom;
-		const maxOffset = 1.0 - 1.0 / targetZoom;
-		newOffset = Math.max(0, Math.min(maxOffset, newOffset));
-
-		// Updates trigger the watch('view') to call applyZoomToEngine()
-		this.view.zoomScale = targetZoom;
-		this.view.zoomOffset = newOffset;
+		focusSpectrumFrequency(this, vfo.freq);
 	},
 	labelFreq(this: AppInstance, percent: number) {
 		const freq = this.minFreq + percent * (this.maxFreq - this.minFreq);

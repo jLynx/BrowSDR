@@ -28,10 +28,23 @@ import { vfoMethods } from '@/app/radio/vfo';
 import { connectionMethods } from '@/app/radio/connection';
 import { remoteMethods } from '@/app/workspace/remote';
 import HeaderTools from '@/app/workspace/receiver-tools';
+import DiscoveryPanel from '@/app/discovery/panel';
 
 export const ReceiverView = defineComponent({
 	template,
-	components: { ...components, VfoPanel, RxLevel, GainReset, ContrastControls, AdsbPanel, AisPanel, BlePanel, AcarsPanel, HeaderTools },
+	components: {
+		...components,
+		VfoPanel,
+		RxLevel,
+		GainReset,
+		ContrastControls,
+		AdsbPanel,
+		AisPanel,
+		BlePanel,
+		AcarsPanel,
+		HeaderTools,
+		DiscoveryPanel,
+	},
 	provide() {
 		return { receiver: this };
 	},

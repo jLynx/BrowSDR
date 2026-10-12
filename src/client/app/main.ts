@@ -36,6 +36,7 @@ import AdsbPanel from './decoders/adsb/panel';
 import { adsbMethods } from './decoders/adsb';
 import { rtl433Methods } from './decoders/rtl433';
 import HeaderTools from './workspace/receiver-tools';
+import DiscoveryPanel from './discovery/panel';
 import * as uiComponents from '@/ui';
 import { coreCapabilityIssues } from '@/platform/browser-capabilities';
 
@@ -48,7 +49,19 @@ if ('serviceWorker' in navigator) {
 
 const Receiver = {
 	template: receiverTemplate,
-	components: { ...uiComponents, VfoPanel, RxLevel, GainReset, ContrastControls, AdsbPanel, AisPanel, BlePanel, AcarsPanel, HeaderTools },
+	components: {
+		...uiComponents,
+		VfoPanel,
+		RxLevel,
+		GainReset,
+		ContrastControls,
+		AdsbPanel,
+		AisPanel,
+		BlePanel,
+		AcarsPanel,
+		HeaderTools,
+		DiscoveryPanel,
+	},
 	provide(this: AppInstance) {
 		return { receiver: this };
 	},
