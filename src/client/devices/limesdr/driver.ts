@@ -37,6 +37,8 @@ import {
 	REG_AFE_CFG,
 	REG_CGEN_CFG,
 	REG_CGEN_DIV,
+	REG_SX_CMP,
+	REG_SX_VCO,
 	REG_RFE_EN,
 	REG_RFE_PATH,
 	REG_RFE_GAIN,
@@ -66,6 +68,23 @@ export class LimeSDR extends LimeSDRClocks {
 	readonly rxLevel = new LimeRxLevel();
 	readonly streamStats = new LimeStreamStats();
 	private packed = false;
+
+	get isStreaming(): boolean {
+		return this.rxRunning !== null;
+	}
+
+	async checkStreamingSXLock(): Promise<void> {
+		if (!this.rxRunning) return;
+		try {
+			await this.modifyReg(REG_RESET, 1, 0, 1);
+			if (this.sxReady && getBits(await this.readLMS7002(REG_SX_CMP), 13, 12) === 2) return;
+			const unstableBand = getBits(await this.readLMS7002(REG_SX_VCO), 2, 1);
+			console.warn('LimeSDR: SXR lost lock during reception; retuning with another usable band preferred');
+			await this.setFrequencySXR(this.currentFrequency, unstableBand);
+		} finally {
+			await this.modifyReg(REG_RESET, 1, 0, this.rxChannel + 1);
+		}
+	}
 
 	setLinkFormat(bits: number): void {
 		if (bits !== 12 && bits !== 16) throw new Error('LimeSDR: unsupported USB sample width');
@@ -412,7 +431,7 @@ export class LimeSDR extends LimeSDRClocks {
 					if (!usbOnly) {
 						this.rxLevel.observe(dv, Date.now(), packed);
 						const outPos = decodeStreamPcm(dv, outBuf, packed);
-						if (receiveReady && outPos > 0) callback(outBuf.subarray(0, outPos));
+						if (receiveReady && this.sxReady && outPos > 0) callback(outBuf.subarray(0, outPos));
 					}
 					resolveStarted();
 					this.streamStats.observeService(performance.now() - serviceStart);

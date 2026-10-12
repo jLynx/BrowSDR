@@ -59,6 +59,8 @@ export class LimeSDRDevice implements SdrDevice {
 		return this.lime.streamStats.report;
 	}
 	private operationQueue: Promise<void> = Promise.resolve();
+	private lockMonitorTimer: ReturnType<typeof setTimeout> | undefined;
+	private lockMonitorGeneration = 0;
 	private rxCallback: ((data: ArrayBufferView) => void) | null = null;
 	private gains: Record<string, number> = { 'RX Channel': 0, LNA: 14, TIA: 2, PGA: 16, Antenna: 1, 'USB Format': 0, 'Receive Mode': 0 };
 
@@ -82,7 +84,9 @@ export class LimeSDRDevice implements SdrDevice {
 	}
 
 	async close(): Promise<void> {
+		this.stopLockMonitor();
 		await this.runExclusive(async () => {
+			this.stopLockMonitor();
 			this.rxCallback = null;
 			await this.lime.close();
 		});
@@ -178,6 +182,30 @@ export class LimeSDRDevice implements SdrDevice {
 	private async startReceive(callback: (data: ArrayBufferView) => void, gains = this.gains): Promise<void> {
 		if (gains['Receive Mode'] === 1) await this.lime.startStreaming(callback, true);
 		else await this.lime.startStreaming(callback);
+		this.startLockMonitor();
+	}
+
+	private stopLockMonitor(): void {
+		this.lockMonitorGeneration++;
+		clearTimeout(this.lockMonitorTimer);
+	}
+
+	private startLockMonitor(): void {
+		this.stopLockMonitor();
+		if (!this.lime.isStreaming) return;
+		const generation = this.lockMonitorGeneration;
+		const poll = async () => {
+			try {
+				await this.runExclusive(async () => {
+					if (generation === this.lockMonitorGeneration) await this.lime.checkStreamingSXLock();
+				});
+			} catch (error) {
+				console.error('LimeSDR: reception PLL recovery failed', error);
+			} finally {
+				if (generation === this.lockMonitorGeneration && this.lime.isStreaming) this.lockMonitorTimer = setTimeout(() => void poll(), 250);
+			}
+		};
+		this.lockMonitorTimer = setTimeout(() => void poll(), 250);
 	}
 
 	async startRx(callback: (data: ArrayBufferView) => void): Promise<void> {
@@ -188,7 +216,9 @@ export class LimeSDRDevice implements SdrDevice {
 	}
 
 	async stopRx(): Promise<void> {
+		this.stopLockMonitor();
 		await this.runExclusive(async () => {
+			this.stopLockMonitor();
 			this.rxCallback = null;
 			await this.lime.stopStreaming();
 		});

@@ -63,6 +63,12 @@ export const CGEN_VCO_MIN = 1930e6;
 export const CGEN_VCO_MAX = 2940e6;
 export const SX_VCO_MIN = 3800e6; // VCOL low bound
 export const SX_VCO_MAX = 7714e6; // VCOH high bound
+// LimeSuite LMS7002M::gVCO_frequency_table: VCOL, VCOM, VCOH.
+export const SX_VCO_RANGES = [
+	[3800e6, 5222e6],
+	[4961e6, 6754e6],
+	[6306e6, 7714e6],
+] as const;
 export const SX_DIV2_THRESHOLD = 5500e6;
 
 // LNA gain table: index = register value (1-15), value = dB

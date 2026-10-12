@@ -456,6 +456,7 @@ describe('LimeSDR receive configuration', () => {
 	])('waits for RX channel %i samples with %i-byte reads (packed=%s, usbOnly=%s)', async (channel, size, packed, usbOnly = false) => {
 		const { driver, usb } = await createDriver();
 		let releaseLock;
+		driver.sxReady = true;
 		const verifyLock = vi
 			.spyOn(driver, 'verifyStreamingSXLock')
 			.mockImplementation(() => new Promise((resolve) => (releaseLock = resolve)));
@@ -533,6 +534,11 @@ describe('LimeSDR receive configuration', () => {
 			expect(callback.mock.calls[0][0]).toHaveLength((size / 4096) * (packed ? 2720 : 2040));
 			expect(Array.from(callback.mock.calls[0][0].slice(0, 4))).toEqual([64, -8, 64, -8]);
 		}
+		// Keep USB reads fed, but exclude IQ while the LO is being recovered.
+		driver.sxReady = false;
+		readResolvers.shift()({ status: 'ok', data: packet });
+		await vi.waitFor(() => expect(driver.streamStats.report.usbTransferCount).toBe(3));
+		expect(callback).toHaveBeenCalledTimes(usbOnly ? 0 : 1);
 		const stopping = driver.stopStreaming();
 		for (const resolve of readResolvers) resolve({ status: 'ok', data: packet });
 		await stopping;
@@ -671,6 +677,56 @@ describe('LimeSDR RX channel selection', () => {
 		}
 		return { device, events };
 	}
+
+	it('serializes periodic PLL recovery with retuning and cancels monitoring on stop', async () => {
+		vi.useFakeTimers();
+		const { device } = createWrapper();
+		vi.spyOn(device.lime, 'isStreaming', 'get').mockReturnValue(true);
+		let releaseRecovery;
+		const check = vi
+			.spyOn(device.lime, 'checkStreamingSXLock')
+			.mockImplementation(() => new Promise((resolve) => (releaseRecovery = resolve)));
+		await device.startRx(vi.fn());
+		await vi.advanceTimersByTimeAsync(250);
+		expect(check).toHaveBeenCalledOnce();
+		const tuning = device.setFrequency(131e6);
+		const stopping = device.stopRx();
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(check).toHaveBeenCalledOnce();
+		expect(device.lime.setFrequencySXR).not.toHaveBeenCalled();
+		releaseRecovery();
+		await Promise.all([tuning, stopping]);
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(device.lime.setFrequencySXR).toHaveBeenCalledWith(131e6);
+		expect(check).toHaveBeenCalledOnce();
+	});
+
+	it('cancels a monitor created by a start that was already queued when stop was requested', async () => {
+		vi.useFakeTimers();
+		const { device } = createWrapper();
+		vi.spyOn(device.lime, 'isStreaming', 'get').mockReturnValue(true);
+		const check = vi.spyOn(device.lime, 'checkStreamingSXLock').mockResolvedValue(undefined);
+		await Promise.all([device.startRx(vi.fn()), device.stopRx()]);
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(check).not.toHaveBeenCalled();
+	});
+
+	it('keeps checking after a failed recovery without overlapping attempts and stops on close', async () => {
+		vi.useFakeTimers();
+		const { device } = createWrapper();
+		vi.spyOn(device.lime, 'isStreaming', 'get').mockReturnValue(true);
+		vi.spyOn(device.lime, 'close').mockResolvedValue(undefined);
+		const check = vi
+			.spyOn(device.lime, 'checkStreamingSXLock')
+			.mockRejectedValueOnce(new Error('PLL recovery failed'))
+			.mockResolvedValue(undefined);
+		await device.startRx(vi.fn());
+		await vi.advanceTimersByTimeAsync(500);
+		expect(check).toHaveBeenCalledTimes(2);
+		await device.close();
+		await vi.advanceTimersByTimeAsync(1000);
+		expect(check).toHaveBeenCalledTimes(2);
+	});
 	it('starts USB-only mode without treating it as RF gain and rejects a live mode change', async () => {
 		const { device } = createWrapper();
 		await device.setGains({ 'Receive Mode': 1, 'USB Format': 1 });

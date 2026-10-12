@@ -8,7 +8,7 @@ afterEach(() => {
 
 // Model the independent hardware comparator, including the SX capacitor-bank
 // discontinuity at 128. Register readback alone cannot establish PLL lock.
-function comparatorDriver(module, intervals) {
+function comparatorDriver(module, intervals, endpoints = [0, 3]) {
 	const driver = new LimeSDRDevice().lime;
 	const cswAddress = module === 'SX' ? 0x0121 : 0x008b;
 	const cmpAddress = module === 'SX' ? 0x0123 : 0x008c;
@@ -21,6 +21,7 @@ function comparatorDriver(module, intervals) {
 	vi.spyOn(driver, 'readLMS7002').mockImplementation(async (address) => {
 		if (address !== cmpAddress) return registers.get(address) ?? 0;
 		const csw = ((registers.get(cswAddress) ?? 0) >> shift) & 255;
+		if (module === 'SX' && (csw === 0 || csw === 255)) return endpoints[csw === 0 ? 0 : 1] << 12;
 		const interval = intervals[module === 'SX' && csw >= 128 ? 1 : 0];
 		return (csw < interval[0] ? 0 : csw > interval[1] ? 3 : 2) << 12;
 	});
@@ -48,7 +49,7 @@ function bandRestoreDriver({ recover = true, fallback = false, widths = [8, 8] }
 	vi.spyOn(driver, 'tuneVCO').mockImplementation(async () => {
 		tunes++;
 		const band = ((registers.get(0x0121) ?? 0) >> 1) & 3;
-		if (tunes <= 3) {
+		if (tunes <= 2) {
 			const value = ((band === 0 ? 120 : 180) << 3) | (band << 1);
 			registers.set(0x0121, value);
 			driver.cacheRegister(0x0121, value);
@@ -131,6 +132,49 @@ describe('LimeSDR PLL lock', () => {
 		expect(await tuning).toBe(false);
 	});
 
+	it.each([
+		[3, 3],
+		[0, 0],
+	])('rejects misleading interior locks when SX endpoints are %j', async (...endpoints) => {
+		vi.useFakeTimers();
+		const { driver } = comparatorDriver(
+			'SX',
+			[
+				[40, 60],
+				[170, 200],
+			],
+			endpoints,
+		);
+		const tuning = driver.tuneVCO('SX');
+		await vi.runAllTimersAsync();
+		expect(await tuning).toBe(false);
+		expect(driver.sxLockWidth).toBe(0);
+	});
+
+	it('keeps the low VCO for 131 → 150 → 150 → 250 MHz despite a wider false lock in VCOM', async () => {
+		vi.useFakeTimers();
+		const { driver, registers } = bandRestoreDriver({ recover: false, widths: [7, 16] });
+		driver.readLMS7002.mockImplementation(async (address) => {
+			if (address === 0x0123) return 0x2000;
+			return registers.get(address) ?? 0;
+		});
+		driver.tuneVCO.mockImplementation(async () => {
+			const band = (registers.get(0x0121) >> 1) & 3;
+			const value = ((band === 0 ? 44 : 39) << 3) | (band << 1);
+			registers.set(0x0121, value);
+			driver.cacheRegister(0x0121, value);
+			driver.sxLockWidth = band === 0 ? 7 : 16;
+			return band !== 2;
+		});
+		for (const frequency of [131e6, 150e6, 150e6, 250e6]) {
+			const tuning = driver.setFrequencySXR(frequency);
+			await vi.runAllTimersAsync();
+			await tuning;
+			expect(driver.currentFrequency).toBe(frequency);
+			expect((registers.get(0x0121) >> 1) & 3).toBe(0);
+		}
+	});
+
 	it('retunes a selected band that loses lock after searching other bands', async () => {
 		vi.useFakeTimers();
 		const { driver, registers } = bandRestoreDriver();
@@ -138,7 +182,7 @@ describe('LimeSDR PLL lock', () => {
 		await vi.runAllTimersAsync();
 		await tuning;
 		expect(driver.currentFrequency).toBe(160e6);
-		expect(driver.tuneVCO).toHaveBeenCalledTimes(4);
+		expect(driver.tuneVCO).toHaveBeenCalledTimes(3);
 		expect((registers.get(0x0121) >> 3) & 255).toBe(124);
 		expect(registers.get(0x0120)).toBe(192);
 	});
@@ -161,19 +205,77 @@ describe('LimeSDR PLL lock', () => {
 		await vi.runAllTimersAsync();
 		await tuning;
 		expect((registers.get(0x0121) >> 1) & 3).toBe(1);
-		expect(driver.tuneVCO).toHaveBeenCalledTimes(3);
+		expect(driver.tuneVCO).toHaveBeenCalledTimes(2);
 		expect(registers.get(0x0120)).toBe(192);
 	});
 
 	it('waits through transient comparator readings and requires sustained lock', async () => {
 		vi.useFakeTimers();
 		const driver = new LimeSDRDevice().lime;
-		const readings = [0, 2, 0, 2, 2, 2, 2, 2, 2];
+		const readings = [0, 2, 0, 2, 2, 2, ...Array(20).fill(2)];
 		const read = vi.spyOn(driver, 'readLMS7002').mockImplementation(async () => readings.shift() << 12);
 		const locking = driver.waitForSXLock();
 		await vi.runAllTimersAsync();
 		expect(await locking).toBe(true);
-		expect(read).toHaveBeenCalledTimes(9);
+		expect(read).toHaveBeenCalledTimes(26);
+	});
+
+	it('rejects intermittent loss of lock hundreds of milliseconds after the initial confirmation', async () => {
+		vi.useFakeTimers();
+		const driver = new LimeSDRDevice().lime;
+		const readings = [...Array(18).fill(2), 0];
+		vi.spyOn(driver, 'readLMS7002').mockImplementation(async () => readings.shift() << 12);
+		let settled = false;
+		const locking = driver.waitForSXLock().then((locked) => {
+			settled = true;
+			return locked;
+		});
+		await vi.advanceTimersByTimeAsync(700);
+		expect(settled).toBe(false);
+		await vi.runAllTimersAsync();
+		expect(await locking).toBe(false);
+	});
+
+	it('prefers another valid oscillator when recovering the band that lost lock during reception', async () => {
+		vi.useFakeTimers();
+		const { driver, registers } = bandRestoreDriver({ recover: false, widths: [8, 16] });
+		driver.readLMS7002.mockImplementation(async (address) => (address === 0x0123 ? 0x2000 : (registers.get(address) ?? 0)));
+		const tuning = driver.setFrequencySXR(160e6, 1);
+		await vi.runAllTimersAsync();
+		await tuning;
+		expect((registers.get(0x0121) >> 1) & 3).toBe(0);
+		expect(driver.sxReady).toBe(true);
+	});
+
+	it.each([true, false])('recovers late streaming loss of lock in bank A and restores RX2 (recovery=%s)', async (recovery) => {
+		const driver = new LimeSDRDevice().lime;
+		driver.rxChannel = 1;
+		driver.currentFrequency = 160e6;
+		driver.rxRunning = [];
+		driver.sxReady = true;
+		const modify = vi.spyOn(driver, 'modifyReg').mockResolvedValue(undefined);
+		vi.spyOn(driver, 'readLMS7002').mockImplementation(async (address) => (address === 0x0121 ? (55 << 3) | 2 : 0));
+		const tune = vi.spyOn(driver, 'setFrequencySXR');
+		if (recovery) tune.mockResolvedValue(undefined);
+		else tune.mockRejectedValue(new Error('No stable band'));
+		const checking = driver.checkStreamingSXLock();
+		if (recovery) await checking;
+		else await expect(checking).rejects.toThrow('No stable band');
+		expect(tune).toHaveBeenCalledWith(160e6, 1);
+		expect(modify).toHaveBeenLastCalledWith(0x0020, 1, 0, 2);
+	});
+
+	it('does not retune a stable streaming PLL or read a stopped receiver', async () => {
+		const driver = new LimeSDRDevice().lime;
+		driver.sxReady = true;
+		const modify = vi.spyOn(driver, 'modifyReg').mockResolvedValue(undefined);
+		vi.spyOn(driver, 'readLMS7002').mockResolvedValue(0x2000);
+		const tune = vi.spyOn(driver, 'setFrequencySXR');
+		await driver.checkStreamingSXLock();
+		expect(modify).not.toHaveBeenCalled();
+		driver.rxRunning = [];
+		await driver.checkStreamingSXLock();
+		expect(tune).not.toHaveBeenCalled();
 	});
 
 	it('rejects a lock indication that drifts away after startup settling', async () => {
@@ -236,7 +338,7 @@ describe('LimeSDR PLL lock', () => {
 		await tuning;
 		expect(driver.currentFrequency).toBe(160e6);
 		expect(registers.get(0x0120)).toBe(96);
-		expect(driver.tuneVCO).toHaveBeenCalledTimes(12);
+		expect(driver.tuneVCO).toHaveBeenCalledTimes(8);
 	});
 
 	it('stops recovery at maximum bias and retains the last confirmed frequency', async () => {
@@ -247,8 +349,9 @@ describe('LimeSDR PLL lock', () => {
 		await vi.runAllTimersAsync();
 		await tuning;
 		expect(driver.currentFrequency).toBe(157.95e6);
+		expect(driver.sxReady).toBe(false);
 		expect(registers.get(0x0120)).toBe(255);
-		expect(driver.tuneVCO).toHaveBeenCalledTimes(11);
+		expect(driver.tuneVCO).toHaveBeenCalledTimes(8);
 		expect(registers.get(0x0020) & 3).toBe(1);
 	});
 
