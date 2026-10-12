@@ -3,6 +3,7 @@ import type {
 	AudioCallback,
 	WhisperCallback,
 	PocsagCallback,
+	PocsagStatusCallback,
 	RdsCallback,
 	Rtl433Callback,
 	AdsbCallback,
@@ -53,6 +54,7 @@ import {
 	setRemoteHostAudioCallback,
 	setRemoteHostStatsCallback,
 	setRemoteHostPocsagCallback,
+	setRemoteHostPocsagStatusCallback,
 	setRemoteHostRdsCallback,
 	setRemoteHostRtl433Callback,
 	setRemoteHostAdsbCallback,
@@ -125,6 +127,7 @@ export class Backend {
 	_remoteHostStatsCb?: HostCallback<[HostStats]>;
 	_remoteClients?: Map<string, RemoteClientState>;
 	_remoteHostPocsagCb?: HostCallback<Parameters<PocsagCallback>>;
+	_remoteHostPocsagStatusCb?: HostCallback<Parameters<PocsagStatusCallback>>;
 	_remoteHostRdsCb?: HostCallback<Parameters<RdsCallback>>;
 	_remoteHostBleCb?: HostCallback<Parameters<BleCallback>>;
 	_remoteHostAisCb?: HostCallback<Parameters<AisCallback>>;
@@ -200,6 +203,7 @@ export class Backend {
 	setRemoteHostAudioCallback = setRemoteHostAudioCallback.bind(this);
 	setRemoteHostStatsCallback = setRemoteHostStatsCallback.bind(this);
 	setRemoteHostPocsagCallback = setRemoteHostPocsagCallback.bind(this);
+	setRemoteHostPocsagStatusCallback = setRemoteHostPocsagStatusCallback.bind(this);
 	setRemoteHostRdsCallback = setRemoteHostRdsCallback.bind(this);
 	setRemoteHostBleCallback = setRemoteHostBleCallback.bind(this);
 	setRemoteHostAisCallback = setRemoteHostAisCallback.bind(this);
@@ -227,6 +231,7 @@ export class Backend {
 		audioCallback: AudioCallback,
 		whisperCallback: WhisperCallback | null = null,
 		pocsagCallback: PocsagCallback | null = null,
+		pocsagStatusCallback: PocsagStatusCallback | null = null,
 		rdsCallback: RdsCallback | null = null,
 		dsdStatusCallback: DsdCallback | null = null,
 		rtl433Callback: Rtl433Callback | null = null,
@@ -242,6 +247,7 @@ export class Backend {
 			audioCallback,
 			whisperCallback,
 			pocsagCallback,
+			pocsagStatusCallback,
 			rdsCallback,
 			dsdStatusCallback,
 			rtl433Callback,

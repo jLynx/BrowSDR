@@ -253,3 +253,38 @@
 	color: #888;
 	font-style: italic;
 }
+
+/* Second-guess (runner-up interpretation): dimmed, and allowed to SHRINK and
+ * ellipsize so it never covers the primary decoded text. The primary
+ * .pocsag-text keeps priority; the alt is capped to a fraction of the row. */
+.pocsag-alt {
+	color: #777;
+	font-style: italic;
+	opacity: 0.7;
+	flex: 0 1 auto;
+	min-width: 0;
+	max-width: 40%;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	text-align: right;
+	margin-left: auto;
+}
+
+/* Per-character decode confidence colouring */
+.pocsag-seg-0 {
+	/* ok — inherits normal text colour */
+	color: inherit;
+}
+.pocsag-seg-1 {
+	/* BCH-corrected — amber so it reads clearly as "repaired", not just dim */
+	color: #ffca28;
+}
+.pocsag-seg-2 {
+	/* uncorrectable — bold red on a red tint; glyph is a plain '?' placeholder */
+	color: #ff5252;
+	font-weight: 700;
+	background: rgba(255, 82, 82, 0.18);
+	border-radius: 2px;
+	padding: 0 1px;
+}

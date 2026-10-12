@@ -8,6 +8,7 @@ import type {
 	AudioCallback,
 	WhisperCallback,
 	PocsagCallback,
+	PocsagStatusCallback,
 	RdsCallback,
 	Rtl433Callback,
 	AdsbCallback,
@@ -54,6 +55,7 @@ export async function startRxStream(
 	audioCallback: AudioCallback,
 	whisperCallback: WhisperCallback | null,
 	pocsagCallback: PocsagCallback | null,
+	pocsagStatusCallback: PocsagStatusCallback | null = null,
 	rdsCallback: RdsCallback | null = null,
 	dsdStatusCallback: DsdCallback | null = null,
 	rtl433Callback: Rtl433Callback | null = null,
@@ -128,7 +130,7 @@ export async function startRxStream(
 		// ── Audio Processing — helper processes a single VFO ──────────
 		// Returns Float32Array of audio samples, or null if none produced
 		let chunkCounter = 0;
-		installWorkerAudioHandler(backend, 0, perf, whisperCallback, pushWhisper, pocsagCallback, pushAudio);
+		installWorkerAudioHandler(backend, 0, perf, whisperCallback, pushWhisper, pocsagCallback, pocsagStatusCallback, pushAudio);
 
 		// Apply initial gains BEFORE starting bulk reads to avoid
 		// control transfer conflicts with in-flight bulk transfers.

@@ -1,3 +1,6 @@
+import type { CharsetKey } from '@/worker/decoders/charsets';
+import type { PocsagMode } from '@/worker/decoders/types';
+
 export interface Vfo {
 	adsb?: boolean;
 	ais?: boolean;
@@ -22,6 +25,12 @@ export interface Vfo {
 	rdsRegion: string;
 	volume: number;
 	pocsag: boolean;
+	/** Selected POCSAG codepage key (vendor/model/codepage); default generic ASCII. */
+	pocsagCharset?: CharsetKey;
+	/** POCSAG type-detection mode: 'auto' | 'alpha' | 'numeric'; default 'auto'. */
+	pocsagMode?: PocsagMode;
+	/** Show the runner-up interpretation (auto mode) dimmed; default false. */
+	pocsagSecondGuess?: boolean;
 	displayFreq: string;
 	focused: boolean;
 }

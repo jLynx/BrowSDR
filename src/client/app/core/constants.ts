@@ -1,6 +1,8 @@
 import type { BookmarkCategory } from '@/app/workspace/types';
 
 // Color palette for N VFOs
+import type { PocsagMode } from '@/worker/decoders/types';
+
 export const VFO_COLORS = ['#ff4444', '#4488ff', '#44cc44', '#ff44ff', '#ffaa44', '#44cccc', '#cccc44', '#ff8844'];
 
 export const makeDefaultVfo = (freq = 100.0) => ({
@@ -20,6 +22,9 @@ export const makeDefaultVfo = (freq = 100.0) => ({
 	rdsRegion: 'eu',
 	volume: 50,
 	pocsag: false,
+	pocsagCharset: { vendor: 'generic', model: 'generic', codepage: 'ascii' },
+	pocsagMode: 'auto' as PocsagMode,
+	pocsagSecondGuess: false,
 	adsb: false,
 	ais: false,
 	ble: false,

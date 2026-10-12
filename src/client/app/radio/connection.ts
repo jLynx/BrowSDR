@@ -298,6 +298,9 @@ export const connectionMethods = {
 				Comlink.proxy((vfoIndex: number, freq: number, msg: Parameters<AppInstance['_onPocsagMessage']>[2]) =>
 					this._onPocsagMessage(vfoIndex, freq, msg),
 				),
+				Comlink.proxy((vfoIndex: number, freq: number, status: Parameters<AppInstance['_onPocsagStatus']>[2]) =>
+					this._onPocsagStatus(vfoIndex, freq, status),
+				),
 				Comlink.proxy((vfoIndex: number, freq: number, msg: Parameters<AppInstance['_onRdsMessage']>[2]) =>
 					this._onRdsMessage(vfoIndex, freq, msg),
 				),

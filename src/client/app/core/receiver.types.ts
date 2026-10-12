@@ -17,7 +17,8 @@ import type { ReceiverTransport } from '@/remote/receiver-transport';
 import type { Vfo } from './types';
 import type { WorkspaceInstance } from '@/app/workspace/types';
 import type { WhisperMessage } from '@/transcription/types';
-import type { RDSMessage, POCSAGMessage, Rtl433Protocol, Rtl433Message } from '@/worker/decoders/types';
+import type { RDSMessage, POCSAGMessage, POCSAGStatus, Rtl433Protocol, Rtl433Message } from '@/worker/decoders/types';
+import type { PocsagLogEntry } from '@/app/decoders/types';
 import type { DSDStatus } from '@/worker/decoders/dsd/types';
 import type { ReceiverCommand } from '@/remote/types';
 
@@ -167,7 +168,15 @@ export interface ReceiverMethods {
 	clearTranscript(): void;
 	exportTranscript(): void;
 	togglePocsagPanel(): void;
+	togglePocsag(i: number): void;
+	pocsagCharsetGroups(): Array<{ vendor: string; items: Array<{ value: string; label: string }> }>;
+	pocsagCharsetValue(i: number): string;
+	setPocsagCharset(i: number, value: string): void;
+	setPocsagMode(i: number, value: string): void;
+	pocsagDisplayText(text: string): string;
 	_onPocsagMessage(vfoIndex: number, freqMhz: number, msg: POCSAGMessage): void;
+	pocsagSegments(entry: PocsagLogEntry): Array<{ text: string; status: number }>;
+	_onPocsagStatus(vfoIndex: number, freqMhz: number, status: POCSAGStatus): void;
 	clearPocsag(): void;
 	exportPocsag(): void;
 	_onDsdStatus(vfoIndex: number, status: DSDStatus): void;

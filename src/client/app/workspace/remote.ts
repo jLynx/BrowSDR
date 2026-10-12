@@ -289,6 +289,9 @@ export const remoteMethods = {
 			case 'pocsag':
 				handlePocsag.call(this, cmd, clientId);
 				break;
+			case 'pocsag_status':
+				handlePocsagStatus.call(this, cmd, clientId);
+				break;
 			case 'rds':
 				handleRds.call(this, cmd, clientId);
 				break;
@@ -368,6 +371,14 @@ async function installHostStreamCallbacks(this: AppInstance) {
 		Comlink.proxy((clientId: string, vfoIndex: number, freq: number, msg: Parameters<AppInstance['_onPocsagMessage']>[2]) => {
 			if (this._webrtc) {
 				this._webrtc?.sendCommandTo(clientId, { type: 'pocsag', vfoIndex, freq, msg });
+			}
+		}),
+	);
+	// Setup POCSAG link-status callback — forward sync/speed/inversion/BER to the client
+	await this.backend.setRemoteHostPocsagStatusCallback(
+		Comlink.proxy((clientId: string, vfoIndex: number, freq: number, status: Parameters<AppInstance['_onPocsagStatus']>[2]) => {
+			if (this._webrtc) {
+				this._webrtc?.sendCommandTo(clientId, { type: 'pocsag_status', vfoIndex, freq, status });
 			}
 		}),
 	);
@@ -514,6 +525,12 @@ function handleRtl433(this: AppInstance, cmd: Extract<ReceiverCommand, { type: '
 function handlePocsag(this: AppInstance, cmd: Extract<ReceiverCommand, { type: 'pocsag' }>, _clientId: string | null) {
 	if (this.remoteMode === 'client') {
 		this._onPocsagMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
+	}
+}
+
+function handlePocsagStatus(this: AppInstance, cmd: Extract<ReceiverCommand, { type: 'pocsag_status' }>, _clientId: string | null) {
+	if (this.remoteMode === 'client') {
+		this._onPocsagStatus(cmd.vfoIndex, cmd.freq, cmd.status);
 	}
 }
 

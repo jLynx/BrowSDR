@@ -19,10 +19,14 @@
 				<span class="pocsag-time">{{ entry.time }}</span>
 				<span class="pocsag-freq" :style="entry.vfoIndex != null ? { color: vfoColor(entry.vfoIndex) } : {}">{{ entry.freq }}</span>
 				<span class="pocsag-capcode" title="Capcode (pager address)">CAP:{{ entry.capcode }}</span>
+				<span class="pocsag-func" title="Function / sub-address (A-D)" style="color:#b39ddb;flex-shrink:0;font-size:10px;">F:{{ ['A','B','C','D'][entry.func] || '?' }}</span>
 				<span class="pocsag-type" :class="'pocsag-type-' + entry.type">{{ entry.type.toUpperCase() }}</span>
 				<span class="pocsag-baud" v-if="entry.baud">{{ entry.baud }}Bd</span>
-				<span class="pocsag-text" v-if="entry.text">{{ entry.text }}</span>
+				<span class="pocsag-text" v-if="entry.text"><span v-for="(seg, si) in pocsagSegments(entry)" :key="si"
+					:class="'pocsag-seg-' + seg.status">{{ seg.text }}</span></span>
 				<span class="pocsag-text pocsag-tone" v-else>(tone only)</span>
+				<span class="pocsag-alt" v-if="entry.alt && entry.alt.text" title="Second guess (runner-up interpretation)">({{ entry.alt.type }}: {{ pocsagDisplayText(entry.alt.text) }})</span>
+				<span class="pocsag-detect" v-if="entry.detectDebug" style="color:#777;font-size:9px;flex-shrink:0;">{{ entry.detectDebug }}</span>
 			</div>
 		</div>
 	</div>

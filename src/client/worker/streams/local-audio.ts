@@ -1,4 +1,4 @@
-import type { AudioCallback, WhisperCallback, PocsagCallback } from '@/worker/runtime/callbacks.types';
+import type { AudioCallback, WhisperCallback, PocsagCallback, PocsagStatusCallback } from '@/worker/runtime/callbacks.types';
 import { downmix } from '@/audio/pcm';
 import type { AudioChannels } from '@/audio/types';
 import type { DspAudio } from '@/worker/runtime/dsp-messages.types';
@@ -15,6 +15,7 @@ export function installWorkerAudioHandler(
 	whisperCallback: WhisperCallback | null,
 	pushWhisper: (v: number, freq: number, samples: Float32Array) => void,
 	pocsagCallback: PocsagCallback | null,
+	pocsagStatusCallback: PocsagStatusCallback | null,
 	pushAudio: AudioCallback,
 ) {
 	const handleWorkerAudio = (v: number, msg: DspAudio): void => {
@@ -52,7 +53,7 @@ export function installWorkerAudioHandler(
 				}
 			}
 
-			decodeLocalPager(pocsagCallback, params, state, v, out);
+			decodeLocalPager(pocsagCallback, pocsagStatusCallback, params, state, v, out);
 
 			// Clean up RDS decoder when disabled
 			if ((!params.rds || params.mode !== 'wfm') && state.rdsDecoder) {
@@ -80,6 +81,7 @@ function queueLocalPcm(state: VfoState, samples: Float32Array, channels: AudioCh
 
 export function decodeLocalPager(
 	pocsagCallback: PocsagCallback | null,
+	pocsagStatusCallback: PocsagStatusCallback | null,
 	params: VfoParams,
 	state: VfoState,
 	v: number,
@@ -87,13 +89,34 @@ export function decodeLocalPager(
 ) {
 	if (pocsagCallback && params.pocsag && params.mode === 'nfm') {
 		if (!state.pocsagDecoder) {
-			state.pocsagDecoder = new POCSAGDecoder(AUDIO_RATE, (pmsg) => {
-				pocsagCallback(v, params.freq, pmsg);
-			});
+			state.pocsagDecoder = new POCSAGDecoder(
+				AUDIO_RATE,
+				(pmsg) => {
+					pocsagCallback(v, params.freq, pmsg);
+				},
+				params.pocsagCharset,
+			);
+			state.pocsagCharset = params.pocsagCharset;
+		} else if (params.pocsagCharset !== state.pocsagCharset) {
+			// Live charset change — re-point the decoder's codepage.
+			if (params.pocsagCharset) state.pocsagDecoder.setCharset(params.pocsagCharset);
+			state.pocsagCharset = params.pocsagCharset;
 		}
+		// Apply type-detection mode + second-guess option (cheap, idempotent).
+		state.pocsagDecoder.setMode(params.pocsagMode ?? 'auto');
+		state.pocsagDecoder.setShowSecondGuess(params.pocsagSecondGuess ?? false);
 		state.pocsagDecoder.process(out);
+		// Emit a throttled link-status snapshot (sync / baud / inversion / BER).
+		if (pocsagStatusCallback) {
+			const now = Date.now();
+			if (state.pocsagStatusAt == null || now - state.pocsagStatusAt >= 500) {
+				state.pocsagStatusAt = now;
+				pocsagStatusCallback(v, params.freq, state.pocsagDecoder.getStatus());
+			}
+		}
 	} else if (!params.pocsag && state.pocsagDecoder) {
 		state.pocsagDecoder = null;
+		state.pocsagStatusAt = undefined;
 	}
 }
 

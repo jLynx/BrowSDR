@@ -1,5 +1,7 @@
 import type { POCSAGDecoder } from '@/worker/decoders/pocsag';
 import type { RDSDecoder } from '@/worker/decoders/rds';
+import type { CharsetKey } from '@/worker/decoders/charsets';
+import type { PocsagMode } from '@/worker/decoders/types';
 import type { RationalResampler } from '@/worker/streams/dsp-pipeline';
 import type { DSDDecoder } from '@/worker/decoders/dsd/dsd-decoder';
 import type { RxStreamStats } from '@/radio/types';
@@ -45,6 +47,9 @@ export interface VfoParams {
 	bandwidth: number;
 	volume: number;
 	pocsag: boolean;
+	pocsagCharset?: CharsetKey;
+	pocsagMode?: PocsagMode;
+	pocsagSecondGuess?: boolean;
 	rds: boolean;
 	rdsRegion: string;
 }
@@ -53,6 +58,10 @@ export interface VfoState {
 	squelchOpen: boolean;
 	squelchDb: number;
 	pocsagDecoder: POCSAGDecoder | null;
+	/** Last time (ms) a POCSAG status snapshot was emitted, for throttling. */
+	pocsagStatusAt?: number;
+	/** Charset key currently applied to pocsagDecoder, to detect live changes. */
+	pocsagCharset?: CharsetKey;
 	rdsDecoder: RDSDecoder | null;
 	audioQueue: Float32Array;
 	audioQueueLen: number;
@@ -138,6 +147,10 @@ export interface RemoteClientState {
 	audioQueues: Array<{ queue: Float32Array; len: number; right?: Float32Array; channels?: 1 | 2 }>;
 	mixBuf: Float32Array | null;
 	pocsagDecoders: Array<POCSAGDecoder | null>;
+	/** Per-index last POCSAG status emission time (ms) for throttling. */
+	pocsagStatusAt?: number[];
+	/** Per-index charset key currently applied, to detect live changes. */
+	pocsagCharsets?: Array<CharsetKey | undefined>;
 	rdsDecoders: Array<RDSDecoder | null>;
 	squelchOpen: boolean[];
 }

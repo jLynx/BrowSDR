@@ -14,8 +14,15 @@ export interface PocsagLogEntry {
 	vfoIndex: number;
 	capcode: string;
 	type: string;
+	/** Function sub-address 0-3 (shown as A-D). */
+	func: number;
 	text: string;
+	/** Per-character decode status parallel to text: 0 ok, 1 corrected, 2 bad. */
+	charStatus: number[];
 	baud: number;
+	detectDebug?: string;
+	/** Runner-up interpretation (second guess), shown dimmed when enabled. */
+	alt?: { type: 'alpha' | 'numeric'; text: string };
 }
 
 export interface Rtl433LogEntry {

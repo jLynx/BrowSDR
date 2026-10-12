@@ -63,8 +63,50 @@
 		</UiFormRow>
 
 		<UiFormRow class="full-checkbox-row" v-if="vfo.mode === 'nfm'">
-			<UiCheckbox v-model="vfo.pocsag" label="Decode POCSAG" @change="receiver.updateBackendVfoParams(i)"></UiCheckbox>
+			<UiCheckbox v-model="vfo.pocsag" label="Decode POCSAG" @change="receiver.togglePocsag(i)"></UiCheckbox>
 		</UiFormRow>
+
+		<!-- POCSAG codepage selector (per-VFO). Shown when POCSAG is enabled. -->
+		<UiFormRow v-if="vfo.mode === 'nfm' && vfo.pocsag" class="pocsag-charset-row">
+			<label>Charset</label>
+			<select class="decoder-vfo-select"
+				:value="receiver.pocsagCharsetValue(i)"
+				@change="receiver.setPocsagCharset(i, $event.target.value)">
+				<optgroup v-for="g in receiver.pocsagCharsetGroups()" :key="g.vendor" :label="g.vendor">
+					<option v-for="o in g.items" :key="o.value" :value="o.value">{{ o.label }}</option>
+				</optgroup>
+			</select>
+		</UiFormRow>
+
+		<!-- POCSAG type-detection mode + second-guess (NFM + POCSAG only) -->
+		<UiFormRow v-if="vfo.mode === 'nfm' && vfo.pocsag" class="pocsag-mode-row">
+			<label>Type</label>
+			<select class="decoder-vfo-select"
+				:value="vfo.pocsagMode || 'auto'"
+				@change="receiver.setPocsagMode(i, $event.target.value)">
+				<option value="auto">Auto (heuristic)</option>
+				<option value="alpha">Alpha</option>
+				<option value="numeric">Numeric</option>
+			</select>
+		</UiFormRow>
+		<UiFormRow class="full-checkbox-row" v-if="vfo.mode === 'nfm' && vfo.pocsag && (vfo.pocsagMode || 'auto') === 'auto'">
+			<UiCheckbox v-model="vfo.pocsagSecondGuess" label="Show second guess" @change="receiver.updateBackendVfoParams(i)"></UiCheckbox>
+		</UiFormRow>
+
+		<!-- POCSAG live link status: sync · speed · polarity · BER -->
+		<div class="pocsag-status-panel" v-if="vfo.mode === 'nfm' && vfo.pocsag"
+			style="padding:4px 8px;font-size:11px;font-family:monospace;line-height:1.6;background:rgba(0,0,0,0.3);border-radius:4px;margin:4px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+			<span style="display:flex;align-items:center;gap:6px;">
+				<span :style="{ width:'8px',height:'8px',borderRadius:'50%',display:'inline-block',flexShrink:0,background: receiver.pocsag.status[i]?.synced ? '#44cc44' : '#666' }"></span>
+				<span style="font-weight:700;color:#fff;">{{ receiver.pocsag.status[i]?.synced ? 'SYNC' : 'SEARCHING' }}</span>
+			</span>
+			<span v-if="receiver.pocsag.status[i]?.baud" style="color:#aaa;">{{ receiver.pocsag.status[i].baud }} Bd</span>
+			<span :style="{ color: receiver.pocsag.status[i]?.inverted ? '#ffcc44' : '#88aacc' }">{{ receiver.pocsag.status[i]?.inverted ? 'INV' : 'NORM' }}</span>
+			<span v-if="receiver.pocsag.status[i]?.ber != null"
+				:style="{ color: receiver.pocsag.status[i].ber < 0.01 ? '#44cc44' : (receiver.pocsag.status[i].ber < 0.05 ? '#ffcc44' : '#ff6644') }">
+				BER {{ (receiver.pocsag.status[i].ber * 100).toFixed(1) }}%
+			</span>
+		</div>
 
 		<!-- DSD status display (SDR++ Brown style) -->
 		<div class="dsd-status-panel" v-if="vfo.mode === 'dsd'" style="padding:4px 8px;font-size:11px;font-family:monospace;line-height:1.6;background:rgba(0,0,0,0.3);border-radius:4px;margin:4px 0;">

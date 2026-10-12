@@ -84,6 +84,12 @@ export const vfoMethods = {
 				volume: vfo.volume,
 				audioMuted: !!this.soloAudioVfo && this.soloAudioVfo !== vfo,
 				pocsag: vfo.pocsag,
+				// Plain clone: vfo.pocsagCharset is a Vue reactive proxy, which
+				// cannot be structured-cloned by Comlink's postMessage (throws
+				// DataCloneError and aborts the whole params update → no audio).
+				pocsagCharset: vfo.pocsagCharset ? { ...vfo.pocsagCharset } : undefined,
+				pocsagMode: vfo.pocsagMode,
+				pocsagSecondGuess: vfo.pocsagSecondGuess,
 				adsb: vfo.adsb && inBandwidth,
 				ais: vfo.ais && inBandwidth,
 				ble: vfo.ble && inBandwidth,

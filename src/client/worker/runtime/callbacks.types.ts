@@ -3,7 +3,7 @@ import type { AisMessage } from '@/worker/decoders/ais/types';
 import type { AcarsMessage } from '@/worker/decoders/acars/types';
 import type { AdsbMessage } from '@/worker/decoders/adsb/types';
 import type { DSDStatus } from '@/worker/decoders/dsd/types';
-import type { Rtl433Message, POCSAGMessage, RDSMessage } from '@/worker/decoders/types';
+import type { Rtl433Message, POCSAGMessage, POCSAGStatus, RDSMessage } from '@/worker/decoders/types';
 import type { PerfReport } from './types';
 
 export type SamplesCallback = (samples: Float32Array) => void;
@@ -11,6 +11,7 @@ export type AudioCallback = (samples: Float32Array, channels?: 1 | 2) => void;
 export type WhisperCallback = (index: number, freq: number, samples: Float32Array) => void;
 export type DecoderCallback<T> = (index: number, freq: number, message: T) => void;
 export type PocsagCallback = DecoderCallback<POCSAGMessage>;
+export type PocsagStatusCallback = (index: number, freq: number, status: POCSAGStatus) => void;
 export type RdsCallback = DecoderCallback<RDSMessage>;
 export type BleCallback = DecoderCallback<BleMessage>;
 export type AisCallback = DecoderCallback<AisMessage>;

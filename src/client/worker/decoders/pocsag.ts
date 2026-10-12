@@ -1,4 +1,7 @@
-import type { ECCTables, POCSAGMessage } from './types';
+import type { POCSAGMessage, POCSAGStatus, PocsagMode } from './types';
+import { POCSAG_CHAR_CORRECTED, POCSAG_CHAR_OK, POCSAG_CHAR_UNCORRECTABLE } from './types';
+import type { CharsetKey } from './charsets';
+import { pocsagCodepage, POCSAG_DEFAULT_CHARSET } from './charsets';
 /*
 Copyright (c) 2026, jLynx <https://github.com/jLynx>
 
@@ -30,6 +33,25 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
  * Sync word detection tolerates up to 2 bit-errors via Hamming distance.
  */
 
+/** Normalise a second-guess candidate string for display: control chars → space,
+ * collapse runs of spaces, trim. Uses char codes (no control-char regex). */
+function _cleanAltText(text: string): string {
+	let out = '';
+	let prevSpace = false;
+	for (let i = 0; i < text.length; i++) {
+		const code = text.charCodeAt(i);
+		const ch = code < 0x20 || code === 0x7f ? ' ' : text[i];
+		if (ch === ' ') {
+			if (prevSpace) continue;
+			prevSpace = true;
+		} else {
+			prevSpace = false;
+		}
+		out += ch;
+	}
+	return out.trim();
+}
+
 /** Hamming distance between two 32-bit integers. */
 export function _pocsagHamming(a: number, b: number): number {
 	let x = (a ^ b) >>> 0;
@@ -39,14 +61,69 @@ export function _pocsagHamming(a: number, b: number): number {
 	return Math.imul(x, 0x01010101) >>> 24;
 }
 
+/**
+ * Even parity over all 32 bits of a POCSAG codeword. Bit 0 is the overall
+ * even-parity bit covering bits 31..1, so a well-formed codeword has an EVEN
+ * popcount → returns 0.
+ */
+export function _pocsagParity(word: number): number {
+	let x = word >>> 0;
+	x ^= x >>> 16;
+	x ^= x >>> 8;
+	x ^= x >>> 4;
+	x ^= x >>> 2;
+	x ^= x >>> 1;
+	return x & 1;
+}
+
+/**
+ * BCH(31,21) syndrome for a POCSAG codeword, with the overall even-parity bit
+ * folded in as the 11th syndrome bit (bit 10). Divides the 21 data bits by the
+ * generator polynomial 0x769, then OR-s parity into bit 10. A well-formed
+ * codeword (correct BCH remainder AND even parity) yields 0. A correction is
+ * valid only when it drives THIS value to 0, i.e. the corrected word satisfies
+ * the CRC remainder AND parity together.
+ */
+export function _pocsagSyndrome(word: number): number {
+	let s = (word >>> 1) & 0x7fffffff; // drop parity bit, keep 31-bit codeword
+	let mask = 1 << 30;
+	let coeff = (0x769 << 20) >>> 0;
+	for (let i = 21; i > 0; i--) {
+		if (s & mask) s ^= coeff;
+		mask >>>= 1;
+		coeff >>>= 1;
+	}
+	s &= 0x3ff;
+	if (_pocsagParity(word)) s |= 1 << 10;
+	return s >>> 0;
+}
+
 export class _POCSAGSingleBaud {
 	static SYNC_WORD = 0x7cd215d8 >>> 0;
 	static SYNC_INVERTED = ~0x7cd215d8 >>> 0;
 	static IDLE_CW = 0x7a89c197 >>> 0;
 	// Max Hamming distance to still recognise a sync / idle word
 	static SYNC_TOLERANCE = 2;
-
-	static _ecc: ECCTables | null = null;
+	// Bits to search for the next frame sync codeword (FSC) after a batch ends
+	// before concluding the transmission stopped and returning to hunt.
+	// Tolerates bit slip without missing a new preamble at any baud.
+	static RESYNC_TIMEOUT_BITS = 48;
+	// ITU-R M.584-2 §2.5.1: a pager ceases decoding a message after TWO
+	// successive indecipherable (uncorrectable) information codewords — end the
+	// message there, but stay in sync (the next idle/address still delimits).
+	static MSG_END_BAD_CODEWORDS = 2;
+	// ITU-R M.584-2 §2.3: a longer unbroken run of uncorrectable codewords means
+	// synchronisation itself is lost (not just one bad message) — drop to hunt
+	// and re-acquire. The standard sets no exact count; half a batch of pure
+	// garbage is a conservative "the lock is dead" threshold.
+	static SYNC_LOSS_BAD_CODEWORDS = 8;
+	// Alternating preamble bits required to accept a BCH-corrected (1-2 bit
+	// error) sync; an exact (0-error) sync is accepted without preamble.
+	static MIN_PREAMBLE_BITS = 8;
+	// Max mid-symbol crossings (nonconsec) tolerated at a sync candidate. A
+	// wrong-baud signal exceeds this (crossings land mid-symbol); the correct
+	// rate keeps it ~0.
+	static NONCONSEC_MAX_SYNC = 10;
 
 	audioRate: number;
 	spb: number;
@@ -55,58 +132,156 @@ export class _POCSAGSingleBaud {
 
 	dcLevel: number;
 	dcAlpha: number;
+	// PLL lock state (drives the dual-rate timing gain).
+	pllLocked: boolean;
+	pllTimeout: number;
+	/** Mid-symbol crossings within the current symbol.
+	 * High on a wrong-baud signal → used to block false sync acquisition. */
+	nonconsec: number;
+	/** Consecutive alternating (1010…) bits seen — preamble quality before sync. */
+	/** Upper 32 bits of the 64-bit RX window (bits above the sync in shiftReg),
+	 * used to measure the alternating preamble that precedes a sync word. */
+	shiftRegHi: number;
 	clockPhase: number;
 	lastSample: number;
 
 	shiftReg: number;
 	inverted: boolean;
 	state: 'hunt' | 'data';
+	// FSC-search lock model:
+	//   batchRemain     — data codewords left in the current batch (16→0)
+	//   resyncCountdown — bits left to find the next FSC after a batch (→unlock)
+	//   resyncBits      — bits consumed in the current between-batch FSC search
+	batchRemain: number;
+	resyncCountdown: number;
+	resyncBits: number;
 
 	cwBitCnt: number;
 	currentCw: number;
 	batchCwIdx: number;
+	// A corrected (1-2 bit) sync accepted WITHOUT a preceding alternating
+	// preamble (i.e. joining an ongoing transmission mid-stream, where the
+	// preamble is long past) is only PROVISIONAL: the first codeword after it
+	// must decode (BCH errors < 3) to confirm the lock, otherwise it was a
+	// noise false-lock and we drop back to hunt. An exact sync, or a corrected
+	// sync with preamble, is a confirmed lock (provisional === false).
+	provisional: boolean;
+	// Consecutive uncorrectable codewords while locked (ITU-R M.584-2 §2.5.1 /
+	// §2.3): drives end-of-message and full sync-loss. Reset by any correctable
+	// codeword.
+	consecBad: number;
 
 	pageActive: boolean;
 	pageCapcode: number;
 	pageFunc: number;
 	pageBits: number[];
+	// Per-bit decode status parallel to pageBits: 0=ok, 1=corrected, 2=bad.
+	pageBitStatus: number[];
 
-	constructor(audioRate: number, baud: number, onMessage: (msg: POCSAGMessage) => void) {
+	// Rolling bit-error stats over the most recent window of decoded codewords.
+	// errBits = count of BCH-corrected bits; totalBits = 31 payload bits per
+	// codeword observed. BER = errBits / totalBits. The window halves itself
+	// once it fills, giving an exponentially-decaying recent average.
+	statErrBits: number;
+	statTotalBits: number;
+	statCodewords: number;
+
+	// Selected codepage key (protocol-implied: pocsag). Decides which glyph
+	// table _decodeAlpha uses. Defaults to generic ASCII.
+	charset: CharsetKey;
+	// Type-detection mode: 'auto' = content heuristic picks alpha/numeric;
+	// 'alpha'/'numeric' = force that decode. Default 'auto'.
+	mode: PocsagMode;
+	// When true (and mode='auto'), also emit the runner-up interpretation as
+	// `alt` on the message so the UI can show a dim second guess.
+	showSecondGuess: boolean;
+
+	constructor(audioRate: number, baud: number, onMessage: (msg: POCSAGMessage) => void, charset: CharsetKey = POCSAG_DEFAULT_CHARSET) {
 		this.audioRate = audioRate;
 		this.spb = audioRate / baud; // samples per bit
 		this.baudRate = baud;
 		this.onMessage = onMessage;
+		this.charset = charset;
+		this.mode = 'auto';
+		this.showSecondGuess = false;
 
 		this.dcLevel = 0;
-		this.dcAlpha = 0.001; // fast initial DC tracking
+		// DC-removal time constant fixed in BIT units (~64 bits), not samples,
+		// so it is identical at every baud. A per-sample constant (e.g. 0.001)
+		// is ~10 bits at 512 Bd — fast enough to chase a run of same-value data
+		// bits and corrupt the slice. Scaling by spb keeps it slow at all rates.
+		this.dcAlpha = 1 / (64 * this.spb);
+		this.pllLocked = false;
+		this.pllTimeout = 0;
+		this.nonconsec = 0;
+		this.shiftRegHi = 0;
 		this.clockPhase = 0;
 		this.lastSample = 0;
 
 		this.shiftReg = 0;
 		this.inverted = false;
 		this.state = 'hunt';
+		this.batchRemain = 0;
+		this.resyncCountdown = 0;
+		this.resyncBits = 0;
 
 		this.cwBitCnt = 0;
 		this.currentCw = 0;
 		this.batchCwIdx = 0;
+		this.provisional = false;
+		this.consecBad = 0;
 
 		this.pageActive = false;
 		this.pageCapcode = 0;
 		this.pageFunc = 0;
 		this.pageBits = [];
+		this.pageBitStatus = [];
+
+		this.statErrBits = 0;
+		this.statTotalBits = 0;
+		this.statCodewords = 0;
 	}
 
 	reset(): void {
 		this.dcLevel = 0;
+		this.dcAlpha = 1 / (64 * this.spb); // rate-aware DC TC (~64 bits)
+		this.pllLocked = false;
+		this.pllTimeout = 0;
+		this.nonconsec = 0;
+		this.shiftRegHi = 0;
 		this.clockPhase = 0;
 		this.lastSample = 0;
 		this.shiftReg = 0;
 		this.state = 'hunt';
+		this.batchRemain = 0;
+		this.resyncCountdown = 0;
+		this.resyncBits = 0;
 		this.cwBitCnt = 0;
 		this.currentCw = 0;
 		this.batchCwIdx = 0;
+		this.provisional = false;
+		this.consecBad = 0;
 		this.pageActive = false;
 		this.pageBits = [];
+		this.pageBitStatus = [];
+		this.statErrBits = 0;
+		this.statTotalBits = 0;
+		this.statCodewords = 0;
+	}
+	/**
+	 * Adaptive DC removal. Tracks the signal DC continuously with an unclamped
+	 * IIR so the zero-crossing slicer stays gain-independent (an absolute clamp
+	 * in signal units caps the correctable offset, so at high gain a real DC
+	 * offset leaks through and biases the slice). The estimate must be allowed
+	 * to converge to the ACTUAL offset even before lock — pulling it toward 0
+	 * on every unlocked sample stops it cancelling a steady offset and blocks
+	 * acquisition of a DC-offset page. The IIR time constant alone keeps a
+	 * transient glitch from parking a large stale offset. Returns the
+	 * DC-removed sample.
+	 */
+	_removeDc(x: number): number {
+		this.dcLevel += this.dcAlpha * (x - this.dcLevel);
+		return x - this.dcLevel;
 	}
 
 	process(samples: Float32Array): void {
@@ -114,109 +289,324 @@ export class _POCSAGSingleBaud {
 		const spbHalf = spb * 0.5;
 
 		for (let i = 0; i < samples.length; i++) {
-			// Adaptive DC removal — tighten alpha once roughly settled
-			this.dcLevel += this.dcAlpha * (samples[i] - this.dcLevel);
-			if (this.dcAlpha > 0.0001) this.dcAlpha *= 0.9999;
-			const s = samples[i] - this.dcLevel;
+			const s = this._removeDc(samples[i]);
 
-			// Zero-crossing PLL: at a bit transition the sample should be at
-			// clockPhase ≈ spbHalf (midpoint between bit-sample events).
-			// Nudge the clock so transitions land at spbHalf.
+			// Zero-crossing timing PLL: nudge the clock so transitions land at
+			// the symbol midpoint (spbHalf), i.e. bit centres at phase 0/spb.
 			if (this.lastSample < 0 !== s < 0) {
 				let err = this.clockPhase - spbHalf;
-				// Wrap to [-spbHalf, +spbHalf]
 				if (err > spbHalf) err -= spb;
 				if (err < -spbHalf) err += spb;
-				// Hard-gate: ignore corrections larger than 40% of a bit period
-				// (those are glitches, not true bit edges)
+				// Crossing-quality (in our phase convention):
+				// a GOOD transition lands near the expected point (spbHalf, small
+				// |err|). A crossing far from it — near the bit CENTRE at 0/spb —
+				// is a mid-symbol transition that shouldn't exist at the correct
+				// baud rate. Count those within a symbol; a wrong-rate signal
+				// produces many, which blocks sync acquisition below.
+				if (Math.abs(err) < spb * 0.25) this.nonconsec = 0;
+				else this.nonconsec++;
+				// Hard-gate: ignore corrections larger than 40% of a bit period.
 				if (Math.abs(err) < spb * 0.4) {
-					this.clockPhase -= err * 0.12;
+					const rate = this.pllLocked ? 0.045 : 0.05;
+					this.clockPhase -= err * rate;
 				}
+				this.pllTimeout = 0;
 			}
 			this.lastSample = s;
 
-			// Sample at the start of each new bit period
+			// Sample at the bit centre (phase wrap). POCSAG standard: mark ("1")
+			// = negative deviation, so s < 0 → 1. (Majority voting was tried but
+			// regressed timing; the single-centre sample with the improved DC
+			// tracking is the reliable path.)
 			if (++this.clockPhase >= spb) {
 				this.clockPhase -= spb;
-				this._onBit(s >= 0 ? 1 : 0);
+				const bit = s < 0 ? 1 : 0;
+				// PLL timeout: grows each symbol with no crossing; too many in a
+				// row → treat the PLL as unlocked (back to the faster gain).
+				if (++this.pllTimeout > 100) this.pllLocked = false;
+				this.nonconsec = 0;
+				this._onBit(bit);
 			}
 		}
+	}
+
+	/**
+	 * Count the alternating-preamble bits immediately preceding the sync word.
+	 * shiftRegHi holds the 32 bits above the sync window; the preamble (…1010…)
+	 * sits in its low bits. Count upward from bit 0 while adjacent bits alternate.
+	 * Returns 0..32 (32 means "at least a full window of preamble").
+	 */
+	_preambleBefore(): number {
+		const w = this.shiftRegHi >>> 0;
+		let count = 0;
+		let prev = w & 1;
+		for (let i = 1; i < 32; i++) {
+			const b = (w >>> i) & 1;
+			if (b !== prev) {
+				count++;
+				prev = b;
+			} else {
+				break;
+			}
+		}
+		return count;
 	}
 
 	_onBit(bit: number): void {
+		// Maintain a 64-bit receive window: shiftRegHi holds bits 32..63 (the
+		// bits ABOVE the 32-bit sync window in shiftReg). Carry shiftReg's
+		// outgoing MSB into shiftRegHi's LSB so preamble preceding the sync can
+		// be measured without the sync word's own bits corrupting the count.
+		this.shiftRegHi = ((this.shiftRegHi << 1) | ((this.shiftReg >>> 31) & 1)) >>> 0;
 		this.shiftReg = ((this.shiftReg << 1) | bit) >>> 0;
 
 		if (this.state === 'hunt') {
-			// Accept sync word with up to SYNC_TOLERANCE bit errors
+			// Not locked: bit-by-bit search for the frame sync codeword (FSC).
+			// Per the standard a transmission ALWAYS precedes sync with a long
+			// alternating preamble, so require preamble before accepting a cold
+			// lock — this is what rejects wrong-baud / noise false-locks. The
+			// preamble is counted in the UPPER bits of a 64-bit window (above the
+			// 32-bit sync), so the sync word's own bits don't reset the count.
 			const dNorm = _pocsagHamming(this.shiftReg, _POCSAGSingleBaud.SYNC_WORD);
 			const dInv = _pocsagHamming(this.shiftReg, _POCSAGSingleBaud.SYNC_INVERTED);
-			if (dNorm <= _POCSAGSingleBaud.SYNC_TOLERANCE) {
+			// Acceptance tiers:
+			//   • EXACT match (0 bit errors): accept immediately, confirmed — a
+			//     full 32-bit sync is decisive on its own.
+			//   • CORRECTED (1-2 bit errors) WITH preamble: confirmed lock — the
+			//     alternating preamble before the sync is strong corroboration.
+			//   • CORRECTED (1-2 bit errors) WITHOUT preamble but with good PLL
+			//     timing: accept PROVISIONALLY. Requiring preamble here would
+			//     reject every mid-transmission join, because batches after the
+			//     first carry no preamble before their FSC. The lock is confirmed
+			//     by the first following codeword decoding (see _onCodeword); a
+			//     noise false-lock produces an uncorrectable first codeword and is
+			//     dropped. The timing gate (low nonconsec) still rejects
+			//     wrong-baud candidates up front.
+			const preOk = this._preambleBefore() >= _POCSAGSingleBaud.MIN_PREAMBLE_BITS;
+			const timingOk = this.nonconsec < _POCSAGSingleBaud.NONCONSEC_MAX_SYNC;
+			// Returns 'no' (reject), 'confirmed' (lock) or 'provisional' (lock,
+			// pending first-codeword confirmation).
+			const classify = (d: number): 'no' | 'confirmed' | 'provisional' => {
+				if (d === 0) return 'confirmed';
+				if (d > _POCSAGSingleBaud.SYNC_TOLERANCE || !timingOk) return 'no';
+				return preOk ? 'confirmed' : 'provisional';
+			};
+			const vNorm = classify(dNorm);
+			if (vNorm !== 'no') {
 				this.inverted = false;
-				this._onSync();
-			} else if (dInv <= _POCSAGSingleBaud.SYNC_TOLERANCE) {
-				this.inverted = true;
-				this._onSync();
-			}
-		} else {
-			// Assemble 32-bit codewords with polarity correction.
-			// While doing so, keep watching for a new sync word in case we drift
-			// — if we see one mid-batch, re-align immediately.
-			const dNorm = _pocsagHamming(this.shiftReg, _POCSAGSingleBaud.SYNC_WORD);
-			const dInv = _pocsagHamming(this.shiftReg, _POCSAGSingleBaud.SYNC_INVERTED);
-			if (this.cwBitCnt >= 28 && (dNorm <= _POCSAGSingleBaud.SYNC_TOLERANCE || dInv <= _POCSAGSingleBaud.SYNC_TOLERANCE)) {
-				// Sync word received as a codeword → new batch starts
-				this.inverted = dInv < dNorm;
-				this.cwBitCnt = 0;
-				this.currentCw = 0;
-				this.batchCwIdx = 0;
+				this.pllLocked = true;
+				this._onSync(vNorm === 'provisional');
 				return;
 			}
-
-			const b = this.inverted ? 1 - bit : bit;
-			this.currentCw = ((this.currentCw << 1) | b) >>> 0;
-			if (++this.cwBitCnt === 32) {
-				this.cwBitCnt = 0;
-				this._onCodeword(this.currentCw);
-				this.currentCw = 0;
+			const vInv = classify(dInv);
+			if (vInv !== 'no') {
+				this.inverted = true;
+				this.pllLocked = true;
+				this._onSync(vInv === 'provisional');
 			}
-		}
-	}
-
-	_onSync(): void {
-		this.state = 'data';
-		this.cwBitCnt = 0;
-		this.currentCw = 0;
-		this.batchCwIdx = 0;
-	}
-
-	_onCodeword(cw: number): void {
-		// Error-correct the received codeword (mirrors Mayhem: call twice —
-		// first call fixes errors, second call counts what remain).
-		const pass1 = this._eccCorrect(cw);
-		const pass2 = this._eccCorrect(pass1.cw);
-
-		if (pass2.errors >= 3) {
-			// Uncorrectable — skip this codeword but keep position counter going
-			if (++this.batchCwIdx >= 16) this.state = 'hunt';
 			return;
 		}
 
-		const corrected = pass2.cw;
+		// ── LOCKED ──────────────────────────────────────────────────────────
+		if (this.batchRemain > 0) {
+			// Inside a batch: accumulate 32-bit codewords by frame count.
+			this.currentCw = ((this.currentCw << 1) | bit) >>> 0;
+			if (++this.cwBitCnt < 32) return;
+			this.cwBitCnt = 0;
+			const raw = this.currentCw >>> 0;
+			this.currentCw = 0;
+			const cw = this.inverted ? ~raw >>> 0 : raw;
+			this._onCodeword(cw);
+			if (--this.batchRemain === 0) {
+				// Batch complete. Per POCSAG spec the next FSC follows the last
+				// codeword with (near) zero gap, but we search a short window to
+				// tolerate bit slip / clock drift instead of assuming an exact
+				// position. Enter between-batch FSC search.
+				this.resyncCountdown = _POCSAGSingleBaud.RESYNC_TIMEOUT_BITS;
+				this.resyncBits = 0;
+			}
+			return;
+		}
 
-		// Exact IDLE check after correction (Mayhem uses exact equality post-ECC)
+		// Between batches: search bit-by-bit for the next FSC within the window.
+		this._fscSearch();
+	}
+
+	/** Between-batch FSC search (locked). Re-locks on sync, unlocks on timeout
+	 * or on a valid non-sync codeword (signal changed). */
+	_fscSearch(): void {
+		this.resyncBits++;
+		const w = this.shiftReg >>> 0;
+		const dNorm = _pocsagHamming(w, _POCSAGSingleBaud.SYNC_WORD);
+		const dInv = _pocsagHamming(w, _POCSAGSingleBaud.SYNC_INVERTED);
+		const matchCur = this.inverted ? dInv : dNorm;
+		const matchOther = this.inverted ? dNorm : dInv;
+
+		// Check FSC (current polarity first) BEFORE the timeout, since the FSC
+		// is 32 bits — otherwise we'd time out on its final bit.
+		if (matchCur <= _POCSAGSingleBaud.SYNC_TOLERANCE) {
+			this._onSync();
+			return;
+		}
+		if (matchOther <= _POCSAGSingleBaud.SYNC_TOLERANCE) {
+			// Inverted FSC at the batch boundary → genuine polarity flip. This
+			// is the ONLY place polarity may change: never mid-batch (POCSAG
+			// polarity is constant within a batch; a new FSC marks the boundary
+			// where a flip can legitimately occur).
+			this.inverted = !this.inverted;
+			this._onSync();
+			return;
+		}
+
+		// Frame-level sanity: once a full 32-bit window has passed during the
+		// search, if it BCH-corrects to a VALID non-sync codeword the signal has
+		// changed (new/ended transmission) — unlock rather than emit garbage.
+		if (this.resyncBits >= 32) {
+			const trial = this.inverted ? ~w >>> 0 : w;
+			const r = this._eccCorrect(trial);
+			if (r.errors < 3 && r.cw !== _POCSAGSingleBaud.IDLE_CW) {
+				this._unlock();
+				return;
+			}
+		}
+
+		if (this.resyncCountdown > 0 && --this.resyncCountdown === 0) {
+			// No FSC within the window — transmission ended; back to hunt.
+			this._unlock();
+		}
+	}
+
+	/** Flush any open page and drop to hunt. */
+	_unlock(): void {
+		if (this.pageActive && this.pageBits.length > 0) this._emitPage();
+		this.pageActive = false;
+		this.state = 'hunt';
+		this.batchRemain = 0;
+		this.resyncCountdown = 0;
+		this.cwBitCnt = 0;
+		this.currentCw = 0;
+		this.provisional = false;
+	}
+
+	_onSync(provisional = false): void {
+		// Sync acquired (or re-acquired at a batch boundary). A batch is 16 data
+		// codewords; count them down, then search for the next FSC.
+		this.state = 'data';
+		this.batchRemain = 16;
+		this.resyncCountdown = 0;
+		this.resyncBits = 0;
+		this.cwBitCnt = 0;
+		this.currentCw = 0;
+		this.batchCwIdx = 0;
+		// A provisional lock (corrected sync, no preamble) awaits confirmation
+		// from the first codeword. A batch-boundary resync of an already-open
+		// page is a confirmed lock (we were already decoding valid codewords).
+		this.provisional = provisional && !this.pageActive;
+		// Preserve the uncorrectable run ACROSS a batch boundary while a message
+		// is still open: an uncorrectable last information word in one batch
+		// followed by an uncorrectable first information word in the next must
+		// still trip the two-bad-codeword end-of-message policy (ITU-R M.584-2
+		// §2.5.1). Only a COLD lock from hunt (no page active) starts fresh.
+		if (!this.pageActive) this.consecBad = 0;
+	}
+
+	_onCodeword(cw: number): void {
+		// Parity-aware BCH correction. A single pass fully
+		// corrects (≤2 bits) or reports uncorrectable (errors === 3); no second
+		// confirmation pass is needed.
+		const result = this._eccCorrect(cw);
+		const errors = result.errors;
+		const corrected = result.cw;
+
+		// Confirm or reject a PROVISIONAL lock (corrected sync accepted without a
+		// preamble, e.g. a mid-transmission join). The first codeword decides: a
+		// decodable word (errors < 3) corroborates the sync and confirms the
+		// lock; an uncorrectable word means the "sync" was a noise coincidence —
+		// drop back to hunt WITHOUT emitting anything, so the false-lock
+		// protection the preamble gate used to provide is retained.
+		if (this.provisional) {
+			if (errors >= 3) {
+				this._unlock();
+				return;
+			}
+			this.provisional = false;
+		}
+
+		// Accumulate bit-error stats over a decaying window. errors is 0/1/2 for
+		// corrected codewords, 3 for uncorrectable (capped). 31 payload bits per
+		// codeword. Halve the window once it fills so BER tracks the recent past.
+		this.statErrBits += Math.min(errors, 3);
+		this.statTotalBits += 31;
+		this.statCodewords++;
+		if (this.statCodewords >= 64) {
+			this.statErrBits *= 0.5;
+			this.statTotalBits *= 0.5;
+			this.statCodewords = 32;
+		}
+
+		if (errors >= 3) {
+			this.consecBad++;
+			// ITU-R M.584-2 §2.3: a long unbroken run of uncorrectable codewords
+			// means sync itself is lost — drop to hunt (flushing any open page)
+			// and re-acquire on the next preamble/sync. Checked first so a dead
+			// signal doesn't keep manufacturing '?' for the rest of the batch.
+			if (this.consecBad >= _POCSAGSingleBaud.SYNC_LOSS_BAD_CODEWORDS) {
+				this._unlock();
+				this.batchCwIdx++;
+				return;
+			}
+			// ITU-R M.584-2 §2.5.1: cease decoding the CURRENT message after two
+			// successive indecipherable information codewords — emit what we have
+			// and close the page, but STAY locked (the next idle/address codeword
+			// still delimits the following message within this batch).
+			if (this.pageActive && this.consecBad >= _POCSAGSingleBaud.MSG_END_BAD_CODEWORDS) {
+				if (this.pageBits.length > 0) this._emitPage();
+				this.pageActive = false;
+				this.batchCwIdx++;
+				return;
+			}
+			// First bad codeword of a (possibly transient) run: keep bit alignment
+			// by appending 20 placeholder bits marked uncorrectable (status 2);
+			// _emitPage renders them as '?'. A single glitch followed by good
+			// content is thus preserved as a short '?' span.
+			if (this.pageActive) {
+				for (let b = 0; b < 20; b++) {
+					this.pageBits.push(0);
+					this.pageBitStatus.push(POCSAG_CHAR_UNCORRECTABLE);
+				}
+			}
+			this.batchCwIdx++;
+			return;
+		}
+		// Any decipherable codeword resets the consecutive-bad run (§2.5.1/§2.3).
+		this.consecBad = 0;
+
+		// Status for this codeword's contributed bits: 0 clean, 1 BCH-corrected.
+		const bitStatus = errors > 0 ? POCSAG_CHAR_CORRECTED : POCSAG_CHAR_OK;
+
+		// Exact IDLE check after correction (exact equality post-ECC).
 		if (corrected === _POCSAGSingleBaud.IDLE_CW) {
 			if (this.pageActive && this.pageBits.length > 0) this._emitPage();
 			this.pageActive = false;
 		} else {
-			this._processCw(corrected, this.batchCwIdx);
+			this._processCw(corrected, this.batchCwIdx, bitStatus);
 		}
 
-		if (++this.batchCwIdx >= 16) {
-			this.state = 'hunt';
-		}
+		// Advance frame position. At batchCwIdx === 16 the next 32 bits are the
+		// batch-boundary sync, handled by _onBit's hysteresis — we stay locked.
+		this.batchCwIdx++;
 	}
 
-	_processCw(cw: number, cwIdx: number): void {
+	/** Population count of a 32-bit value. */
+	_popcount32(v: number): number {
+		let x = v >>> 0;
+		x -= (x >>> 1) & 0x55555555;
+		x = (x & 0x33333333) + ((x >>> 2) & 0x33333333);
+		x = (x + (x >>> 4)) & 0x0f0f0f0f;
+		return Math.imul(x, 0x01010101) >>> 24;
+	}
+
+	_processCw(cw: number, cwIdx: number, bitStatus: number): void {
 		const type = (cw >>> 31) & 1;
 		if (type === 0) {
 			// Address codeword → flush any previous page, start new one
@@ -227,183 +617,356 @@ export class _POCSAGSingleBaud {
 			this.pageCapcode = (addrHigh << 3) | frame;
 			this.pageFunc = func;
 			this.pageBits = [];
+			this.pageBitStatus = [];
 			this.pageActive = true;
 		} else {
-			// Message codeword: 20 data bits (bits 30..11), MSB first
+			// Message codeword: 20 data bits (bits 30..11), MSB first. Each bit
+			// inherits this codeword's status so _emitPage can mark the character
+			// it lands in as clean / corrected / uncorrectable.
 			if (this.pageActive) {
 				const data = (cw >>> 11) & 0xfffff;
 				for (let b = 19; b >= 0; b--) {
 					this.pageBits.push((data >>> b) & 1);
+					this.pageBitStatus.push(bitStatus);
 				}
 			}
 		}
 	}
 
 	/**
-	 * BCH(31,21) error correction — ported directly from Mayhem's EccContainer.
-	 *
-	 * Builds two lookup tables once (shared across all instances via a static
-	 * property) then corrects up to 2 bit-errors per codeword, exactly as the
-	 * working Mayhem firmware does.  Returns { cw: correctedValue, errors: n }
-	 * where n=0 (clean), 1 (1-bit fixed), 2 (2-bit fixed), or 3 (uncorrectable).
+	 * Parity-aware BCH(31,21) correction.
+	 * Returns { cw, errors } where errors = 0 (clean), 1 or 2 (bits corrected to
+	 * a word satisfying BCH remainder AND parity), or 3 (uncorrectable).
 	 */
 
-	static _buildECC(): ECCTables {
-		const ecs = new Uint32Array(32);
-		const bch = new Uint32Array(1025);
+	_eccCorrect(val: number): { cw: number; errors: number } {
+		// Parity-aware BCH(31,21) correction.
+		// A word is accepted ONLY when a flip of ≤2 bits drives the FULL syndrome
+		// (BCH remainder AND the folded even-parity bit) to zero — the corrected
+		// word must satisfy the CRC remainder and parity SIMULTANEOUSLY. This is
+		// stricter than a bare "distance ≤ 2 to any codeword" table lookup: it
+		// rejects the ~half of near-codeword noise windows that would land on the
+		// wrong parity, which is the main source of phantom codewords.
+		const word = val >>> 0;
+		if (_pocsagSyndrome(word) === 0) return { cw: word, errors: 0 };
 
-		// Generate ECS (error correction sequences) — same LFSR as Mayhem
-		let srr = 0x3b4;
-		for (let i = 0; i <= 20; i++) {
-			ecs[i] = srr;
-			if (srr & 1) srr = (srr >>> 1) ^ 0x3b4;
-			else srr = srr >>> 1;
+		// Try every single-bit flip.
+		for (let i = 0; i < 32; i++) {
+			const trial = (word ^ (1 << i)) >>> 0;
+			if (_pocsagSyndrome(trial) === 0) return { cw: trial, errors: 1 };
 		}
-
-		// Two errors in data
-		for (let n = 0; n <= 20; n++) {
-			for (let i = 0; i <= 20; i++) {
-				const k = (ecs[n] ^ ecs[i]) & 0x3ff;
-				bch[k] = (i << 5) + n + 0x2000;
+		// Try every two-bit flip combination.
+		for (let i = 0; i < 32; i++) {
+			for (let j = i + 1; j < 32; j++) {
+				const trial = (word ^ (1 << i) ^ (1 << j)) >>> 0;
+				if (_pocsagSyndrome(trial) === 0) return { cw: trial, errors: 2 };
 			}
 		}
-		// One error in data
-		for (let n = 0; n <= 20; n++) {
-			const k = ecs[n] & 0x3ff;
-			bch[k] = n + (0x1f << 5) + 0x1000;
-		}
-		// One error in data + one error in ECC
-		for (let n = 0; n <= 20; n++) {
-			for (let i = 0; i < 10; i++) {
-				const k = (ecs[n] ^ (1 << i)) & 0x3ff;
-				bch[k] = n + (0x1f << 5) + 0x2000;
-			}
-		}
-		// One error in ECC only
-		for (let n = 0; n < 10; n++) {
-			bch[1 << n] = 0x3ff + 0x1000;
-		}
-		// Two errors in ECC only
-		for (let n = 0; n < 10; n++) {
-			for (let i = 0; i < 10; i++) {
-				if (i !== n) bch[(1 << n) ^ (1 << i)] = 0x3ff + 0x2000;
-			}
-		}
-
-		return { ecs, bch };
+		return { cw: word, errors: 3 }; // uncorrectable (3+ bit errors)
 	}
 
-	_eccCorrect(val: number): { cw: number; errors: number } {
-		if (!_POCSAGSingleBaud._ecc) _POCSAGSingleBaud._ecc = _POCSAGSingleBaud._buildECC();
-		const { ecs, bch } = _POCSAGSingleBaud._ecc;
-
-		// Compute syndrome from data bits (31..11) and received ECC bits (10..1)
-		let ecc = 0;
-		for (let i = 31; i >= 11; i--) {
-			if ((val >>> i) & 1) {
-				ecc ^= ecs[31 - i];
+	/**
+	 * Decode the page bit buffer as 7-bit alphanumeric (ITU IA5, LSB-first per
+	 * character), mapping each code through the active codepage so vendor /
+	 * national glyphs (umlauts, Cyrillic, …) render correctly. Per-character
+	 * status is the worst status among the 7 source bits; unmapped codes and
+	 * uncorrectable spans become the lost-char sentinel.
+	 */
+	_decodeAlpha(bits: number[], status: number[]): { text: string; charStatus: number[] } {
+		const cp = pocsagCodepage(this.charset);
+		const chars: string[] = [];
+		const charStatus: number[] = [];
+		let c = 0;
+		let cb = 0;
+		let worst = POCSAG_CHAR_OK;
+		for (let i = 0; i < bits.length; i++) {
+			c |= bits[i] << cb;
+			if (status[i] > worst) worst = status[i];
+			if (++cb === 7) {
+				let ch: string;
+				const glyph = cp[c & 0x7f];
+				if (worst === POCSAG_CHAR_UNCORRECTABLE)
+					ch = '\ufffd'; // lost data
+				else if (c === 0)
+					ch = '\u0000'; // NULL = end-of-message fill
+				else if (glyph != null)
+					ch = glyph; // mapped glyph (incl. \n, \r)
+				else ch = String.fromCharCode(c); // other control/unmapped — keep raw for <0xNN> display
+				chars.push(ch);
+				charStatus.push(worst);
+				c = 0;
+				cb = 0;
+				worst = POCSAG_CHAR_OK;
 			}
 		}
-
-		let acc = 0;
-		for (let i = 10; i >= 1; i--) {
-			acc = (acc << 1) | ((val >>> i) & 1);
+		// Strip trailing fill. Per POCSAG spec the final codeword is padded with
+		// NULL (0x00) or space; a contiguous run of the SAME fill char at the end
+		// is message padding, not content — drop it (prevents a spurious trailing
+		// '?' / space on nearly every message).
+		let end = chars.length;
+		if (end > 0) {
+			const last = chars[end - 1];
+			if (last === '\u0000' || last === ' ') {
+				while (end > 0 && chars[end - 1] === last) end--;
+			}
 		}
-		acc &= 0x3ff;
+		// Also drop any embedded NULLs (incomplete fill at codeword boundaries).
+		let text = '';
+		const outStatus: number[] = [];
+		for (let i = 0; i < end; i++) {
+			if (chars[i] === '\u0000') continue;
+			text += chars[i];
+			outStatus.push(charStatus[i]);
+		}
+		return { text, charStatus: outStatus };
+	}
 
-		const synd = (ecc ^ acc) & 0x3ff;
-		let errl = 0;
+	/**
+	 * Decode the page bit buffer as numeric BCD (4-bit nibbles). Each digit's
+	 * bits are sent MSB-first on air; we accumulate them LSB-first here (the
+	 * same bit-reversal the reference decoders apply), then index the standard
+	 * POCSAG numeric table (ITU-R M.584 / RPC1):
+	 * 10='R' 11='U' 12=space 13='-' 14=']'
+	 * 15='['. Per-nibble status is the worst of its 4 source bits.
+	 */
+	_decodeNumeric(bits: number[], status: number[]): { text: string; charStatus: number[] } {
+		const NMAP = '0123456789RU -][';
+		let text = '';
+		const charStatus: number[] = [];
+		for (let i = 0; i + 3 < bits.length; i += 4) {
+			const n = bits[i] | (bits[i + 1] << 1) | (bits[i + 2] << 2) | (bits[i + 3] << 3);
+			let worst = POCSAG_CHAR_OK;
+			for (let b = 0; b < 4; b++) if (status[i + b] > worst) worst = status[i + b];
+			text += worst === POCSAG_CHAR_UNCORRECTABLE ? '\ufffd' : NMAP[n];
+			charStatus.push(worst);
+		}
+		return { text, charStatus };
+	}
 
-		if (synd !== 0) {
-			const entry = bch[synd];
-			if (entry !== 0) {
-				const b1 = entry & 0x1f;
-				const b2 = (entry >>> 5) & 0x1f;
-
-				if (b2 !== 0x1f) {
-					val = (val ^ (1 << (31 - b2))) >>> 0;
-				}
-				if (b1 !== 0x1f) {
-					val = (val ^ (1 << (31 - b1))) >>> 0;
-				}
-
-				errl = entry >>> 12;
+	/**
+	 * Quality of a decoded candidate in [0,1]: the fraction of characters that
+	 * read as sensible content for that encoding. BrowSDR must choose ONE type
+	 * (one decoder output is chosen rather than listing every interpretation),
+	 * so we compare normalized quality: an alpha page decoded as numeric
+	 * sprays the rare R U ] [ symbols (low numeric quality), and a numeric page
+	 * decoded as alpha yields control codes (low alpha quality).
+	 */
+	_scoreCandidate(text: string, kind: 'alpha' | 'numeric'): number {
+		if (text.length === 0) return 0;
+		let good = 0;
+		for (let i = 0; i < text.length; i++) {
+			const ch = text.charCodeAt(i);
+			if (ch === 0xfffd) continue; // lost char
+			if (kind === 'numeric') {
+				// Digits / space / '-' are strong numeric content; the rare
+				// symbols R U ] [ count half so an alpha-as-numeric scores lower.
+				if ((ch >= 0x30 && ch <= 0x39) || ch === 0x20 || ch === 0x2d) good += 1;
+				else good += 0.5;
 			} else {
-				errl = 3;
+				// Alpha quality. A real alpha page is letters, digits, spaces and
+				// ordinary punctuation. Control characters (below 0x20, other than
+				// newline/CR) are the tell-tale of a NON-alpha page misread as
+				// alpha — penalise them HARD so numeric wins those. Newline/CR and
+				// everyday printable punctuation count as content.
+				if (ch < 0x20) {
+					if (ch === 10 || ch === 13)
+						good += 1; // newline/CR are legit
+					else good -= 1; // control char: strong evidence this isn't alpha
+				} else {
+					good += 1; // any printable glyph (ASCII or codepage)
+				}
 			}
 		}
+		return Math.max(0, good) / text.length;
+	}
 
-		if (errl === 4) errl = 3;
-
-		return { cw: val >>> 0, errors: errl };
+	/**
+	 * Choose the message type and decode it. In 'auto' mode a content heuristic
+	 * picks alpha vs numeric (the function field is a sub-address, not a reliable
+	 * encoding indicator); 'alpha'/'numeric' force the decode. Returns the chosen
+	 * type, its decode, the detection-score string, and (auto + second-guess) the
+	 * runner-up interpretation.
+	 */
+	_decidePage(
+		func: number,
+		bits: number[],
+		status: number[],
+	): {
+		chosen: 'alpha' | 'tone' | 'numeric';
+		decoded: { text: string; charStatus: number[] };
+		detectScores: string;
+		altGuess?: { type: 'alpha' | 'numeric'; text: string };
+	} {
+		if (func === 0 && bits.length === 0) {
+			return { chosen: 'tone', decoded: { text: '', charStatus: [] }, detectScores: '' };
+		}
+		const alpha = this._decodeAlpha(bits, status);
+		const numeric = this._decodeNumeric(bits, status);
+		if (this.mode === 'alpha') return { chosen: 'alpha', decoded: alpha, detectScores: '' };
+		if (this.mode === 'numeric') return { chosen: 'numeric', decoded: numeric, detectScores: '' };
+		// Auto heuristic.
+		const alphaQ = this._scoreCandidate(alpha.text, 'alpha');
+		const numericQ = this._scoreCandidate(numeric.text, 'numeric');
+		const numericIsPureDigits = numeric.text.length > 0 && /^[0-9 -]+$/.test(numeric.text);
+		// A clean alpha reading is one with no control characters — i.e. every
+		// character is legitimate alpha content (alphaQ === 1). When the alpha
+		// reading is clean AND the numeric reading is pure digits, the page is
+		// genuinely ambiguous: both interpretations are plausible (a short alpha
+		// page such as "A"/"AB"/"12345" also reads as digits). Numeric must NOT
+		// win that tie — doing so turns independently-encoded alpha pages into
+		// numeric gibberish while forced-Alpha recovers the original. Prefer
+		// alpha on the tie (it preserves the content and matches main /
+		// forced-Alpha) and require numeric to score STRICTLY higher to win.
+		const alphaIsClean = alpha.text.length > 0 && alphaQ >= 1;
+		const ambiguous = alphaIsClean && numericIsPureDigits;
+		let chosen: 'alpha' | 'numeric';
+		if (numericIsPureDigits && numericQ > alphaQ) chosen = 'numeric';
+		else if (alphaQ >= 0.8 || alphaQ + 0.1 >= numericQ) chosen = 'alpha';
+		else chosen = 'numeric';
+		const detectScores = `a=${alphaQ.toFixed(2)} n=${numericQ.toFixed(2)}`;
+		// Surface the runner-up interpretation when the user asked for it OR when
+		// the page is genuinely ambiguous — so a tied reading is never silently
+		// hidden behind the default pick.
+		const showAlt = this.showSecondGuess || ambiguous;
+		const altGuess = showAlt
+			? chosen === 'alpha'
+				? { type: 'numeric' as const, text: numeric.text }
+				: { type: 'alpha' as const, text: alpha.text }
+			: undefined;
+		return { chosen, decoded: chosen === 'alpha' ? alpha : numeric, detectScores, altGuess };
 	}
 
 	_emitPage(): void {
-		const { pageCapcode: capcode, pageFunc: func, pageBits: bits } = this;
-		let text = '';
+		const { pageCapcode: capcode, pageFunc: func, pageBits: bits, pageBitStatus: status } = this;
 
-		if (func === 3) {
-			// Alphanumeric: 7-bit ASCII, LSB-first per character
-			let c = 0,
-				cb = 0;
-			for (let i = 0; i < bits.length; i++) {
-				c |= bits[i] << cb;
-				if (++cb === 7) {
-					if (c >= 32 && c < 127) text += String.fromCharCode(c);
-					else if (c === 10 || c === 13) text += '\n';
-					c = 0;
-					cb = 0;
-				}
+		const { chosen, decoded, detectScores, altGuess } = this._decidePage(func, bits, status);
+
+		// Collapse runs of whitespace for the displayed text while keeping a
+		// per-character status parallel to the FINAL text. We rebuild both in
+		// lock-step so colour-coding lines up with the trimmed string. Trailing
+		// uncorrectable ('?') spans are PRESERVED — they are the signal that the
+		// message was truncated by lost data (incomplete reception), not noise to
+		// hide.
+		const outChars: string[] = [];
+		const outStatus: number[] = [];
+		let prevSpace = false;
+		for (let i = 0; i < decoded.text.length; i++) {
+			let ch = decoded.text[i];
+			const code = ch.charCodeAt(0);
+			// Map the internal lost-char sentinel (U+FFFD) to a plain '?' for
+			// display. Control characters (newline, etc.) are PRESERVED in the
+			// emitted text — the log/display layer represents them (⏎ for newline,
+			// <0xNN> for others) rather than flattening them here.
+			if (code === 0xfffd) ch = '?';
+			if (ch === ' ') {
+				if (prevSpace) continue; // collapse consecutive spaces
+				prevSpace = true;
+			} else {
+				prevSpace = false;
 			}
-		} else if (func !== 0) {
-			// Numeric BCD (func 1/2): 4-bit nibbles, LSB-first
-			const NMAP = '0123456789 -.)(';
-			for (let i = 0; i + 3 < bits.length; i += 4) {
-				const n = bits[i] | (bits[i + 1] << 1) | (bits[i + 2] << 2) | (bits[i + 3] << 3);
-				if (n < NMAP.length) text += NMAP[n];
-			}
+			outChars.push(ch);
+			outStatus.push(decoded.charStatus[i] ?? POCSAG_CHAR_OK);
 		}
-		// func === 0 → tone-only
+		// Trim leading/trailing spaces, keeping status aligned.
+		while (outChars.length && outChars[0] === ' ') {
+			outChars.shift();
+			outStatus.shift();
+		}
+		while (outChars.length && outChars[outChars.length - 1] === ' ') {
+			outChars.pop();
+			outStatus.pop();
+		}
 
-		const clean = text
-			.split('')
-			.map((character) => (character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127 ? ' ' : character))
-			.join('')
-			.replace(/ {2,}/g, ' ')
-			.trim();
+		const clean = outChars.join('');
 
-		if (clean.length > 0 || func === 0) {
+		if (clean.length > 0 || chosen === 'tone') {
 			this.onMessage({
 				capcode,
 				func,
-				type: func === 3 ? 'alpha' : func === 0 ? 'tone' : 'numeric',
+				type: chosen,
 				text: clean,
+				charStatus: outStatus,
 				baud: this.baudRate,
+				detectDebug: detectScores || undefined,
+				alt: altGuess ? { type: altGuess.type, text: _cleanAltText(altGuess.text) } : undefined,
 			});
 		}
 
 		this.pageBits = [];
+		this.pageBitStatus = [];
 		this.pageActive = false;
+	}
+
+	/** Snapshot of this sub-decoder's link status. */
+	getStatus(): POCSAGStatus {
+		const synced = this.state === 'data';
+		return {
+			synced,
+			baud: synced ? this.baudRate : null,
+			inverted: this.inverted,
+			ber: this.statTotalBits > 0 ? this.statErrBits / this.statTotalBits : null,
+			codewords: this.statCodewords,
+		};
 	}
 }
 
-/** Outer wrapper: runs parallel 1200 Bd and 512 Bd decoders simultaneously. */
+/** Outer wrapper: runs parallel 512 / 1200 / 2400 Bd decoders simultaneously. */
 export class POCSAGDecoder {
+	private _d2400: _POCSAGSingleBaud;
 	private _d1200: _POCSAGSingleBaud;
 	private _d512: _POCSAGSingleBaud;
 
-	constructor(audioRate: number, onMessage: (msg: POCSAGMessage) => void) {
-		this._d1200 = new _POCSAGSingleBaud(audioRate, 1200, onMessage);
-		this._d512 = new _POCSAGSingleBaud(audioRate, 512, onMessage);
+	constructor(audioRate: number, onMessage: (msg: POCSAGMessage) => void, charset: CharsetKey = POCSAG_DEFAULT_CHARSET) {
+		// POCSAG is standardised at 512 / 1200 / 2400 Bd (ITU-R M.584).
+		this._d2400 = new _POCSAGSingleBaud(audioRate, 2400, onMessage, charset);
+		this._d1200 = new _POCSAGSingleBaud(audioRate, 1200, onMessage, charset);
+		this._d512 = new _POCSAGSingleBaud(audioRate, 512, onMessage, charset);
+	}
+
+	/** Change the active codepage for all baud sub-decoders. */
+	setCharset(charset: CharsetKey): void {
+		this._d2400.charset = charset;
+		this._d1200.charset = charset;
+		this._d512.charset = charset;
+	}
+
+	/** Set the type-detection mode (auto / alpha / numeric) for all rates. */
+	setMode(mode: PocsagMode): void {
+		this._d2400.mode = mode;
+		this._d1200.mode = mode;
+		this._d512.mode = mode;
+	}
+
+	/** Toggle emitting the runner-up interpretation (auto mode) for all rates. */
+	setShowSecondGuess(on: boolean): void {
+		this._d2400.showSecondGuess = on;
+		this._d1200.showSecondGuess = on;
+		this._d512.showSecondGuess = on;
 	}
 
 	process(samples: Float32Array): void {
+		this._d2400.process(samples);
 		this._d1200.process(samples);
 		this._d512.process(samples);
 	}
 
 	reset(): void {
+		this._d2400.reset();
 		this._d1200.reset();
 		this._d512.reset();
+	}
+
+	/**
+	 * Combined link status across the three baud sub-decoders. If one is locked
+	 * (synced), its status wins; otherwise the sub-decoder with the most recent
+	 * bit-error evidence (most codewords seen) is reported, so the UI shows the
+	 * rate that is actually seeing signal even before full lock.
+	 */
+	getStatus(): POCSAGStatus {
+		const subs = [this._d2400.getStatus(), this._d1200.getStatus(), this._d512.getStatus()];
+		const locked = subs.find((s) => s.synced);
+		if (locked) return locked;
+		// Not locked: report whichever rate has the strongest recent evidence.
+		return subs.reduce((best, s) => (s.codewords > best.codewords ? s : best), subs[0]);
 	}
 }

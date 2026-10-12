@@ -66,6 +66,7 @@ async function createStream(rdsCallback = null, dsdStatusCallback = null, rtl433
 		null,
 		null,
 		null,
+		null,
 		rdsCallback,
 		dsdStatusCallback,
 		rtl433Callback,

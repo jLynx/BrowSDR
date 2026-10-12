@@ -2,6 +2,7 @@ import type {
 	SamplesCallback,
 	AudioCallback,
 	PocsagCallback,
+	PocsagStatusCallback,
 	RdsCallback,
 	Rtl433Callback,
 	AdsbCallback,
@@ -65,6 +66,10 @@ export function setRemoteHostStatsCallback(this: Backend, callback: HostCallback
 
 export function setRemoteHostPocsagCallback(this: Backend, callback: HostCallback<Parameters<PocsagCallback>>): void {
 	this._remoteHostPocsagCb = callback;
+}
+
+export function setRemoteHostPocsagStatusCallback(this: Backend, callback: HostCallback<Parameters<PocsagStatusCallback>>): void {
+	this._remoteHostPocsagStatusCb = callback;
 }
 
 export function setRemoteHostRdsCallback(this: Backend, callback: HostCallback<Parameters<RdsCallback>>): void {
@@ -267,6 +272,33 @@ export function removeRemoteVfo(this: Backend, clientId: string, index: number):
 	return Promise.resolve(true);
 }
 
+/**
+ * Get or create the per-index POCSAG decoder for a remote client, applying the
+ * VFO's selected charset on create and on live change. Extracted from
+ * _queueRemoteAudio to keep that hot path's complexity in check.
+ */
+function ensureRemotePocsagDecoder(
+	cb: HostCallback<Parameters<PocsagCallback>>,
+	state: RemoteClientState,
+	index: number,
+	params: VfoParams,
+	clientId: string,
+): POCSAGDecoder {
+	if (!state.pocsagCharsets) state.pocsagCharsets = [];
+	let dec = state.pocsagDecoders[index];
+	if (!dec) {
+		dec = new POCSAGDecoder(AUDIO_RATE, (pmsg) => cb(clientId, index, params.freq, pmsg), params.pocsagCharset);
+		state.pocsagDecoders[index] = dec;
+		state.pocsagCharsets[index] = params.pocsagCharset;
+	} else if (params.pocsagCharset !== state.pocsagCharsets[index]) {
+		if (params.pocsagCharset) dec.setCharset(params.pocsagCharset);
+		state.pocsagCharsets[index] = params.pocsagCharset;
+	}
+	dec.setMode(params.pocsagMode ?? 'auto');
+	dec.setShowSecondGuess(params.pocsagSecondGuess ?? false);
+	return dec;
+}
+
 export function _queueRemoteAudio(this: Backend, clientId: string, index: number, samples: Float32Array, channels: 1 | 2 = 1): void {
 	const state = this._remoteClients && this._remoteClients.get(clientId);
 	if (!state) return;
@@ -276,14 +308,20 @@ export function _queueRemoteAudio(this: Backend, clientId: string, index: number
 	// Run POCSAG decoding on the raw audio before mixing
 	const params = state.params[index];
 	if (this._remoteHostPocsagCb && params && params.pocsag && params.mode === 'nfm') {
-		if (!state.pocsagDecoders[index]) {
-			state.pocsagDecoders[index] = new POCSAGDecoder(AUDIO_RATE, (pmsg) => {
-				this._remoteHostPocsagCb?.(clientId, index, params.freq, pmsg);
-			});
+		const dec = ensureRemotePocsagDecoder(this._remoteHostPocsagCb, state, index, params, clientId);
+		dec.process(samples);
+		// Emit a throttled link-status snapshot to the remote client.
+		if (this._remoteHostPocsagStatusCb) {
+			if (!state.pocsagStatusAt) state.pocsagStatusAt = [];
+			const now = Date.now();
+			if (state.pocsagStatusAt[index] == null || now - state.pocsagStatusAt[index] >= 500) {
+				state.pocsagStatusAt[index] = now;
+				this._remoteHostPocsagStatusCb(clientId, index, params.freq, dec.getStatus());
+			}
 		}
-		state.pocsagDecoders[index].process(samples);
 	} else if (state.pocsagDecoders[index]) {
 		state.pocsagDecoders[index] = null;
+		if (state.pocsagStatusAt) state.pocsagStatusAt[index] = undefined as unknown as number;
 	}
 
 	// Muted VFOs still decode metadata, but their audio must not accumulate.

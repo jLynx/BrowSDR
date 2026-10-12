@@ -152,3 +152,52 @@ describe('bookmark data boundaries', () => {
 		expect(() => parseBookmarks('[{"name":"Group","vfos":{}}]')).toThrow();
 	});
 });
+
+/*
+ * PR #49 review item 2 (jLynx): the pocsag remote command now consumes the
+ * alt / detectDebug / charStatus fields. An otherwise-valid message carrying
+ * alt: { type: 'numeric', text: 42 } used to pass validation and then throw
+ * "text is not iterable" during export/render. Validate the alternate (and the
+ * other newly-consumed fields) at the boundary instead.
+ */
+describe('remote pocsag message boundaries', () => {
+	const base = {
+		type: 'pocsag',
+		vfoIndex: 0,
+		freq: 148.0,
+		msg: { capcode: 123, func: 0, baud: 1200, type: 'alpha', text: 'HELLO' },
+	};
+	const cmd = (msg) => ({ ...base, msg: { ...base.msg, ...msg } });
+
+	it('accepts a well-formed pocsag message', () => {
+		expect(isReceiverCommand(base)).toBe(true);
+	});
+
+	it('accepts a valid alternate interpretation', () => {
+		expect(isReceiverCommand(cmd({ alt: { type: 'numeric', text: '12345' } }))).toBe(true);
+	});
+
+	it('rejects an alternate whose text is not a string', () => {
+		expect(isReceiverCommand(cmd({ alt: { type: 'numeric', text: 42 } }))).toBe(false);
+	});
+
+	it('rejects an alternate with an invalid type', () => {
+		expect(isReceiverCommand(cmd({ alt: { type: 'tone', text: 'x' } }))).toBe(false);
+	});
+
+	it('rejects a non-record alternate', () => {
+		expect(isReceiverCommand(cmd({ alt: 'oops' }))).toBe(false);
+	});
+
+	it('rejects a non-string detectDebug', () => {
+		expect(isReceiverCommand(cmd({ detectDebug: 7 }))).toBe(false);
+	});
+
+	it('rejects a charStatus holding a non-number', () => {
+		expect(isReceiverCommand(cmd({ charStatus: [0, 1, 'x'] }))).toBe(false);
+	});
+
+	it('accepts a numeric charStatus array', () => {
+		expect(isReceiverCommand(cmd({ charStatus: [0, 1, 2] }))).toBe(true);
+	});
+});
