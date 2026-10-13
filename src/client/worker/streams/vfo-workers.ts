@@ -4,6 +4,7 @@ import type {
 	DsdCallback,
 	AdsbCallback,
 	AisCallback,
+	RadiosondeCallback,
 	BleCallback,
 	AcarsCallback,
 } from '@/worker/runtime/callbacks.types';
@@ -23,6 +24,7 @@ export function initializeVfoWorkers(
 	aisCallback: AisCallback | null = null,
 	bleCallback: BleCallback | null = null,
 	acarsCallback: AcarsCallback | null = null,
+	radiosondeCallback: RadiosondeCallback | null = null,
 ) {
 	const initialBandwidth = 150000;
 
@@ -97,6 +99,7 @@ export function initializeVfoWorkers(
 				aisCallback,
 				bleCallback,
 				acarsCallback,
+				radiosondeCallback,
 			);
 		worker.postMessage({
 			type: 'init',
@@ -127,8 +130,9 @@ export function routeLocalWorkerMessage(
 	aisCallback: AisCallback | null = null,
 	bleCallback: BleCallback | null = null,
 	acarsCallback: AcarsCallback | null = null,
+	radiosondeCallback: RadiosondeCallback | null = null,
 ) {
-	if (routePacketMessage(backend, worker, msg, bleCallback, aisCallback, adsbCallback, acarsCallback)) return;
+	if (routePacketMessage(backend, worker, msg, bleCallback, aisCallback, adsbCallback, acarsCallback, radiosondeCallback)) return;
 
 	if (msg.type === 'rtl433_event' || msg.type === 'rtl433_status') {
 		routeSensorMessage(backend, worker, msg, rtl433Callback);
@@ -210,7 +214,14 @@ function routePacketMessage(
 	aisCallback: AisCallback | null,
 	adsbCallback: AdsbCallback | null,
 	acarsCallback: AcarsCallback | null,
+	radiosondeCallback: RadiosondeCallback | null,
 ): boolean {
+	if (msg.type === 'radiosonde') {
+		const index = backend.dspWorkers!.indexOf(worker);
+		const params = backend.vfoParams?.[index];
+		if (params?.radiosonde && params.freq === msg.freq) radiosondeCallback?.(index, params.freq, msg);
+		return true;
+	}
 	if (msg.type === 'acars') {
 		routeAcarsMessage(backend, worker, msg, acarsCallback);
 		return true;

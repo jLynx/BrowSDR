@@ -140,6 +140,27 @@ describe('LimeSDR LMS64C commands', () => {
 		await expect(driver.readFPGA(0x000a)).rejects.toThrow('unexpected command response');
 	});
 
+	it('drains an abandoned page response before accepting the initialization reset', async () => {
+		const { driver, usb, packets } = await createDriver();
+		const stale = new Uint8Array(64);
+		stale[0] = 0x22;
+		stale[1] = 1;
+		usb.transferIn.mockResolvedValueOnce({ status: 'ok', data: new DataView(stale.buffer) });
+		await expect(driver.sendCommand(0x20, new Uint8Array([2]))).resolves.toMatchObject({ 0: 0x20, 1: 1 });
+		expect(usb.transferIn).toHaveBeenCalledTimes(2);
+		expect(packets).toHaveLength(1);
+	});
+
+	it('bounds initialization response recovery', async () => {
+		const { driver, usb } = await createDriver();
+		const stale = new Uint8Array(64);
+		stale[0] = 0x22;
+		stale[1] = 1;
+		usb.transferIn.mockResolvedValue({ status: 'ok', data: new DataView(stale.buffer) });
+		await expect(driver.sendCommand(0x20, new Uint8Array([2]))).rejects.toThrow('unexpected command response');
+		expect(usb.transferIn).toHaveBeenCalledTimes(8);
+	});
+
 	it('serializes complete request-response exchanges', async () => {
 		const { driver, usb } = await createDriver();
 		const events = [];

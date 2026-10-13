@@ -8,6 +8,7 @@ import type {
 	Rtl433Callback,
 	AdsbCallback,
 	AisCallback,
+	RadiosondeCallback,
 	BleCallback,
 	AcarsCallback,
 	DsdCallback,
@@ -59,6 +60,7 @@ import {
 	setRemoteHostRtl433Callback,
 	setRemoteHostAdsbCallback,
 	setRemoteHostAisCallback,
+	setRemoteHostRadiosondeCallback,
 	setRemoteHostBleCallback,
 	setRemoteHostAcarsCallback,
 	setRemoteHostSquelchCallback,
@@ -131,6 +133,7 @@ export class Backend {
 	_remoteHostRdsCb?: HostCallback<Parameters<RdsCallback>>;
 	_remoteHostBleCb?: HostCallback<Parameters<BleCallback>>;
 	_remoteHostAisCb?: HostCallback<Parameters<AisCallback>>;
+	_remoteHostRadiosondeCb?: HostCallback<Parameters<RadiosondeCallback>>;
 	_remoteHostAcarsCb?: HostCallback<Parameters<AcarsCallback>>;
 	_remoteHostAdsbCb?: HostCallback<Parameters<AdsbCallback>>;
 	_remoteHostRtl433Cb?: HostCallback<Parameters<Rtl433Callback>>;
@@ -207,6 +210,7 @@ export class Backend {
 	setRemoteHostRdsCallback = setRemoteHostRdsCallback.bind(this);
 	setRemoteHostBleCallback = setRemoteHostBleCallback.bind(this);
 	setRemoteHostAisCallback = setRemoteHostAisCallback.bind(this);
+	setRemoteHostRadiosondeCallback = setRemoteHostRadiosondeCallback.bind(this);
 	setRemoteHostAcarsCallback = setRemoteHostAcarsCallback.bind(this);
 	setRemoteHostAdsbCallback = setRemoteHostAdsbCallback.bind(this);
 	setRemoteHostRtl433Callback = setRemoteHostRtl433Callback.bind(this);
@@ -239,6 +243,7 @@ export class Backend {
 		aisCallback: AisCallback | null = null,
 		bleCallback: BleCallback | null = null,
 		acarsCallback: AcarsCallback | null = null,
+		radiosondeCallback: RadiosondeCallback | null = null,
 	): Promise<void> {
 		return startRxStream(
 			this,
@@ -255,6 +260,7 @@ export class Backend {
 			aisCallback,
 			bleCallback,
 			acarsCallback,
+			radiosondeCallback,
 		);
 	}
 

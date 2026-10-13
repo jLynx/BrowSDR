@@ -27,6 +27,7 @@ export const makeDefaultVfo = (freq = 100.0) => ({
 	pocsagSecondGuess: false,
 	adsb: false,
 	ais: false,
+	radiosonde: false,
 	ble: false,
 	acars: false,
 	rtl433: false,

@@ -1,0 +1,150 @@
+<section
+	v-if="receiver.radiosonde.panelOpen"
+	class="adsb-panel radiosonde-panel"
+	:class="{ 'adsb-fullscreen': fullscreen }"
+	aria-label="Radiosonde balloons"
+>
+	<UiToolHeader variant="pocsag" closable close-label="Close radiosonde panel" @close="receiver.toggleRadiosondePanel">
+		Radiosonde Balloons <span class="pocsag-count">{{ sondes.length }} balloons · {{ positioned.length }} located</span>
+		<template #actions>
+			<UiSelect v-model.number="receiver.activeVfoIndex" aria-label="Radiosonde VFO" class="decoder-vfo-select">
+				<option v-for="(vfo, i) in receiver.vfos" :key="i" :value="i">VFO {{ i + 1 }} · {{ vfo.freq.toFixed(3) }} MHz</option>
+			</UiSelect>
+			<UiCheckbox
+				v-if="selectedVfo"
+				v-model="selectedVfo.radiosonde"
+				class="adsb-decode-control"
+				:label="'Decode VFO ' + (receiver.activeVfoIndex + 1)"
+				:input-label="'Radiosonde decoding for VFO ' + (receiver.activeVfoIndex + 1)"
+				:disabled="(selectedVfo.freq < 400 || selectedVfo.freq > 406) && !selectedVfo.radiosonde"
+				@change="receiver.updateBackendVfoParams(receiver.activeVfoIndex)"
+			></UiCheckbox>
+			<UiButton variant="transcript" @click="receiver.tuneRadiosondeVfo()">Tune 403.000 MHz</UiButton>
+			<UiButton variant="transcript" @click="showMap = !showMap" :aria-expanded="showMap">{{ showMap ? 'Hide map' : 'Show map' }}</UiButton>
+			<UiButton variant="transcript" @click="setFullscreen(!fullscreen)" :aria-pressed="fullscreen"
+				>{{ fullscreen ? 'Exit fullscreen' : 'Fullscreen map' }}</UiButton
+			>
+			<UiButton variant="transcript" @click="fit" :disabled="!showMap || !positioned.length">Fit balloons</UiButton>
+		</template>
+	</UiToolHeader>
+	<div class="adsb-summary">
+		<span v-if="!receiver.running">Reception stopped</span>
+		<template v-for="(vfo, i) in receiver.vfos" :key="i"
+			><span v-if="vfo.radiosonde" :class="{ 'rtl433-error': receiver.radiosonde.status[i]?.state === 'error' }"
+				>VFO {{ i + 1 }} · {{ receiver.radiosondeStatusText(i) }}</span
+			></template
+		>
+		<span v-if="!active">Tune to the balloon frequency in 400–406 MHz, then enable decoding. Audio can stay muted.</span>
+	</div>
+	<div class="adsb-content" :class="{ 'adsb-list-only': !showMap }">
+		<div v-if="showMap" class="adsb-map-wrap">
+			<div ref="mapElement" class="adsb-map" aria-label="Live balloons map"></div>
+			<div v-if="!positioned.length" class="adsb-map-message">Waiting for a balloon GPS fix…</div>
+			<div v-if="error" class="adsb-map-error" role="status">{{ error }}</div>
+		</div>
+		<div class="adsb-list">
+			<div v-if="selectedSonde" class="adsb-details" aria-label="Balloon details">
+				<div class="adsb-details-heading">
+					<strong>{{ selectedSonde.id }} · {{ selectedSonde.subtype ?? selectedSonde.model }}</strong
+					><UiButton variant="transcript" @click="selected = ''">Back to balloons</UiButton>
+				</div>
+
+				<dl class="adsb-detail-grid">
+					<div v-for="field in details" :key="field.label">
+						<dt>{{ field.label }}</dt>
+						<dd>{{ field.value }}</dd>
+					</div>
+				</dl>
+				<details class="radiosonde-extra" v-if="selectedSonde.configuration?.length">
+					<summary>Transmitted configuration and runtime status</summary>
+					<dl class="adsb-detail-grid">
+						<div v-for="field in selectedSonde.configuration" :key="field.label">
+							<dt>{{ field.label }}</dt>
+							<dd>
+								{{ typeof field.value === 'number' ? format(field.value, Number.isInteger(field.value) ? 0 : 3) : field.value }} {{
+								field.unit }}
+							</dd>
+						</div>
+					</dl>
+				</details>
+				<details class="radiosonde-extra" v-if="selectedSonde.gnssSatellites?.length">
+					<summary>GNSS satellite measurements</summary>
+					<table class="adsb-table">
+						<thead>
+							<tr>
+								<th>PRN</th>
+								<th>Signal code</th>
+								<th>Quality</th>
+								<th>Pseudorange (m)</th>
+								<th>Doppler</th>
+							</tr>
+						</thead>
+						<tbody>
+							<tr v-for="sat in selectedSonde.gnssSatellites" :key="sat.prn">
+								<td>{{ sat.prn }}</td>
+								<td>{{ sat.signal }}</td>
+								<td>{{ sat.quality }}</td>
+								<td>{{ format(sat.pseudorange, 2) }}</td>
+								<td>{{ sat.doppler ?? '—' }}</td>
+							</tr>
+						</tbody>
+					</table>
+				</details>
+				<details class="radiosonde-extra" v-if="selectedSonde.auxiliary?.length">
+					<summary>Auxiliary instrument payloads (XDATA)</summary>
+					<code v-for="(data, index) in selectedSonde.auxiliary" :key="index">{{ data }}</code>
+				</details>
+				<details class="radiosonde-extra" v-if="selectedSonde.rawBlocks?.length">
+					<summary>Raw telemetry and calibration</summary>
+					<p>Payloads are dewhitened. Fields use only CRC-valid blocks; failed blocks are shown for inspection.</p>
+					<div v-for="(block, index) in selectedSonde.rawBlocks" :key="index">
+						<strong>{{ blockType(block.type) }} · {{ block.crcValid ? 'CRC valid' : 'CRC failed' }}</strong><code>{{ block.data }}</code>
+					</div>
+					<div v-if="selectedSonde.measurements">
+						<strong>Sensor ADC counts</strong><code>{{ selectedSonde.measurements.join(', ') }}</code>
+					</div>
+					<div v-for="fragment in selectedSonde.calibrationFragments" :key="fragment.index">
+						<strong>Calibration {{ blockType(fragment.index) }}</strong><code>{{ fragment.data }}</code>
+					</div>
+				</details>
+			</div>
+			<UiInputGroup v-show="!selectedSonde" class="adsb-search"
+				><UiInput v-model="query" aria-label="Search balloons" placeholder="Search sonde ID"></UiInput
+			></UiInputGroup>
+			<UiEmptyState v-if="!selectedSonde && !sondes.length" variant="pocsag"
+				>Waiting for RS41 transmissions. Start the SDR with an antenna covering 403 MHz; the map appears after a CRC-checked GPS
+				fix.</UiEmptyState
+			>
+			<UiEmptyState v-else-if="!selectedSonde && !filtered.length" variant="pocsag">No balloons match your search.</UiEmptyState>
+			<div v-if="filtered.length" v-show="!selectedSonde" class="adsb-table-wrap">
+				<table class="adsb-table">
+					<thead>
+						<tr>
+							<th>Balloon</th>
+							<th>Altitude</th>
+							<th>Speed</th>
+							<th>Climb</th>
+							<th>Seen</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr v-for="item in filtered" :key="item.id" :class="{ selected: selected === item.id }">
+							<td>
+								<UiButton variant="transcript" @click="select(item.id)" :aria-pressed="selected === item.id">{{ item.id }}</UiButton
+								><small>{{ item.subtype ?? item.model }} · {{ hasLiveSondePosition(item, now) ? 'Located' : 'No current GPS fix' }}</small>
+							</td>
+							<td>{{ format(item.altitude, 0, ' m') }}</td>
+							<td>{{ format(item.speed, 1, ' m/s') }}</td>
+							<td>{{ format(item.climb, 1, ' m/s') }}</td>
+							<td>{{ Math.max(0, Math.floor((now - item.lastSeen) / 1000)) }}s</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+	<div class="adsb-footer">
+		<span>Vaisala RS41 · 4800 baud FSK · CRC-checked telemetry</span
+		><span>Positions expire after 5min; balloons after 30min. Map tiles need internet.</span>
+	</div>
+</section>

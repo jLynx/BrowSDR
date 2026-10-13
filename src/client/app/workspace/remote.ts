@@ -406,6 +406,11 @@ async function installHostStreamCallbacks(this: AppInstance) {
 			this._webrtc?.sendCommandTo(clientId, { type: 'ais', vfoIndex: index, freq, msg });
 		}),
 	);
+	await this.backend.setRemoteHostRadiosondeCallback(
+		Comlink.proxy((clientId: string, index: number, freq: number, msg: Parameters<AppInstance['_onRadiosondeMessage']>[2]) => {
+			this._webrtc?.sendCommandTo(clientId, { type: 'radiosonde', vfoIndex: index, freq, msg });
+		}),
+	);
 	await this.backend.setRemoteHostAcarsCallback(
 		Comlink.proxy((clientId: string, index: number, freq: number, msg: Parameters<AppInstance['_onAcarsMessage']>[2]) => {
 			this._webrtc?.sendCommandTo(clientId, { type: 'acars', vfoIndex: index, freq, msg });
@@ -605,6 +610,10 @@ function handleAis(this: AppInstance, cmd: Extract<ReceiverCommand, { type: 'ais
 }
 
 function handlePacketTelemetry(this: AppInstance, cmd: ReceiverCommand): boolean {
+	if (cmd.type === 'radiosonde') {
+		if (this.remoteMode === 'client') this._onRadiosondeMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
+		return true;
+	}
 	if (cmd.type === 'ais') {
 		handleAis.call(this, cmd);
 		return true;

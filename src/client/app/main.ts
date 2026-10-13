@@ -3,7 +3,9 @@ import { bleMethods } from '@/app/decoders/ble/controller';
 import AcarsPanel from '@/app/decoders/acars/panel';
 import { acarsMethods } from '@/app/decoders/acars';
 import AisPanel from '@/app/decoders/ais/panel';
+import RadiosondePanel from '@/app/decoders/radiosonde/panel';
 import { aisMethods } from '@/app/decoders/ais';
+import { radiosondeMethods } from '@/app/decoders/radiosonde/controller';
 import { isRecord } from '@/platform/data';
 import type { AppInstance } from '@/app/core/receiver.types';
 import type { Backend as BackendInstance } from '@/worker/runtime/backend';
@@ -57,6 +59,7 @@ const Receiver = {
 		ContrastControls,
 		AdsbPanel,
 		AisPanel,
+		RadiosondePanel,
 		BlePanel,
 		AcarsPanel,
 		HeaderTools,
@@ -88,6 +91,7 @@ const Receiver = {
 		...rtl433Methods,
 		...adsbMethods,
 		...aisMethods,
+		...radiosondeMethods,
 		...bleMethods,
 		...acarsMethods,
 	},

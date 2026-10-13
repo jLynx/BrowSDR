@@ -13,6 +13,7 @@ export function planSharedBands(sampleRate: number, centerFreq: number, params: 
 				value.pocsag ||
 				value.adsb ||
 				value.ais ||
+				value.radiosonde ||
 				value.ble ||
 				value.acars ||
 				value.rtl433 ||
@@ -59,6 +60,7 @@ function channelWidth(value: VfoParams, sampleRate: number): number {
 		value.rtl433 ? rtl433SampleRate(value.rtl433SampleRate) : 0,
 		value.adsb ? 2000000 : 0,
 		value.ais ? 48000 : 0,
+		value.radiosonde ? 48000 : 0,
 		value.ble ? 2000000 : 0,
 		value.acars ? 48000 : 0,
 	);

@@ -4,6 +4,7 @@ import type { PocsagMode } from '@/worker/decoders/types';
 export interface Vfo {
 	adsb?: boolean;
 	ais?: boolean;
+	radiosonde?: boolean;
 	ble?: boolean;
 	acars?: boolean;
 	rtl433?: boolean;

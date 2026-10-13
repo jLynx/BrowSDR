@@ -1,5 +1,6 @@
 import type { BleMessage } from '@/worker/decoders/ble/types';
 import type { AisMessage } from '@/worker/decoders/ais/types';
+import type { RadiosondeMessage } from '@/worker/decoders/radiosonde/types';
 import type { AcarsMessage } from '@/worker/decoders/acars/types';
 import type { AdsbMessage } from '@/worker/decoders/adsb/types';
 import type { DSDStatus } from '@/worker/decoders/dsd/types';
@@ -15,6 +16,7 @@ export type PocsagStatusCallback = (index: number, freq: number, status: POCSAGS
 export type RdsCallback = DecoderCallback<RDSMessage>;
 export type BleCallback = DecoderCallback<BleMessage>;
 export type AisCallback = DecoderCallback<AisMessage>;
+export type RadiosondeCallback = DecoderCallback<RadiosondeMessage>;
 export type AcarsCallback = DecoderCallback<AcarsMessage>;
 export type AdsbCallback = DecoderCallback<AdsbMessage>;
 export type Rtl433Callback = DecoderCallback<Rtl433Message>;

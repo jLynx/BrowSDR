@@ -22,6 +22,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 
 import {
 	CMD_GET_INFO,
+	CMD_LMS7002_RST,
 	CMD_LMS7002_WR,
 	CMD_LMS7002_RD,
 	CMD_USB_FIFO_RST,
@@ -95,14 +96,7 @@ export abstract class LimeSDRTransport {
 			if (sent.status !== 'ok' || sent.bytesWritten !== pkt.length) {
 				throw new Error(`LimeSDR: USB command write failed (status=${sent.status}, bytes=${sent.bytesWritten})`);
 			}
-			const result = await this.dev.transferIn(EP_CTRL_IN_NUM, 64);
-			if (result.status !== 'ok' || result.data?.byteLength !== 64) {
-				throw new Error(`LimeSDR: USB command response failed (status=${result.status}, bytes=${result.data?.byteLength ?? 0})`);
-			}
-			const response = new Uint8Array(result.data.buffer, result.data.byteOffset, result.data.byteLength);
-			if (response[0] !== cmd) {
-				throw new Error(`LimeSDR: unexpected command response 0x${response[0].toString(16)} (expected 0x${cmd.toString(16)})`);
-			}
+			const response = await this.readCommandResponse(cmd);
 			if (response[1] !== 1) {
 				throw new LimeSDRCommandError(cmd, response[1]);
 			}
@@ -113,6 +107,24 @@ export abstract class LimeSDRTransport {
 			() => {},
 		);
 		return command;
+	}
+
+	private async readCommandResponse(cmd: number): Promise<Uint8Array> {
+		// A page reload can abandon a control read, leaving its reply in the FX3.
+		// Only initialization's reset may discard old replies; register reads must
+		// still fail on mismatches rather than accidentally accepting stale data.
+		const attempts = cmd === CMD_LMS7002_RST ? 8 : 1;
+		for (let attempt = 0; attempt < attempts; attempt++) {
+			const result = await this.dev.transferIn(EP_CTRL_IN_NUM, 64);
+			if (result.status !== 'ok' || result.data?.byteLength !== 64)
+				throw new Error(`LimeSDR: USB command response failed (status=${result.status}, bytes=${result.data?.byteLength ?? 0})`);
+			const response = new Uint8Array(result.data.buffer, result.data.byteOffset, result.data.byteLength);
+			if (response[0] === cmd) return response;
+			if (attempt === attempts - 1)
+				throw new Error(`LimeSDR: unexpected command response 0x${response[0].toString(16)} (expected 0x${cmd.toString(16)})`);
+			console.warn(`LimeSDR: discarding stale command response 0x${response[0].toString(16)} during initialization`);
+		}
+		throw new Error('LimeSDR: control response recovery exhausted');
 	}
 
 	// ── LMS7002M SPI Registers ──────────────────────────────────

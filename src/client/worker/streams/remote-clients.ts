@@ -7,6 +7,7 @@ import type {
 	Rtl433Callback,
 	AdsbCallback,
 	AisCallback,
+	RadiosondeCallback,
 	BleCallback,
 	AcarsCallback,
 	HostCallback,
@@ -86,6 +87,10 @@ export function setRemoteHostBleCallback(this: Backend, callback: HostCallback<P
 
 export function setRemoteHostAisCallback(this: Backend, callback: HostCallback<Parameters<AisCallback>>): void {
 	this._remoteHostAisCb = callback;
+}
+
+export function setRemoteHostRadiosondeCallback(this: Backend, callback: HostCallback<Parameters<RadiosondeCallback>>): void {
+	this._remoteHostRadiosondeCb = callback;
 }
 
 export function setRemoteHostAcarsCallback(this: Backend, callback: HostCallback<Parameters<AcarsCallback>>): void {
@@ -511,6 +516,11 @@ function forwardPacketMessage(backend: Backend, clientId: string, state: RemoteC
 	}
 	if (msg.type === 'acars') {
 		forwardAcars(backend, clientId, state, index, msg);
+		return true;
+	}
+	if (msg.type === 'radiosonde') {
+		const params = state.params[index];
+		if (params?.radiosonde && params.freq === msg.freq) backend._remoteHostRadiosondeCb?.(clientId, index, params.freq, msg);
 		return true;
 	}
 	if (msg.type === 'ais') {

@@ -1,5 +1,6 @@
 import type { BleDevice, BleStatus } from '@/worker/decoders/ble/types';
 import type { AisStatus, Vessel } from '@/worker/decoders/ais/types';
+import type { RadiosondeStatus, Radiosonde } from '@/worker/decoders/radiosonde/types';
 import type { AcarsStatus, AcarsRecord } from '@/worker/decoders/acars/types';
 import type { AdsbStatus, Aircraft } from '@/worker/decoders/adsb/types';
 import type { POCSAGStatus } from '@/worker/decoders/types';
@@ -164,6 +165,7 @@ function createDecoderAndBookmarkState() {
 			sources: [] as Array<{ freq: number; messages: AcarsRecord[] } | null>,
 		},
 		ais: { panelOpen: false, status: [] as Array<AisStatus | null>, sources: [] as Vessel[][] },
+		radiosonde: { panelOpen: false, status: [] as Array<RadiosondeStatus | null>, sources: [] as Radiosonde[][] },
 		adsb: { panelOpen: false, status: [] as Array<AdsbStatus | null>, sources: [] as Aircraft[][] },
 		rtl433: {
 			panelOpen: false,

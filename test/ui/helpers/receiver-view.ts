@@ -3,6 +3,8 @@ import { bleMethods } from '@/app/decoders/ble/controller';
 import AcarsPanel from '@/app/decoders/acars/panel';
 import { acarsMethods } from '@/app/decoders/acars';
 import AisPanel from '@/app/decoders/ais/panel';
+import RadiosondePanel from '@/app/decoders/radiosonde/panel';
+import { radiosondeMethods } from '@/app/decoders/radiosonde/controller';
 import { aisMethods } from '@/app/decoders/ais';
 import { defineComponent } from 'vue';
 import template from '@/app/templates/receiver';
@@ -40,6 +42,7 @@ export const ReceiverView = defineComponent({
 		ContrastControls,
 		AdsbPanel,
 		AisPanel,
+		RadiosondePanel,
 		BlePanel,
 		AcarsPanel,
 		HeaderTools,
@@ -60,6 +63,7 @@ export const ReceiverView = defineComponent({
 		...rtl433Methods,
 		...adsbMethods,
 		...aisMethods,
+		...radiosondeMethods,
 		...bleMethods,
 		...acarsMethods,
 		...bookmarkMethods,

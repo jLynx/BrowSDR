@@ -15,11 +15,7 @@ export function dispatchIqChunk(
 ) {
 	const targets = collectTargets(backend);
 	backend._iqDispatcher!.retain(new Set(targets.map((target) => target.worker)));
-	const plannedParams = targets.map((target) =>
-		target.shared
-			? target.params
-			: { ...target.params, enabled: false, pocsag: false, rds: false, rtl433: false, adsb: false, ais: false, ble: false, acars: false },
-	);
+	const plannedParams = targets.map((target) => (target.shared ? target.params : disabledDecoders(target.params)));
 	const plan = planSharedBands(sampleRate, backend._centerFreq ?? centerFreq, plannedParams, true);
 	const nextKey = JSON.stringify([backend._centerFreq ?? centerFreq, plan.ratio, plan.bands.map((band) => band.centerBin)]);
 	channel.plan = plan;
@@ -194,7 +190,23 @@ function needsIq(params: VfoParams): boolean {
 		params.rtl433 === true ||
 		params.adsb === true ||
 		params.ais === true ||
+		params.radiosonde === true ||
 		params.ble === true ||
 		params.acars === true
 	);
+}
+
+function disabledDecoders(params: VfoParams): VfoParams {
+	return {
+		...params,
+		enabled: false,
+		pocsag: false,
+		rds: false,
+		rtl433: false,
+		adsb: false,
+		ais: false,
+		radiosonde: false,
+		ble: false,
+		acars: false,
+	};
 }

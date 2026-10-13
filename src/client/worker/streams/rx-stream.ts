@@ -13,6 +13,7 @@ import type {
 	Rtl433Callback,
 	AdsbCallback,
 	AisCallback,
+	RadiosondeCallback,
 	BleCallback,
 	AcarsCallback,
 	DsdCallback,
@@ -63,6 +64,7 @@ export async function startRxStream(
 	aisCallback: AisCallback | null = null,
 	bleCallback: BleCallback | null = null,
 	acarsCallback: AcarsCallback | null = null,
+	radiosondeCallback: RadiosondeCallback | null = null,
 ): Promise<void> {
 	if (_streamStarting) return;
 	_streamStarting = true;
@@ -78,8 +80,7 @@ export async function startRxStream(
 		await device.setFrequency(displayToDeviceFrequencyHz(centerFreq, frequencyShift));
 		await configureReceiveGains(device, gains);
 		if (import.meta.env.DEV && device.deviceType === 'limesdr' && gains?.['Receive Mode'] === 1) {
-			await startUsbOnlyStream(backend, sampleRate);
-			return;
+			return await startUsbOnlyStream(backend, sampleRate);
 		}
 
 		// ── Spectrum FFT setup ────────────────────────────────────────
@@ -117,6 +118,7 @@ export async function startRxStream(
 			aisCallback,
 			bleCallback,
 			acarsCallback,
+			radiosondeCallback,
 		});
 
 		// ── DSP Performance Counters ──────────────────────────────────
@@ -273,6 +275,7 @@ function initializeWorkers(
 		aisCallback: AisCallback | null;
 		bleCallback: BleCallback | null;
 		acarsCallback: AcarsCallback | null;
+		radiosondeCallback: RadiosondeCallback | null;
 	},
 ): void {
 	initializeVfoWorkers(
@@ -286,6 +289,7 @@ function initializeWorkers(
 		callbacks.aisCallback,
 		callbacks.bleCallback,
 		callbacks.acarsCallback,
+		callbacks.radiosondeCallback,
 	);
 }
 

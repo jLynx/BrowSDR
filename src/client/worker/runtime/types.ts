@@ -29,6 +29,7 @@ export interface VfoParams {
 	stereo?: boolean;
 	adsb?: boolean;
 	ais?: boolean;
+	radiosonde?: boolean;
 	ble?: boolean;
 	acars?: boolean;
 	rtl433?: boolean;

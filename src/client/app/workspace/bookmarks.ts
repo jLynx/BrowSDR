@@ -49,6 +49,7 @@ export const bookmarkMethods = {
 				rdsRegion: vfo.rdsRegion,
 				adsb: vfo.adsb,
 				ais: vfo.ais,
+				radiosonde: vfo.radiosonde,
 				acars: vfo.acars,
 				rtl433: vfo.rtl433,
 				rtl433SampleRate: vfo.rtl433SampleRate,
@@ -275,9 +276,7 @@ function applyIndividualBookmark(this: AppInstance, bm: Bookmark) {
 		highPass: bm.highPass ?? false,
 		rds: bm.rds ?? false,
 		rdsRegion: bm.rdsRegion ?? 'eu',
-		adsb: bm.adsb ?? false,
-		ais: bm.ais ?? false,
-		acars: bm.acars ?? false,
+		...bookmarkPacketDecoders(bm),
 		rtl433: bm.rtl433 ?? false,
 		rtl433SampleRate: bm.rtl433SampleRate ?? 250000,
 		rtl433Protocols: bm.rtl433Protocols ?? '',
@@ -308,4 +307,8 @@ function editIndividualBookmark(this: AppInstance, bm: Bookmark) {
 
 function bookmarkSelection(index: number | undefined, count: number): number {
 	return typeof index === 'number' && Number.isSafeInteger(index) && index >= 0 && index < count ? index : 0;
+}
+
+function bookmarkPacketDecoders(bm: Bookmark) {
+	return { adsb: bm.adsb ?? false, ais: bm.ais ?? false, radiosonde: bm.radiosonde ?? false, acars: bm.acars ?? false };
 }

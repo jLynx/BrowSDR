@@ -92,6 +92,7 @@ export const vfoMethods = {
 				pocsagSecondGuess: vfo.pocsagSecondGuess,
 				adsb: vfo.adsb && inBandwidth,
 				ais: vfo.ais && inBandwidth,
+				radiosonde: vfo.radiosonde && inBandwidth,
 				ble: vfo.ble && inBandwidth,
 				acars: vfo.acars && inBandwidth,
 				rtl433: vfo.rtl433 && inBandwidth,
@@ -324,8 +325,10 @@ export const vfoMethods = {
 		this.adsb?.sources.splice(index, 1);
 		this.ble?.status.splice(index, 1);
 		this.ais?.status.splice(index, 1);
+		this.radiosonde?.status.splice(index, 1);
 		this.acars?.status.splice(index, 1);
 		this.ais?.sources.splice(index, 1);
+		this.radiosonde?.sources.splice(index, 1);
 		this.acars?.sources.splice(index, 1);
 		if (this.backend && this.running) {
 			if (this.remoteMode === 'client' && this._webrtc) {

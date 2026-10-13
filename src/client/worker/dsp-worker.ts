@@ -1,5 +1,6 @@
 import { BleStream } from './decoders/ble/stream';
 import { AisStream } from './decoders/ais';
+import { RadiosondeStream } from './decoders/radiosonde';
 import { AcarsStream } from './decoders/acars';
 import { SharedBandPool } from './streams/shared-band-pool';
 import { errorMessage } from '@/platform/errors';
@@ -64,6 +65,7 @@ const bandPool = typeof SharedArrayBuffer === 'undefined' ? undefined : new Shar
 let rtl433: Rtl433Stream;
 let adsb: AdsbStream;
 let ais: AisStream;
+let radiosonde: RadiosondeStream;
 let ble: BleStream;
 let acars: AcarsStream;
 
@@ -89,6 +91,7 @@ async function startup(): Promise<void> {
 				adsb = new AdsbStream(DspProcessor, _wasm.memory, (message) => self.postMessage(message));
 				ble = new BleStream(DspProcessor, _wasm.memory, (message) => self.postMessage(message));
 				ais = new AisStream(DspProcessor, _wasm.memory, (message) => self.postMessage(message));
+				radiosonde = new RadiosondeStream(DspProcessor, _wasm.memory, (message) => self.postMessage(message));
 				acars = new AcarsStream(DspProcessor, _wasm.memory, (message) => self.postMessage(message));
 				set_panic_hook();
 
@@ -167,11 +170,7 @@ function decodeRdsChunk(msg: Extract<DspInput, { type: 'process' }>) {
 
 function configureDDC(params: VfoParams, systemCenterFreq: number): void {
 	configuredParams = JSON.stringify(params);
-	rtl433.configure(params, systemSampleRate, systemCenterFreq);
-	adsb.configure(params, systemSampleRate, systemCenterFreq);
-	ais.configure(params, systemSampleRate, systemCenterFreq);
-	ble.configure(params, systemSampleRate, systemCenterFreq);
-	acars.configure(params, systemSampleRate, systemCenterFreq);
+	configurePacketDecoders(params, systemCenterFreq);
 	const ifRate = IF_RATES[params.mode];
 	if (ifRate === undefined) {
 		console.error(`[DSP Worker] Unknown mode "${params.mode}" — no IF rate defined. Skipping DDC config.`);
@@ -500,6 +499,7 @@ function handleDspInit(msg: Extract<DspInput, { type: 'init' }>) {
 	rtl433.reset();
 	adsb.reset();
 	ais.reset();
+	radiosonde.reset();
 	ble.reset();
 	acars.reset();
 	inputIsFloat = false;
@@ -549,11 +549,7 @@ function handleDspProcess(msg: Extract<DspInput, { type: 'process' }>) {
 	configureInputRate(msg);
 	configureInputParams(msg.params);
 	inputIsFloat = msg.floatIq === true;
-	rtl433.configure(msg.params, systemSampleRate, inputCenterFreq);
-	adsb.configure(msg.params, systemSampleRate, inputCenterFreq);
-	ais.configure(msg.params, systemSampleRate, inputCenterFreq);
-	ble.configure(msg.params, systemSampleRate, inputCenterFreq);
-	acars.configure(msg.params, systemSampleRate, inputCenterFreq);
+	configurePacketDecoders(msg.params, inputCenterFreq);
 	// Audio mute does not stop independent RDS or pager decoding.
 	if (!needsVfoInput(msg.params) || !copyInputPayload(msg)) {
 		self.postMessage({ type: 'processed', chunkId: msg.chunkId });
@@ -565,9 +561,10 @@ function handleDspProcess(msg: Extract<DspInput, { type: 'process' }>) {
 		const sequence = msg.sequence ?? msg.chunkId;
 		adsb.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat, sequence);
 		ais.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat, sequence);
+		radiosonde.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat, sequence);
 		ble.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat, sequence);
 		acars.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat, sequence);
-		const audioOut = msg.params.enabled || msg.params.pocsag || msg.params.rds ? processVfoAudio(msg.chunkLen, msg.params) : null;
+		const audioOut = decodeVfoAudio(msg.chunkLen, msg.params);
 		// Complete decoder work before acknowledging the input. Otherwise replies
 		// let the sender queue more input while RDS is still using this worker.
 		decodeRdsChunk(msg);
@@ -668,9 +665,14 @@ function needsVfoInput(params: VfoParams): boolean {
 		params.pocsag ||
 		(params.rds && params.mode === 'wfm') ||
 		params.rtl433 === true ||
-		params.adsb === true ||
-		params.ais === true ||
-		params.ble === true ||
-		params.acars === true
+		[params.adsb, params.ais, params.radiosonde, params.ble, params.acars].some((enabled) => enabled === true)
 	);
+}
+
+function configurePacketDecoders(params: VfoParams, center: number): void {
+	for (const decoder of [rtl433, adsb, ais, radiosonde, ble, acars]) decoder.configure(params, systemSampleRate, center);
+}
+
+function decodeVfoAudio(length: number, params: VfoParams): Float32Array | null {
+	return params.enabled || params.pocsag || params.rds ? processVfoAudio(length, params) : null;
 }

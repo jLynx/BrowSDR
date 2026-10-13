@@ -16,7 +16,7 @@ export default [
 	part1,
 	part2,
 	part3,
-	'<AdsbPanel /><AisPanel /><BlePanel /><AcarsPanel /><DiscoveryPanel />',
+	'<AdsbPanel /><AisPanel /><RadiosondePanel /><BlePanel /><AcarsPanel /><DiscoveryPanel />',
 	part4,
 	part5,
 	part6,

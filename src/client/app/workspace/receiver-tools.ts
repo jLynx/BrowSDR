@@ -58,6 +58,14 @@ function toolGroups(receiver: AppInstance): UiMenuGroup[] {
 					open: receiver.ble.panelOpen,
 				},
 				{
+					id: 'radiosonde',
+					label: 'Radiosonde',
+					description: 'Weather balloon tracking · RS41',
+					icon: 'radio',
+					active: vfos.some((vfo) => vfo.radiosonde),
+					open: receiver.radiosonde.panelOpen,
+				},
+				{
 					id: 'ais',
 					label: 'AIS',
 					description: 'Vessel tracking',
@@ -124,6 +132,7 @@ function selectTool(receiver: AppInstance, id: string, openOnly = false): void {
 			adsb: receiver.adsb,
 			ble: receiver.ble,
 			ais: receiver.ais,
+			radiosonde: receiver.radiosonde,
 			acars: receiver.acars,
 		};
 		const panel = panels[id as keyof typeof panels];
