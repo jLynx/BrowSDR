@@ -4,6 +4,23 @@ import { BLOCK, WRITE_FLAG } from '@/devices/rtlsdr/protocol';
 import { RtlSdrDevice } from '@/devices/rtlsdr/device';
 
 describe('RTL-SDR USB transport', () => {
+	it('resets GPIO4 before probing reset-dependent tuners', async () => {
+		const device = new RtlSdrDevice();
+		const events = [];
+		device.com = {
+			closeI2C: vi.fn(async () => events.push('close')),
+			openI2C: vi.fn(async () => events.push('open')),
+			writeRegBuffer: vi.fn(async () => events.push('probe')),
+			readReg: vi.fn().mockResolvedValue(0x56),
+		};
+		device.setGpioOutput = vi.fn(async (pin) => events.push(`output:${pin}`));
+		device.setGpioBit = vi.fn(async (pin, value) => events.push(`bit:${pin}:${value}`));
+		expect(await device.probeTuner([], [{ name: 'FC2580', addr: 0xac, checkReg: 1, expectVal: 0x56, mask: 0x7f }])).toEqual({
+			detectedTuner: 'FC2580',
+			detectedAddr: 0xac,
+		});
+		expect(events).toEqual(['close', 'output:4', 'bit:4:true', 'bit:4:false', 'open', 'probe']);
+	});
 	it('returns USB identity and detected tuner without inventing a firmware version', async () => {
 		const device = new RtlSdrDevice();
 		device.dev = { serialNumber: '00000001', manufacturerName: 'Realtek', productName: 'RTL2838' };

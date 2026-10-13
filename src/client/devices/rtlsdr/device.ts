@@ -137,7 +137,7 @@ export class RtlSdrDevice implements SdrDevice {
 			{ name: 'R820T/R820T2/R828D', addr: 0x34, checkReg: 0x00, expectVal: 0x96 },
 			{ name: 'R828D', addr: 0x74, checkReg: 0x00, expectVal: 0x96 },
 		];
-		// Phase 2: After GPIO5 reset — FC2580 and FC0012
+		// Phase 2: After GPIO4 reset — FC2580 and FC0012
 		const PHASE2_PROBES: Array<{ name: string; addr: number; checkReg: number; expectVal: number; mask?: number }> = [
 			{ name: 'FC2580', addr: 0xac, checkReg: 0x01, expectVal: 0x56, mask: 0x7f },
 			{ name: 'FC0012', addr: 0xc6, checkReg: 0x00, expectVal: 0xa1 },
@@ -296,13 +296,13 @@ export class RtlSdrDevice implements SdrDevice {
 			if (await probeOne(probe)) break;
 		}
 
-		// Phase 2: GPIO5 reset then probe FC2580/FC0012
+		// Phase 2: GPIO4 reset then probe FC2580/FC0012
 		if (!detectedTuner) {
-			console.log('RTL-SDR: Phase 1 found nothing, resetting tuner via GPIO5...');
+			console.log('RTL-SDR: Phase 1 found nothing, resetting tuner via GPIO4...');
 			await this.com.closeI2C();
-			await this.setGpioOutput(5);
-			await this.setGpioBit(5, true);
-			await this.setGpioBit(5, false);
+			await this.setGpioOutput(4);
+			await this.setGpioBit(4, true);
+			await this.setGpioBit(4, false);
 			await this.com.openI2C();
 
 			for (const probe of PHASE2_PROBES) {

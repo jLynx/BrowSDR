@@ -104,7 +104,13 @@ describe('nextrtl calibration and identification', () => {
 describe('nextrtl WebUSB reception controls', () => {
 	it('uses rev 1 calibration, switches at 30 MHz and turns off HF and LED on close', async () => {
 		const { receiver, registers, tuning } = await openBoard();
-		expect(await receiver.getInfo()).toEqual({ name: 'RTL-SDR (nextrtl / FC0013)', serial: 'NR01' });
+		expect(await receiver.getInfo()).toEqual({
+			name: 'RTL-SDR (nextrtl / FC0013)',
+			serial: 'NR01',
+			manufacturer: 'zxkmm',
+			product: 'nextrtl',
+			tuner: 'nextrtl / FC0013',
+		});
 		expect(receiver.gainControls).toContainEqual(expect.objectContaining({ name: 'L-band input', default: 0 }));
 		await receiver.setFrequency(7100000);
 		expect(tuning).toHaveBeenLastCalledWith(132112345);
