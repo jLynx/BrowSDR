@@ -61,7 +61,7 @@ function toolGroups(receiver: AppInstance): UiMenuGroup[] {
 					id: 'radiosonde',
 					label: 'Radiosonde',
 					description: 'Weather balloon tracking · RS41',
-					icon: 'radio',
+					icon: 'balloon',
 					active: vfos.some((vfo) => vfo.radiosonde),
 					open: receiver.radiosonde.panelOpen,
 				},

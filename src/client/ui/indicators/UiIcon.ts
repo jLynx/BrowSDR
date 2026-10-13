@@ -1,4 +1,17 @@
-import { Activity, Bluetooth, ChartNoAxesColumn, Mail, Mic, Plane, Radio, RadioTower, RotateCcw, Ship, Smartphone } from '@lucide/vue';
+import {
+	Activity,
+	Balloon,
+	Bluetooth,
+	ChartNoAxesColumn,
+	Mail,
+	Mic,
+	Plane,
+	Radio,
+	RadioTower,
+	RotateCcw,
+	Ship,
+	Smartphone,
+} from '@lucide/vue';
 import { defineComponent, h, type PropType } from 'vue';
 import type { UiIconName } from './icons.types';
 
@@ -9,6 +22,7 @@ const icons = {
 	radio: Radio,
 	sensors: RadioTower,
 	aircraft: Plane,
+	balloon: Balloon,
 	bluetooth: Bluetooth,
 	vessel: Ship,
 	message: Mail,

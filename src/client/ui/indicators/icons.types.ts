@@ -1,2 +1,13 @@
 export type UiIconName =
-	'microphone' | 'pager' | 'radio' | 'sensors' | 'aircraft' | 'bluetooth' | 'vessel' | 'message' | 'stats' | 'activity' | 'reset';
+	| 'microphone'
+	| 'pager'
+	| 'radio'
+	| 'sensors'
+	| 'aircraft'
+	| 'balloon'
+	| 'bluetooth'
+	| 'vessel'
+	| 'message'
+	| 'stats'
+	| 'activity'
+	| 'reset';
