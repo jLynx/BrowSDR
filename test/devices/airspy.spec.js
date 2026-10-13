@@ -163,6 +163,43 @@ describe('Airspy real ADC to IQ', () => {
 });
 
 describe('Airspy receive lifecycle', () => {
+	it('stops reception inherited from a closed browser before any vendor IN request', async () => {
+		const { usb } = radio();
+		let receiving = true;
+		const originalIn = usb.controlTransferIn.getMockImplementation();
+		usb.controlTransferIn.mockImplementation(async (...args) => {
+			if (receiving) throw new Error('inherited reception blocks control IN');
+			return originalIn(...args);
+		});
+		usb.controlTransferOut.mockImplementation(async (setup) => {
+			if (setup.request === 1) receiving = setup.value === 1;
+			return { status: 'ok', bytesWritten: 0 };
+		});
+		const device = new AirspyDevice();
+		await device.open(usb);
+		expect(receiving).toBe(false);
+		expect((await device.getInfo()).name).toBe('Airspy One');
+		await device.setSampleRate(10000000);
+		expect(usb.controlTransferOut.mock.invocationCallOrder[0]).toBeLessThan(usb.controlTransferIn.mock.invocationCallOrder[0]);
+	});
+	it('drains active reads before changing sample rate and restarts without unplugging', async () => {
+		const { device, usb, pending } = await connected();
+		const callback = vi.fn();
+		await device.startRx(callback);
+		expect(pending).toHaveLength(4);
+		await device.setSampleRate(2500000);
+		expect(pending).toHaveLength(0);
+		expect(callback).not.toHaveBeenCalled();
+		expect(usb.close).not.toHaveBeenCalled();
+		await device.startRx(callback);
+		expect(pending).toHaveLength(4);
+		await device.stopRx();
+	});
+	it('includes the failed request in rejected WebUSB control errors', async () => {
+		const { device, usb } = await connected();
+		usb.controlTransferIn.mockRejectedValueOnce(new Error('A transfer error has occurred.'));
+		await expect(device.setSampleRate(2500000)).rejects.toThrow('req=12, value=0, index=1');
+	});
 	it('disables packing, queues four reads and consumes completions in submission order', async () => {
 		const { device, usb, pending } = await connected();
 		const callback = vi.fn();

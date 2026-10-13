@@ -60,6 +60,10 @@ export class AirspyDevice implements SdrDevice {
 		await device.open();
 		await device.selectConfiguration(1);
 		await device.claimInterface(0);
+		// Closing a browser can terminate the worker without sending RECEIVER_MODE_OFF.
+		// Stop inherited reception before querying or configuring the device.
+		await this.vendorOut(AIRSPY_RECEIVER_MODE, 0, 0);
+		await device.clearHalt('in', 1);
 		// Legacy R2 firmware uses this same fallback order in libairspy.
 		this.firmwareRates = [10000000, 2500000];
 		try {
@@ -113,6 +117,7 @@ export class AirspyDevice implements SdrDevice {
 	async setSampleRate(rate: number): Promise<void> {
 		const index = this.firmwareRates.indexOf(rate);
 		if (index < 0) throw new Error(`Airspy: unsupported sample rate ${rate}`);
+		await this.stopRx();
 		await this.dev.clearHalt('in', 1);
 		await this.vendorIn(AIRSPY_SET_SAMPLERATE, 0, index, 1);
 	}
@@ -210,12 +215,20 @@ export class AirspyDevice implements SdrDevice {
 	}
 
 	private async vendorOut(request: number, value: number, index: number, data?: ArrayBuffer): Promise<void> {
-		const result = await this.dev.controlTransferOut({ requestType: 'vendor', recipient: 'device', request, value, index }, data);
+		const result = await this.dev
+			.controlTransferOut({ requestType: 'vendor', recipient: 'device', request, value, index }, data)
+			.catch((error: unknown) => {
+				throw new Error(`Airspy: vendor OUT failed (req=${request}, value=${value}, index=${index}): ${errorMessage(error)}`);
+			});
 		if (result.status !== 'ok') throw new Error(`Airspy: vendor OUT failed (req=${request})`);
 	}
 
 	private async vendorIn(request: number, value: number, index: number, length: number): Promise<ArrayBuffer> {
-		const result = await this.dev.controlTransferIn({ requestType: 'vendor', recipient: 'device', request, value, index }, length);
+		const result = await this.dev
+			.controlTransferIn({ requestType: 'vendor', recipient: 'device', request, value, index }, length)
+			.catch((error: unknown) => {
+				throw new Error(`Airspy: vendor IN failed (req=${request}, value=${value}, index=${index}): ${errorMessage(error)}`);
+			});
 		if (result.status !== 'ok' || !result.data) throw new Error(`Airspy: vendor IN failed (req=${request})`);
 		const data = result.data;
 		if (request !== AIRSPY_VERSION_STRING_READ && data.byteLength !== length) {
