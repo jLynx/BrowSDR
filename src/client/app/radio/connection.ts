@@ -70,6 +70,8 @@ export const connectionMethods = {
 		return this._connectToDevice(device);
 	},
 	async _connectToDevice(this: AppInstance, device: USBDevice, deviceIndex?: number) {
+		this.deviceInfoCollapsed = true;
+		this.info.device = null;
 		this.devicePicker.show = false;
 		this.showMsg('Connecting...');
 		try {
@@ -83,6 +85,7 @@ export const connectionMethods = {
 				this.connected = true;
 				const info = await this.backend.info();
 				this.info.boardName = info.name;
+				this.info.device = info;
 
 				// Populate device capabilities for dynamic UI
 				const caps = await this.backend.getDeviceCapabilities();
@@ -115,6 +118,8 @@ export const connectionMethods = {
 		return this._connectMock();
 	},
 	async _connectMock(this: AppInstance) {
+		this.deviceInfoCollapsed = true;
+		this.info.device = null;
 		if (!import.meta.env.DEV || !this.backend) return;
 		this._initAudioCtx(); // create AudioContext within user gesture
 		this.showMsg('Connecting Mock SDR...');
@@ -124,6 +129,7 @@ export const connectionMethods = {
 				this.connected = true;
 				const info = await this.backend.info();
 				this.info.boardName = info.name;
+				this.info.device = info;
 
 				const caps = await this.backend.getDeviceCapabilities();
 				this.deviceCapabilities = caps;
@@ -150,6 +156,8 @@ export const connectionMethods = {
 		return this._disconnectReceiver();
 	},
 	async _disconnectReceiver(this: AppInstance) {
+		this.deviceInfoCollapsed = true;
+		this.info.device = null;
 		this.stopBleScan();
 		if (this.autoGain.active) this.cancelAutoGain();
 		if (this.workspace) {

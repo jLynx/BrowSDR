@@ -331,6 +331,8 @@ async function disconnectLastLocalReceiver(this: WorkspaceInstance, runtime: Wor
 		app.connected = false;
 		app.running = false;
 		app.info.boardName = '';
+		app.info.device = null;
+		app.deviceInfoCollapsed = true;
 		app.deviceCapabilities = null;
 		const entry = this.receivers[0];
 		entry.status = 'Disconnected';

@@ -5,6 +5,24 @@ import { HackRFDevice } from '@/devices/hackrf/device';
 afterEach(() => vi.useRealTimers());
 
 describe('HackRF receiver lifecycle', () => {
+	it('returns firmware, IDs, API and supported hardware revision for device details', async () => {
+		const device = new HackRFDevice();
+		device.hackrf.readBoardId = vi.fn().mockResolvedValue(2);
+		device.hackrf.readVersionString = vi.fn().mockResolvedValue('2024.02.1');
+		device.hackrf.readPartIdSerialNo = vi.fn().mockResolvedValue({ partId: [0x12345678, 0x9abcdef0], serialNo: [0, 0, 0, 0x12345678] });
+		device.hackrf.readApiVersion = vi.fn().mockResolvedValue([1, 0, 7]);
+		device.hackrf.boardRevRead = vi.fn().mockResolvedValue(4);
+		expect(await device.getInfo()).toMatchObject({
+			firmware: '2024.02.1',
+			boardId: 2,
+			partId: '123456789abcdef0',
+			serial: '00000000000000000000000012345678',
+			apiVersion: '1.07',
+			hardware: 'r9',
+		});
+		device.hackrf.boardRevRead.mockRejectedValueOnce(new Error('Unsupported'));
+		expect(await device.getInfo()).not.toHaveProperty('hardware');
+	});
 	it('turns off the hardware before waiting for blocked USB reads and ignores late callbacks', async () => {
 		const receiver = new HackRF();
 		const pending = [];

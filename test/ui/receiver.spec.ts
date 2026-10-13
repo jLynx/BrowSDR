@@ -5,6 +5,8 @@ import { makeDefaultVfo } from '@/app/core/constants';
 import VfoPanel from '@/app/radio/vfo-panel';
 import * as components from '@/ui';
 import { ReceiverView } from './helpers/receiver-view';
+import { settingsMethods } from '@/app/radio/settings';
+import type { AppInstance } from '@/app/core/receiver.types';
 
 let wrapper: VueWrapper;
 
@@ -16,6 +18,42 @@ afterEach(() => {
 });
 
 describe('receiver uses the shared UI', () => {
+	it.each([
+		{ name: 'LimeSDR-USB', serial: '0009083401871437', firmware: '4', gateware: '2.22' },
+		{ name: 'HackRF One', serial: '00000000000000000000000012345678', firmware: '2024.02.1', hardware: 'r9', apiVersion: '1.07' },
+		{ name: 'RTL-SDR', serial: '00000001', manufacturer: 'Realtek', product: 'RTL2838', tuner: 'R820T/R820T2' },
+	])('shows $name info in a shared panel that starts closed and is not saved', async (device) => {
+		const storage = new Map<string, string>();
+		vi.stubGlobal('localStorage', {
+			getItem: (key: string) => storage.get(key) ?? null,
+			setItem: (key: string, value: string) => storage.set(key, value),
+		});
+		wrapper = mount(ReceiverView);
+		await wrapper.setData({ connected: true, collapsedPanels: { source: false }, info: { boardName: device.name, device } });
+		const panel = wrapper.get('.device-info');
+		expect(panel.findComponent(components.UiPanelHeader).exists()).toBe(true);
+		expect(panel.get('.panel-body').isVisible()).toBe(false);
+		await panel.get('[role=button]').trigger('click');
+		expect(wrapper.vm.deviceInfoCollapsed).toBe(false);
+		expect((panel.get('.panel-body').element as HTMLElement).style.display).not.toBe('none');
+		expect(panel.text()).toContain(device.serial);
+		if ('firmware' in device) expect(panel.text()).toContain(device.firmware);
+		if ('tuner' in device) expect(panel.text()).toContain(device.tuner);
+		settingsMethods.saveSetting.call(wrapper.vm as unknown as AppInstance);
+		const saved = JSON.parse(localStorage.getItem('SDRSetting')!);
+		expect(saved).not.toHaveProperty('deviceInfoCollapsed');
+		expect(saved).not.toHaveProperty('info');
+		await wrapper.setData({ backend: { open: vi.fn().mockResolvedValue(false) } });
+		vi.spyOn(wrapper.vm, '_initAudioCtx').mockImplementation(() => {});
+		await wrapper.vm._connectToDevice({ vendorId: 0x1d50, productId: 0x6108 } as USBDevice);
+		expect(wrapper.vm.deviceInfoCollapsed).toBe(true);
+		expect(wrapper.vm.info.device).toBeNull();
+		// A new receiver/session always initializes the transient panel closed.
+		wrapper.unmount();
+		wrapper = mount(ReceiverView);
+		settingsMethods.loadSetting.call(wrapper.vm as unknown as AppInstance);
+		expect(wrapper.vm.deviceInfoCollapsed).toBe(true);
+	});
 	it('reveals selected header VFOs without moving the page or scrolling visible tabs', async () => {
 		wrapper = mount(ReceiverView);
 		await wrapper.setData({ connected: true, vfos: Array.from({ length: 10 }, (_, i) => makeDefaultVfo(130 + i)) });

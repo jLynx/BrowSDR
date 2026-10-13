@@ -47,6 +47,23 @@
 					<UiFormRow class="info-row" v-if="connected && remoteMode !== 'client'">
 						<small>{{ info.boardName }}</small>
 					</UiFormRow>
+					<UiPanel label="Device info" class="radio-advanced device-info" v-if="connected && remoteMode !== 'client' && info.device" v-model:collapsed="deviceInfoCollapsed">
+						<UiFormRow v-if="info.device.manufacturer" label="Manufacturer"><small>{{ info.device.manufacturer }}</small></UiFormRow>
+						<UiFormRow v-if="info.device.product" label="Product"><small>{{ info.device.product }}</small></UiFormRow>
+						<UiFormRow v-if="info.device.tuner" label="Tuner"><small>{{ info.device.tuner }}</small></UiFormRow>
+						<UiFormRow v-if="info.device.serial" label="Serial"><small>{{ info.device.serial }}</small></UiFormRow>
+						<UiFormRow v-if="info.device.usbSerial && info.device.usbSerial !== info.device.serial" label="USB serial"><small>{{ info.device.usbSerial }}</small></UiFormRow>
+						<UiFormRow v-if="info.device.firmware" label="Firmware"><small>{{ info.device.firmware }}</small></UiFormRow>
+						<UiFormRow v-if="info.device.hardware" label="Hardware"><small>{{ info.device.hardware }}</small></UiFormRow>
+						<UiFormRow v-if="info.device.apiVersion" label="API"><small>{{ info.device.apiVersion }}</small></UiFormRow>
+						<UiFormRow v-if="info.device.boardId !== undefined" label="Board ID"><small>{{ info.device.boardId }}</small></UiFormRow>
+						<UiFormRow v-if="info.device.partId" label="Part ID"><small>{{ info.device.partId }}</small></UiFormRow>
+						<UiFormRow v-if="info.device.protocol" label="Protocol"><small>{{ info.device.protocol }}</small></UiFormRow>
+						<UiFormRow v-if="info.device.gateware" label="Gateware"><small>{{ info.device.gateware }}</small></UiFormRow>
+						<UiFormRow v-if="info.device.gatewareTarget" label="FPGA target"><small>{{ info.device.gatewareTarget }}</small></UiFormRow>
+						<UiFormRow v-if="info.device.gatewareHardware" label="FPGA hardware"><small>{{ info.device.gatewareHardware }}</small></UiFormRow>
+						<UiFormRow v-if="info.device.expansion" label="Expansion"><small>{{ info.device.expansion }}</small></UiFormRow>
+					</UiPanel>
 					<UiFormRow v-if="connected && remoteMode === 'none'">
 						<UiButton variant="secondary" style="width: 100%;" @click="startRemoteHost" :disabled="!isOnline" :title="!isOnline ? 'Not available offline' : 'Share remote access via WebRTC'">Share Remote Access</UiButton>
 					</UiFormRow>

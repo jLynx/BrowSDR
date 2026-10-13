@@ -120,6 +120,8 @@ export const remoteMethods = {
 						this.connected = true;
 						this.applySharedChannelization();
 						this.info.boardName = 'Remote SDR';
+						this.info.device = null;
+						this.deviceInfoCollapsed = true;
 						this.showMsg('Connected to remote host.');
 
 						// Update recent ids list (keep last 5)

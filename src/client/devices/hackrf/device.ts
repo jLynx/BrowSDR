@@ -52,7 +52,7 @@ export class HackRFDevice implements SdrDevice {
 	async getInfo(): Promise<SdrDeviceInfo> {
 		const boardId = await this.hackrf.readBoardId();
 		const versionString = await this.hackrf.readVersionString();
-		const { serialNo } = await this.hackrf.readPartIdSerialNo();
+		const { serialNo, partId } = await this.hackrf.readPartIdSerialNo();
 		const name = HackRF.BOARD_ID_NAME.get(boardId) || 'Unknown HackRF';
 		const serial = serialNo.map((i: number) => (i + 0x100000000).toString(16).slice(1)).join('');
 
@@ -60,6 +60,14 @@ export class HackRFDevice implements SdrDevice {
 		const apiVersion = await this.hackrf.readApiVersion();
 		const [apiMajor, apiMinor, apiSubminor] = apiVersion;
 		const bcdVersion = (apiMajor << 8) | (apiMinor << 4) | apiSubminor;
+		const info: SdrDeviceInfo = {
+			name,
+			serial,
+			firmware: versionString,
+			boardId,
+			partId: partId.map((value) => value.toString(16).padStart(8, '0')).join(''),
+			apiVersion: `${apiMajor}.${String(apiMinor) + String(apiSubminor)}`,
+		};
 		console.log(`Board ID: ${boardId} (${name})`);
 		console.log(`Firmware: ${versionString} (API:${apiMajor}.${String(apiMinor) + String(apiSubminor)})`);
 		console.log(`Serial: ${serial}`);
@@ -68,13 +76,14 @@ export class HackRFDevice implements SdrDevice {
 			try {
 				const boardRev = await this.hackrf.boardRevRead();
 				const revName = HackRF.BOARD_REV_NAME.get(boardRev);
+				info.hardware = revName ?? `Unknown (${boardRev})`;
 				if (revName) console.log(`Hardware Revision: ${revName}`);
 			} catch (_) {
 				/* not supported */
 			}
 		}
 
-		return { name, serial, firmware: versionString };
+		return info;
 	}
 
 	async setSampleRate(rate: number): Promise<void> {

@@ -289,6 +289,10 @@ canvas {
 	margin: 0 -12px -12px;
 }
 
+.panel-body .panel.radio-advanced {
+	margin: 0;
+}
+
 .radio-advanced p {
 	color: var(--text-muted);
 	font-size: 11px;

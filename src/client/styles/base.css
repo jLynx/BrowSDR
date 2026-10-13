@@ -518,6 +518,44 @@ body {
 	padding: 8px 12px;
 }
 
+/* Nested disclosures read as sections within a panel, rather than new panels. */
+.panel-body .panel {
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	overflow: hidden;
+}
+
+.panel-body .panel > .panel-header {
+	background-color: transparent;
+	border-bottom: 0;
+	padding: 9px 10px;
+	font-size: 12px;
+	font-weight: 500;
+	text-transform: none;
+	color: var(--text-main);
+	justify-content: flex-start;
+	gap: 8px;
+}
+
+.panel-body .panel > .panel-header-collapsible:hover {
+	background-color: var(--btn-hover);
+}
+
+.panel-body .panel > .panel-header > .panel-chevron {
+	order: -1;
+}
+
+.panel-body .panel > .panel-header:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+
+.panel-body .panel > .panel-body {
+	border-top: 1px solid var(--border);
+	padding: 10px;
+	gap: 10px;
+}
+
 .form-row {
 	display: flex;
 	align-items: center;
@@ -526,6 +564,16 @@ body {
 .form-row.info-row {
 	justify-content: flex-start;
 	color: var(--text-muted);
+}
+
+.device-info .form-row {
+	flex-wrap: wrap;
+}
+
+.device-info small {
+	min-width: 0;
+	font-size: 11px;
+	overflow-wrap: anywhere;
 }
 .form-row label {
 	font-size: 13px;

@@ -1,8 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
 import { RtlCom } from '@/devices/rtlsdr/usb';
 import { BLOCK, WRITE_FLAG } from '@/devices/rtlsdr/protocol';
+import { RtlSdrDevice } from '@/devices/rtlsdr/device';
 
 describe('RTL-SDR USB transport', () => {
+	it('returns USB identity and detected tuner without inventing a firmware version', async () => {
+		const device = new RtlSdrDevice();
+		device.dev = { serialNumber: '00000001', manufacturerName: 'Realtek', productName: 'RTL2838' };
+		device.tunerName = 'R820T/R820T2';
+		expect(await device.getInfo()).toEqual({
+			name: 'RTL-SDR (R820T/R820T2)',
+			serial: '00000001',
+			manufacturer: 'Realtek',
+			product: 'RTL2838',
+			tuner: 'R820T/R820T2',
+		});
+	});
 	it('writes little-endian device registers with the correct block and write flag', async () => {
 		const device = { controlTransferOut: vi.fn().mockResolvedValue({ status: 'ok' }) };
 		await new RtlCom(device).writeReg(BLOCK.USB, 0x2158, 0x0200, 2);

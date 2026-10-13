@@ -92,11 +92,15 @@ export abstract class LimeSDRTransport {
 		}
 
 		const command = this.commandQueue.then(async () => {
-			const sent = await this.dev.transferOut(EP_CTRL_OUT, pkt);
+			// GET_INFO belongs to the FX3 control endpoint, not the FPGA bulk command path.
+			const control = cmd === CMD_GET_INFO;
+			const sent = control
+				? await this.dev.controlTransferOut({ requestType: 'vendor', recipient: 'device', request: 0xc1, value: 0, index: 0 }, pkt)
+				: await this.dev.transferOut(EP_CTRL_OUT, pkt);
 			if (sent.status !== 'ok' || sent.bytesWritten !== pkt.length) {
 				throw new Error(`LimeSDR: USB command write failed (status=${sent.status}, bytes=${sent.bytesWritten})`);
 			}
-			const response = await this.readCommandResponse(cmd);
+			const response = await this.readCommandResponse(cmd, control);
 			if (response[1] !== 1) {
 				throw new LimeSDRCommandError(cmd, response[1]);
 			}
@@ -109,13 +113,15 @@ export abstract class LimeSDRTransport {
 		return command;
 	}
 
-	private async readCommandResponse(cmd: number): Promise<Uint8Array> {
+	private async readCommandResponse(cmd: number, control = false): Promise<Uint8Array> {
 		// A page reload can abandon a control read, leaving its reply in the FX3.
 		// Only initialization's reset may discard old replies; register reads must
 		// still fail on mismatches rather than accidentally accepting stale data.
 		const attempts = cmd === CMD_LMS7002_RST ? 8 : 1;
 		for (let attempt = 0; attempt < attempts; attempt++) {
-			const result = await this.dev.transferIn(EP_CTRL_IN_NUM, 64);
+			const result = control
+				? await this.dev.controlTransferIn({ requestType: 'vendor', recipient: 'device', request: 0xc0, value: 0, index: 0 }, 64)
+				: await this.dev.transferIn(EP_CTRL_IN_NUM, 64);
 			if (result.status !== 'ok' || result.data?.byteLength !== 64)
 				throw new Error(`LimeSDR: USB command response failed (status=${result.status}, bytes=${result.data?.byteLength ?? 0})`);
 			const response = new Uint8Array(result.data.buffer, result.data.byteOffset, result.data.byteLength);
@@ -231,16 +237,72 @@ export abstract class LimeSDRTransport {
 			.map((b) => b.toString(16).padStart(2, '0'))
 			.join('');
 
-		const deviceNames: Record<number, string> = {
-			15: 'LimeSDR-USB',
-			4: 'LimeSDR-USB',
-			5: 'LimeSDR-PCIe',
-			10: 'LimeSDR Mini',
-			11: 'LimeSDR Mini v2',
+		// Read the same four identification registers as LimeSuite GetFPGAInfo.
+		const fpga = await this.sendCommand(CMD_BRDSPI_RD, new Uint8Array([0, 0, 0, 1, 0, 2, 0, 3]));
+		const target = (fpga[10] << 8) | fpga[11];
+		const version = (fpga[14] << 8) | fpga[15];
+		const revision = (fpga[18] << 8) | fpga[19];
+		const info: SdrDeviceInfo = {
+			name: limeDeviceName(device),
+			serial,
+			firmware: String(fw),
+			hardware: device === 14 ? `1.${hw}` : String(hw),
+			protocol: String(proto),
+			expansion: LIME_EXPANSION_NAMES[resp[12]] ?? `Unknown (type=${resp[12]})`,
+			gateware: `${version}.${revision}`,
+			gatewareTarget: limeDeviceName(target),
+			gatewareHardware: target === 14 ? `1.${fpga[23] & 0x7f}` : String(fpga[23] & 0x7f),
+			usbSerial: this.dev.serialNumber || undefined,
 		};
-		const name = deviceNames[device] ?? `LimeSDR (type=${device})`;
-
-		console.log(`${name}: FW=${fw}, HW=${hw}, Proto=${proto}, Serial=${serial}`);
-		return { name, serial, firmware: `FW:${fw} HW:${hw}` };
+		console.log(
+			`${info.name}: FW=${fw}, HW=${info.hardware}, Proto=${proto}, Serial=${serial}, Gateware=${info.gateware}, Target=${info.gatewareTarget}, FPGA HW=${info.gatewareHardware}, Expansion=${info.expansion}, USB Serial=${info.usbSerial ?? 'unavailable'}`,
+		);
+		return info;
 	}
+}
+
+// LMSBoards.h protocol IDs; shared by FX3 and FPGA identification responses.
+const LIME_DEVICE_NAMES = [
+	'Unknown',
+	'EVB6',
+	'DigiGreen',
+	'DigiRed',
+	'EVB7',
+	'ZIPPER',
+	'Socket Board',
+	'EVB7_v2',
+	'Stream',
+	'Novena',
+	'DataSpark',
+	'RF-Spark',
+	'LMS6002-USB Stick',
+	'RF-ESpark',
+	'LimeSDR-USB',
+	'LimeSDR-PCIe',
+	'LimeSDR-QPCIe',
+	'LimeSDR-Mini',
+	'uStream',
+	'LimeSDR SONY PA',
+	'LimeSDR-USB SP',
+	'LMS7002M Ultimate EVB',
+	'LimeNET-Micro',
+	'LimeSDR-Core',
+	'LimeSDR-Core-HE',
+	'LimeSDR-Mini v2',
+];
+const LIME_EXPANSION_NAMES = [
+	'Unknown',
+	'Unsupported',
+	'Not available',
+	'Myriad1',
+	'Myriad2',
+	'Novena',
+	'HPM1000',
+	'Myriad7',
+	'HMP7',
+	'Myriad7 Novena',
+];
+
+function limeDeviceName(id: number): string {
+	return LIME_DEVICE_NAMES[id] ?? `Unknown (type=${id})`;
 }

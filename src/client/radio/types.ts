@@ -13,6 +13,19 @@ export interface SdrDeviceInfo {
 	name: string;
 	serial?: string;
 	firmware?: string;
+	hardware?: string;
+	protocol?: string;
+	expansion?: string;
+	gateware?: string;
+	gatewareTarget?: string;
+	gatewareHardware?: string;
+	usbSerial?: string;
+	boardId?: number;
+	partId?: string;
+	apiVersion?: string;
+	manufacturer?: string;
+	product?: string;
+	tuner?: string;
 }
 
 export interface RxLevel {

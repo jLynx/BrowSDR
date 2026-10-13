@@ -55,6 +55,66 @@ describe('LimeSDR USB access', () => {
 });
 
 describe('LimeSDR LMS64C commands', () => {
+	it('reads FX3 info over vendor control transfers and FPGA info over bulk', async () => {
+		const { driver, usb, packets } = await createDriver();
+		usb.serialNumber = '0009083401871437';
+		const backing = new Uint8Array(80);
+		const info = backing.subarray(8, 72);
+		info[1] = 1;
+		info.set([4, 14, 1, 4, 1], 8);
+		info.set([0, 9, 8, 0x34, 1, 0x87, 0x14, 0x37], 18);
+		usb.controlTransferOut = vi.fn().mockResolvedValue({ status: 'ok', bytesWritten: 64 });
+		usb.controlTransferIn = vi.fn().mockResolvedValue({ status: 'ok', data: new DataView(backing.buffer, 8, 64) });
+		const fpga = new Uint8Array(64);
+		fpga[0] = 0x56;
+		fpga[1] = 1;
+		fpga.set([0, 0, 0, 14, 0, 1, 0, 2, 0, 2, 0, 22, 0, 3, 0, 0x84], 8);
+		usb.transferIn.mockResolvedValueOnce({ status: 'ok', data: new DataView(fpga.buffer) });
+		expect(await driver.getDeviceInfo()).toEqual({
+			name: 'LimeSDR-USB',
+			serial: '0009083401871437',
+			usbSerial: '0009083401871437',
+			firmware: '4',
+			hardware: '1.4',
+			protocol: '1',
+			expansion: 'Unsupported',
+			gateware: '2.22',
+			gatewareTarget: 'LimeSDR-USB',
+			gatewareHardware: '1.4',
+		});
+		expect(usb.controlTransferOut).toHaveBeenCalledWith(
+			{ requestType: 'vendor', recipient: 'device', request: 0xc1, value: 0, index: 0 },
+			new Uint8Array(64),
+		);
+		expect(usb.controlTransferIn).toHaveBeenCalledWith(
+			{ requestType: 'vendor', recipient: 'device', request: 0xc0, value: 0, index: 0 },
+			64,
+		);
+		expect(packets).toHaveLength(1);
+		expect(Array.from(packets[0].slice(0, 4))).toEqual([0x56, 0, 4, 0]);
+		expect(Array.from(packets[0].slice(8, 16))).toEqual([0, 0, 0, 1, 0, 2, 0, 3]);
+	});
+
+	it('rejects failed FX3 control writes without reading or falling back to bulk', async () => {
+		const { driver, usb } = await createDriver();
+		usb.controlTransferOut = vi.fn().mockResolvedValue({ status: 'stall', bytesWritten: 0 });
+		usb.controlTransferIn = vi.fn();
+		await expect(driver.getDeviceInfo()).rejects.toThrow('USB command write failed');
+		expect(usb.controlTransferIn).not.toHaveBeenCalled();
+		expect(usb.transferOut).not.toHaveBeenCalled();
+	});
+
+	it('rejects a mismatched FX3 control reply', async () => {
+		const { driver, usb } = await createDriver();
+		usb.controlTransferOut = vi.fn().mockResolvedValue({ status: 'ok', bytesWritten: 64 });
+		const response = new Uint8Array(64);
+		response[0] = 0x20;
+		response[1] = 1;
+		usb.controlTransferIn = vi.fn().mockResolvedValue({ status: 'ok', data: new DataView(response.buffer) });
+		await expect(driver.getDeviceInfo()).rejects.toThrow('unexpected command response');
+		expect(usb.transferOut).not.toHaveBeenCalled();
+	});
+
 	it('encodes LMS register writes without a raw SPI write flag', async () => {
 		const { driver, usb, packets } = await createDriver();
 		await driver.writeLMS7002(0x040c, 0x1234);

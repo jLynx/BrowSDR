@@ -11,7 +11,7 @@ import type { PairedDevices } from '@/app/radio/types';
 import type { RemoteClients, DspStats } from '@/remote/types';
 import type { Remote } from 'comlink';
 import type { Backend } from '@/worker/runtime/backend';
-import type { DeviceCapabilities, RxLevel, AutoGainMode } from '@/radio/types';
+import type { DeviceCapabilities, RxLevel, AutoGainMode, SdrDeviceInfo } from '@/radio/types';
 import type { Bookmark } from '@/app/workspace/types';
 import type { Vfo } from './types';
 import { makeDefaultVfo, BOOKMARK_CATEGORIES } from './constants';
@@ -69,7 +69,8 @@ export function createAppData() {
 		vfos: [makeDefaultVfo(100.0)],
 		activeVfoIndex: 0,
 		soloAudioVfo: null as Vfo | null,
-		info: { boardName: '' },
+		info: { boardName: '', device: null as SdrDeviceInfo | null },
+		deviceInfoCollapsed: true,
 		hoverFreqText: '',
 		dspStats: null as DspStats | null,
 		audioGapCount: 0,

@@ -339,7 +339,13 @@ export class RtlSdrDevice implements SdrDevice {
 	getInfo(): Promise<SdrDeviceInfo> {
 		const name = this.tunerName ? `RTL-SDR (${this.tunerName})` : 'RTL-SDR';
 		const serial = this.dev.serialNumber || undefined;
-		return Promise.resolve({ name, serial });
+		return Promise.resolve({
+			name,
+			serial,
+			manufacturer: this.dev.manufacturerName || undefined,
+			product: this.dev.productName || undefined,
+			tuner: this.tunerName || undefined,
+		});
 	}
 
 	/** Serialize USB operations to prevent concurrent control/bulk transfer conflicts. */
