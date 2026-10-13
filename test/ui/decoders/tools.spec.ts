@@ -18,7 +18,7 @@ describe('decoder tools menu', () => {
 		await wrapper.get('.tools-trigger').trigger('click');
 		const groups = wrapper.findAll('.ui-menu-group');
 		expect(groups.map((group) => group.get('.ui-menu-group-label').text())).toEqual(['Decoders', 'Utilities']);
-		expect(groups[0].findAll('button')).toHaveLength(8);
+		expect(groups[0].findAll('button')).toHaveLength(9);
 		expect(wrapper.get('.ui-menu-list').text()).toContain('Sensor & device data · rtl_433');
 		await wrapper.get('button[aria-label="Wireless Sensors"]').trigger('click');
 		expect(wrapper.vm.rtl433.panelOpen).toBe(true);
@@ -26,6 +26,12 @@ describe('decoder tools menu', () => {
 		expect(wrapper.findAll('.active-decoder-tool')).toHaveLength(0);
 		expect(wrapper.find('.ui-menu-list').exists()).toBe(false);
 		expect(document.activeElement).toBe(wrapper.get('.tools-trigger').element);
+		await wrapper.get('.tools-trigger').trigger('click');
+		await wrapper.get('button[aria-label="Radiosonde"]').trigger('click');
+		expect(wrapper.vm.radiosonde.panelOpen).toBe(true);
+		expect(wrapper.vm.vfos[0].radiosonde).toBe(false);
+		expect(wrapper.findAll('.active-decoder-tool')).toHaveLength(0);
+		expect(wrapper.find('.ui-menu-list').exists()).toBe(false);
 	});
 
 	it('deduplicates enabled decoders across VFOs and reopens their panels without changing configuration', async () => {
