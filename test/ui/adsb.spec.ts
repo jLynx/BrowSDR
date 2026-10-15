@@ -33,6 +33,7 @@ afterEach(() => {
 	wrapper?.unmount();
 	vi.clearAllMocks();
 	vi.unstubAllGlobals();
+	vi.useRealTimers();
 });
 
 const snapshot = (): AdsbMessage => ({
@@ -56,6 +57,25 @@ const snapshot = (): AdsbMessage => ({
 });
 
 describe('ADS-B receiver controls and aircraft map', () => {
+	it('keeps aircraft with expired positions in map updates until they leave the live list', async () => {
+		vi.useFakeTimers();
+		wrapper = mount(ReceiverView);
+		await wrapper.setData({
+			running: true,
+			vfos: [{ ...makeDefaultVfo(1090), adsb: true }],
+			adsb: { panelOpen: true, sources: [], status: [] },
+		});
+		await vi.waitFor(() => expect(AircraftMap).toHaveBeenCalledOnce());
+		const message = snapshot();
+		wrapper.vm._onAdsbMessage(0, 1090, message);
+		await nextTick();
+		const map = vi.mocked(AircraftMap).mock.results[0].value as { update: ReturnType<typeof vi.fn> };
+		await vi.advanceTimersByTimeAsync(31000);
+		expect(wrapper.text()).toContain('1 aircraft · 0 located');
+		expect(map.update).toHaveBeenLastCalledWith(message.aircraft, '', expect.any(Function), expect.any(Number));
+		await vi.advanceTimersByTimeAsync(90000);
+		expect(map.update).toHaveBeenLastCalledWith([], '', expect.any(Function), expect.any(Number));
+	});
 	it('can look up an ICAO address without live reception and return to the search', async () => {
 		wrapper = mount(ReceiverView);
 		await wrapper.setData({ adsb: { panelOpen: true, sources: [], status: [] } });

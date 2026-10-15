@@ -7,6 +7,7 @@ import { aircraftColor } from './colors';
 import { aircraftTooltip } from './tooltip';
 import { lookupOfflineAircraft, lookupOfflineAirline } from '@/app/decoders/adsb/database/lookup';
 import { offlineDatabaseAvailable } from '@/app/decoders/adsb/database/offline';
+import { hasLivePosition } from '@/app/decoders/adsb/aircraft';
 
 export class AircraftMap {
 	private map: Leaflet.Map;
@@ -57,7 +58,7 @@ export class AircraftMap {
 		legend.addTo(this.map);
 	}
 
-	update(aircraft: Aircraft[], selected: string, onSelect: (icao: string) => void): void {
+	update(aircraft: Aircraft[], selected: string, onSelect: (icao: string) => void, now = Date.now()): void {
 		this.checkOffline();
 		const live = new Set(aircraft.map((item) => item.icao));
 		for (const [icao, item] of this.markers) {
@@ -67,20 +68,24 @@ export class AircraftMap {
 				this.markers.delete(icao);
 			}
 		}
-		for (const record of aircraft) this.updateMarker(record, record.icao === selected, onSelect);
-		if (!this.centered && aircraft.length) {
+		for (const record of aircraft) {
+			if (hasLivePosition(record, now)) this.updateMarker(record, record.icao === selected, onSelect);
+			// Keep the trail until the aircraft expires, even when its position has expired.
+			else this.markers.get(record.icao)?.marker.remove();
+		}
+		if (!this.centered && this.liveMarkers().length) {
 			this.fit();
 			this.centered = true;
 		}
 	}
 
 	fit(): void {
-		const points = [...this.markers.values()].map((item) => item.marker.getLatLng());
+		const points = this.liveMarkers().map((item) => item.marker.getLatLng());
 		if (points.length) this.map.fitBounds(this.leaflet.latLngBounds(points), { padding: [35, 35], maxZoom: 10 });
 	}
 	focus(icao: string): void {
 		const item = this.markers.get(icao);
-		if (item) {
+		if (item && this.map.hasLayer(item.marker)) {
 			this.map.panTo(item.marker.getLatLng());
 			item.marker.openTooltip();
 		}
@@ -132,6 +137,7 @@ export class AircraftMap {
 			this.markers.set(record.icao, item);
 		} else {
 			item.marker.setLatLng(point);
+			if (!this.map.hasLayer(item.marker)) item.marker.addTo(this.map);
 			if (item.iconKey !== iconKey) {
 				const open = item.marker.isTooltipOpen();
 				item.marker.setIcon(this.icon(record, selected, item.databaseType));
@@ -168,6 +174,9 @@ export class AircraftMap {
 				interactive: true,
 			});
 		this.positionTooltip(item.marker);
+	}
+	private liveMarkers(): AircraftMarker[] {
+		return [...this.markers.values()].filter((item) => this.map.hasLayer(item.marker));
 	}
 	private positionTooltip(marker: Leaflet.Marker): void {
 		if (!marker.isTooltipOpen()) return;

@@ -224,6 +224,7 @@ export const connectionMethods = {
 	async _togglePlay(this: AppInstance, isRestart = false) {
 		if (this.running) {
 			if (this.autoGain.active) this.cancelAutoGain();
+			this.stopAudioRecording();
 			this.stopBleScan();
 			await this.backend.stopRx();
 			this.running = false;

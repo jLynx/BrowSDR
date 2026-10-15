@@ -47,7 +47,7 @@ export default defineComponent({
 			selected.value = icao;
 			map?.focus(icao);
 		};
-		const refresh = () => map?.update(positioned.value, selected.value, select);
+		const refresh = () => map?.update(aircraft.value, selected.value, select, now.value);
 		const destroy = () => {
 			generation++;
 			observer?.disconnect();
@@ -85,7 +85,7 @@ export default defineComponent({
 			},
 			{ immediate: true },
 		);
-		watch([positioned, selected], refresh);
+		watch([aircraft, selected, now], refresh);
 		onBeforeUnmount(() => {
 			clearInterval(timer);
 			destroy();

@@ -146,6 +146,8 @@ const Receiver = {
 		watchVfoSelection.call(this);
 	},
 	beforeUnmount(this: AppInstance) {
+		this.stopAudioRecording();
+		this._disposeAudioRecording();
 		this.stopBleScan();
 		this._disposed = true;
 		this._cleanup?.forEach((cleanup: () => void) => cleanup());

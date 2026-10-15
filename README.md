@@ -18,6 +18,8 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
   Built for raw performance. FFT and DSP pipelines are written in **Rust** and compiled to **WebAssembly (WASM)**. Running inside Web Workers off the main thread ensures a crystal-clear, smooth UI and buttery 60 FPS performance, even with multiple active VFOs.
 - **🎙️ Live Transcribe**
   Built-in AI-powered live transcription of demodulated audio right in your browser.
+- **⏺️ Audio Recording**
+  Record the current receiver's audio mix to a lossless 48 kHz, 16-bit stereo WAV for signal analysis. Use the record button in the top bar or the Audio recording panel, then stop to download and preview the clip. Recordings save automatically when reception stops or after five minutes of captured audio. Solo the target VFO and disable squelch, noise reduction and voice filters when capturing an unknown data signal. Filenames include the selected VFO's starting frequency, mode and UTC timestamp; other audible VFOs and tuning changes are included in the mix.
 - **📟 POCSAG Decoder**
   Instantly decode paging networks straight from the UI.
 - **🌡️ rtl_433 Sensor Decoder**

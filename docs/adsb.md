@@ -68,7 +68,8 @@ terms are included in `src/client/app/decoders/adsb/map/assets/`.
 Positions require an even and odd airborne Compact Position Reporting (CPR)
 message from the same aircraft and altitude source within ten seconds. A callsign
 or altitude alone does not locate an aircraft. Position markers expire after
-30 seconds without a decoded position; aircraft leave the list after two minutes
+30 seconds without a decoded position; their trails remain and resume when a fresh
+position arrives. Aircraft and their trails expire after two minutes
 without a valid message. Each worker and the visible list retain at most 500 aircraft,
 and each map trail retains at most 60 positions.
 

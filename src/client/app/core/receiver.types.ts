@@ -122,6 +122,11 @@ export interface ReceiverMethods {
 	resizeFftCanvas(): void;
 	drawSpectrum(data: Float32Array): void;
 	playAudio(samples: Float32Array | Record<number, number>, channels?: 1 | 2): void;
+	toggleAudioRecording(): void;
+	stopAudioRecording(): void;
+	downloadAudioRecording(): void;
+	_recordAudioSamples(samples: Float32Array, channels: 1 | 2): void;
+	_disposeAudioRecording(): void;
 	_scheduleAudioChunk(floats: Float32Array, channels?: 1 | 2): void;
 	_prepareAudioWorklet(): Promise<void>;
 	_resetAudioPlayback(clearCounters?: boolean): void;

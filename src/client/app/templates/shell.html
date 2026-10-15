@@ -21,6 +21,9 @@
 					<svg v-else viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
 			</UiButton>
 			<HeaderTools />
+			<UiButton variant="icon" class="audio-record-button" @click="toggleAudioRecording" :class="{ recording: audioRecording.active }" :disabled="!running && !audioRecording.active" :aria-pressed="audioRecording.active" :aria-label="audioRecording.active ? 'Stop and save audio recording' : 'Record audio'" :title="audioRecording.active ? 'Stop and save audio recording' : 'Record receiver audio as WAV'">
+				<svg viewBox="0 0 24 24" width="24" height="24"><rect v-if="audioRecording.active" fill="currentColor" x="6" y="6" width="12" height="12"/><circle v-else fill="currentColor" cx="12" cy="12" r="7"/></svg>
+			</UiButton>
 		</div>
 	</div>
 
@@ -151,6 +154,17 @@
 				</UiPanel>
 
 				<VfoPanel v-for="(vfo, i) in vfos" :key="'vfo-panel-' + i" :vfo="vfo" :i="i" />
+				<UiPanel label="Audio recording" v-model:collapsed="collapsedPanels['audioRecording']">
+					<div class="audio-recording-controls">
+						<UiButton @click="toggleAudioRecording" :disabled="!running && !audioRecording.active">{{ audioRecording.active ? 'Stop & save WAV' : 'Record audio' }}</UiButton>
+						<span role="status" :class="{ 'audio-recording-status': audioRecording.active }">{{ audioRecording.active ? 'REC ' : '' }}{{ formatActivityDuration(audioRecording.seconds * 1000) }}</span>
+					</div>
+					<p class="audio-recording-hint">Records this receiver's audio mix as 48 kHz WAV, up to 5 minutes. Solo a VFO to isolate a signal. Volume, squelch and audio filters affect the recording.</p>
+					<template v-if="audioRecording.url">
+						<audio class="audio-recording-preview" :src="audioRecording.url" controls preload="metadata" aria-label="Play latest audio recording"></audio>
+						<UiButton variant="secondary" @click="downloadAudioRecording">Download latest WAV</UiButton>
+					</template>
+				</UiPanel>
 
 				<!-- Add VFO button -->
 				<div class="panel" :class="{ disabled: !connected }">

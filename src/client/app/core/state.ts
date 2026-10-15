@@ -74,6 +74,7 @@ export function createAppData() {
 		hoverFreqText: '',
 		dspStats: null as DspStats | null,
 		audioGapCount: 0,
+		audioRecording: { active: false, seconds: 0, url: '', filename: '' },
 		audioGapMs: 0,
 		audioTargetMs: 20,
 		audioPlaybackRate: 1,
