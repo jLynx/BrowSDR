@@ -1,5 +1,6 @@
 import type { AppInstance } from '@/app/core/receiver.types';
 import { makeDefaultVfo, MODE_DEFAULTS } from '@/app/core/constants';
+import { isValidDisplayFrequencyMhz, minimumDisplayFrequencyMhz } from '@/radio/frequency-shift';
 
 export const vfoMethods = {
 	clearInactiveSoloAudio(this: AppInstance) {
@@ -133,7 +134,11 @@ export const vfoMethods = {
 	},
 	isFreqInBandwidth(this: AppInstance, freq: number): boolean {
 		const halfBw = this.radio.sampleRate / 2e6;
-		return freq >= this.radio.centerFreq - halfBw && freq <= this.radio.centerFreq + halfBw;
+		return (
+			isValidDisplayFrequencyMhz(freq, this.radio.frequencyShift) &&
+			freq >= this.radio.centerFreq - halfBw &&
+			freq <= this.radio.centerFreq + halfBw
+		);
 	},
 
 	findCenterForAllVfos(this: AppInstance, newFreq: number, vfoIndex: number): number | null {
@@ -193,6 +198,11 @@ export const vfoMethods = {
 	validateAndApplyVfoFreq(this: AppInstance, index: number, newFreq: number) {
 		const vfo = this.vfos[index];
 		const previousFreq = vfo.freq;
+		if (!isValidDisplayFrequencyMhz(newFreq, this.radio.frequencyShift)) {
+			vfo.displayFreq = this.formatFreq(previousFreq);
+			this.showMsg('Frequency must be at or above ' + minimumDisplayFrequencyMhz(this.radio.frequencyShift) + ' MHz');
+			return;
+		}
 
 		// Case 1: Already within bandwidth — apply directly
 		if (this.isFreqInBandwidth(newFreq)) {
@@ -205,7 +215,7 @@ export const vfoMethods = {
 		// Case 2: Client mode with locked center frequency — clamp and warn
 		if (this.remoteMode === 'client' && this.locks.centerFreq) {
 			const halfBw = this.radio.sampleRate / 2e6;
-			const minBw = this.radio.centerFreq - halfBw;
+			const minBw = Math.max(minimumDisplayFrequencyMhz(this.radio.frequencyShift), this.radio.centerFreq - halfBw);
 			const maxBw = this.radio.centerFreq + halfBw;
 			const clamped = Math.max(minBw, Math.min(maxBw, newFreq));
 			vfo.freq = clamped;

@@ -333,12 +333,12 @@ export const connectionMethods = {
 			} catch {
 				/* Best-effort cleanup or optional capability; retain the current state if unavailable. */
 			}
-			this.showMsg('Error starting stream: ' + errorMessage(e));
 			this.running = false;
+			restoreStartupTuning(this, opts, e);
 			return;
 		}
 
-		startReceiverStatsPolling.call(this);
+		startReceiverStatsPolling.call(this, opts);
 
 		await this._acquireWakeLock();
 		if (usbOnly) return;
@@ -391,11 +391,24 @@ export const connectionMethods = {
 	},
 };
 
+function restoreStartupTuning(receiver: AppInstance, requested: { centerFreq: number; frequencyShift: number }, error: unknown) {
+	const previous = receiver._confirmedTuning;
+	let restored = false;
+	if (previous && (previous.centerFreq !== requested.centerFreq || previous.frequencyShift !== requested.frequencyShift)) {
+		Object.assign(receiver.radio, previous);
+		receiver.applyZoomToEngine();
+		receiver.saveSetting();
+		restored = true;
+	}
+	receiver.showMsg('Error starting stream: ' + errorMessage(error) + (restored ? '. Restored the previous frequency.' : ''));
+}
+
 function isUsbOnlyDiagnostic(receiver: AppInstance) {
 	return receiver.deviceCapabilities?.deviceType === 'limesdr' && receiver.gains['Receive Mode'] === 1;
 }
 
-function startReceiverStatsPolling(this: AppInstance) {
+function startReceiverStatsPolling(this: AppInstance, tuning: { centerFreq: number; frequencyShift: number }) {
+	this._confirmedTuning = { centerFreq: tuning.centerFreq, frequencyShift: tuning.frequencyShift };
 	this._statsTimer = setInterval(() => {
 		(async () => {
 			if (this.backend && this.running) {

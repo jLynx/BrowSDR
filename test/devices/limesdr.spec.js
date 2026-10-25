@@ -8,6 +8,15 @@ async function createDriver() {
 		selectConfiguration: vi.fn().mockResolvedValue(undefined),
 		claimInterface: vi.fn().mockResolvedValue(undefined),
 		close: vi.fn().mockResolvedValue(undefined),
+		controlTransferOut: vi.fn(async (_, packet) => {
+			packets.push(packet.slice());
+			return { status: 'ok', bytesWritten: packet.length };
+		}),
+		controlTransferIn: vi.fn(async () => {
+			const response = packets[packets.length - 1].slice();
+			response[1] = 1;
+			return { status: 'ok', data: new DataView(response.buffer) };
+		}),
 		transferOut: vi.fn(async (endpoint, packet) => {
 			packets.push(packet.slice());
 			return { status: 'ok', bytesWritten: packet.length };
@@ -271,12 +280,29 @@ describe('LimeSDR receive configuration', () => {
 		vi.restoreAllMocks();
 	});
 
+	it('resets USB stream FIFOs through the FX3 control endpoint', async () => {
+		const { driver, usb, packets } = await createDriver();
+		await driver.resetStreamBuffers();
+		expect(usb.controlTransferOut).toHaveBeenCalledWith(
+			{ requestType: 'vendor', recipient: 'device', request: 0xc1, value: 0, index: 0 },
+			expect.any(Uint8Array),
+		);
+		expect(usb.controlTransferIn).toHaveBeenCalledWith(
+			{ requestType: 'vendor', recipient: 'device', request: 0xc0, value: 0, index: 0 },
+			64,
+		);
+		expect(Array.from(packets[0].slice(0, 4))).toEqual([0x40, 0, 1, 0]);
+		expect(packets[0][8]).toBe(0); // Reset stream FIFOs, preserving the command FIFOs.
+		expect(usb.transferOut).not.toHaveBeenCalled();
+		expect(usb.transferIn).not.toHaveBeenCalled();
+	});
+
 	it('allows firmware that does not implement the USB FIFO reset command', async () => {
 		const { driver, usb, packets } = await createDriver();
 		const response = new Uint8Array(64);
 		response[0] = 0x40;
 		response[1] = 2;
-		usb.transferIn.mockResolvedValueOnce({ status: 'ok', data: new DataView(response.buffer) });
+		usb.controlTransferIn.mockResolvedValueOnce({ status: 'ok', data: new DataView(response.buffer) });
 		await expect(driver.resetStreamBuffers()).resolves.toBeUndefined();
 		expect(Array.from(packets[0].slice(0, 4))).toEqual([0x40, 0, 1, 0]);
 	});
@@ -286,7 +312,7 @@ describe('LimeSDR receive configuration', () => {
 		const response = new Uint8Array(64);
 		response[0] = 0x40;
 		response[1] = status;
-		usb.transferIn.mockResolvedValueOnce({ status: 'ok', data: new DataView(response.buffer) });
+		usb.controlTransferIn.mockResolvedValueOnce({ status: 'ok', data: new DataView(response.buffer) });
 		await expect(driver.resetStreamBuffers()).rejects.toThrow(`device status=${status}`);
 	});
 
@@ -713,8 +739,9 @@ describe('LimeSDR RX channel selection', () => {
 		const { driver } = await createDriver();
 		driver.rxChannel = 1;
 		const modify = vi.spyOn(driver, 'modifyReg').mockResolvedValue(undefined);
-		vi.spyOn(driver, 'readLMS7002').mockImplementation(async (address) => (address === 0x0123 ? 0x2000 : 0));
-		vi.spyOn(driver, 'writeLMS7002').mockResolvedValue(undefined);
+		const registers = new Map();
+		vi.spyOn(driver, 'readLMS7002').mockImplementation(async (address) => (address === 0x0123 ? 0x2000 : (registers.get(address) ?? 0)));
+		vi.spyOn(driver, 'writeLMS7002').mockImplementation(async (address, value) => registers.set(address, value));
 		vi.spyOn(driver, 'tuneVCO').mockResolvedValue(!failure);
 		if (failure) await expect(driver.setFrequencySXR(106.4e6)).rejects.toThrow('SX VCO failed to lock');
 		else await driver.setFrequencySXR(106.4e6);
@@ -750,7 +777,7 @@ describe('LimeSDR RX channel selection', () => {
 			'setPGAGain',
 			'setAntennaPath',
 			'setLinkFormat',
-			'setFrequencySXR',
+			'setReceiveFrequency',
 		]) {
 			vi.spyOn(device.lime, method).mockImplementation(async (value) => {
 				events.push([method, value]);
@@ -774,11 +801,11 @@ describe('LimeSDR RX channel selection', () => {
 		const stopping = device.stopRx();
 		await vi.advanceTimersByTimeAsync(1000);
 		expect(check).toHaveBeenCalledOnce();
-		expect(device.lime.setFrequencySXR).not.toHaveBeenCalled();
+		expect(device.lime.setReceiveFrequency).not.toHaveBeenCalled();
 		releaseRecovery();
 		await Promise.all([tuning, stopping]);
 		await vi.advanceTimersByTimeAsync(1000);
-		expect(device.lime.setFrequencySXR).toHaveBeenCalledWith(131e6);
+		expect(device.lime.setReceiveFrequency).toHaveBeenCalledWith(131e6);
 		expect(check).toHaveBeenCalledOnce();
 	});
 
@@ -900,7 +927,7 @@ describe('LimeSDR RX channel selection', () => {
 		await Promise.all([device.setGain('RX Channel', 1), device.setFrequency(106.4e6), device.stopRx()]);
 		expect(events.slice(-3)).toEqual([
 			['startStreaming', expect.any(Function)],
-			['setFrequencySXR', 106.4e6],
+			['setReceiveFrequency', 106.4e6],
 			['stopStreaming', undefined],
 		]);
 		await device.setGain('RX Channel', 0);

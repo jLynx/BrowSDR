@@ -18,4 +18,10 @@ describe('frequency shift', () => {
 		expect(normalizeFrequencyShiftMhz('')).toBe(0);
 		expect(normalizeFrequencyShiftMhz('invalid')).toBe(0);
 	});
+	it('rejects negative RF and negative hardware frequencies while allowing zero', () => {
+		expect(() => displayToDeviceFrequencyHz(-0.859, 0)).toThrow(RangeError);
+		expect(() => displayToDeviceFrequencyHz(-0.859, -125)).toThrow(RangeError);
+		expect(() => displayToDeviceFrequencyHz(100, 125)).toThrow(RangeError);
+		expect(displayToDeviceFrequencyHz(0, -125)).toBe(125_000_000);
+	});
 });

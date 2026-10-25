@@ -101,7 +101,7 @@ export class LimeSDRDevice implements SdrDevice {
 	}
 
 	async setFrequency(freqHz: number): Promise<void> {
-		await this.runExclusive(() => this.lime.setFrequencySXR(freqHz));
+		await this.runExclusive(() => this.lime.setReceiveFrequency(freqHz));
 	}
 
 	async setGain(name: string, value: number): Promise<void> {

@@ -1,4 +1,4 @@
-import { defineComponent, h } from 'vue';
+import { defineComponent, h, ref } from 'vue';
 import UiInput from '@/ui/controls/UiInput';
 
 export default defineComponent({
@@ -15,8 +15,18 @@ export default defineComponent({
 	},
 	emits: ['update:modelValue', 'select', 'apply', 'focus'],
 	setup(props, { emit }) {
-		return () =>
-			h(
+		const editing = ref(false);
+		const draft = ref('');
+		const apply = (event: Event) => {
+			if (editing.value) {
+				emit('update:modelValue', draft.value.trim());
+				editing.value = false;
+			}
+			emit('apply', event);
+		};
+		return () => {
+			const value = editing.value ? draft.value : props.modelValue;
+			return h(
 				'div',
 				{
 					class: [
@@ -39,14 +49,22 @@ export default defineComponent({
 					h('span', { class: 'vfo-label', style: { background: props.color } }, props.index + 1),
 					h(UiInput, {
 						class: 'vfo-freq-input',
-						modelValue: props.modelValue,
+						modelValue: value,
 						'aria-label': `VFO ${props.index + 1} frequency in MHz`,
-						'onUpdate:modelValue': (value: string | number) => emit('update:modelValue', value),
-						onBlur: (event: FocusEvent) => emit('apply', event),
-						onKeyup: (event: KeyboardEvent) => {
-							if (event.key === 'Enter') emit('apply', event);
+						'onUpdate:modelValue': (value: string | number) => {
+							draft.value = String(value);
 						},
-						onFocus: (event: FocusEvent) => emit('focus', event),
+						onBlur: (event: FocusEvent) => {
+							if (editing.value) apply(event);
+						},
+						onKeyup: (event: KeyboardEvent) => {
+							if (event.key === 'Enter') apply(event);
+						},
+						onFocus: (event: FocusEvent) => {
+							draft.value = value;
+							editing.value = true;
+							emit('focus', event);
+						},
 					}),
 					h('div', { class: 'vfo-unit' }, 'MHz'),
 					props.receiving
@@ -66,5 +84,6 @@ export default defineComponent({
 					props.bookmark ? h('span', { class: 'vfo-bookmark-label', title: props.bookmark }, props.bookmark) : null,
 				],
 			);
+		};
 	},
 });

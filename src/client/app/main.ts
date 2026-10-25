@@ -22,6 +22,8 @@ import { createAppData } from './core/state';
 import { computedProperties } from './core/computed';
 import { uiHelperMethods, watchVfoSelection } from './core/ui-helpers';
 import { connectionMethods } from './radio/connection';
+import { watchRadioTuning } from './radio/tuning';
+import { isValidDisplayFrequencyMhz, minimumDisplayFrequencyMhz } from '@/radio/frequency-shift';
 import { canvasMethods, mountCanvas } from './display/canvas';
 import { audioMethods } from './audio/audio';
 import { vfoMethods } from './radio/vfo';
@@ -175,7 +177,7 @@ function watchReceiverSettings(this: AppInstance) {
 	watchContrast.call(this);
 	watchRadioFrequency.call(this);
 
-	watchFrequencyShift.call(this);
+	watchRadioTuning(this);
 
 	watchGainChanges.call(this);
 
@@ -183,6 +185,9 @@ function watchReceiverSettings(this: AppInstance) {
 		'vfos',
 		() => {
 			for (let i = 0; i < this.vfos.length; i++) {
+				if (!isValidDisplayFrequencyMhz(this.vfos[i].freq, this.radio.frequencyShift)) {
+					this.vfos[i].freq = minimumDisplayFrequencyMhz(this.radio.frequencyShift);
+				}
 				if (!this.vfos[i].focused) {
 					this.vfos[i].displayFreq = this.formatFreq(this.vfos[i].freq);
 				}
@@ -303,81 +308,7 @@ function watchGainChanges(this: AppInstance) {
 	);
 }
 
-function watchFrequencyShift(this: AppInstance) {
-	let frequencyShiftDebounce: ReturnType<typeof setTimeout> | null = null;
-	this._cleanup.push(() => {
-		if (frequencyShiftDebounce) clearTimeout(frequencyShiftDebounce);
-	});
-	this.$watch(
-		() => this.radio.frequencyShift,
-		(newVal: number) => {
-			this.saveSetting();
-
-			// The converter belongs to the host's hardware. Remote clients receive
-			// the host's shift through radio sync and cannot change it themselves.
-			if (this.remoteMode === 'client') return;
-
-			if (frequencyShiftDebounce) clearTimeout(frequencyShiftDebounce);
-			frequencyShiftDebounce = setTimeout(() => {
-				frequencyShiftDebounce = null;
-				if (this.running && this.backend) {
-					this.backend.setFrequency(this.radio.centerFreq, newVal).catch(console.error);
-				}
-
-				if (this.remoteMode === 'host' && this._webrtc) {
-					this._webrtc?.sendCommand({ type: 'sync', radio: this.radio, gains: this.gains, locks: this.locks });
-				}
-			}, 200);
-		},
-	);
-}
-
 function watchRadioFrequency(this: AppInstance) {
-	let freqDebounce: ReturnType<typeof setTimeout> | null = null;
-	this._cleanup.push(() => {
-		if (freqDebounce) clearTimeout(freqDebounce);
-	});
-	this.$watch(
-		() => this.radio.centerFreq,
-		(newVal: number, _oldVal: number) => {
-			this.saveSetting();
-			if (freqDebounce) {
-				clearTimeout(freqDebounce);
-				freqDebounce = null;
-			}
-			if (this.ble.tuning) return;
-			if (this.ble.scanning) this.stopBleScan();
-			// Reset zoom on radio change
-			this.view.zoomScale = 1.0;
-			this.view.zoomOffset = 0.0;
-			this.applyZoomToEngine();
-
-			if (this.remoteMode === 'client') {
-				if (!this._applyingSync) {
-					this._webrtc?.sendCommand({ type: 'requestChange', target: 'radio', property: 'centerFreq', value: newVal });
-				}
-				return;
-			}
-
-			// Debounce: wait for the input to settle before sending USB commands.
-			// Typing "106" fires intermediate values (1, 10, 106) — each triggers a
-			// full pauseRx/VCO-cal/resumeRx cycle that can leave the FC0012 PLL in a
-			// bad state if changes arrive too fast.
-			if (freqDebounce) clearTimeout(freqDebounce);
-			freqDebounce = setTimeout(() => {
-				freqDebounce = null;
-
-				if (this.running && this.backend) {
-					this.backend.setFrequency(newVal, this.radio.frequencyShift).catch(console.error);
-				}
-
-				if (this.remoteMode === 'host' && this._webrtc) {
-					this._webrtc?.sendCommand({ type: 'sync', radio: this.radio, gains: this.gains, locks: this.locks });
-				}
-			}, 200);
-		},
-	);
-
 	this.$watch(
 		() => [this.radio.sampleRate, this.radio.fftSize],
 		async (newVals: number[], oldVals: number[]) => {

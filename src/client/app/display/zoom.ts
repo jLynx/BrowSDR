@@ -1,4 +1,5 @@
 import type { AppInstance } from '@/app/core/receiver.types';
+import { frequencyView } from '@/display/frequency-view';
 
 /** Centre a frequency using the same minimum zoom as the active-audio shortcuts. */
 export function focusSpectrumFrequency(receiver: AppInstance, frequencyMHz: number): void {
@@ -43,6 +44,9 @@ export const zoomMethods = {
 		this.applyZoomToEngine();
 	},
 	applyZoomToEngine(this: AppInstance) {
+		const bounds = frequencyView(this.radio, this.view);
+		this.view.zoomScale = bounds.zoomScale;
+		this.view.zoomOffset = bounds.zoomOffset;
 		if (this._waterfallEngine) {
 			this._waterfallEngine.setZoom(this.view.zoomOffset, this.view.zoomScale);
 			// Force an immediate repaint so the new zoom is visible without waiting for the next data frame

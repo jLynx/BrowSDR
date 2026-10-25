@@ -68,6 +68,85 @@ function bandRestoreDriver({ recover = true, fallback = false, widths = [8, 8] }
 	return { driver, registers };
 }
 
+function lockedRegisterDriver() {
+	const driver = new LimeSDRDevice().lime;
+	const registers = new Map([
+		[0x0020, 0xfffd],
+		[0x0089, 0x1000],
+		[0x011c, 0x8941],
+	]);
+	vi.spyOn(driver, 'writeLMS7002').mockImplementation(async (address, value) => {
+		registers.set(address, value);
+		driver.cacheRegister(address, value);
+	});
+	vi.spyOn(driver, 'writeLMS7002Batch').mockImplementation(async (pairs) => {
+		for (const [address, value] of pairs) await driver.writeLMS7002(address, value);
+	});
+	vi.spyOn(driver, 'readLMS7002').mockImplementation(async (address) => registers.get(address) ?? 0);
+	vi.spyOn(driver, 'tuneVCO').mockResolvedValue(true);
+	vi.spyOn(driver, 'waitForSXLock').mockResolvedValue(true);
+	return { driver, registers };
+}
+
+// Decode the hardware words using the LMS7002M frequency equations, independently
+// of the driver's tuning calculation and its currentFrequency bookkeeping.
+function sxFrequency(registers) {
+	const word = registers.get(0x011e);
+	const fraction = (word & 15) * 65536 + registers.get(0x011d);
+	const divider = 2 ** (((registers.get(0x011f) >> 6) & 7) + 1);
+	const multiplier = ((registers.get(0x011c) >> 10) & 1) + 1;
+	return (30.72e6 * multiplier * ((word >> 4) + 4 + fraction / 1048576)) / divider;
+}
+
+describe('LimeSDR frequency programming', () => {
+	it.each([43.9e6, 44.2e6, 48.5e6, 128.305e6, 3.8e9])('programs the requested RF frequency %i Hz', async (frequency) => {
+		const { driver, registers } = lockedRegisterDriver();
+		await driver.setFrequencySXR(frequency);
+		expect(sxFrequency(registers) / 1e6).toBeCloseTo(frequency / 1e6, 4);
+		expect(driver.currentFrequency).toBe(frequency);
+		expect(driver.sxReady).toBe(true);
+	});
+
+	it('carries SX fractional rounding into INT at a reference-clock boundary', async () => {
+		const { driver, registers } = lockedRegisterDriver();
+		await driver.setFrequencySXR(169.9199999e6);
+		expect(registers.get(0x011e) >> 4).toBe(173);
+		expect(registers.get(0x011e) & 15).toBe(0);
+		expect(registers.get(0x011d)).toBe(0);
+		expect(sxFrequency(registers)).toBeCloseTo(169.92e6, 0);
+	});
+
+	it('carries CGEN fractional rounding into INT rather than changing the sample clock', async () => {
+		const { driver, registers } = lockedRegisterDriver();
+		await driver.setCGENFrequency(153.6e6 - 0.01);
+		const word = registers.get(0x0088);
+		const fraction = (word & 15) * 65536 + registers.get(0x0087);
+		const divider = ((registers.get(0x0089) >> 3) & 255) + 1;
+		const clock = (30.72e6 * ((word >> 4) + 1 + fraction / 1048576)) / (2 * divider);
+		expect(word >> 4).toBe(79);
+		expect(fraction).toBe(0);
+		expect(clock).toBeCloseTo(153.6e6, 0);
+	});
+
+	it.each([
+		[0x011e, 0x0010],
+		[0x011d, 0x0002],
+		[0x011f, 0x0040],
+		[0x011c, 0x0400],
+	])('rejects a locked synthesizer with incorrect readback at register 0x%s', async (address, mask) => {
+		const { driver, registers } = lockedRegisterDriver();
+		driver.rxChannel = 1;
+		driver.readLMS7002.mockImplementation(async (register) => {
+			const value = registers.get(register) ?? 0;
+			return register === address ? value ^ mask : value;
+		});
+		await expect(driver.setFrequencySXR(44.2e6)).rejects.toThrow('SXR frequency readback mismatch');
+		expect(driver.currentFrequency).toBe(100e6);
+		expect(driver.sxReady).toBe(false);
+		expect(registers.get(0x0020) & 3).toBe(2);
+	});
+});
+
 describe('LimeSDR PLL lock', () => {
 	it.each([
 		['CGEN', [[40, 60]], 50],

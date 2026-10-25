@@ -6,6 +6,7 @@ import { SpectrumFrameLimiter, WaterfallClock } from '@/display/spectrum-rate';
 import { sidebandOffsetHz } from '@/worker/decoders/ssb';
 import { updateContrast } from './contrast';
 import { submitDiscovery, drawDiscovery } from '@/app/discovery/bridge';
+import { formatFrequencyLabel } from '@/display/frequency-format';
 
 export const canvasMethods = {
 	initCanvas(this: AppInstance) {
@@ -323,12 +324,12 @@ function createMouseHandlers(this: AppInstance) {
 	const getFreqFromEvent = (e: MouseEvent) => {
 		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
 		const p = (e.clientX - rect.left) / rect.width;
-		return this.minFreq + p * (this.maxFreq - this.minFreq);
+		return this.minFreq + Math.max(0, Math.min(1, p)) * (this.maxFreq - this.minFreq);
 	};
 
 	const updateHover = (e: MouseEvent) => {
 		const hoverFreq = getFreqFromEvent(e);
-		this.hoverFreqText = hoverFreq.toFixed(3) + ' MHz';
+		this.hoverFreqText = formatFrequencyLabel(hoverFreq);
 
 		const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
 		const p = (e.clientX - rect.left) / rect.width;

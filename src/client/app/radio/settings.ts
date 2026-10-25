@@ -4,6 +4,8 @@ import { normalizeSpectrumFps } from '@/display/spectrum-rate';
 import { DEFAULT_FFT_SIZE, normalizedSpectrumRange, SPECTRUM_RANGE_VERSION } from '@/display/spectrum-range';
 import { isRecord, restoreFields, primitiveMap } from '@/platform/data';
 import { validContrastRange } from '@/display/contrast';
+import { isValidDisplayFrequencyMhz, minimumDisplayFrequencyMhz } from '@/radio/frequency-shift';
+import { formatFrequencyMhz } from '@/display/frequency-format';
 
 export const settingsMethods = {
 	saveSetting(this: AppInstance) {
@@ -62,6 +64,7 @@ export const settingsMethods = {
 		} catch (_e) {
 			/* Best-effort cleanup or optional capability; retain the current state if unavailable. */
 		}
+		restoreFrequencySettings(this);
 	},
 	requestOrApplyChange(this: AppInstance, target: string, property: string, value: number) {
 		if (this.remoteMode === 'client') {
@@ -78,6 +81,16 @@ export const settingsMethods = {
 		}
 	},
 };
+
+function restoreFrequencySettings(receiver: AppInstance) {
+	const shift = receiver.radio?.frequencyShift;
+	const floor = minimumDisplayFrequencyMhz(shift);
+	if (receiver.radio && !isValidDisplayFrequencyMhz(receiver.radio.centerFreq, shift)) receiver.radio.centerFreq = floor;
+	for (const vfo of receiver.vfos ?? []) {
+		if (!isValidDisplayFrequencyMhz(vfo.freq, shift)) vfo.freq = floor;
+		vfo.displayFreq = formatFrequencyMhz(vfo.freq);
+	}
+}
 
 function restoreDisplaySettings(this: AppInstance, setting: Record<string, unknown>) {
 	if (setting.display) restoreFields(this.display, setting.display);

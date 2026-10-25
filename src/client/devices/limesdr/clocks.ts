@@ -67,6 +67,7 @@ import {
 import { LimeSDRTransport } from './transport';
 
 export abstract class LimeSDRClocks extends LimeSDRTransport {
+	protected rxOversample = 2;
 	protected sxLockWidth = 0;
 	protected sxReady = false;
 	// ── CGEN PLL (Clock Generator) ──────────────────────────────
@@ -87,8 +88,11 @@ export abstract class LimeSDRClocks extends LimeSDRTransport {
 		}
 
 		const ratio = vcoFreq / REF_CLK;
-		const gINT = Math.floor(ratio) - 1;
-		const gFRAC = Math.round((ratio - gINT - 1) * (1 << 20)) & 0xfffff;
+		// Round the whole fixed-point divider so a fractional rollover carries
+		// into INT instead of silently dropping one reference-clock period.
+		const dividerWord = Math.round(ratio * (1 << 20));
+		const gINT = Math.floor(dividerWord / (1 << 20)) - 1;
+		const gFRAC = dividerWord & 0xfffff;
 
 		// Write CGEN PLL registers
 		await this.writeLMS7002Batch([
@@ -141,8 +145,9 @@ export abstract class LimeSDRClocks extends LimeSDRTransport {
 		const en_div2 = vcoFreq > SX_DIV2_THRESHOLD ? 1 : 0;
 		const divisor = en_div2 ? 2 : 1;
 		const ratio = vcoFreq / (REF_CLK * divisor);
-		const intPart = Math.floor(ratio) - 4;
-		const fracPart = Math.round((ratio - intPart - 4) * (1 << 20)) & 0xfffff;
+		const dividerWord = Math.round(ratio * (1 << 20));
+		const intPart = Math.floor(dividerWord / (1 << 20)) - 4;
+		const fracPart = dividerWord & 0xfffff;
 
 		// Write SX PLL registers
 		let sxCfg = await this.readLMS7002(REG_SX_CFG);
@@ -205,6 +210,12 @@ export abstract class LimeSDRClocks extends LimeSDRTransport {
 		const rbDivisor = rbEnDiv2 ? 2 : 1;
 		const rbVCO = (rbInt + 4 + rbFrac / (1 << 20)) * REF_CLK * rbDivisor;
 		const rbFreq = rbVCO / (1 << (rbDiv + 1));
+		const frequencyStep = (REF_CLK * divisor) / (1 << (div_loch + 1)) / (1 << 20);
+		if (Math.abs(rbFreq - freq_Hz) > frequencyStep / 2 + 0.001) {
+			throw new Error(
+				`LimeSDR: SXR frequency readback mismatch: requested ${(freq_Hz / 1e6).toFixed(6)} MHz, read ${(rbFreq / 1e6).toFixed(6)} MHz`,
+			);
+		}
 		console.log(
 			`LimeSDR: SXR locked at ${(freq_Hz / 1e6).toFixed(3)} MHz, actual=${(rbFreq / 1e6).toFixed(3)} MHz, VCO=${bestVCO}, CSW=${bestCSW}, div_loch=${div_loch}, INT=${rbInt}, FRAC=${rbFrac}, DIV=${rbDiv}, EN_DIV2=${rbEnDiv2}, CFG=0x${(await this.readLMS7002(REG_SX_CFG)).toString(16)}`,
 		);
@@ -325,8 +336,9 @@ export abstract class LimeSDRClocks extends LimeSDRTransport {
 		// Enable RxTSP
 		await this.modifyReg(REG_RXTSP_CFG, 0, 0, 1);
 
-		await this.modifyReg(REG_RXTSP_DEC, 14, 12, 0);
-		await this.modifyReg(0x0203, 14, 12, 0);
+		const decimation = Math.log2(this.rxOversample) - 1;
+		await this.modifyReg(REG_RXTSP_DEC, 14, 12, decimation);
+		await this.modifyReg(0x0203, 14, 12, decimation);
 
 		// AGC bypass
 		await this.modifyReg(REG_RXTSP_AGC, 13, 12, 2);
@@ -338,11 +350,10 @@ export abstract class LimeSDRClocks extends LimeSDRTransport {
 		// Bit 1: GC_BYP=1, Bit 0: PH_BYP=1 (no calibration data available)
 		await this.writeLMS7002(REG_RXTSP_BYP, 0x00fb);
 
-		// Zero the NCO phase/frequency registers to ensure no residual mixing
-		// PHO registers 0x0440-0x0449 (NCO frequency words)
-		await this.writeLMS7002(0x0440, 0x0000); // FCW0 [15:0]
-		await this.writeLMS7002(0x0441, 0x0000); // FCW0 [31:16]
-		await this.writeLMS7002(0x0442, 0x0000); // PHO0
+		await this.writeLMS7002(0x0440, 0); // NCO mode/selection
+		await this.writeLMS7002(0x0441, 0); // Phase offset
+		await this.writeLMS7002(0x0442, 0); // FCW0 [31:16]
+		await this.writeLMS7002(0x0443, 0); // FCW0 [15:0]
 
 		// DC correction averaging (register 0x0404 bits [2:0] per LimeSuite)
 		await this.modifyReg(0x0404, 2, 0, 7); // Max averaging window
@@ -375,6 +386,16 @@ export abstract class LimeSDRClocks extends LimeSDRTransport {
 		// 0x002B: MCLK sources (LimeSuite Init default)
 		// MCLK1SRC[3:2]=2 (TXTSPCLKA_DIV), MCLK2SRC[5:4]=3 (RXTSPCLKA_DIV)
 		await this.writeLMS7002(REG_CLK_SRC, 0x0038);
+
+		// LimeSuite SetInterfaceFrequency: preserve 2 * outputRate MCLKs in MIMO.
+		const decimation = Math.log2(this.rxOversample) - 1;
+		if (decimation > 0) {
+			const divider = 2 ** decimation / 2 - 1;
+			await this.writeLMS7002(0x002c, (divider << 8) | divider);
+			await this.modifyReg(REG_CLK_SRC, 5, 4, 1);
+			await this.modifyReg(REG_CLK_SRC, 3, 2, 0);
+			await this.modifyReg(REG_CLK_SRC, 1, 0, 3);
+		}
 	}
 
 	// ── FPGA Configuration ──────────────────────────────────────

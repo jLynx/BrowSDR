@@ -80,6 +80,7 @@ export interface ReceiverInternals {
 	_applyingSync?: boolean;
 	_hostRunning?: boolean;
 	_resumeAfterHostPause?: boolean;
+	_confirmedTuning?: { centerFreq: number; frequencyShift: number };
 	_pendingImportFile: File | null;
 }
 

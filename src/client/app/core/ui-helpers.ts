@@ -1,6 +1,7 @@
 import type { AppInstance } from '@/app/core/receiver.types';
 import { VFO_COLORS } from './constants';
 import { focusSpectrumFrequency } from '@/app/display/zoom';
+import { formatFrequencyMhz } from '@/display/frequency-format';
 
 export const uiHelperMethods = {
 	copyRemoteLink(this: AppInstance) {
@@ -26,9 +27,7 @@ export const uiHelperMethods = {
 		this.collapsedPanels[collKey] = !this.collapsedPanels[collKey];
 	},
 	formatFreq(this: AppInstance, mhz: number) {
-		if (!mhz) return '000.000000';
-		const s = mhz.toFixed(6);
-		return s.padStart(10, '0');
+		return formatFrequencyMhz(mhz);
 	},
 	// Format a duration in milliseconds as a human-readable string (e.g. "2m 05s")
 	formatActivityDuration(this: AppInstance, ms: number) {
@@ -96,7 +95,7 @@ export const uiHelperMethods = {
 	},
 	labelFreq(this: AppInstance, percent: number) {
 		const freq = this.minFreq + percent * (this.maxFreq - this.minFreq);
-		return freq.toFixed(2);
+		return freq.toFixed(2) + ' MHz';
 	},
 	showMsg(this: AppInstance, msg: string) {
 		this.snackbar.message = msg;

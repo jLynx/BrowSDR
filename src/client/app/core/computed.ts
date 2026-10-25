@@ -2,6 +2,7 @@ import type { Vfo } from './types';
 import type { BookmarkEntry } from '@/app/workspace/types';
 import type { AppInstance } from '@/app/core/receiver.types';
 import { BOOKMARK_CATEGORIES } from './constants';
+import { frequencyView } from '@/display/frequency-view';
 
 export const computedProperties = {
 	isDevelopment() {
@@ -90,13 +91,9 @@ export const computedProperties = {
 	},
 	// Calculate the min/max display bandwidth based on sampleRate AND zoom state
 	minFreq(this: AppInstance) {
-		const baseMin = this.radio.centerFreq - this.radio.sampleRate / 2 / 1e6;
-		const baseSpan = this.radio.sampleRate / 1e6;
-		return baseMin + baseSpan * this.view.zoomOffset;
+		return frequencyView(this.radio, this.view).minFreq;
 	},
 	maxFreq(this: AppInstance) {
-		const baseMin = this.radio.centerFreq - this.radio.sampleRate / 2 / 1e6;
-		const baseSpan = this.radio.sampleRate / 1e6;
-		return baseMin + baseSpan * (this.view.zoomOffset + 1.0 / this.view.zoomScale);
+		return frequencyView(this.radio, this.view).maxFreq;
 	},
 };

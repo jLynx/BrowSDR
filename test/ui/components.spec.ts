@@ -207,4 +207,21 @@ describe('composed UI behavior', () => {
 		expect(wrapper.find('.vfo-mute-badge').exists()).toBe(true);
 		expect(wrapper.find('.vfo-bookmark-label').text()).toBe('Station');
 	});
+	it('keeps low-frequency display and entry in MHz', async () => {
+		const wrapper = mount(ui.UiFrequencyDisplay, { props: { modelValue: '000.859000', index: 0, color: '#ff4444' } });
+		wrappers.push(wrapper);
+		const input = wrapper.find('input');
+		expect(input.element.value).toBe('000.859000');
+		expect(input.attributes('aria-label')).toContain('MHz');
+		await input.trigger('focus');
+		await input.setValue('0.1');
+		expect(wrapper.find('.vfo-unit').text()).toBe('MHz');
+		await input.trigger('keyup', { key: 'Enter' });
+		expect(wrapper.emitted('update:modelValue')![0]).toEqual(['0.1']);
+		await input.trigger('blur');
+		expect(wrapper.emitted('apply')).toHaveLength(1);
+		await wrapper.setProps({ modelValue: '000.100000' });
+		expect(input.element.value).toBe('000.100000');
+		expect(wrapper.find('.vfo-unit').text()).toBe('MHz');
+	});
 });

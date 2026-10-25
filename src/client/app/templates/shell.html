@@ -89,7 +89,7 @@
 				<UiPanel label="Radio" :disabled="!connected" v-model:collapsed="collapsedPanels['radio']">
 					<UiFormRow label="Center">
 						<UiInputGroup unit="MHz">
-							<UiInput type="number" v-model.number="radio.centerFreq" step="0.1" title="Center Frequency (MHz)" :disabled="autoGain.active || (remoteMode === 'client' && locks.centerFreq)"></UiInput>
+							<UiInput type="number" v-model.number="radio.centerFreq" min="0" step="0.1" title="Center Frequency (MHz)" :disabled="autoGain.active || (remoteMode === 'client' && locks.centerFreq)"></UiInput>
 						</UiInputGroup>
 						<UiLock v-if="remoteMode === 'host' || (remoteMode === 'client' && locks.centerFreq)" :locked="locks.centerFreq" :host="remoteMode === 'host'" @toggle="locks.centerFreq = !locks.centerFreq"></UiLock>
 					</UiFormRow>

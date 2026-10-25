@@ -28,7 +28,6 @@ import {
 	NUM_TRANSFERS,
 	STREAM_START_TIMEOUT_MS,
 	STREAM_STOP_TIMEOUT_MS,
-	MAX_SAMPLE_RATE,
 	REG_RESET,
 	REG_LML_CONF1,
 	REG_LML1_MAP,
@@ -61,10 +60,10 @@ import {
 } from './protocol';
 import { LimeRxLevel } from './rx-level';
 import { LimeStreamStats } from './stream-stats';
-import { LimeSDRClocks } from './clocks';
+import { LimeSDRReceiveTuning } from './receive-tuning';
 import { decodeStreamPcm, readStreamComponent, streamSamplesPerPacket, streamTransferSize } from './stream-pcm';
 
-export class LimeSDR extends LimeSDRClocks {
+export class LimeSDR extends LimeSDRReceiveTuning {
 	readonly rxLevel = new LimeRxLevel();
 	readonly streamStats = new LimeStreamStats();
 	private packed = false;
@@ -80,7 +79,7 @@ export class LimeSDR extends LimeSDRClocks {
 			if (this.sxReady && getBits(await this.readLMS7002(REG_SX_CMP), 13, 12) === 2) return;
 			const unstableBand = getBits(await this.readLMS7002(REG_SX_VCO), 2, 1);
 			console.warn('LimeSDR: SXR lost lock during reception; retuning with another usable band preferred');
-			await this.setFrequencySXR(this.currentFrequency, unstableBand);
+			await this.retuneReceiveLO(unstableBand);
 		} finally {
 			await this.modifyReg(REG_RESET, 1, 0, this.rxChannel + 1);
 		}
@@ -253,7 +252,8 @@ export class LimeSDR extends LimeSDRClocks {
 	// ── Analog Filter Bandwidth ─────────────────────────────────
 
 	async setAnalogBandwidth(bwHz: number): Promise<void> {
-		const bw = Math.max(0.5e6, Math.min(bwHz, MAX_SAMPLE_RATE));
+		// RF bandwidth before RxTSP mixing can exceed the final USB sample rate.
+		const bw = Math.max(0.5e6, Math.min(bwHz, 130e6));
 		const filterIF = bw / 2;
 		const adjustedIF = filterIF * 1.3;
 		await this.configureTIAFilter(filterIF);
@@ -297,7 +297,7 @@ export class LimeSDR extends LimeSDRClocks {
 		// index: 0=0dB(reg=1), 1=9dB(reg=2), 2=12dB(reg=3)
 		const regVal = Math.max(1, Math.min(3, index + 1));
 		await this.modifyReg(REG_RFE_GAIN, 1, 0, regVal);
-		await this.configureTIAFilter(this.currentSampleRate / 2);
+		await this.configureTIAFilter(this.receiveBandwidth / 2);
 	}
 
 	async setPGAGain(value: number): Promise<void> {
@@ -332,27 +332,10 @@ export class LimeSDR extends LimeSDRClocks {
 		await this.modifyReg(REG_RESET, 1, 0, 1);
 		await this.modifyReg(REG_RFE_PATH, 0, 0, channel);
 		await this.modifyReg(REG_RESET, 1, 0, channel + 1);
-		await this.setAnalogBandwidth(this.currentSampleRate);
+		await this.setAnalogBandwidth(this.receiveBandwidth);
 		await this.writeFPGA(FPGA_REG_CH_EN, 1 << channel);
 		this.rxChannel = channel;
 		console.log(`LimeSDR: selected RX${channel + 1}`);
-	}
-
-	async setSampleRate(rate: number): Promise<void> {
-		if (!Number.isFinite(rate) || rate < 1e6 || rate > MAX_SAMPLE_RATE) {
-			throw new Error(`LimeSDR: unsupported sample rate ${rate}`);
-		}
-		this.currentSampleRate = rate;
-		try {
-			await this.setCGENFrequency(rate * 8);
-			await this.setAnalogBandwidth(rate);
-			await this.modifyReg(REG_RESET, 1, 0, 3);
-			await this.configureRxTSP();
-			await this.configureLML();
-			await this.configureFPGAPLL();
-		} finally {
-			await this.modifyReg(REG_RESET, 1, 0, this.rxChannel + 1);
-		}
 	}
 
 	// ── Streaming ───────────────────────────────────────────────
@@ -468,7 +451,7 @@ export class LimeSDR extends LimeSDRClocks {
 			await this.modifyReg(REG_RESET, 1, 0, 1);
 			if (await this.waitForSXLock()) return;
 			console.warn('LimeSDR: SXR lost lock after RX start; retuning under the active receive clocks');
-			await this.setFrequencySXR(this.currentFrequency);
+			await this.retuneReceiveLO();
 		} finally {
 			await this.modifyReg(REG_RESET, 1, 0, this.rxChannel + 1);
 		}

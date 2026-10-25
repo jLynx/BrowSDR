@@ -92,8 +92,8 @@ export abstract class LimeSDRTransport {
 		}
 
 		const command = this.commandQueue.then(async () => {
-			// GET_INFO belongs to the FX3 control endpoint, not the FPGA bulk command path.
-			const control = cmd === CMD_GET_INFO;
+			// Board information and USB FIFO reset are handled by the FX3 firmware.
+			const control = cmd === CMD_GET_INFO || cmd === CMD_USB_FIFO_RST;
 			const sent = control
 				? await this.dev.controlTransferOut({ requestType: 'vendor', recipient: 'device', request: 0xc1, value: 0, index: 0 }, pkt)
 				: await this.dev.transferOut(EP_CTRL_OUT, pkt);
