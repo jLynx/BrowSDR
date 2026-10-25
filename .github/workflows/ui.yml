@@ -21,7 +21,8 @@ jobs:
 
   ui:
     name: Components and Storybook
-    runs-on: ubuntu-latest
+    # Playwright 1.58.2 supports Ubuntu 24.04, but not the Ubuntu 26.04 latest runner.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
