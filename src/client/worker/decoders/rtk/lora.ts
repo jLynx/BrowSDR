@@ -15,8 +15,16 @@ export class LoraReceiver {
 	private phaseQ = 0;
 	private previous?: { bin: number; real: number; imag: number };
 	private lock?: { at: number; bin: number; fraction: number };
-	private frame?: { start: number; cfo: number; header?: LoraHeader };
-	readonly counters = { syncs: 0, headers: 0, packets: 0, crcErrors: 0 };
+	private frame?: { start: number; cfo: number; sync: [number, number]; header?: LoraHeader };
+	readonly counters = {
+		syncs: 0,
+		headers: 0,
+		payloads: 0,
+		packets: 0,
+		crcErrors: 0,
+		codingErrors: 0,
+		syncSymbols: undefined as [number, number] | undefined,
+	};
 	constructor(
 		private profile: LoraProfile,
 		private clockPpm: number,
@@ -93,10 +101,13 @@ export class LoraReceiver {
 		if (aligned - this.symbol >= this.samples.base && this.spectrum.peak(aligned - this.symbol, true).coherence > 0.25)
 			aligned -= this.symbol;
 		if (aligned - 2 * this.symbol < this.samples.base) return;
-		const sync = [this.spectrum.peak(aligned - 2 * this.symbol, false, cfo).bin, this.spectrum.peak(aligned - this.symbol, false, cfo).bin];
+		const sync: [number, number] = [
+			this.spectrum.peak(aligned - 2 * this.symbol, false, cfo).bin,
+			this.spectrum.peak(aligned - this.symbol, false, cfo).bin,
+		];
 		if (sync.some((bin, i) => Math.abs(signedBin(bin - this.profile.sync[i])) > 2)) return;
 		this.counters.syncs++;
-		this.frame = { start: aligned + 2.25 * this.symbol, cfo };
+		this.frame = { start: aligned + 2.25 * this.symbol, cfo, sync };
 	}
 	private recover(): boolean {
 		const frame = this.frame!,
@@ -111,10 +122,14 @@ export class LoraReceiver {
 				return true;
 			}
 			this.counters.headers++;
+			// Publish the observed symbols only after the explicit header checksum passes.
+			this.counters.syncSymbols = frame.sync;
 		}
 		if (frame.start + frame.header.symbols * step + 4 >= this.samples.end) return false;
 		const bins = Array.from({ length: frame.header.symbols }, (_, i) => this.spectrum.peak(frame.start + i * step, false, frame.cfo).bin);
 		const packet = decodePayload(bins, frame.header, this.profile.ldro, (frame.cfo * this.profile.bandwidth) / 128);
+		this.counters.payloads++;
+		this.counters.codingErrors += packet.codingErrors ?? 0;
 		if (packet.verified) this.counters.packets++;
 		else if (packet.hasCrc) this.counters.crcErrors++;
 		this.onPacket(packet);

@@ -12,6 +12,10 @@ coordinates are included.
   encoding; it does not import the production decoder.
 - `mock-iq.js`: SF7/BW500/CR4-6/LDRO, sync [40,36], preamble 32, payload 248,
   CFO 630 Hz and sample skew +20 ppm. Samples are generated offline in memory.
+  Configurable synthetic parameters also exercise SF7/BW250/CR4-5 with LDRO
+  off, sync [16,8], preamble 16, +10 ppm and no payload CRC. These bytes are
+  mock input, not a claim that the unidentified lower signal uses the same
+  application wrapper as the verified profile.
 
 Tests compare the entire decoded payload with the mock bytes, verify both
 checksums and assert the exact invented pairing and reference coordinates.

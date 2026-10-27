@@ -18,7 +18,7 @@ function hammingWord(nibble: number, rate: number): number {
 }
 
 /** Gray demapping, diagonal deinterleaving and systematic Hamming decoding. */
-export function decodeBlock(bins: number[], bits: number, rate: number): number[] {
+export function decodeBlock(bins: number[], bits: number, rate: number, errors?: { detected: number }): number[] {
 	const columns = rate + 4;
 	const words = new Uint8Array(bits);
 	for (let column = 0; column < columns; column++) {
@@ -26,6 +26,8 @@ export function decodeBlock(bins: number[], bits: number, rate: number): number[
 		for (let bit = 0; bit < bits; bit++) words[mod(column - bit - 1, bits)] |= ((symbol >> (bits - bit - 1)) & 1) << (columns - column - 1);
 	}
 	return Array.from(words, (word) => {
+		// CR4/5 has one even-parity bit. It detects errors but cannot correct them.
+		if (rate === 1 && errors && parity(word)) errors.detected++;
 		if (rate <= 2) return reverseNibble(word >> rate);
 		let best = 0,
 			distance = 9;
@@ -70,10 +72,11 @@ export function crc16(data: Uint8Array): number {
 
 export function decodePayload(bins: number[], header: LoraHeader, ldro: boolean, cfoHz: number): LoraPacket {
 	const nibbles: number[] = [];
+	const errors = { detected: 0 };
 	const columns = header.codingRate + 4;
 	for (let offset = 8; offset < header.symbols; offset += columns) {
 		const symbols = bins.slice(offset, offset + columns).map((bin) => Math.floor(mod(bin - 1, 128) / (ldro ? 4 : 1)));
-		nibbles.push(...decodeBlock(symbols, ldro ? 5 : 7, header.codingRate));
+		nibbles.push(...decodeBlock(symbols, ldro ? 5 : 7, header.codingRate, errors));
 	}
 	const bytes = Uint8Array.from({ length: header.length + (header.hasCrc ? 2 : 0) }, (_, i) => nibbles[2 * i] | (nibbles[2 * i + 1] << 4));
 	let whitening = 255;
@@ -85,5 +88,12 @@ export function decodePayload(bins: number[], header: LoraHeader, ldro: boolean,
 	const length = header.length;
 	const calculated = length >= 2 ? crc16(bytes.subarray(0, length - 2)) ^ bytes[length - 1] ^ (bytes[length - 2] << 8) : -1;
 	const verified = header.hasCrc && calculated === (bytes[length] | (bytes[length + 1] << 8));
-	return { data: bytes.slice(0, length), verified, hasCrc: header.hasCrc, codingRate: header.codingRate, cfoHz };
+	return {
+		data: bytes.slice(0, length),
+		verified,
+		hasCrc: header.hasCrc,
+		codingRate: header.codingRate,
+		codingErrors: errors.detected,
+		cfoHz,
+	};
 }

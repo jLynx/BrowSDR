@@ -12,17 +12,138 @@ radio protocols still need their own decoders.
 
 These profiles were verified with LimeSDR-USB, RX1_L (RX1 / LNAL).
 
-| Signal | Measured centre           | PHY                                                                                         | Identity                                                            |
-| ------ | ------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| Upper  | approximately 923.118 MHz | SF7, BW500 kHz, CR4/6, explicit header, payload CRC, preamble32, sync [40,36], LDRO enabled | Mammotion wrapper and RTCM verified; receiver UNICORE UM960         |
-| Lower  | approximately 915.190 MHz | SF7, BW250 kHz, CR4/5, explicit header, no payload CRC, preamble16, sync [16,8]             | **Unverified**; Luba 2 pairing and payload format remain unresolved |
+| Signal       | Measured centre                                                     | PHY                                                                                         | Identity                                                                      |
+| ------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| Upper        | approximately 923.118 MHz                                           | SF7, BW500 kHz, CR4/6, explicit header, payload CRC, preamble32, sync [40,36], LDRO enabled | Mammotion wrapper and RTCM verified; receiver UNICORE UM960                   |
+| Experimental | approximately 915.190 MHz before restart; 918.060 MHz after restart | SF7, BW250 kHz, CR4/5, explicit header, no payload CRC, preamble16, sync [16,8]             | **Luba 2 candidate**; power-cycle association, pairing and payload unverified |
 
 These are uncalibrated receiver measurements. The antenna label does not
 establish an exact frequency. A Mammotion pairing code describes
-scan/channel/loc/net fields; its first number is not a frequency. The lower
+scan/channel/loc/net fields; its first number is not a frequency. The experimental
 signal's pairing fields have not been identified.
 The bases are not interchangeable, and the Luba 1 wrapper is not assumed to
 apply to Luba 2.
+
+### FCC and New Zealand frequency references
+
+FCC ID **2A8QJ-RTK0002** identifies the Luba 2 AWD RTK Reference Station.
+Its January 2024 LoRa test report, SGS **SZCR231000347702** (exhibit 7089749),
+lists CSS modulation and 26 US channels on page 6:
+
+| Channels | Centre frequencies (MHz)                            |
+| -------- | --------------------------------------------------- |
+| 0        | 902.500                                             |
+| 1–10     | 903.125–912.125, in 1 MHz steps                     |
+| 11–23    | 914.125–926.125, in 1 MHz steps; 913.125 is omitted |
+| 24–25    | 926.500, 926.800                                    |
+
+Channel 12 is 915.125 MHz and channel 20 is 923.125 MHz. Page 52 reports
+measured 6 dB bandwidths of 621, 624 and 616 kHz at the low, middle and high
+test frequencies. These are occupied-bandwidth measurements, not proof of
+a 625 kHz LoRa modem setting. The report does not establish the spreading
+factor, coding rate, sync word or application payload format.
+
+The installation being investigated is in New Zealand. The local SRD licence
+lists the **915–928 MHz** band; this is a search-band reference, not a
+Mammotion-specific channel plan. The FCC's wider US table does not establish
+the active frequency or regional configuration of a New Zealand/Australian
+base. Antenna labels and pairing numbers do not settle that question either.
+
+A July 2024 community report describes changed Luba 2 firmware using frequency
+hopping in the European band. It is an investigative lead, not confirmation
+of hopping or a channel plan for this installation. Short captures on one
+frequency cannot exclude an intermittent or hopping transmitter.
+
+### Waterfall candidates and receiver images
+
+Live waterfall inspection also found weak, narrow bursts around 918.8–919.55 MHz.
+The discovery tool estimated widths around 1–3 kHz for several bursts. The user
+subsequently switched off both RTK bases together: the regular wider streams
+disappeared, but the small dots continued. Exclude those dots from the RTK
+investigation; their modulation and source have not been identified.
+
+A 32-second narrow-band capture also contained interference at frequencies
+consistent with the two stronger streams aliasing into the reduced sample
+span. Individual FFT peaks from that recording must not be interpreted as
+separate hopping transmissions.
+
+A stronger apparent third stream near 931.06 MHz moved to approximately
+928.815 MHz when the SDR centre changed from 923.125 to 922 MHz, while the
+915.19 MHz stream stayed at its frequency. This matches an IQ receiver image
+at `2 × centre − signal`, with matching burst timing. Receiver images can also
+appear for the verified 923 MHz stream. Check how a candidate responds to
+centre retuning before treating every waterfall trace as a separate transmitter.
+
+### Reported power-cycle sequence
+
+The user's screenshots and account of restarting both bases together show:
+
+1. Paired side streams initially appear closer to the receiver centre.
+2. The verified 923.118 MHz correction stream starts.
+3. The initial side streams stop, and the wider-spaced 915.19 MHz stream and
+   its approximately 931.06 MHz receiver image appear.
+
+This strengthens the association between the 915.19 MHz stream and the powered
+RTK equipment. With the 923.118 MHz stream already associated with Luba 1,
+915.19 MHz is the leading Luba 2 candidate. The two side traces represent a
+signal and its receiver image, not two independently identified transmitters.
+The initial change may be channel selection during startup; continuous hopping
+has not been established. Both bases were switched together, so the test does
+not independently assign the second stream to one base or verify its payload.
+
+### Recorded power-cycle results
+
+A subsequent restart of both bases was recorded in fourteen short IQ slices
+at 10 MSPS, centred at 919.500 MHz. This nominally covers 914.5–924.5 MHz,
+so it cannot establish activity on the upper New Zealand channels. The slices
+have gaps, including a substantial gap during startup; they are not a continuous
+recording. All surviving slices report zero missing USB samples.
+
+The baseline contains the verified 923.118 MHz stream and the experimental
+915.190 MHz stream. Both are absent from the off-state slice. After power returns,
+the experimental stream appears at approximately **918.060 MHz**, initially
+with 30-byte packets and subsequently packets as large as 255 bytes. The verified
+923.118 MHz stream returns around the transition to larger experimental packets.
+Six analysed startup slices yield **38 complete packets with zero coding parity
+errors**. The baseline yields another **11**. All 49 share the same first eight
+decoded bytes, supporting a common packet family without verifying station identity.
+
+An initial coarse tuning estimate of 918.190 MHz produced misleading sync symbols
+and corrupted payloads. Correct tuning to 918.060 MHz restores **sync [16,8]** and
+clean parity. No change of sync word has been established. The browser diagnostics
+show observed sync symbols only after the explicit-header checksum passes.
+
+At a receiver centre of 923.125 MHz, the corresponding image appears near
+928.190 MHz. Retuning the centre to 922.125 MHz leaves the real stream near
+918.060 MHz and moves the image near 926.190 MHz. This is a receiver image,
+not evidence of another station or of hopping. Channel selection changed across
+the restart, but continuous hopping has not been demonstrated.
+
+The experimental VFO also recovers live headers and payloads at 40 MSPS with
+the receiver centre restored to 923.125 MHz. Live reception can still produce
+coding parity errors. No experimental application checksum, pairing identity,
+or RTCM CRC has passed; recovered bytes remain unverified.
+
+### Related RTK 3 protocol clues
+
+VE2MRX's RTK 3 research reports the same basic experimental PHY: SF7, BW250 kHz,
+CR4/5, explicit header, preamble16 and no LoRa payload CRC. Its US installation
+uses ascending 1 MHz channel steps with 600 ms dwell and a 15-second cycle.
+Those timings and channel plans have not been observed in this New Zealand
+Luba 2 investigation.
+
+That project describes a four-byte station-address header, a little-endian
+CRC16/MODBUS trailer, separate 21-byte beacons marked `55 55 00 40`, and
+containers beginning `A5 5A 04 01 04`. Containers carry sequence numbers and
+can span radio frames; address headers, checksum trailers and beacons must be
+excluded from the correction stream before reassembly.
+
+None of the 49 clean baseline/startup packets passes that whole-frame MODBUS
+checksum or contains its beacon or container markers in the expected decoded
+format. Nibble-order and whitening-phase checks also produce no matching
+structures. These are useful investigative leads, not established Luba 2 support.
+The next protocol step remains identifying and validating this stream's own
+application framing before displaying station identity or GNSS information.
 
 ## Live browser workflow
 
@@ -33,7 +154,8 @@ apply to Luba 2.
 4. The list combines verified bases from all enabled RTK VFOs. Select a row
    to see that base's location and map, satellite counts, GNSS signal quality
    and receiver model. **Decoder settings** controls the selected VFO's profile
-   and preset tuning.
+   and preset tuning. The experimental profile has no fixed-frequency preset;
+   tune its VFO to the active waterfall signal, which can change after a restart.
 5. **Save data** offers a station summary (JSON) or a verified correction
    stream (RTCM3), with explanations of both formats. **Diagnostics** contains
    pairing fields, message types, satellite IDs and packet/error counters.
@@ -67,17 +189,37 @@ frames from the selected VFO, even if RTCM station IDs are reused. Export
 filenames include the decoded identity. Radio diagnostics remain VFO-wide.
 
 The centre can differ from the VFO frequency: the existing WASM DDC supplies
-a 1 MSPS channel to the LoRa receiver. For a 10 MSPS view covering both
-signals, use a centre near 919 MHz and separate VFOs at 923.118 and 915.190 MHz.
+a 1 MSPS channel to the LoRa receiver. For a 10 MSPS view covering the measured
+signals, use a centre near 919.5 MHz and separate VFOs at 923.118 MHz and the
+experimental signal's current frequency (observed at 915.190 and 918.060 MHz).
+Use a wider sample span to investigate the full regional band.
 Select the lower profile on the second VFO. Its valid-header counter is
 diagnostic; unchecked payloads never become verified station or RTCM results.
 RTK telemetry currently works with a locally connected SDR, not remote
 WebRTC clients.
 
 **Decoder settings** includes a sample timing adjustment in ppm. The measured
-500 kHz signal uses +20 ppm; the lower profile starts at 0. This compensates
+500 kHz signal uses +20 ppm; fresh lower-channel captures recover clean coding
+parity near +10 ppm, which is now that profile's preset. This compensates
 sample timing, not carrier frequency calibration. Another SDR may need a
 different value.
+
+### Lower-channel investigation
+
+A fresh 12-second capture at 915.190 MHz recovered 39 explicit headers,
+including recurring 30-byte packets and larger packets up to 255 bytes.
+The current browser diagnostics show **Payloads recovered** separately from
+**Verified radio packets**, and count failed CR4/5 even-parity codewords under
+**Coding parity errors**. This parity code can detect an error but cannot correct
+it; passing parity is not a checksum or proof of a station identity.
+
+The recovered bytes have not produced checksum-verified RTCM or identified
+pairing fields. Standard LoRa coding/whitening and the published RTK3 wrapper
+were checked, but that wrapper has not been established for this signal.
+The experimental transmitter therefore remains unidentified. Neither encryption
+nor Luba 2 compatibility has been established. An initial SF8–10 check near
+923 MHz found no valid headers in the short capture; this does not exclude
+other parameters, weak signals, or intermittent/hopping transmissions.
 
 ## Validation and format
 
@@ -161,6 +303,9 @@ only invented identities and coordinates for visual review without hardware.
 
 ## References
 
+- [Luba 2 RTK FCC filing, 2A8QJ-RTK0002](https://fccid.io/2A8QJ-RTK0002) and [LoRa test report 7089749](https://fccid.io/2A8QJ-RTK0002/Test-Report/Test-Report-7089749): channel table on page 6; measured 6 dB bandwidth on page 52. FCC exhibits are viewed through a third-party mirror.
+- [New Zealand RSM Short Range Devices GURL](https://www.rsm.govt.nz/licensing/frequencies-for-anyone/short-range-devices-gurl) and [linked Gazette notice 2022-go3100](https://gazette.govt.nz/notice/id/2022-go3100): regional 915–928 MHz band reference.
+- [Community report of July 2024 Luba 2 firmware radio changes](https://www.reddit.com/r/MammotionTechnology/comments/1ea9yzo/rtk_with_new_firmware_july_23rd_2024/): unverified European frequency-hopping observations.
 - [gr-lora_sdr](https://github.com/tapparelj/gr-lora_sdr): PHY reference and independent synthetic waveform generator. Browser decoding uses its own TypeScript implementation.
 - [VE2MRX Mammotion RTK research](https://github.com/Ve2mrx/mammotion-rtk-lora): related RTK3 research; its wrapper and hopping assumptions differ from this verified Luba 1 signal.
 - [PyMammotion](https://github.com/mikey0000/PyMammotion): scan/channel/loc/net pairing fields.

@@ -6,7 +6,7 @@ export const rtkMethods = {
 		const index = this.activeVfoIndex;
 		if (!this.vfos[index]) return;
 		this.vfos[index].rtkProfile = frequency > 920 ? 'luba1' : 'lower';
-		this.vfos[index].rtkClockPpm = frequency > 920 ? 20 : 0;
+		this.vfos[index].rtkClockPpm = frequency > 920 ? 20 : 10;
 		this.validateAndApplyVfoFreq(index, frequency);
 		this.updateBackendVfoParams(index);
 	},

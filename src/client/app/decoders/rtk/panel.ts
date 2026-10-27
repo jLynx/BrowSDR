@@ -50,7 +50,7 @@ export default defineComponent({
 				now: now.value,
 			}),
 		);
-		const presetFrequency = computed(() => (vfo.value?.rtkProfile === 'lower' ? 915.19 : 923.118));
+		const presetFrequency = computed(() => (vfo.value?.rtkProfile === 'lower' ? undefined : 923.118));
 		const canDownload = computed(() => (exportFormat.value === 'corrections' ? frames.value.length > 0 : !!station.value));
 		return {
 			...mapView,
@@ -74,7 +74,7 @@ export default defineComponent({
 			signalStrength,
 			update: () => receiver.updateBackendVfoParams(index.value),
 			changeProfile: () => {
-				vfo.value.rtkClockPpm = vfo.value.rtkProfile === 'luba1' ? 20 : 0;
+				vfo.value.rtkClockPpm = vfo.value.rtkProfile === 'luba1' ? 20 : 10;
 				receiver.updateBackendVfoParams(index.value);
 			},
 			exportData: () => {

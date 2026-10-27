@@ -16,6 +16,8 @@ const initialStatus = (): RtkStatus => ({
 	samples: 0,
 	syncs: 0,
 	headers: 0,
+	payloads: 0,
+	codingErrors: 0,
 	packets: 0,
 	crcErrors: 0,
 	discontinuities: 0,
@@ -48,7 +50,7 @@ export class RtkStream {
 		}
 		const name = params.rtkProfile ?? 'luba1',
 			profile = RTK_PROFILES[name];
-		const ppm = params.rtkClockPpm ?? (name === 'luba1' ? 20 : 0);
+		const ppm = params.rtkClockPpm ?? (name === 'luba1' ? 20 : 10);
 		const key = JSON.stringify([params.freq, rate, center, name, ppm]);
 		if (this.key === key) return;
 		this.reset();

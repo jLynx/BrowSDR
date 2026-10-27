@@ -120,8 +120,13 @@
 						<option value="lower">LoRa · 250 kHz (experimental)</option>
 					</select></label
 				>
-				<UiButton variant="transcript" @click="receiver.tuneRtkVfo(presetFrequency)">Tune to {{ presetFrequency.toFixed(3) }} MHz</UiButton>
-				<p class="rtk-caption">Changes the selected VFO to the measured signal frequency.</p>
+				<template v-if="presetFrequency !== undefined">
+					<UiButton variant="transcript" @click="receiver.tuneRtkVfo(presetFrequency)"
+						>Tune to {{ presetFrequency.toFixed(3) }} MHz</UiButton
+					>
+					<p class="rtk-caption">Changes the selected VFO to the measured signal frequency.</p>
+				</template>
+				<p v-else class="rtk-caption">Tune the VFO to the active signal in the waterfall. This experimental signal can change channel.</p>
 				<label class="rtk-field"
 					>Sample timing adjustment (ppm)<input
 						v-model.number="vfo.rtkClockPpm"
@@ -132,7 +137,9 @@
 						aria-label="RTK sample clock correction"
 						@change="update"
 				/></label>
-				<p class="rtk-caption">Default: 20 for the 500 kHz profile, 0 for the experimental signal. Adjust only if packet decoding fails.</p>
+				<p class="rtk-caption">
+					Measured presets: 20 for the 500 kHz profile, 10 for the experimental signal. Other receivers may need different timing.
+				</p>
 			</div>
 		</details>
 		<details class="rtk-section">
@@ -164,6 +171,18 @@
 						<dt>LoRa headers detected</dt>
 						<dd>{{ status.headers }}</dd>
 					</div>
+					<div v-if="vfo.rtkProfile === 'lower'">
+						<dt>Payloads recovered</dt>
+						<dd>{{ status.payloads ?? 0 }}</dd>
+					</div>
+					<div v-if="vfo.rtkProfile === 'lower'">
+						<dt>Coding parity errors</dt>
+						<dd>{{ status.codingErrors ?? 0 }}</dd>
+					</div>
+					<div v-if="vfo.rtkProfile === 'lower' && status.syncSymbols">
+						<dt>Observed LoRa sync symbols</dt>
+						<dd>{{ status.syncSymbols.join(', ') }}</dd>
+					</div>
 					<div>
 						<dt>Checksum errors</dt>
 						<dd>{{ status.crcErrors }}</dd>
@@ -175,6 +194,10 @@
 				</dl>
 				<p v-else class="rtk-caption">No reception statistics yet.</p>
 				<p v-if="status" class="rtk-caption">Radio counters cover this VFO. Correction details below are for the selected base.</p>
+				<p v-if="status && vfo.rtkProfile === 'lower'" class="rtk-caption">
+					Recovered payloads without a LoRa checksum remain unverified, even with zero parity errors. The sync symbols describe this VFO's
+					latest valid header.
+				</p>
 				<template v-if="station">
 					<p>Pairing fields: scan {{ station.scan }}, channel {{ station.channel }}, net ID {{ station.netId }}.</p>
 					<p>{{ station.rtcmCount }} verified correction messages · RTCM types {{ Object.keys(station.rtcmTypes).join(', ') }}</p>

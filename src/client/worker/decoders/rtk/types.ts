@@ -20,6 +20,7 @@ export interface LoraPacket {
 	hasCrc: boolean;
 	codingRate: number;
 	cfoHz: number;
+	codingErrors?: number;
 }
 
 export interface RtkStatus {
@@ -28,9 +29,12 @@ export interface RtkStatus {
 	samples: number;
 	syncs: number;
 	headers: number;
+	payloads?: number;
+	codingErrors?: number;
 	packets: number;
 	crcErrors: number;
 	discontinuities: number;
+	syncSymbols?: [number, number];
 }
 
 export interface RtkStation {

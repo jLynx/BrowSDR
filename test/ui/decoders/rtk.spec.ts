@@ -164,6 +164,14 @@ describe('live RTK receiver tools', () => {
 		await nextTick();
 		await wrapper.get('select[aria-label="RTK VFO"]').setValue('1');
 		expect(wrapper.get('.rtk-heading .rtk-state').text()).toBe('Payload undecoded');
+		lower.status = { ...lower.status, payloads: 17, codingErrors: 2, syncSymbols: [16, 8] };
+		wrapper.vm._onRtkMessage(1, 915.19, lower);
+		await nextTick();
+		expect(wrapper.get('.rtk-heading .rtk-state').text()).toBe('Payload unverified');
+		const diagnostics = wrapper.get('.rtk-diagnostics').text();
+		expect(diagnostics).toContain('Payloads recovered17');
+		expect(diagnostics).toContain('Coding parity errors2');
+		expect(diagnostics).toContain('Observed LoRa sync symbols16, 8');
 		expect(wrapper.get('.rtk-empty').text()).toContain('Select a base from the list');
 		expect(wrapper.find('[aria-label="Base station position"]').exists()).toBe(false);
 		expect(wrapper.find('[aria-label="LoRa number"]').exists()).toBe(false);
@@ -202,6 +210,6 @@ describe('live RTK receiver tools', () => {
 		wrapper.vm._onRtkMessage(0, 915.19, lower);
 		expect(wrapper.vm.rtk.frames[0]).toEqual([]);
 		await wrapper.get('select[aria-label="RTK signal profile"]').setValue('lower');
-		expect(wrapper.vm.vfos[0].rtkClockPpm).toBe(0);
+		expect(wrapper.vm.vfos[0].rtkClockPpm).toBe(10);
 	});
 });

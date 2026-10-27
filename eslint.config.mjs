@@ -16,6 +16,7 @@ export default defineConfig(
 		'test-results/**',
 		'.wrangler/**',
 		'.cache/**',
+		'output/rtk/**',
 		'.codex/**',
 		'public/lib/**',
 		'wasm/dsp/pkg/**',

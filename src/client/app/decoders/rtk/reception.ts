@@ -10,6 +10,12 @@ export function receptionState(value: RtkReception): { label: string; detail: st
 	if (value.station?.lastCorrection && value.now - value.station.lastCorrection < 5000)
 		return { label: 'Live corrections', detail: 'Receiving verified correction data from this base.', tone: 'live' };
 	if (value.station) return { label: 'Waiting for corrections', detail: 'Showing the last received base data.', tone: 'idle' };
+	if (value.status?.payloads)
+		return {
+			label: 'Payload unverified',
+			detail: 'LoRa payload bytes recovered. Their format, checksums and base identity are not yet verified.',
+			tone: 'warning',
+		};
 	if (value.status?.headers)
 		return {
 			label: 'Payload undecoded',

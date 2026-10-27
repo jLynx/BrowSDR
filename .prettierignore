@@ -13,6 +13,7 @@ wasm/
 package-lock.json
 lint-results.json
 .cache/
+output/rtk/
 .codex/
 radio-proxy/
 # Raw fragments intentionally share opening/closing tags across files.
