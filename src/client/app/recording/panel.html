@@ -4,26 +4,28 @@
 	>
 	<div class="discovery-controls">
 		<label
-			>Duration (seconds)
-			<input v-model.number="seconds" type="number" min="0.01" step="1" aria-label="IQ capture duration" :disabled="active"
+			>Duration <input v-model.number="duration" type="number" min="0.01" step="any" aria-label="IQ capture duration" :disabled="active"
 		/></label>
-		<span
-			>{{ size.toFixed(1) }} MiB · {{ (receiver.radio.sampleRate / 1e6).toFixed(2) }} MSPS · {{ receiver.radio.centerFreq.toFixed(6) }}
-			MHz</span
-		>
+		<select v-model.number="unit" aria-label="IQ capture duration unit" :disabled="active">
+			<option :value="1">Seconds</option>
+			<option :value="60">Minutes</option>
+		</select>
+		<span>{{ size }} · {{ (receiver.radio.sampleRate / 1e6).toFixed(2) }} MSPS · {{ receiver.radio.centerFreq.toFixed(6) }} MHz</span>
 		<UiButton
 			variant="transcript"
-			:disabled="active || !receiver.running || receiver.remoteMode === 'client' || receiver.autoGain.active || !(size > 0 && size <= 64)"
+			:disabled="active || !!blockedReason"
+			:title="blockedReason || (saveToFile ? 'Choose a file and stream IQ directly to disk' : 'Capture IQ for download')"
 			@click="capture"
 			>Capture IQ</UiButton
 		>
 		<UiButton v-if="active" variant="transcript" @click="cancel">Cancel capture</UiButton>
 		<UiButton v-if="data" variant="transcript" @click="downloadData">Download IQ</UiButton>
-		<UiButton v-if="data" variant="transcript" @click="downloadMetadata">Download metadata</UiButton>
+		<UiButton v-if="metadata && !active" variant="transcript" @click="downloadMetadata">Download metadata</UiButton>
 	</div>
 	<div class="adsb-summary" role="status">{{ status }}</div>
 	<p class="ble-notice">
-		Signed 8-bit I/Q in SigMF format, up to 64 MiB. Choose a lower sample rate for longer captures. Retuning, changing gains, or stopping
-		reception cancels the capture.
+		Signed 8-bit I/Q in SigMF format for later demodulation and decoding. Captures above 64 MiB stream directly to a file in Chrome or Edge.
+		Choose Minutes for long captures; a lower receiver sample rate reduces file size and captured bandwidth. Keep the tab open while
+		recording. Retuning, changing gains, or stopping reception cancels the capture. Interrupted file captures are discarded.
 	</p>
 </section>

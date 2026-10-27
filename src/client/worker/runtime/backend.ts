@@ -102,6 +102,23 @@ export class Backend {
 	cancelIqCapture(): void {
 		this.iqCapture.cancel();
 	}
+
+	async captureIqToFile(seconds: number, file: FileSystemFileHandle) {
+		if (!this.device || !this._perfInterval || this._retuning || !this._sampleRate)
+			throw new Error('Start local reception before capturing IQ');
+		const device = this.device;
+		const before = device.getRxStreamStats?.();
+		let missingSamples: number | null = null;
+		const byteLength = await this.iqCapture.startToFile(this._sampleRate, seconds, file, () => {
+			const after = device.getRxStreamStats?.();
+			missingSamples = before && after ? after.sourceMissingSamples - before.sourceMissingSamples : null;
+		});
+		return { byteLength, missingSamples };
+	}
+
+	getIqCaptureProgress() {
+		return this.iqCapture.progress;
+	}
 	// Hardware — generic SDR device
 	device: SdrDevice | null = null;
 	wasm!: InitOutput;

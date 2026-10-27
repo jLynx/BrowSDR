@@ -291,8 +291,23 @@ and sequence gaps reset acquisition. No new application dependency is needed.
 ## Capture files and fixtures
 
 **Tools → IQ Capture** records raw signed IQ with SigMF metadata for further
-protocol research. Capture buffers are copied before USB reuse and cancelled
-on receiver lifecycle/configuration changes. Download both data and metadata.
+protocol research and offline demodulation. Choose Seconds or Minutes for the
+duration. Captures above 64 MiB open a save dialog in Chrome/Edge and stream
+directly to disk, including 8–30 minute recordings. Smaller captures stay in
+memory for download. Download the matching `.sigmf-meta` after either capture.
+The data is interleaved signed 8-bit I/Q (`ci8`), at the receiver sample rate,
+covering the full receiver bandwidth; no additional capture decimation is applied.
+For example, at 2 MSPS, 8 minutes is 1.92 GB and 15 minutes is 3.6 GB. Lower the
+receiver sample rate if less bandwidth is needed. Keep the tab open and ensure
+the disk has enough space and sustained write speed.
+
+Capture buffers are copied before USB reuse. The file write queue is bounded
+to 64 MiB; a disk that cannot keep up fails the capture instead of silently
+dropping data or accumulating the entire recording in memory. Retuning,
+changing gains, stopping reception, or disconnecting cancels the capture.
+Incomplete file captures are aborted rather than saved. USB sample loss is
+reported in the completion message and SigMF metadata when the device provides
+continuity statistics.
 
 RF captures, station exports and screenshots may expose a base's precise
 coordinates or pairing identifiers. They are ignored under `output/rtk/` and

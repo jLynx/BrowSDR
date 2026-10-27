@@ -1,5 +1,10 @@
-/** Bounded, sample-exact recording of the signed interleaved I/Q receiver stream. */
+import { FileIqCapture } from './file-capture';
+import { IQ_MEMORY_LIMIT, iqCaptureByteLength, iqCaptureTimeout } from './limits';
+import type { IqCaptureProgress } from './types';
+
+/** Sample-exact recording of signed interleaved I/Q, in memory or streamed to disk. */
 export class IqCapture {
+	private fileCapture?: FileIqCapture;
 	private recording?: {
 		data: Int8Array<ArrayBuffer>;
 		offset: number;
@@ -9,22 +14,37 @@ export class IqCapture {
 	};
 
 	start(sampleRate: number, seconds: number): Promise<Int8Array<ArrayBuffer>> {
-		if (this.recording) throw new Error('An IQ capture is already running');
-		const samples = Math.round(sampleRate * seconds);
-		if (!Number.isFinite(seconds) || seconds <= 0 || !Number.isFinite(samples) || samples < 1 || samples * 2 > 64 * 1024 * 1024)
-			throw new Error('Choose a capture duration between one sample and 64 MiB');
+		if (this.recording || this.fileCapture) throw new Error('An IQ capture is already running');
+		const length = iqCaptureByteLength(sampleRate, seconds);
+		if (length > IQ_MEMORY_LIMIT) throw new Error('Captures above 64 MiB must be saved directly to a file');
 		return new Promise((resolve, reject) => {
 			this.recording = {
-				data: new Int8Array(samples * 2),
+				data: new Int8Array(length),
 				offset: 0,
 				resolve,
 				reject,
-				timer: setTimeout(() => this.cancel('IQ capture timed out waiting for samples'), Math.max(10000, seconds * 3000)),
+				timer: setTimeout(() => this.cancel('IQ capture timed out waiting for samples'), iqCaptureTimeout(seconds)),
 			};
 		});
 	}
 
+	startToFile(sampleRate: number, seconds: number, file: FileSystemFileHandle, onInputComplete?: () => void): Promise<number> {
+		if (this.recording || this.fileCapture) throw new Error('An IQ capture is already running');
+		const capture = new FileIqCapture(iqCaptureByteLength(sampleRate, seconds), onInputComplete);
+		this.fileCapture = capture;
+		return capture.start(file, seconds).finally(() => {
+			this.fileCapture = undefined;
+		});
+	}
+
+	get progress(): IqCaptureProgress | null {
+		if (this.fileCapture) return this.fileCapture.progress;
+		const recording = this.recording;
+		return recording ? { capturedBytes: recording.offset, writtenBytes: recording.offset, totalBytes: recording.data.length } : null;
+	}
+
 	push(data: Int8Array): void {
+		this.fileCapture?.push(data);
 		const recording = this.recording;
 		if (!recording) return;
 		const length = Math.min(data.length, recording.data.length - recording.offset);
@@ -37,10 +57,11 @@ export class IqCapture {
 		}
 	}
 
-	cancel(message = 'IQ capture cancelled'): void {
+	cancel(message?: string): void {
+		this.fileCapture?.cancel(message);
 		if (!this.recording) return;
 		clearTimeout(this.recording.timer);
-		this.recording.reject(new Error(message));
+		this.recording.reject(new Error(message ?? 'IQ capture cancelled'));
 		this.recording = undefined;
 	}
 }

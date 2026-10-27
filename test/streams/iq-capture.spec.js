@@ -14,6 +14,7 @@ describe('raw IQ capture', () => {
 	it('bounds allocations and rejects a concurrent recording', async () => {
 		const capture = new IqCapture();
 		for (const seconds of [NaN, Infinity, -1, 0, 100]) expect(() => capture.start(1e6, seconds)).toThrow();
+		for (const sampleRate of [NaN, Infinity, -1, 0]) expect(() => capture.start(sampleRate, 1)).toThrow();
 		const done = capture.start(1e6, 1);
 		expect(() => capture.start(1e6, 1)).toThrow('already running');
 		const rejection = expect(done).rejects.toThrow('retuned');
