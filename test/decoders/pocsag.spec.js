@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { _POCSAGSingleBaud } from '@/worker/decoders/pocsag';
+import { FskBitSlicer } from '@/worker/decoders/fsk-frontend';
 
 /*
  * Synthetic-batch tests for the POCSAG decoder.
@@ -236,7 +237,7 @@ describe('POCSAG decoder — PR #49 review regressions', () => {
 			const msgs = [];
 			const dec = new _POCSAGSingleBaud(48000, baud, (m) => msgs.push(m));
 			const batch = buildBatch(0, alphaCodewords('DCTEST'));
-			const signal = buildSignal(batch, { baud, amp: 0.025, dc: 0.05 });
+			const signal = buildSignal(batch, { baud, amp: 0.025, dc: 0.05, preambleBits: 64 });
 			dec.process(signal);
 			expect(msgs.length, `baud ${baud}`).toBeGreaterThan(0);
 			expect(msgs[0].text).toContain('DCTEST');
@@ -341,5 +342,154 @@ describe('POCSAG decoder — PR #49 review regressions', () => {
 		const msgs = decodeBatch(0, numericCodewords('0123456789'));
 		expect(msgs[0].type).toBe('numeric');
 		expect(msgs[0].text).toContain('0123456789');
+	});
+});
+
+/*
+ * Batch-boundary re-lock alignment.
+ *
+ * After a batch ends the decoder searches bit-by-bit for the next frame sync
+ * codeword (FSC) and must re-lock at the EXACT 32-bit boundary. If the FSC
+ * search accepts a near-sync window one bit early (e.g. on bare Hamming
+ * distance without BCH-validating that the window corrects to exactly the sync
+ * word), the entire following batch is shifted by one bit: every codeword
+ * becomes a bit-shifted neighbour of the true word, which BCH then force-
+ * "corrects" into phantom codewords. On a live off-air capture this showed as
+ * an IDLE word (0x7a89c197) shifting into a bogus "message" 0xf513832e that
+ * BCH corrected to a phantom — the trailing check/parity bits read wrong while
+ * the data bits were a one-bit shift of IDLE.
+ *
+ * This drives TWO consecutive batches through the full slicer/PLL/framing
+ * audio path. The second batch forces a between-batch FSC re-lock; a one-bit
+ * misalignment corrupts its codewords. The payload must survive both batches.
+ */
+describe('POCSAG decoder — batch-boundary FSC re-lock alignment', () => {
+	/**
+	 * Build audio for consecutive batches, each preceded by its own 32-bit FSC
+	 * (as a real multi-batch transmission sends), with ONE preamble before the
+	 * first batch only. A clean, integer-spb square wave so any bit error is a
+	 * framing fault, not noise.
+	 */
+	function buildMultiBatchSignal(batches, { rate = 48000, baud = 512, amp = 0.3, syncErrors = [] } = {}) {
+		const spb = Math.round(rate / baud);
+		const bits = [];
+		for (let i = 0; i < 64; i++) bits.push(i & 1 ? 0 : 1); // preamble (first batch only)
+		batches.forEach((batch, bi) => {
+			// Optionally damage this batch's FSC by flipping the given bit
+			// positions, as live RF does — this is what lets the bit-by-bit FSC
+			// search reach its Hamming tolerance at a SHIFTED offset and re-lock
+			// one bit early, shifting the whole batch.
+			let fsc = _POCSAGSingleBaud.SYNC_WORD >>> 0;
+			for (const b of syncErrors[bi] ?? []) fsc = (fsc ^ (1 << b)) >>> 0;
+			for (const b of cwBits(fsc)) bits.push(b);
+			for (const cw of batch) for (const b of cwBits(cw)) bits.push(b);
+		});
+		for (let i = 0; i < 64; i++) bits.push(i & 1 ? 0 : 1); // trailing dwell
+		const out = new Float32Array(bits.length * spb);
+		let k = 0;
+		for (const bit of bits) {
+			const level = bit ? -amp : amp;
+			for (let s = 0; s < spb; s++) out[k++] = level;
+		}
+		return out;
+	}
+
+	it('re-locks at the exact boundary so a second batch decodes without a bit-shift', () => {
+		for (const baud of [512, 1200]) {
+			const msgs = [];
+			const dec = new _POCSAGSingleBaud(48000, baud, (m) => msgs.push(m));
+			// Batch 1 carries "FIRST", batch 2 carries "SECOND". Batch 2 can only
+			// decode correctly if the between-batch FSC re-lock is bit-exact.
+			const batch1 = buildBatch(0, alphaCodewords('FIRST'));
+			const batch2 = buildBatch(0, alphaCodewords('SECOND'));
+			const signal = buildMultiBatchSignal([batch1, batch2], { baud, amp: 0.3 });
+			dec.process(signal);
+			const texts = msgs.map((m) => m.text).join(' | ');
+			expect(msgs.length, `baud ${baud}: got [${texts}]`).toBeGreaterThanOrEqual(2);
+			expect(texts, `baud ${baud}`).toContain('FIRST');
+			expect(texts, `baud ${baud}`).toContain('SECOND');
+		}
+	});
+
+	it('re-locks exactly even when the between-batch FSC has a 1-bit error', () => {
+		// A 1-bit-damaged second FSC is BCH-correctable to the sync word, so the
+		// decoder must still re-lock — and at the CORRECT boundary. A bare-
+		// Hamming search can match the damaged window one bit early (a shifted
+		// offset also within Hamming tolerance), shifting batch 2. Validating
+		// that the window BCH-corrects to EXACTLY the sync word (osmocom's rule)
+		// pins the re-lock to the true boundary.
+		const msgs = [];
+		const dec = new _POCSAGSingleBaud(48000, 512, (m) => msgs.push(m));
+		const batch1 = buildBatch(0, alphaCodewords('FIRST'));
+		const batch2 = buildBatch(0, alphaCodewords('SECOND'));
+		// Flip one bit in batch 2's FSC (bit 5, an arbitrary data-region bit).
+		const signal = buildMultiBatchSignal([batch1, batch2], {
+			baud: 512,
+			amp: 0.3,
+			syncErrors: [[], [5]],
+		});
+		dec.process(signal);
+		const texts = msgs.map((m) => m.text).join(' | ');
+		expect(texts).toContain('FIRST');
+		expect(texts).toContain('SECOND');
+	});
+
+	it('does not manufacture phantom messages from a shifted IDLE batch', () => {
+		// Two all-IDLE batches: the only legitimate output is nothing (IDLE
+		// carries no page). A one-bit re-lock slip turns shifted IDLEs into
+		// BCH-corrected phantom "messages" — so any emitted message is the bug.
+		const msgs = [];
+		const dec = new _POCSAGSingleBaud(48000, 512, (m) => msgs.push(m));
+		const idleBatch = new Array(16).fill(_POCSAGSingleBaud.IDLE_CW);
+		const signal = buildMultiBatchSignal([idleBatch, idleBatch], { baud: 512, amp: 0.3 });
+		dec.process(signal);
+		expect(msgs.length, `phantom messages: ${JSON.stringify(msgs.map((m) => m.text))}`).toBe(0);
+	});
+});
+
+/*
+ * Bit-recovery timing integrity (the FskBitSlicer PLL).
+ *
+ * These are the tests the earlier suite lacked: they drive the slicer at the
+ * REAL, non-integer samples-per-bit the hardware produces (48000/512 = 93.75)
+ * using a CONTINUOUS bit clock (sample n belongs to bit floor(n/spb)), not a
+ * rounded integer grid. A correct PLL emits exactly one bit per symbol period
+ * over a long run; a PLL that drifts drops or duplicates a bit, which on the
+ * real decoder slid a whole batch by one bit and manufactured phantom
+ * codewords. The earlier tests used integer spb and never exercised this.
+ */
+describe('FskBitSlicer — fractional-spb timing integrity', () => {
+	/** Render a bit list at a continuous (possibly fractional) bit clock. */
+	function renderContinuous(bits, rate, baud, amp = 0.3) {
+		const spb = rate / baud;
+		const n = Math.floor(bits.length * spb);
+		const out = new Float32Array(n);
+		for (let i = 0; i < n; i++) out[i] = bits[Math.floor(i / spb)] ? -amp : amp;
+		return out;
+	}
+
+	/** Count bits the locked slicer emits for a rendered signal. */
+	function emittedBits(sig, rate, baud) {
+		let count = 0;
+		const dec = new FskBitSlicer(rate, baud, () => count++);
+		dec.pllLocked = true;
+		dec.process(sig);
+		return count;
+	}
+
+	// A correct PLL has ZERO CUMULATIVE drift: the emitted-vs-input bit-count
+	// error is a fixed edge artifact (acquisition settle + trailing partial
+	// symbol) that does NOT grow with stream length. We assert that by taking
+	// the SAME measurement at two very different lengths and requiring the error
+	// to be identical — any growth is real timing drift that slides batches.
+	it.each([512, 1200, 2400])('has no length-dependent timing drift at %i Bd', (baud) => {
+		const mk = (nbits) => {
+			const bits = [];
+			for (let i = 0; i < nbits; i++) bits.push(i & 1);
+			return emittedBits(renderContinuous(bits, 48000, baud), 48000, baud) - nbits;
+		};
+		const short = mk(4000);
+		const long = mk(40000);
+		expect(long, `baud ${baud}: drift grew ${short} -> ${long} over 10x length`).toBe(short);
 	});
 });

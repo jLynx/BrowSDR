@@ -1,7 +1,7 @@
 @import './styles/base.css';
 @import './styles/controls.css';
 @import './styles/transcription.css';
-@import './styles/pocsag.css';
+@import './styles/pager.css';
 @import './styles/rds.css';
 @import 'leaflet/dist/leaflet.css';
 @import './styles/adsb.css';

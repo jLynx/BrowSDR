@@ -102,7 +102,7 @@
 }
 
 .transcript-header.tool-header-closable,
-.pocsag-header.tool-header-closable,
+.msgcenter-header.tool-header-closable,
 .activity-header.tool-header-closable {
 	position: relative;
 }

@@ -1,4 +1,6 @@
 import type { POCSAGDecoder } from '@/worker/decoders/pocsag';
+import type { GSCDecoder } from '@/worker/decoders/golay';
+import type { FlexDecoder } from '@/worker/decoders/flex/decoder';
 import type { RDSDecoder } from '@/worker/decoders/rds';
 import type { CharsetKey } from '@/worker/decoders/charsets';
 import type { PocsagMode } from '@/worker/decoders/types';
@@ -51,6 +53,13 @@ export interface VfoParams {
 	pocsagCharset?: CharsetKey;
 	pocsagMode?: PocsagMode;
 	pocsagSecondGuess?: boolean;
+	gsc?: boolean;
+	/** Show the runner-up GSC alpha/numeric interpretation; default false. */
+	gscSecondGuess?: boolean;
+	/** Decode FLEX on this NFM VFO. */
+	flex?: boolean;
+	/** Selected FLEX charset (ASCII default, or Kanji which switches decoding). */
+	flexCharset?: CharsetKey;
 	rds: boolean;
 	rdsRegion: string;
 }
@@ -63,6 +72,16 @@ export interface VfoState {
 	pocsagStatusAt?: number;
 	/** Charset key currently applied to pocsagDecoder, to detect live changes. */
 	pocsagCharset?: CharsetKey;
+	/** GSC decoder instance (when params.gsc). */
+	gscDecoder?: GSCDecoder | null;
+	/** Last time (ms) a GSC status snapshot was emitted, for throttling. */
+	gscStatusAt?: number;
+	/** FLEX decoder instance (when params.flex). */
+	flexDecoder?: FlexDecoder | null;
+	/** Charset key currently applied to flexDecoder, to detect live changes. */
+	flexCharset?: CharsetKey;
+	/** Last time (ms) a FLEX status snapshot was emitted, for throttling. */
+	flexStatusAt?: number;
 	rdsDecoder: RDSDecoder | null;
 	audioQueue: Float32Array;
 	audioQueueLen: number;
@@ -152,6 +171,14 @@ export interface RemoteClientState {
 	pocsagStatusAt?: number[];
 	/** Per-index charset key currently applied, to detect live changes. */
 	pocsagCharsets?: Array<CharsetKey | undefined>;
+	/** Per-index GSC decoder instances. */
+	gscDecoders?: Array<GSCDecoder | null>;
+	/** Per-index last GSC status emission time (ms) for throttling. */
+	gscStatusAt?: number[];
+	/** Per-index FLEX decoder instances. */
+	flexDecoders?: Array<FlexDecoder | null>;
+	/** Per-index last FLEX status emission time (ms) for throttling. */
+	flexStatusAt?: number[];
 	rdsDecoders: Array<RDSDecoder | null>;
 	squelchOpen: boolean[];
 }

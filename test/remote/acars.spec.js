@@ -44,7 +44,7 @@ describe('ACARS local and remote routing', () => {
 		const worker = {};
 		const received = vi.fn();
 		const value = { dspWorkers: [removed, worker], vfoParams: [params, params] };
-		const send = (target) => routeLocalWorkerMessage(value, target, message, null, null, null, null, null, null, received);
+		const send = (target) => routeLocalWorkerMessage(value, target, message, null, null, null, null, null, null, null, received);
 		send(worker);
 		expect(received).toHaveBeenLastCalledWith(1, params.freq, message);
 		value.dspWorkers.splice(0, 1);

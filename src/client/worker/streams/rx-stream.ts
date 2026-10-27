@@ -7,9 +7,9 @@ import type {
 	SamplesCallback,
 	AudioCallback,
 	WhisperCallback,
-	PocsagCallback,
-	PocsagStatusCallback,
+	PagerCallbacks,
 	RdsCallback,
+	RdsStatusCallback,
 	Rtl433Callback,
 	AdsbCallback,
 	AisCallback,
@@ -49,15 +49,16 @@ import { spectrumSmoothingAlpha } from '@/display/spectrum-rate';
 
 let _streamStarting = false;
 
+// eslint-disable-next-line max-lines-per-function
 export async function startRxStream(
 	backend: Backend,
 	opts: RxStreamOpts,
 	spectrumCallback: SamplesCallback,
 	audioCallback: AudioCallback,
 	whisperCallback: WhisperCallback | null,
-	pocsagCallback: PocsagCallback | null,
-	pocsagStatusCallback: PocsagStatusCallback | null = null,
+	pager: PagerCallbacks,
 	rdsCallback: RdsCallback | null = null,
+	rdsStatusCallback: RdsStatusCallback | null = null,
 	dsdStatusCallback: DsdCallback | null = null,
 	rtl433Callback: Rtl433Callback | null = null,
 	adsbCallback: AdsbCallback | null = null,
@@ -113,6 +114,7 @@ export async function startRxStream(
 		initializeWorkers(backend, opts, {
 			rtl433Callback,
 			rdsCallback,
+			rdsStatusCallback,
 			dsdStatusCallback,
 			adsbCallback,
 			aisCallback,
@@ -132,7 +134,7 @@ export async function startRxStream(
 		// ── Audio Processing — helper processes a single VFO ──────────
 		// Returns Float32Array of audio samples, or null if none produced
 		let chunkCounter = 0;
-		installWorkerAudioHandler(backend, 0, perf, whisperCallback, pushWhisper, pocsagCallback, pocsagStatusCallback, pushAudio);
+		installWorkerAudioHandler(backend, 0, perf, whisperCallback, pushWhisper, pager, pushAudio);
 
 		// Apply initial gains BEFORE starting bulk reads to avoid
 		// control transfer conflicts with in-flight bulk transfers.
@@ -270,6 +272,7 @@ function initializeWorkers(
 	callbacks: {
 		rtl433Callback: Rtl433Callback | null;
 		rdsCallback: RdsCallback | null;
+		rdsStatusCallback: RdsStatusCallback | null;
 		dsdStatusCallback: DsdCallback | null;
 		adsbCallback: AdsbCallback | null;
 		aisCallback: AisCallback | null;
@@ -283,6 +286,7 @@ function initializeWorkers(
 		opts.centerFreq,
 		callbacks.rtl433Callback,
 		callbacks.rdsCallback,
+		callbacks.rdsStatusCallback,
 		callbacks.dsdStatusCallback,
 		opts.sampleRate,
 		callbacks.adsbCallback,

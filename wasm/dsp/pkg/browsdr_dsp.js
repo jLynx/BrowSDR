@@ -55,7 +55,7 @@ export class DspProcessor {
      */
     constructor(in_sample_rate, shift_hz, bandwidth) {
         const ret = wasm.dspprocessor_new(in_sample_rate, shift_hz, bandwidth);
-        this.__wbg_ptr = ret >>> 0;
+        this.__wbg_ptr = ret;
         DspProcessorFinalization.register(this, this.__wbg_ptr, this);
         return this;
     }
@@ -140,6 +140,7 @@ export class DspProcessor {
         wasm.dspprocessor_reset(this.__wbg_ptr);
     }
     /**
+     * FM-demod diagnostics over the last processed block. Raw phase step is
      * Enable or disable audio filters (LowPass, HighPass) for NFM.
      * @param {boolean} low_pass
      * @param {boolean} high_pass
@@ -153,6 +154,23 @@ export class DspProcessor {
      */
     set_bandwidth(bandwidth) {
         wasm.dspprocessor_set_bandwidth(this.__wbg_ptr, bandwidth);
+    }
+    /**
+     * Override the FM deviation reference used for output normalization.
+     *
+     * By default, `set_bandwidth` sets the deviation reference to `bandwidth/2`,
+     * so a tone at the channel edge maps to ±1.0. For 2-FSK pager decoders the
+     * nominal deviation is well-known and narrower than the channel (e.g. POCSAG
+     * and GSC use ±4.5 kHz within a 12.5 kHz channel), so the default reference
+     * of 6.25 kHz causes the demod to over-range on any burst that exceeds it.
+     * Calling this method with the known deviation (e.g. 4500.0) re-scales the
+     * output so a tone at that exact deviation maps to ±1.0, giving headroom for
+     * over-deviation without railing. Pass 0.0 to revert to the bandwidth/2
+     * default (the reference is restored on the next `set_bandwidth` call).
+     * @param {number} deviation_hz
+     */
+    set_fm_deviation(deviation_hz) {
+        wasm.dspprocessor_set_fm_deviation(this.__wbg_ptr, deviation_hz);
     }
     /**
      * Change the IF sample rate and rebuild the entire resampler/filter chain.
@@ -251,7 +269,7 @@ export class FFT {
         const ptr0 = passArrayF32ToWasm0(window_, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.fft_new(n, ptr0, len0);
-        this.__wbg_ptr = ret >>> 0;
+        this.__wbg_ptr = ret;
         FFTFinalization.register(this, this.__wbg_ptr, this);
         return this;
     }
@@ -286,7 +304,7 @@ export class SharedChannelizer {
         const ptr0 = passArray32ToWasm0(centers, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.sharedchannelizer_new(ratio, ptr0, len0);
-        this.__wbg_ptr = ret >>> 0;
+        this.__wbg_ptr = ret;
         SharedChannelizerFinalization.register(this, this.__wbg_ptr, this);
         return this;
     }
@@ -352,17 +370,16 @@ export function free_iq_buffer(ptr, capacity) {
 export function set_panic_hook() {
     wasm.set_panic_hook();
 }
-
 function __wbg_get_imports() {
     const import0 = {
         __proto__: null,
-        __wbg___wbindgen_copy_to_typed_array_5294f8e46aecc086: function(arg0, arg1, arg2) {
+        __wbg___wbindgen_copy_to_typed_array_88899a52af046901: function(arg0, arg1, arg2) {
             new Uint8Array(arg2.buffer, arg2.byteOffset, arg2.byteLength).set(getArrayU8FromWasm0(arg0, arg1));
         },
-        __wbg___wbindgen_throw_39bc967c0e5a9b58: function(arg0, arg1) {
+        __wbg___wbindgen_throw_41e9ee4f547fc59a: function(arg0, arg1) {
             throw new Error(getStringFromWasm0(arg0, arg1));
         },
-        __wbg_error_a6fa202b58aa1cd3: function(arg0, arg1) {
+        __wbg_error_757e9472f8410341: function(arg0, arg1) {
             let deferred0_0;
             let deferred0_1;
             try {
@@ -402,13 +419,13 @@ function __wbg_get_imports() {
 
 const DspProcessorFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
-    : new FinalizationRegistry(ptr => wasm.__wbg_dspprocessor_free(ptr >>> 0, 1));
+    : new FinalizationRegistry(ptr => wasm.__wbg_dspprocessor_free(ptr, 1));
 const FFTFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
-    : new FinalizationRegistry(ptr => wasm.__wbg_fft_free(ptr >>> 0, 1));
+    : new FinalizationRegistry(ptr => wasm.__wbg_fft_free(ptr, 1));
 const SharedChannelizerFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
-    : new FinalizationRegistry(ptr => wasm.__wbg_sharedchannelizer_free(ptr >>> 0, 1));
+    : new FinalizationRegistry(ptr => wasm.__wbg_sharedchannelizer_free(ptr, 1));
 
 function getArrayU8FromWasm0(ptr, len) {
     ptr = ptr >>> 0;
@@ -432,8 +449,7 @@ function getFloat32ArrayMemory0() {
 }
 
 function getStringFromWasm0(ptr, len) {
-    ptr = ptr >>> 0;
-    return decodeText(ptr, len);
+    return decodeText(ptr >>> 0, len);
 }
 
 let cachedUint32ArrayMemory0 = null;
@@ -539,8 +555,9 @@ if (!('encodeInto' in cachedTextEncoder)) {
 
 let WASM_VECTOR_LEN = 0;
 
-let wasmModule, wasm;
+let wasmModule, wasmInstance, wasm;
 function __wbg_finalize_init(instance, module) {
+    wasmInstance = instance;
     wasm = instance.exports;
     wasmModule = module;
     cachedDataViewMemory0 = null;
@@ -553,11 +570,15 @@ function __wbg_finalize_init(instance, module) {
 
 async function __wbg_load(module, imports) {
     if (typeof Response === 'function' && module instanceof Response) {
+        if (!module.ok) {
+            throw new Error(`failed to fetch Wasm: ${module.status} ${module.statusText} fetching '${module.url}'`);
+        }
+
         if (typeof WebAssembly.instantiateStreaming === 'function') {
             try {
                 return await WebAssembly.instantiateStreaming(module, imports);
             } catch (e) {
-                const validResponse = module.ok && expectedResponseType(module.type);
+                const validResponse = expectedResponseType(module.type);
 
                 if (validResponse && module.headers.get('Content-Type') !== 'application/wasm') {
                     console.warn("`WebAssembly.instantiateStreaming` failed because your server does not serve Wasm with `application/wasm` MIME type. Falling back to `WebAssembly.instantiate` which is slower. Original error:\n", e);

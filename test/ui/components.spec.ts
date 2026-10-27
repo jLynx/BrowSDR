@@ -117,8 +117,8 @@ describe('composed UI behavior', () => {
 		expect(wrapper.find('[aria-label="Close decoder"]').exists()).toBe(false);
 		await wrapper.setData({ closable: true });
 		const close = wrapper.get('[aria-label="Close decoder"]');
-		expect(wrapper.get('.pocsag-controls').element.contains(close.element)).toBe(false);
-		await wrapper.get('.pocsag-controls button').trigger('click');
+		expect(wrapper.get('.msgcenter-controls').element.contains(close.element)).toBe(false);
+		await wrapper.get('.msgcenter-controls button').trigger('click');
 		expect(wrapper.vm.closed).toBe(false);
 		await close.trigger('click');
 		expect(wrapper.vm.closed).toBe(true);

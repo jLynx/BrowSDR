@@ -25,7 +25,10 @@ import { bookmarkMethods } from '@/app/workspace/bookmarks';
 import { zoomMethods } from '@/app/display/zoom';
 import { audioMethods } from '@/app/audio/audio';
 import { whisperMethods } from '@/app/decoders/whisper';
+import { pagerMethods } from '@/app/decoders/pager';
 import { pocsagMethods } from '@/app/decoders/pocsag';
+import { gscMethods } from '@/app/decoders/gsc';
+import { flexMethods } from '@/app/decoders/flex';
 import { vfoMethods } from '@/app/radio/vfo';
 import { connectionMethods } from '@/app/radio/connection';
 import { remoteMethods } from '@/app/workspace/remote';
@@ -70,7 +73,10 @@ export const ReceiverView = defineComponent({
 		...zoomMethods,
 		...audioMethods,
 		...whisperMethods,
+		...pagerMethods,
 		...pocsagMethods,
+		...gscMethods,
+		...flexMethods,
 		...vfoMethods,
 		...connectionMethods,
 		...remoteMethods,

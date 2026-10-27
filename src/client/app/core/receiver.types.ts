@@ -19,7 +19,11 @@ import type { Vfo } from './types';
 import type { WorkspaceInstance } from '@/app/workspace/types';
 import type { WhisperMessage } from '@/transcription/types';
 import type { RDSMessage, POCSAGMessage, POCSAGStatus, Rtl433Protocol, Rtl433Message } from '@/worker/decoders/types';
-import type { PocsagLogEntry } from '@/app/decoders/types';
+import type { RdsStatus } from '@/worker/decoders/types';
+import type { GSCMessage, GSCStatus } from '@/worker/decoders/types';
+import type { FlexMessage, FlexStatus } from '@/worker/decoders/types';
+import type { PagerLogEntry } from '@/app/decoders/types';
+import type { PagerProtocol } from '@/worker/decoders/charsets';
 import type { DSDStatus } from '@/worker/decoders/dsd/types';
 import type { ReceiverCommand } from '@/remote/types';
 
@@ -169,22 +173,70 @@ export interface ReceiverMethods {
 	_flushWhisperVfoBuf(vfoIndex: number): void;
 	clearTranscript(): void;
 	exportTranscript(): void;
-	togglePocsagPanel(): void;
+	togglePagerPanel(): void;
 	togglePocsag(i: number): void;
-	pocsagCharsetGroups(): Array<{ vendor: string; items: Array<{ value: string; label: string }> }>;
+	pagerProtocols(): Array<{ id: PagerProtocol; label: string; hasCharsets: boolean }>;
+	setPagerFilter(value: string): void;
+	pagerRows(): PagerLogEntry[];
+	pagerCharsetGroups(protocol: PagerProtocol): Array<{ vendor: string; items: Array<{ value: string; label: string }> }>;
 	pocsagCharsetValue(i: number): string;
 	setPocsagCharset(i: number, value: string): void;
+	flexCharsetValue(i: number): string;
+	setFlexCharset(i: number, value: string): void;
 	setPocsagMode(i: number, value: string): void;
-	pocsagDisplayText(text: string): string;
+	pagerDisplayText(text: string): string;
 	_onPocsagMessage(vfoIndex: number, freqMhz: number, msg: POCSAGMessage): void;
-	pocsagSegments(entry: PocsagLogEntry): Array<{ text: string; status: number }>;
+	pagerSegments(entry: PagerLogEntry): Array<{ text: string; status: number }>;
 	_onPocsagStatus(vfoIndex: number, freqMhz: number, status: POCSAGStatus): void;
-	clearPocsag(): void;
-	exportPocsag(): void;
+	toggleGsc(i: number): void;
+	_onGscMessage(vfoIndex: number, freqMhz: number, msg: GSCMessage): void;
+	_onGscStatus(vfoIndex: number, freqMhz: number, status: GSCStatus): void;
+	/** Unmute/open squelch on a GSC voice page and restore it when the page ends. */
+	_gscAutoListen(vfoIndex: number, event: 'start' | 'stop'): void;
+	/** Saved mute/squelch state per VFO while auto-listen holds the channel open. */
+	_gscPriorMute: Map<number, { enabled: boolean; squelchEnabled: boolean }>;
+	toggleFlex(i: number): void;
+	_onFlexMessage(vfoIndex: number, freqMhz: number, msg: FlexMessage): void;
+	_onFlexStatus(vfoIndex: number, freqMhz: number, status: FlexStatus): void;
+	flexTzLabel(i: number): string;
+	flexCapClassLabel(cls: string): string;
+	flexMembers(members: number[]): string;
+	flexHasGroups(i: number): boolean;
+	flexGroupCellColor(state: string): string;
+	flexGroupSlotTitle(i: number, s: number): string;
+	clearPager(): void;
+	exportPager(): void;
 	_onDsdStatus(vfoIndex: number, status: DSDStatus): void;
 	_rdsStation(vfoIndex: number): AppInstance['rds']['stations'][number];
 	rdsActive(): AppInstance['rds']['stations'][number];
 	_onRdsMessage(vfoIndex: number, freqMhz: number, msg: RDSMessage): void;
+	_onRdsStatus(vfoIndex: number, freqMhz: number, status: RdsStatus): void;
+	_applyRdsStnFields(stn: AppInstance['rds']['stations'][number], msg: RDSMessage, time: string, freq: string, vfoIndex: number): void;
+	_applyRdsTextFields(stn: AppInstance['rds']['stations'][number], msg: RDSMessage, time: string, freq: string, vfoIndex: number): void;
+	_applyRdsFlagFields(stn: AppInstance['rds']['stations'][number], msg: RDSMessage, time: string, freq: string, vfoIndex: number): void;
+	_applyRdsServiceMeta(stn: AppInstance['rds']['stations'][number], msg: RDSMessage): void;
+	_applyRdsDiPinPaging(stn: AppInstance['rds']['stations'][number], msg: RDSMessage, time: string, freq: string, vfoIndex: number): void;
+	_applyRdsOdaFields(stn: AppInstance['rds']['stations'][number], msg: RDSMessage, time: string, freq: string, vfoIndex: number): void;
+	_applyRdsRtPlusFields(stn: AppInstance['rds']['stations'][number], msg: RDSMessage, time: string, freq: string, vfoIndex: number): void;
+	_rtPlusLogValue(n1: string | undefined, t1: string | undefined, n2: string | undefined, t2: string | undefined): string | null;
+	_applyRdsErtFields(stn: AppInstance['rds']['stations'][number], msg: RDSMessage, time: string, freq: string, vfoIndex: number): void;
+	_applyRdsEonPagingFields(
+		stn: AppInstance['rds']['stations'][number],
+		msg: RDSMessage,
+		time: string,
+		freq: string,
+		vfoIndex: number,
+	): void;
+	_applyRdsEonNetwork(stn: AppInstance['rds']['stations'][number], eon: NonNullable<RDSMessage['eon']>): void;
+	_applyRdsTmcMessage(
+		time: string,
+		freq: string,
+		vfoIndex: number,
+		tm: NonNullable<RDSMessage['tmcMessage']>,
+		srcGroup: string | undefined,
+	): void;
+	setRdsRegion(vfoIndex: number, region: string): void;
+	rdsFlagTitle(flag: string, value: boolean | null, a?: number, b?: number): string;
 	toggleDisplayLock(): void;
 	handleWheelZoom(e: WheelEvent, rect: DOMRect): void;
 	applyZoomToEngine(): void;

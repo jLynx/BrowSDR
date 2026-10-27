@@ -5,7 +5,7 @@ import UiButton from '@/ui/controls/UiButton';
 export default defineComponent({
 	name: 'UiToolHeader',
 	props: {
-		variant: { type: String as PropType<'transcript' | 'pocsag' | 'activity'>, default: 'pocsag' },
+		variant: { type: String as PropType<'transcript' | 'msgcenter' | 'activity'>, default: 'msgcenter' },
 		closable: Boolean,
 		closeLabel: { type: String, default: 'Close tool' },
 	},

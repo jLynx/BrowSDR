@@ -7,7 +7,7 @@
 	border-top: 2px solid var(--accent);
 	background: var(--bg-panel);
 }
-.adsb-panel .pocsag-header {
+.adsb-panel .msgcenter-header {
 	flex-wrap: wrap;
 	gap: 8px;
 }

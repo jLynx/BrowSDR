@@ -4,8 +4,8 @@
 	:class="{ 'adsb-fullscreen': fullscreen }"
 	aria-label="Radiosonde balloons"
 >
-	<UiToolHeader variant="pocsag" closable close-label="Close radiosonde panel" @close="receiver.toggleRadiosondePanel">
-		Radiosonde Balloons <span class="pocsag-count">{{ sondes.length }} balloons · {{ positioned.length }} located</span>
+	<UiToolHeader variant="msgcenter" closable close-label="Close radiosonde panel" @close="receiver.toggleRadiosondePanel">
+		Radiosonde Balloons <span class="msgcenter-count">{{ sondes.length }} balloons · {{ positioned.length }} located</span>
 		<template #actions>
 			<UiSelect v-model.number="receiver.activeVfoIndex" aria-label="Radiosonde VFO" class="decoder-vfo-select">
 				<option v-for="(vfo, i) in receiver.vfos" :key="i" :value="i">VFO {{ i + 1 }} · {{ vfo.freq.toFixed(3) }} MHz</option>
@@ -111,11 +111,11 @@
 			<UiInputGroup v-show="!selectedSonde" class="adsb-search"
 				><UiInput v-model="query" aria-label="Search balloons" placeholder="Search sonde ID"></UiInput
 			></UiInputGroup>
-			<UiEmptyState v-if="!selectedSonde && !sondes.length" variant="pocsag"
+			<UiEmptyState v-if="!selectedSonde && !sondes.length" variant="msgcenter"
 				>Waiting for RS41 transmissions. Start the SDR with an antenna covering 403 MHz; the map appears after a CRC-checked GPS
 				fix.</UiEmptyState
 			>
-			<UiEmptyState v-else-if="!selectedSonde && !filtered.length" variant="pocsag">No balloons match your search.</UiEmptyState>
+			<UiEmptyState v-else-if="!selectedSonde && !filtered.length" variant="msgcenter">No balloons match your search.</UiEmptyState>
 			<div v-if="filtered.length" v-show="!selectedSonde" class="adsb-table-wrap">
 				<table class="adsb-table">
 					<thead>

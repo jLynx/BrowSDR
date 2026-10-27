@@ -1,5 +1,6 @@
 import type {
 	RdsCallback,
+	RdsStatusCallback,
 	Rtl433Callback,
 	DsdCallback,
 	AdsbCallback,
@@ -18,6 +19,7 @@ export function initializeVfoWorkers(
 	centerFreq: number,
 	rtl433Callback: Rtl433Callback | null,
 	rdsCallback: RdsCallback | null,
+	rdsStatusCallback: RdsStatusCallback | null,
 	dsdStatusCallback: DsdCallback | null,
 	sampleRate: number,
 	adsbCallback: AdsbCallback | null = null,
@@ -94,6 +96,7 @@ export function initializeVfoWorkers(
 				e.data,
 				rtl433Callback,
 				rdsCallback,
+				rdsStatusCallback,
 				dsdStatusCallback,
 				adsbCallback,
 				aisCallback,
@@ -125,6 +128,7 @@ export function routeLocalWorkerMessage(
 	msg: DspOutput,
 	rtl433Callback: Rtl433Callback | null,
 	rdsCallback: RdsCallback | null,
+	rdsStatusCallback: RdsStatusCallback | null,
 	dsdStatusCallback: DsdCallback | null,
 	adsbCallback: AdsbCallback | null = null,
 	aisCallback: AisCallback | null = null,
@@ -133,24 +137,18 @@ export function routeLocalWorkerMessage(
 	radiosondeCallback: RadiosondeCallback | null = null,
 ) {
 	if (routePacketMessage(backend, worker, msg, bleCallback, aisCallback, adsbCallback, acarsCallback, radiosondeCallback)) return;
-
 	if (msg.type === 'rtl433_event' || msg.type === 'rtl433_status') {
 		routeSensorMessage(backend, worker, msg, rtl433Callback);
 		return;
 	}
 	if (msg.type === 'audio') {
-		// Look up current index dynamically — splice() in removeVfo
-		// shifts the array, so the captured `index` goes stale.
-		const currentIndex = backend.dspWorkers!.indexOf(worker);
-		if (currentIndex === -1) return; // worker was removed
-		backend._handleWorkerAudio!(currentIndex, msg);
-	} else if (msg.type === 'rds') {
 		const currentIndex = backend.dspWorkers!.indexOf(worker);
 		if (currentIndex === -1) return;
-		// Forward decoded RDS using the worker's current VFO index.
-		const params = backend.vfoParams![currentIndex];
-		if (rdsCallback && params) rdsCallback(currentIndex, params.freq, msg.msg);
-	} else if (msg.type === 'dsd_status') {
+		backend._handleWorkerAudio!(currentIndex, msg);
+		return;
+	}
+	if (routeRdsMessages(backend, worker, msg, rdsCallback, rdsStatusCallback)) return;
+	if (msg.type === 'dsd_status') {
 		const currentIndex = backend.dspWorkers!.indexOf(worker);
 		if (currentIndex === -1) return;
 		if (dsdStatusCallback) dsdStatusCallback(currentIndex, msg.status);
@@ -160,6 +158,30 @@ export function routeLocalWorkerMessage(
 		const currentIndex = backend.dspWorkers!.indexOf(worker);
 		console.error(`[DSP Worker ${currentIndex}] Error:`, msg.error);
 	}
+}
+
+function routeRdsMessages(
+	backend: Backend,
+	worker: Worker,
+	msg: DspOutput,
+	rdsCallback: RdsCallback | null,
+	rdsStatusCallback: RdsStatusCallback | null,
+): boolean {
+	if (msg.type === 'rds') {
+		const currentIndex = backend.dspWorkers!.indexOf(worker);
+		if (currentIndex === -1) return true;
+		const params = backend.vfoParams![currentIndex];
+		if (rdsCallback && params) rdsCallback(currentIndex, params.freq, msg.msg);
+		return true;
+	}
+	if (msg.type === 'rds_status') {
+		const currentIndex = backend.dspWorkers!.indexOf(worker);
+		if (currentIndex === -1) return true;
+		const params = backend.vfoParams![currentIndex];
+		if (rdsStatusCallback && params) rdsStatusCallback(currentIndex, params.freq, msg.status);
+		return true;
+	}
+	return false;
 }
 
 function routeSensorMessage(

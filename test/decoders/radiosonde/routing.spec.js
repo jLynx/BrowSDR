@@ -19,7 +19,7 @@ describe('Radiosonde routing', () => {
 		const worker = {};
 		const callback = vi.fn();
 		const backend = { dspWorkers: [worker], vfoParams: [params] };
-		const send = () => routeLocalWorkerMessage(backend, worker, message, null, null, null, null, null, null, null, callback);
+		const send = () => routeLocalWorkerMessage(backend, worker, message, null, null, null, null, null, null, null, null, callback);
 		send();
 		expect(callback).toHaveBeenCalledWith(0, 403, message);
 		backend.vfoParams[0] = { ...params, freq: 404 };

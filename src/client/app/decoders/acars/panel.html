@@ -1,6 +1,6 @@
 <section v-if="receiver.acars.panelOpen" class="adsb-panel acars-panel" aria-label="ACARS messages">
-	<UiToolHeader variant="pocsag" closable close-label="Close ACARS panel" @close="receiver.toggleAcarsPanel">
-		ACARS Messages <span class="pocsag-count">{{ messages.length }} messages</span>
+	<UiToolHeader variant="msgcenter" closable close-label="Close ACARS panel" @close="receiver.toggleAcarsPanel">
+		ACARS Messages <span class="msgcenter-count">{{ messages.length }} messages</span>
 		<template #actions>
 			<UiSelect v-model.number="receiver.activeVfoIndex" aria-label="ACARS VFO" class="decoder-vfo-select">
 				<option v-for="(vfo, i) in receiver.vfos" :key="i" :value="i">VFO {{ i + 1 }} · {{ vfo.freq.toFixed(3) }} MHz</option>

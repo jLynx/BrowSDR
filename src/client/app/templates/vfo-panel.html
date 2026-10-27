@@ -62,24 +62,64 @@
 			<UiCheckbox v-model="vfo.rds" label="Decode RDS" @change="receiver.updateBackendVfoParams(i)"></UiCheckbox>
 		</UiFormRow>
 
+		<!-- RDS live status: sync / BER / pilot -->
+		<div class="pager-status-panel" v-if="vfo.mode === 'wfm' && vfo.rds && receiver.rdsStatus[i]"
+			style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;padding:3px 6px;font-size:10px;">
+			<span style="display:flex;align-items:center;gap:4px;">
+				<span :style="{ width:'8px',height:'8px',borderRadius:'50%',display:'inline-block',flexShrink:0,background: receiver.rdsStatus[i]?.synced ? '#44cc44' : '#666' }"></span>
+				<span style="font-weight:700;color:#fff;">RDS {{ receiver.rdsStatus[i]?.synced ? 'SYNC' : 'HUNT' }}</span>
+			</span>
+			<span v-if="receiver.rdsStatus[i]?.synced"
+				:style="{ color: (receiver.rdsStatus[i].ber ?? 1) < 0.05 ? '#44cc44' : ((receiver.rdsStatus[i].ber ?? 1) < 0.2 ? '#ffcc44' : '#ff6644') }">
+				BER {{ ((receiver.rdsStatus[i].ber ?? 1) * 100).toFixed(0) }}%
+			</span>
+			<span v-if="!receiver.rdsStatus[i]?.synced && receiver.rdsStatus[i]?.ber < 1"
+				:style="{ color: '#aaa' }">
+				BER {{ ((receiver.rdsStatus[i].ber ?? 1) * 100).toFixed(0) }}%
+			</span>
+			<span v-if="receiver.rdsStatus[i]?.correctedBlocks > 0" style="opacity:0.6;"
+				:title="receiver.rdsStatus[i].correctedBlocks + ' BCH-corrected blocks'">
+				{{ receiver.rdsStatus[i].correctedBlocks }}↑
+			</span>
+		</div>
+
 		<UiFormRow class="full-checkbox-row" v-if="vfo.mode === 'nfm'">
 			<UiCheckbox v-model="vfo.pocsag" label="Decode POCSAG" @change="receiver.togglePocsag(i)"></UiCheckbox>
 		</UiFormRow>
 
-		<!-- POCSAG codepage selector (per-VFO). Shown when POCSAG is enabled. -->
-		<UiFormRow v-if="vfo.mode === 'nfm' && vfo.pocsag" class="pocsag-charset-row">
+		<!-- POCSAG live link status: sync / stage / speed / polarity / BER -->
+		<div class="pager-status-panel" v-if="vfo.mode === 'nfm' && vfo.pocsag"
+			style="padding:4px 8px;font-size:11px;font-family:monospace;line-height:1.6;background:rgba(0,0,0,0.3);border-radius:4px;margin:4px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+			<span style="display:flex;align-items:center;gap:6px;">
+				<span :style="{ width:'8px',height:'8px',borderRadius:'50%',display:'inline-block',flexShrink:0,background: receiver.pocsagStatus[i]?.synced ? '#44cc44' : '#666' }"></span>
+				<span style="font-weight:700;color:#fff;">POCSAG {{ receiver.pocsagStatus[i]?.synced ? 'SYNC' : 'HUNT' }}</span>
+			</span>
+			<span v-if="receiver.pocsagStatus[i]?.stage" style="color:#b39ddb;text-transform:uppercase;" title="What is being received">{{ receiver.pocsagStatus[i].stage }}</span>
+			<span v-if="receiver.pocsagStatus[i]?.baud" style="color:#aaa;">{{ receiver.pocsagStatus[i].baud }} Bd</span>
+			<span v-if="receiver.pocsagStatus[i]?.synced" :style="{ color: receiver.pocsagStatus[i]?.inverted ? '#ffcc44' : '#88aacc' }" title="Signal polarity">{{ receiver.pocsagStatus[i]?.inverted ? 'INV' : 'NORM' }}</span>
+			<span v-if="receiver.pocsagStatus[i]?.ber != null"
+				:style="{ color: receiver.pocsagStatus[i].ber < 0.01 ? '#44cc44' : (receiver.pocsagStatus[i].ber < 0.05 ? '#ffcc44' : '#ff6644') }">
+				BER {{ (receiver.pocsagStatus[i].ber * 100).toFixed(1) }}%
+			</span>
+			<span v-else-if="receiver.pocsagStatus[i]?.lastBer != null" style="color:#666;">
+				BER {{ (receiver.pocsagStatus[i].lastBer * 100).toFixed(1) }}%
+			</span>
+		</div>
+
+		<!-- POCSAG codepage selector (per-VFO). Shown when POCSAG is enabled and has charsets. -->
+		<UiFormRow v-if="vfo.mode === 'nfm' && vfo.pocsag" class="pager-charset-row">
 			<label>Charset</label>
 			<select class="decoder-vfo-select"
 				:value="receiver.pocsagCharsetValue(i)"
 				@change="receiver.setPocsagCharset(i, $event.target.value)">
-				<optgroup v-for="g in receiver.pocsagCharsetGroups()" :key="g.vendor" :label="g.vendor">
+				<optgroup v-for="g in receiver.pagerCharsetGroups('pocsag')" :key="g.vendor" :label="g.vendor">
 					<option v-for="o in g.items" :key="o.value" :value="o.value">{{ o.label }}</option>
 				</optgroup>
 			</select>
 		</UiFormRow>
 
 		<!-- POCSAG type-detection mode + second-guess (NFM + POCSAG only) -->
-		<UiFormRow v-if="vfo.mode === 'nfm' && vfo.pocsag" class="pocsag-mode-row">
+		<UiFormRow v-if="vfo.mode === 'nfm' && vfo.pocsag" class="pager-mode-row">
 			<label>Type</label>
 			<select class="decoder-vfo-select"
 				:value="vfo.pocsagMode || 'auto'"
@@ -93,20 +133,104 @@
 			<UiCheckbox v-model="vfo.pocsagSecondGuess" label="Show second guess" @change="receiver.updateBackendVfoParams(i)"></UiCheckbox>
 		</UiFormRow>
 
-		<!-- POCSAG live link status: sync · speed · polarity · BER -->
-		<div class="pocsag-status-panel" v-if="vfo.mode === 'nfm' && vfo.pocsag"
+		<!-- GSC (Golay) decode toggle (NFM). Default-only: no charset selector. -->
+		<UiFormRow class="full-checkbox-row" v-if="vfo.mode === 'nfm'">
+			<UiCheckbox v-model="vfo.gsc" label="Decode GSC" @change="receiver.toggleGsc(i)"></UiCheckbox>
+		</UiFormRow>
+
+		<!-- GSC live link status: sync / stage / speed / polarity / BER -->
+		<div class="pager-status-panel" v-if="vfo.mode === 'nfm' && vfo.gsc"
 			style="padding:4px 8px;font-size:11px;font-family:monospace;line-height:1.6;background:rgba(0,0,0,0.3);border-radius:4px;margin:4px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
 			<span style="display:flex;align-items:center;gap:6px;">
-				<span :style="{ width:'8px',height:'8px',borderRadius:'50%',display:'inline-block',flexShrink:0,background: receiver.pocsag.status[i]?.synced ? '#44cc44' : '#666' }"></span>
-				<span style="font-weight:700;color:#fff;">{{ receiver.pocsag.status[i]?.synced ? 'SYNC' : 'SEARCHING' }}</span>
+				<span :style="{ width:'8px',height:'8px',borderRadius:'50%',display:'inline-block',flexShrink:0,background: receiver.gscStatus[i]?.synced ? '#44cc44' : '#666' }"></span>
+				<span style="font-weight:700;color:#fff;">GSC {{ receiver.gscStatus[i]?.synced ? 'SYNC' : 'HUNT' }}</span>
 			</span>
-			<span v-if="receiver.pocsag.status[i]?.baud" style="color:#aaa;">{{ receiver.pocsag.status[i].baud }} Bd</span>
-			<span :style="{ color: receiver.pocsag.status[i]?.inverted ? '#ffcc44' : '#88aacc' }">{{ receiver.pocsag.status[i]?.inverted ? 'INV' : 'NORM' }}</span>
-			<span v-if="receiver.pocsag.status[i]?.ber != null"
-				:style="{ color: receiver.pocsag.status[i].ber < 0.01 ? '#44cc44' : (receiver.pocsag.status[i].ber < 0.05 ? '#ffcc44' : '#ff6644') }">
-				BER {{ (receiver.pocsag.status[i].ber * 100).toFixed(1) }}%
+			<span v-if="receiver.gscStatus[i]?.stage" style="color:#b39ddb;text-transform:uppercase;" title="What is being received">{{ receiver.gscStatus[i].stage }}</span>
+			<span v-if="receiver.gscStatus[i]?.baud" style="color:#aaa;">{{ receiver.gscStatus[i].baud }} Bd</span>
+			<span v-if="receiver.gscStatus[i]?.synced" :style="{ color: receiver.gscStatus[i]?.inverted ? '#ffcc44' : '#88aacc' }" title="Signal polarity">{{ receiver.gscStatus[i]?.inverted ? 'INV' : 'NORM' }}</span>
+			<span v-if="receiver.gscStatus[i]?.ber != null"
+				:style="{ color: receiver.gscStatus[i].ber < 0.01 ? '#44cc44' : (receiver.gscStatus[i].ber < 0.05 ? '#ffcc44' : '#ff6644') }">
+				BER {{ (receiver.gscStatus[i].ber * 100).toFixed(1) }}%
+			</span>
+			<span v-else-if="receiver.gscStatus[i]?.lastBer != null" style="color:#666;">
+				BER {{ (receiver.gscStatus[i].lastBer * 100).toFixed(1) }}%
 			</span>
 		</div>
+
+		<UiFormRow class="full-checkbox-row" v-if="vfo.mode === 'nfm' && vfo.gsc">
+			<UiCheckbox v-model="vfo.gscAutoListen" label="Auto-listen to voice pages"
+				title="On a GSC voice page, unmute and open squelch to hear the announcement, then restore when it ends"></UiCheckbox>
+		</UiFormRow>
+		<!-- GSC alpha/numeric are auto-discriminated by content score; expose the
+		     runner-up like POCSAG. Off by default. -->
+		<UiFormRow class="full-checkbox-row" v-if="vfo.mode === 'nfm' && vfo.gsc">
+			<UiCheckbox v-model="vfo.gscSecondGuess" label="Show second guess" @change="receiver.updateBackendVfoParams(i)"></UiCheckbox>
+		</UiFormRow>
+
+		<!-- FLEX (Motorola FLEX) decode toggle (NFM). -->
+		<UiFormRow class="full-checkbox-row" v-if="vfo.mode === 'nfm'">
+			<UiCheckbox v-model="vfo.flex" label="Decode FLEX" @change="receiver.toggleFlex(i)"></UiCheckbox>
+		</UiFormRow>
+
+		<!-- FLEX live link status: lock, pipeline stage, polarity, air mode,
+		     cycle/frame, BER, and network/temporal data from BIW (system id,
+		     country, date/time/timezone when the transmitter broadcasts them). -->
+		<div class="pager-status-panel" v-if="vfo.mode === 'nfm' && vfo.flex"
+			style="padding:4px 8px;font-size:11px;font-family:monospace;line-height:1.6;background:rgba(0,0,0,0.3);border-radius:4px;margin:4px 0;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+			<span style="display:flex;align-items:center;gap:6px;">
+				<span :style="{ width:'8px',height:'8px',borderRadius:'50%',display:'inline-block',flexShrink:0,background: receiver.flexStatus[i]?.locked ? '#44cc44' : '#666' }"></span>
+				<span style="font-weight:700;color:#fff;">FLEX {{ receiver.flexStatus[i]?.locked ? 'SYNC' : 'HUNT' }}</span>
+			</span>
+			<span v-if="receiver.flexStatus[i]?.locked" style="color:#b39ddb;text-transform:uppercase;">{{ receiver.flexStatus[i].stage }}</span>
+			<span v-if="receiver.flexStatus[i]?.locked" :style="{ color: receiver.flexStatus[i]?.inverted ? '#ffcc44' : '#88aacc' }" title="Signal polarity">{{ receiver.flexStatus[i]?.inverted ? 'INV' : 'NORM' }}</span>
+			<span v-if="receiver.flexStatus[i]?.mode" style="color:#aaa;">{{ receiver.flexStatus[i].mode }}</span>
+			<span v-if="receiver.flexStatus[i]?.cycle != null" style="color:#88aacc;">C{{ String(receiver.flexStatus[i].cycle).padStart(2, '0') }} F{{ String(receiver.flexStatus[i].frame).padStart(3, '0') }}</span>
+			<span v-if="receiver.flexStatus[i]?.ber != null"
+				:style="{ color: receiver.flexStatus[i].ber < 0.01 ? '#44cc44' : (receiver.flexStatus[i].ber < 0.05 ? '#ffcc44' : '#ff6644') }">
+				BER {{ (receiver.flexStatus[i].ber * 100).toFixed(1) }}%
+			</span>
+			<span v-else-if="receiver.flexStatus[i]?.lastBer != null" style="color:#666;">
+				BER {{ (receiver.flexStatus[i].lastBer * 100).toFixed(1) }}%
+			</span>
+			<span v-if="receiver.flexStatus[i]?.localId != null" style="color:#aaa;" title="Simulcast local channel ID / coverage zone">LID {{ receiver.flexStatus[i].localId }}<template v-if="receiver.flexStatus[i]?.coverageZone != null">/{{ receiver.flexStatus[i].coverageZone }}</template></span>
+			<span v-if="receiver.flexStatus[i]?.countryCode != null" style="color:#aaa;" title="Country code">CC {{ receiver.flexStatus[i].countryCode }}</span>
+			<span v-if="receiver.flexStatus[i]?.tmf != null" style="color:#aaa;" title="SSID2 traffic-management flags (which of the 4 traffic groups this channel serves)">TMF 0x{{ receiver.flexStatus[i].tmf.toString(16).toUpperCase() }}</span>
+			<span v-if="receiver.flexStatus[i]?.date" style="color:#8bc34a;">{{ receiver.flexStatus[i].date }}</span>
+			<span v-if="receiver.flexStatus[i]?.time" style="color:#8bc34a;">{{ receiver.flexStatus[i].time }}<template v-if="receiver.flexStatus[i]?.tzOffsetMin != null">&nbsp;{{ receiver.flexTzLabel(i) }}</template></span>
+			<span v-if="receiver.flexStatus[i]?.timePrecisionSec != null" style="color:#6d8a4a;font-size:9px;" :title="'Network time resolution: ' + (receiver.flexStatus[i].timePrecisionSec === 0.9375 ? '0.9375 s (extended seconds from TZ word)' : '7.5 s (coarse TIME step; no TZ word yet)')">&plusmn;{{ receiver.flexStatus[i].timePrecisionSec === 0.9375 ? '0.94' : '7.5' }}s</span>
+			<span v-if="receiver.flexStatus[i]?.dst != null" :style="{ color: receiver.flexStatus[i].dst ? '#8bc34a' : '#888' }" :title="receiver.flexStatus[i].dst ? 'Daylight saving time active' : 'Standard time (no DST)'">{{ receiver.flexStatus[i].dst ? 'DST' : 'STD' }}</span>
+			<span v-if="receiver.flexStatus[i]?.reasmBuffers" style="color:#ffb74d;" title="In-flight fragment reassembly buffers (this polarity)">REASM&times;{{ receiver.flexStatus[i].reasmBuffers }}</span>
+			<span v-if="receiver.flexStatus[i]?.lastSyncEvent" :style="{ color: receiver.flexStatus[i].lastSyncEvent.ers ? '#ff5252' : '#ffca28', fontWeight:700 }" :title="(receiver.flexStatus[i].lastSyncEvent.ers ? 'Emergency re-synchronization (ERS) detected -- base station lost sync timing; receiver re-synchronizes' : 'Reserved sync code detected (100% error-free)') + ': code 0x' + receiver.flexStatus[i].lastSyncEvent.code.toString(16).padStart(4, '0')">{{ receiver.flexStatus[i].lastSyncEvent.ers ? 'ERS' : 'SYNC' }}: {{ receiver.flexStatus[i].lastSyncEvent.label }}</span>
+		</div>
+		<!-- FLEX charset: ASCII default, or Kanji (switches alpha decoding to
+		     16-bit Shift-JIS). Selecting a handler charset changes the decode
+		     logic, it is not a glyph-table remap. -->
+		<UiFormRow v-if="vfo.mode === 'nfm' && vfo.flex" class="pager-charset-row">
+			<label>Charset</label>
+			<select class="decoder-vfo-select"
+				:value="receiver.flexCharsetValue(i)"
+				@change="receiver.setFlexCharset(i, $event.target.value)">
+				<optgroup v-for="g in receiver.pagerCharsetGroups('flex')" :key="g.vendor" :label="g.vendor">
+					<option v-for="o in g.items" :key="o.value" :value="o.value">{{ o.label }}</option>
+				</optgroup>
+			</select>
+		</UiFormRow>
+
+
+
+		<!-- FLEX group-messaging slots (A1): 16 temporary-address slots as a
+		     2x8 colored mini-grid. grey=idle, blue=registered, amber=delivering.
+		     Hover a cell for slot #, state, target frame, and member capcodes. -->
+		<div v-if="vfo.mode === 'nfm' && vfo.flex && receiver.flexHasGroups(i)"
+			style="padding:4px 8px;margin:4px 0;background:rgba(0,0,0,0.3);border-radius:4px;">
+			<div style="font-size:9px;font-weight:700;color:#aaa;letter-spacing:0.5px;margin-bottom:3px;">GROUP SLOTS</div>
+			<div style="display:grid;grid-template-columns:repeat(8,1fr);gap:2px;max-width:200px;">
+				<span v-for="(slot, s) in receiver.flexStatus[i].groupSlots" :key="s"
+					:title="receiver.flexGroupSlotTitle(i, s)"
+					:style="{ height:'10px', borderRadius:'2px', cursor:'help', background: receiver.flexGroupCellColor(slot.state) }"></span>
+			</div>
+		</div>
+
 
 		<!-- DSD status display (SDR++ Brown style) -->
 		<div class="dsd-status-panel" v-if="vfo.mode === 'dsd'" style="padding:4px 8px;font-size:11px;font-family:monospace;line-height:1.6;background:rgba(0,0,0,0.3);border-radius:4px;margin:4px 0;">
@@ -156,9 +280,9 @@
 
 		<UiFormRow v-if="vfo.mode === 'wfm' && vfo.rds" style="align-items: center;">
 			<label :for="receiver.receiverId + '-rds-region-' + i" style="flex: 0 0 120px; opacity: 0.7;">RDS Region</label>
-			<UiSelect :id="receiver.receiverId + '-rds-region-' + i" v-model="vfo.rdsRegion" style="width: 130px; margin-left: auto;" title="Programme-type labels. Use Europe for regions using RDS; North America for RBDS.">
-				<option value="eu">Europe</option>
-				<option value="na">North America</option>
+			<UiSelect :id="receiver.receiverId + '-rds-region-' + i" :modelValue="vfo.rdsRegion || 'eu'" @update:modelValue="receiver.setRdsRegion(i, $event)" style="width: 130px; margin-left: auto;" title="RDS region: sets programme-type labels and auto-selects de-emphasis (EU=50µs, NA=75µs).">
+				<option value="eu">RDS (Europe)</option>
+				<option value="na">RBDS (US)</option>
 			</UiSelect>
 		</UiFormRow>
 

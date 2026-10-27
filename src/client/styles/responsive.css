@@ -290,14 +290,14 @@
 
 	/* ── Bottom Panels (transcript, POCSAG, activity) ── */
 	.transcript-panel,
-	.pocsag-panel,
+	.msgcenter-panel,
 	.activity-panel {
 		height: 40vh;
 		max-height: 50vh;
 	}
 
 	.transcript-header,
-	.pocsag-header,
+	.msgcenter-header,
 	.activity-header {
 		flex-wrap: wrap;
 		gap: 6px;
@@ -305,14 +305,14 @@
 	}
 
 	.transcript-controls,
-	.pocsag-controls,
+	.msgcenter-controls,
 	.activity-controls {
 		flex-wrap: wrap;
 		gap: 4px;
 	}
 
 	.transcript-header.tool-header-closable,
-	.pocsag-header.tool-header-closable,
+	.msgcenter-header.tool-header-closable,
 	.activity-header.tool-header-closable {
 		padding-right: 50px;
 	}
@@ -337,13 +337,13 @@
 		gap: 4px;
 	}
 
-	.pocsag-entry {
+	.msgcenter-entry {
 		flex-wrap: wrap;
 		gap: 4px;
 		margin-bottom: 8px;
 	}
 
-	.pocsag-text {
+	.msgcenter-text {
 		flex-basis: 100%;
 		white-space: normal;
 		word-break: break-word;
@@ -459,7 +459,7 @@
 
 @media (max-width: 768px) and (hover: none) and (pointer: coarse) {
 	.transcript-controls,
-	.pocsag-controls,
+	.msgcenter-controls,
 	.activity-controls {
 		gap: 6px;
 		min-width: 0;
@@ -469,7 +469,7 @@
 	/* Tool actions stay compact instead of inheriting sidebar-sized buttons. */
 	.transcript-btn,
 	.transcript-controls .btn,
-	.pocsag-controls .btn,
+	.msgcenter-controls .btn,
 	.activity-controls .btn {
 		flex: none;
 		min-height: 28px;
@@ -479,7 +479,7 @@
 	}
 
 	.transcript-controls select,
-	.pocsag-controls select,
+	.msgcenter-controls select,
 	.activity-controls select {
 		min-height: 28px;
 		max-width: 100%;
@@ -488,21 +488,21 @@
 	}
 
 	.transcript-controls .custom-checkbox,
-	.pocsag-controls .custom-checkbox,
+	.msgcenter-controls .custom-checkbox,
 	.activity-controls .custom-checkbox {
 		min-height: 28px;
 		font-size: 11px;
 	}
 
 	.transcript-controls .checkmark,
-	.pocsag-controls .checkmark,
+	.msgcenter-controls .checkmark,
 	.activity-controls .checkmark {
 		width: 16px;
 		height: 16px;
 	}
 
 	.transcript-controls .checkmark:after,
-	.pocsag-controls .checkmark:after,
+	.msgcenter-controls .checkmark:after,
 	.activity-controls .checkmark:after {
 		left: 5px;
 		top: 2px;

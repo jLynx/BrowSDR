@@ -30,7 +30,10 @@ import { vfoMethods } from './radio/vfo';
 import { settingsMethods } from './radio/settings';
 import { bookmarkMethods } from './workspace/bookmarks';
 import { whisperMethods } from './decoders/whisper';
+import { pagerMethods } from './decoders/pager';
 import { pocsagMethods } from './decoders/pocsag';
+import { gscMethods } from './decoders/gsc';
+import { flexMethods } from './decoders/flex';
 import { dsdMethods } from './decoders/dsd';
 import { rdsMethods } from './decoders/rds';
 import { zoomMethods } from './display/zoom';
@@ -84,7 +87,10 @@ const Receiver = {
 		...settingsMethods,
 		...bookmarkMethods,
 		...whisperMethods,
+		...pagerMethods,
 		...pocsagMethods,
+		...gscMethods,
+		...flexMethods,
 		...dsdMethods,
 		...rdsMethods,
 		...zoomMethods,

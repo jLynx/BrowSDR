@@ -1,6 +1,6 @@
 <section v-if="receiver.discovery.panelOpen" class="adsb-panel discovery-panel" aria-label="Signal Discovery">
-	<UiToolHeader variant="pocsag" closable close-label="Close Signal Discovery" @close="receiver.discovery.panelOpen = false">
-		Signal Discovery <span class="pocsag-count">{{ result.signals.length }} signals</span>
+	<UiToolHeader variant="msgcenter" closable close-label="Close Signal Discovery" @close="receiver.discovery.panelOpen = false">
+		Signal Discovery <span class="msgcenter-count">{{ result.signals.length }} signals</span>
 		<template #actions>
 			<UiCheckbox v-model="receiver.discovery.enabled" label="Discover signals" />
 			<UiButton variant="transcript" @click="reset">Clear history</UiButton>
