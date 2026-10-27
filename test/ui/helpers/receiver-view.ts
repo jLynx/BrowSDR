@@ -1,3 +1,5 @@
+import RtkPanel from '@/app/decoders/rtk/panel';
+import { rtkMethods } from '@/app/decoders/rtk/controller';
 import BlePanel from '@/app/decoders/ble/panel';
 import { bleMethods } from '@/app/decoders/ble/controller';
 import AcarsPanel from '@/app/decoders/acars/panel';
@@ -31,6 +33,7 @@ import { connectionMethods } from '@/app/radio/connection';
 import { remoteMethods } from '@/app/workspace/remote';
 import HeaderTools from '@/app/workspace/receiver-tools';
 import DiscoveryPanel from '@/app/discovery/panel';
+import IqCapturePanel from '@/app/recording/panel';
 
 export const ReceiverView = defineComponent({
 	template,
@@ -43,10 +46,12 @@ export const ReceiverView = defineComponent({
 		AdsbPanel,
 		AisPanel,
 		RadiosondePanel,
+		RtkPanel,
 		BlePanel,
 		AcarsPanel,
 		HeaderTools,
 		DiscoveryPanel,
+		IqCapturePanel,
 	},
 	provide() {
 		return { receiver: this };
@@ -64,6 +69,7 @@ export const ReceiverView = defineComponent({
 		...adsbMethods,
 		...aisMethods,
 		...radiosondeMethods,
+		...rtkMethods,
 		...bleMethods,
 		...acarsMethods,
 		...bookmarkMethods,

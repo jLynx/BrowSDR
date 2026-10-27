@@ -303,9 +303,7 @@ export const connectionMethods = {
 				Comlink.proxy((spectrumData: Float32Array) => this.drawSpectrum(spectrumData)),
 				Comlink.proxy((audioSamples: Float32Array, channels: 1 | 2 = 1) => this.playAudio(audioSamples, channels)),
 				Comlink.proxy((vfoIndex: number, freq: number, samples: Float32Array) => this._feedWhisperVfo(vfoIndex, freq, samples)),
-				Comlink.proxy((vfoIndex: number, freq: number, msg: Parameters<AppInstance['_onPocsagMessage']>[2]) =>
-					this._onPocsagMessage(vfoIndex, freq, msg),
-				),
+				Comlink.proxy(this._onPocsagMessage.bind(this)),
 				Comlink.proxy((vfoIndex: number, freq: number, status: Parameters<AppInstance['_onPocsagStatus']>[2]) =>
 					this._onPocsagStatus(vfoIndex, freq, status),
 				),
@@ -325,6 +323,7 @@ export const connectionMethods = {
 				Comlink.proxy(this._onBleMessage.bind(this)),
 				Comlink.proxy(this._onAcarsMessage.bind(this)),
 				Comlink.proxy(this._onRadiosondeMessage.bind(this)),
+				Comlink.proxy(this._onRtkMessage.bind(this)),
 			);
 		} catch (e) {
 			console.error('Error starting RX stream:', e);
@@ -480,6 +479,10 @@ function clearDecoderSources(receiver: AppInstance): void {
 	receiver.radiosonde.sources = [];
 	receiver.ais.status = [];
 	receiver.radiosonde.status = [];
+	receiver.rtk.status = [];
+	receiver.rtk.sources = [];
+	receiver.rtk.frames = [];
+	receiver.rtk.frequencies = [];
 	receiver.ble.status = [];
 	receiver.acars.status = [];
 	receiver.acars.sources = [];

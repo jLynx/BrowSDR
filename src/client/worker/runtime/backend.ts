@@ -9,6 +9,7 @@ import type {
 	AdsbCallback,
 	AisCallback,
 	RadiosondeCallback,
+	RtkCallback,
 	BleCallback,
 	AcarsCallback,
 	DsdCallback,
@@ -82,8 +83,25 @@ import { startRxStream } from '@/worker/streams/rx-stream';
 import type { VfoParams, VfoState, PerfCounters, RxStreamOpts, RemoteClientState, DeviceOpenOpts } from './types';
 import { displayToDeviceFrequencyHz } from '@/radio/frequency-shift';
 import { selectUsbDevice } from '@/radio/usb-device-selection';
+import { transfer } from 'comlink';
+import { IqCapture } from '@/worker/recording/iq-capture';
 
 export class Backend {
+	readonly iqCapture = new IqCapture();
+
+	async captureIq(seconds: number) {
+		if (!this.device || !this._perfInterval || this._retuning || !this._sampleRate)
+			throw new Error('Start local reception before capturing IQ');
+		const before = this.device.getRxStreamStats?.();
+		const data = await this.iqCapture.start(this._sampleRate, seconds);
+		const after = this.device.getRxStreamStats?.();
+		const missingSamples = before && after ? after.sourceMissingSamples - before.sourceMissingSamples : null;
+		return transfer({ data, missingSamples }, [data.buffer]);
+	}
+
+	cancelIqCapture(): void {
+		this.iqCapture.cancel();
+	}
 	// Hardware — generic SDR device
 	device: SdrDevice | null = null;
 	wasm!: InitOutput;
@@ -244,7 +262,9 @@ export class Backend {
 		bleCallback: BleCallback | null = null,
 		acarsCallback: AcarsCallback | null = null,
 		radiosondeCallback: RadiosondeCallback | null = null,
+		rtkCallback: RtkCallback | null = null,
 	): Promise<void> {
+		this.iqCapture.cancel('Reception restarted during IQ capture');
 		return startRxStream(
 			this,
 			opts,
@@ -261,6 +281,7 @@ export class Backend {
 			bleCallback,
 			acarsCallback,
 			radiosondeCallback,
+			rtkCallback,
 		);
 	}
 
@@ -366,6 +387,7 @@ export class Backend {
 	}
 
 	async setFrequency(centerFreqMhz: number, frequencyShiftMhz = 0): Promise<void> {
+		this.iqCapture.cancel('Receiver retuned during IQ capture');
 		if (!this.device) throw new Error('No device connected');
 		this._retuning = true;
 		try {
@@ -407,6 +429,7 @@ export class Backend {
 	}
 
 	async setGain(name: string, value: number): Promise<void> {
+		this.iqCapture.cancel('Receiver gains changed during IQ capture');
 		if (!this.device) throw new Error('No device connected');
 		await this.device.setGain(name, value);
 	}
@@ -416,6 +439,7 @@ export class Backend {
 	}
 
 	async setGains(gains: Record<string, number>): Promise<void> {
+		this.iqCapture.cancel('Receiver gains changed during IQ capture');
 		if (!this.device) throw new Error('No device connected');
 		if (this.device.setGains) {
 			await this.device.setGains(gains);
@@ -432,6 +456,7 @@ export class Backend {
 	}
 
 	async stopRx(): Promise<void> {
+		this.iqCapture.cancel('Reception stopped during IQ capture');
 		if (!this.device) throw new Error('No device connected');
 		this._streamGeneration++;
 		try {
@@ -468,6 +493,7 @@ export class Backend {
 	}
 
 	async close(): Promise<void> {
+		this.iqCapture.cancel('Receiver disconnected during IQ capture');
 		if (!this.device) return;
 		this._streamGeneration++;
 		try {

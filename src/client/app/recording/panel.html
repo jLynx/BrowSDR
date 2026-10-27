@@ -1,0 +1,29 @@
+<section v-if="receiver.iqRecording.panelOpen" class="adsb-panel discovery-panel" aria-label="IQ Capture">
+	<UiToolHeader variant="pocsag" closable close-label="Close IQ Capture" @close="receiver.iqRecording.panelOpen = false"
+		>IQ Capture</UiToolHeader
+	>
+	<div class="discovery-controls">
+		<label
+			>Duration (seconds)
+			<input v-model.number="seconds" type="number" min="0.01" step="1" aria-label="IQ capture duration" :disabled="active"
+		/></label>
+		<span
+			>{{ size.toFixed(1) }} MiB · {{ (receiver.radio.sampleRate / 1e6).toFixed(2) }} MSPS · {{ receiver.radio.centerFreq.toFixed(6) }}
+			MHz</span
+		>
+		<UiButton
+			variant="transcript"
+			:disabled="active || !receiver.running || receiver.remoteMode === 'client' || receiver.autoGain.active || !(size > 0 && size <= 64)"
+			@click="capture"
+			>Capture IQ</UiButton
+		>
+		<UiButton v-if="active" variant="transcript" @click="cancel">Cancel capture</UiButton>
+		<UiButton v-if="data" variant="transcript" @click="downloadData">Download IQ</UiButton>
+		<UiButton v-if="data" variant="transcript" @click="downloadMetadata">Download metadata</UiButton>
+	</div>
+	<div class="adsb-summary" role="status">{{ status }}</div>
+	<p class="ble-notice">
+		Signed 8-bit I/Q in SigMF format, up to 64 MiB. Choose a lower sample rate for longer captures. Retuning, changing gains, or stopping
+		reception cancels the capture.
+	</p>
+</section>

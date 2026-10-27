@@ -2,7 +2,7 @@ import { installWorkerAudioHandler, createAudioBatchers } from './local-audio';
 import { initializePerformanceReporting } from './performance';
 import { dispatchIqChunk } from './channel-dispatch';
 import { initializeVfoWorkers } from './vfo-workers';
-import { configureReceiveGains, startUsbOnlyStream } from './usb-diagnostic';
+import { configureReceiveGains, startUsbOnlyStream, isUsbOnlyReceive } from './usb-diagnostic';
 import type {
 	SamplesCallback,
 	AudioCallback,
@@ -14,6 +14,7 @@ import type {
 	AdsbCallback,
 	AisCallback,
 	RadiosondeCallback,
+	RtkCallback,
 	BleCallback,
 	AcarsCallback,
 	DsdCallback,
@@ -65,6 +66,7 @@ export async function startRxStream(
 	bleCallback: BleCallback | null = null,
 	acarsCallback: AcarsCallback | null = null,
 	radiosondeCallback: RadiosondeCallback | null = null,
+	rtkCallback: RtkCallback | null = null,
 ): Promise<void> {
 	if (_streamStarting) return;
 	_streamStarting = true;
@@ -79,7 +81,7 @@ export async function startRxStream(
 		await device.setSampleRate(sampleRate);
 		await device.setFrequency(displayToDeviceFrequencyHz(centerFreq, frequencyShift));
 		await configureReceiveGains(device, gains);
-		if (import.meta.env.DEV && device.deviceType === 'limesdr' && gains?.['Receive Mode'] === 1) {
+		if (isUsbOnlyReceive(device, gains)) {
 			return await startUsbOnlyStream(backend, sampleRate);
 		}
 
@@ -87,12 +89,11 @@ export async function startRxStream(
 		const { spectrumFft, spectrumOutput } = initializeSpectrum(fftSize, backend);
 
 		// Double buffer for Comlink zero-copy memory transfers
-		let specFlip = new Float32Array(fftSize);
-		let specFlop = new Float32Array(fftSize);
-		let useFlip = true;
+		let { specFlip, specFlop, useFlip } = createSpectrumBuffers(fftSize);
 
 		const iqBuffer = new Int8Array(fftSize * 2);
-		let iqBufferPos = 0;
+		let iqBufferPos = 0,
+			lastSpectrumTime = 0;
 		backend.setSpectrumFps(opts.spectrumFps ?? 20);
 		backend._sharedChannelization = opts.sharedChannelization !== false;
 		backend.setWhisperEnabled(opts.whisperEnabled === true);
@@ -105,7 +106,6 @@ export async function startRxStream(
 			perf: { calls: 0, sum: 0, max: 0 },
 		};
 		installChannelCleanup(backend, channel);
-		let lastSpectrumTime = 0;
 
 		// ── Audio DDC setup ───────────────────────────────────────────
 		// Full SDR++ pipeline in Rust: NCO → polyphase resampler (→50kHz)
@@ -119,6 +119,7 @@ export async function startRxStream(
 			bleCallback,
 			acarsCallback,
 			radiosondeCallback,
+			rtkCallback,
 		});
 
 		// ── DSP Performance Counters ──────────────────────────────────
@@ -181,6 +182,10 @@ export async function startRxStream(
 	} finally {
 		_streamStarting = false;
 	}
+}
+
+function createSpectrumBuffers(fftSize: number) {
+	return { specFlip: new Float32Array(fftSize), specFlop: new Float32Array(fftSize), useFlip: true };
 }
 
 function initializeSpectrum(fftSize: number, backend: Backend) {
@@ -276,6 +281,7 @@ function initializeWorkers(
 		bleCallback: BleCallback | null;
 		acarsCallback: AcarsCallback | null;
 		radiosondeCallback: RadiosondeCallback | null;
+		rtkCallback: RtkCallback | null;
 	},
 ): void {
 	initializeVfoWorkers(
@@ -290,6 +296,7 @@ function initializeWorkers(
 		callbacks.bleCallback,
 		callbacks.acarsCallback,
 		callbacks.radiosondeCallback,
+		callbacks.rtkCallback,
 	);
 }
 

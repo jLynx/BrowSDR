@@ -2,6 +2,7 @@ import type { BookmarkCategory } from '@/app/workspace/types';
 
 // Color palette for N VFOs
 import type { PocsagMode } from '@/worker/decoders/types';
+import type { RtkProfile } from '@/worker/decoders/rtk/types';
 
 export const VFO_COLORS = ['#ff4444', '#4488ff', '#44cc44', '#ff44ff', '#ffaa44', '#44cccc', '#cccc44', '#ff8844'];
 
@@ -28,6 +29,9 @@ export const makeDefaultVfo = (freq = 100.0) => ({
 	adsb: false,
 	ais: false,
 	radiosonde: false,
+	rtk: false,
+	rtkProfile: 'luba1' as RtkProfile,
+	rtkClockPpm: 20,
 	ble: false,
 	acars: false,
 	rtl433: false,

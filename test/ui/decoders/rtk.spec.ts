@@ -1,0 +1,207 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { mount, type VueWrapper } from '@vue/test-utils';
+import { nextTick } from 'vue';
+import { ReceiverView } from '../helpers/receiver-view';
+import { makeDefaultVfo } from '@/app/core/constants';
+import type { RtkMessage } from '@/worker/decoders/rtk/types';
+import { downloadReport, downloadCorrections } from '@/app/decoders/rtk/downloads';
+
+vi.mock('@/app/decoders/rtk/downloads', () => ({ downloadReport: vi.fn(), downloadCorrections: vi.fn() }));
+
+let wrapper: VueWrapper<InstanceType<typeof ReceiverView>>;
+afterEach(() => {
+	wrapper?.unmount();
+	vi.clearAllMocks();
+});
+
+const message = (frequency = 923.118): RtkMessage => ({
+	type: 'rtk',
+	freq: frequency,
+	status: {
+		state: 'receiving',
+		message: 'Listening',
+		samples: 1000000,
+		syncs: 1,
+		headers: 1,
+		packets: 1,
+		crcErrors: 0,
+		discontinuities: 0,
+	},
+	stations: [
+		{
+			name: 'RTK base station',
+			scan: 1234,
+			channel: 7,
+			netId: 42,
+			packets: 1,
+			lastSeen: Date.now(),
+			lastCorrection: Date.now(),
+			rtcmCount: 1,
+			rtcmTypes: { 1074: 1 },
+			cfoHz: 0,
+		},
+	],
+	rtcm: [{ type: 1074, stationId: 1, data: new Uint8Array([0xd3]) }],
+});
+
+async function setup() {
+	wrapper = mount(ReceiverView);
+	await wrapper.setData({
+		running: true,
+		connected: true,
+		backend: { setVfoParams: vi.fn() },
+		vfos: [{ ...makeDefaultVfo(923.118), enabled: false }],
+	});
+}
+
+describe('live RTK receiver tools', () => {
+	it('opens without enabling, decodes muted VFOs, and continues with the panel closed', async () => {
+		await setup();
+		await wrapper.get('.tools-trigger').trigger('click');
+		await wrapper.get('button[aria-label="RTK"]').trigger('click');
+		expect(wrapper.vm.vfos[0].rtk).toBe(false);
+		await wrapper.get('input[aria-label="RTK decoding for VFO 1"]').setValue(true);
+		expect(wrapper.vm.backend!.setVfoParams).toHaveBeenLastCalledWith(0, expect.objectContaining({ rtk: true, enabled: false }));
+		wrapper.vm._onRtkMessage(0, 923.118, message());
+		await nextTick();
+		expect(wrapper.get('.rtk-heading .rtk-state').text()).toBe('Live corrections');
+		expect(wrapper.findAll('.rtk-section').every((section) => !(section.element as HTMLDetailsElement).open)).toBe(true);
+		expect(wrapper.get('[aria-label="LoRa number"]').text()).toContain('1234.7.?.42');
+		expect(wrapper.get('[aria-label="LoRa number"]').text()).toContain('loc unknown');
+		expect(wrapper.findAll('button').some((button) => button.text() === 'Clear saved messages')).toBe(false);
+		await wrapper.get('button[aria-label="Close RTK decoder"]').trigger('click');
+		wrapper.vm._onRtkMessage(0, 923.118, message());
+		expect(wrapper.vm.rtk.frames[0]).toHaveLength(2);
+		expect(wrapper.vm.vfos[0].rtk).toBe(true);
+	});
+
+	it('shows the selected base position and satellite observations using general RTK wording', async () => {
+		await setup();
+		wrapper.vm.rtk.panelOpen = true;
+		wrapper.vm.vfos[0].rtk = true;
+		const packet = message();
+		packet.stations[0].reference = {
+			stationId: 42,
+			itrf: 20,
+			latitude: 0,
+			longitude: 0,
+			heightM: 10,
+			ecef: [1, 2, 3],
+			antennaHeightM: 0,
+		};
+		packet.stations[0].equipment = {
+			stationId: 42,
+			antenna: 'ANT',
+			setupId: 0,
+			antennaSerial: '',
+			receiver: 'UNICORE UM960',
+			firmware: '1.2',
+			receiverSerial: '',
+		};
+		packet.stations[0].observations = {
+			GPS: {
+				type: 1074,
+				stationId: 42,
+				constellation: 'GPS',
+				epochMs: 123456,
+				multipleMessage: false,
+				satellites: [1, 3, 32],
+				signals: [2, 8],
+				cells: 3,
+				cnrDbHz: [35, 42, 49],
+				measurements: [
+					{ satellite: 1, signal: 2, cnrDbHz: 35, band: 'L1', group: 'primary' },
+					{ satellite: 3, signal: 8, cnrDbHz: 42, band: 'L2', group: 'secondary' },
+					{ satellite: 32, signal: 2, cnrDbHz: 49, band: 'L1', group: 'primary' },
+				],
+				receivedAt: Date.now(),
+			},
+		};
+		wrapper.vm._onRtkMessage(0, 923.118, packet);
+		await nextTick();
+		expect(wrapper.get('[aria-label="Base station position"]').text()).toContain('0.0000000°, 0.0000000°');
+		expect(wrapper.get('[aria-label="Satellite observations"] strong').text()).toBe('3');
+		expect(wrapper.get('[aria-label="Satellites by constellation"]').text()).toContain('GPS3');
+		expect(wrapper.get('.rtk-heading h3').text()).toBe('UNICORE UM960');
+		expect(wrapper.get('[aria-label="Satellites by frequency group"]').text()).toContain('L1 / primary2');
+		expect(wrapper.get('[aria-label="Satellites by frequency group"]').text()).toContain('L2 / secondary1');
+		expect(wrapper.get('[aria-label="GNSS signal quality"]').text()).toContain('Good');
+		expect(wrapper.find('[aria-label="Base station location map"]').exists()).toBe(true);
+		expect(wrapper.get('[aria-label="Live RTK decoder"]').text()).toContain('42.0 dB-Hz');
+		expect(wrapper.find('[aria-label="Rover fix status"]').exists()).toBe(false);
+		expect(wrapper.get('[aria-label="Live RTK decoder"]').text()).not.toContain('mower');
+	});
+
+	it('bounds saved messages and rejects stopped, disabled and stale-frequency updates', async () => {
+		await setup();
+		wrapper.vm.vfos[0].rtk = true;
+		const packet = message();
+		packet.rtcm = Array.from({ length: 600 }, (_, stationId) => ({ ...packet.rtcm[0], stationId }));
+		wrapper.vm._onRtkMessage(0, 923.118, packet);
+		expect(wrapper.vm.rtk.frames[0]).toHaveLength(512);
+		expect(wrapper.vm.rtk.frames[0][0].stationId).toBe(88);
+		wrapper.vm._onRtkMessage(0, 923.118, message(915.19));
+		wrapper.vm._onRtkMessage(0, 915.19, message(915.19));
+		wrapper.vm.vfos[0].rtk = false;
+		wrapper.vm._onRtkMessage(0, 923.118, message());
+		wrapper.vm.vfos[0].rtk = true;
+		wrapper.vm.running = false;
+		wrapper.vm._onRtkMessage(0, 923.118, message());
+		expect(wrapper.vm.rtk.frames[0]).toHaveLength(512);
+	});
+
+	it('shows only the selected channel and explains an undecoded signal', async () => {
+		await setup();
+		wrapper.vm.rtk.panelOpen = true;
+		wrapper.vm.vfos[0].rtk = true;
+		wrapper.vm._onRtkMessage(0, 923.118, message());
+		wrapper.vm.vfos.push({ ...makeDefaultVfo(915.19), rtk: true, rtkProfile: 'lower' });
+		const lower = message(915.19);
+		lower.stations = [];
+		lower.rtcm = [];
+		lower.status.packets = 0;
+		wrapper.vm._onRtkMessage(1, 915.19, lower);
+		await nextTick();
+		await wrapper.get('select[aria-label="RTK VFO"]').setValue('1');
+		expect(wrapper.get('.rtk-heading .rtk-state').text()).toBe('Payload undecoded');
+		expect(wrapper.get('.rtk-empty').text()).toContain('Select a base from the list');
+		expect(wrapper.find('[aria-label="Base station position"]').exists()).toBe(false);
+		expect(wrapper.find('[aria-label="LoRa number"]').exists()).toBe(false);
+	});
+
+	it('downloads a clearly named format for the selected channel only', async () => {
+		await setup();
+		wrapper.vm.rtk.panelOpen = true;
+		wrapper.vm.vfos[0].rtk = true;
+		const packet = message();
+		wrapper.vm._onRtkMessage(0, 923.118, packet);
+		await nextTick();
+		await wrapper.get('select[aria-label="RTK export format"]').setValue('corrections');
+		const download = wrapper.findAll('.rtk-section button').find((button) => button.text() === 'Download file')!;
+		await download.trigger('click');
+		expect(downloadCorrections).toHaveBeenCalledWith(packet.rtcm, 923.118, '1234.7.42');
+		await wrapper.get('select[aria-label="RTK export format"]').setValue('report');
+		await download.trigger('click');
+		expect(downloadReport).toHaveBeenCalledWith(
+			expect.objectContaining({ frequency: 923.118, profile: 'luba1', stations: packet.stations }),
+		);
+	});
+
+	it('hides old station results on retune and replaces saved corrections for the new frequency', async () => {
+		await setup();
+		wrapper.vm.vfos[0].rtk = true;
+		wrapper.vm.rtk.panelOpen = true;
+		wrapper.vm._onRtkMessage(0, 923.118, message());
+		wrapper.vm.vfos[0].freq = 915.19;
+		await nextTick();
+		expect(wrapper.find('[aria-label="LoRa number"]').exists()).toBe(false);
+		expect(wrapper.get('.rtk-heading .rtk-state').text()).toBe('Listening');
+		const lower = message(915.19);
+		lower.stations = [];
+		lower.rtcm = [];
+		wrapper.vm._onRtkMessage(0, 915.19, lower);
+		expect(wrapper.vm.rtk.frames[0]).toEqual([]);
+		await wrapper.get('select[aria-label="RTK signal profile"]').setValue('lower');
+		expect(wrapper.vm.vfos[0].rtkClockPpm).toBe(0);
+	});
+});

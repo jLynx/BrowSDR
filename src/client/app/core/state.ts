@@ -1,6 +1,7 @@
 import type { BleDevice, BleStatus } from '@/worker/decoders/ble/types';
 import type { AisStatus, Vessel } from '@/worker/decoders/ais/types';
 import type { RadiosondeStatus, Radiosonde } from '@/worker/decoders/radiosonde/types';
+import type { RtkStatus, RtkStation, RtkMessage } from '@/worker/decoders/rtk/types';
 import type { AcarsStatus, AcarsRecord } from '@/worker/decoders/acars/types';
 import type { AdsbStatus, Aircraft } from '@/worker/decoders/adsb/types';
 import type { POCSAGStatus } from '@/worker/decoders/types';
@@ -92,6 +93,7 @@ export function createAppData() {
 		autoSquelchActive: [] as boolean[],
 		activityNow: 0,
 		showActivity: false,
+		iqRecording: { panelOpen: false },
 		discovery: { panelOpen: false, enabled: false, thresholdDb: 10, minWidthHz: 0, excludeDc: true },
 		view: {
 			zoomScale: 1.0,
@@ -167,6 +169,13 @@ function createDecoderAndBookmarkState() {
 		},
 		ais: { panelOpen: false, status: [] as Array<AisStatus | null>, sources: [] as Vessel[][] },
 		radiosonde: { panelOpen: false, status: [] as Array<RadiosondeStatus | null>, sources: [] as Radiosonde[][] },
+		rtk: {
+			panelOpen: false,
+			frequencies: [] as number[],
+			status: [] as Array<RtkStatus | null>,
+			sources: [] as RtkStation[][],
+			frames: [] as Array<RtkMessage['rtcm']>,
+		},
 		adsb: { panelOpen: false, status: [] as Array<AdsbStatus | null>, sources: [] as Aircraft[][] },
 		rtl433: {
 			panelOpen: false,

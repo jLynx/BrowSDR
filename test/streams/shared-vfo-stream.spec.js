@@ -9,6 +9,7 @@ vi.mock('@/worker/runtime/wasm-init', () => ({
 }));
 
 import { startRxStream } from '@/worker/streams/rx-stream';
+import { IqCapture } from '@/worker/recording/iq-capture';
 import { makePerformanceVfos } from '../fixtures/multi-vfo';
 
 afterEach(() => {
@@ -44,6 +45,7 @@ async function createStream(rdsCallback = null, dsdStatusCallback = null, rtl433
 	);
 	let receive;
 	const backend = {
+		iqCapture: new IqCapture(),
 		device: {
 			setSampleRate: vi.fn(),
 			setFrequency: vi.fn(),

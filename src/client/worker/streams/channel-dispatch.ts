@@ -13,6 +13,7 @@ export function dispatchIqChunk(
 	signed: Int8Array<ArrayBufferLike>,
 	chunkCounter: number,
 ) {
+	backend.iqCapture.push(signed);
 	const targets = collectTargets(backend);
 	backend._iqDispatcher!.retain(new Set(targets.map((target) => target.worker)));
 	const plannedParams = targets.map((target) => (target.shared ? target.params : disabledDecoders(target.params)));
@@ -191,6 +192,7 @@ function needsIq(params: VfoParams): boolean {
 		params.adsb === true ||
 		params.ais === true ||
 		params.radiosonde === true ||
+		params.rtk === true ||
 		params.ble === true ||
 		params.acars === true
 	);
@@ -206,6 +208,7 @@ function disabledDecoders(params: VfoParams): VfoParams {
 		adsb: false,
 		ais: false,
 		radiosonde: false,
+		rtk: false,
 		ble: false,
 		acars: false,
 	};

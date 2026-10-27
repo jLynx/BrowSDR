@@ -38,6 +38,7 @@ playwright-report/
 /AGENTS.md
 /docs/local/
 /scripts/performance/
+/output/rtk/
 
 # OS files
 .DS_Store

@@ -10,6 +10,14 @@ function toolGroups(receiver: AppInstance): UiMenuGroup[] {
 			label: 'Decoders',
 			items: [
 				{
+					id: 'rtk',
+					label: 'RTK',
+					description: 'Mammotion LoRa corrections',
+					icon: 'radio',
+					active: vfos.some((vfo) => vfo.rtk),
+					open: receiver.rtk.panelOpen,
+				},
+				{
 					id: 'whisper',
 					label: 'Live Transcription',
 					description: 'Speech to text · Whisper',
@@ -92,6 +100,13 @@ function utilityGroup(receiver: AppInstance): UiMenuGroup {
 		label: 'Utilities',
 		items: [
 			{
+				id: 'iqRecording',
+				label: 'IQ Capture',
+				description: 'Record raw samples for decoder development',
+				icon: 'radio',
+				open: receiver.iqRecording.panelOpen,
+			},
+			{
 				id: 'discovery',
 				label: 'Signal Discovery',
 				description: 'Find frequencies & estimate signal widths',
@@ -123,6 +138,7 @@ function selectTool(receiver: AppInstance, id: string, openOnly = false): void {
 	if (id === 'stats') receiver.showStats = !receiver.showStats;
 	else if (id === 'activity') receiver.showActivity = !receiver.showActivity;
 	else if (id === 'discovery') receiver.discovery.panelOpen = !receiver.discovery.panelOpen;
+	else if (id === 'iqRecording') receiver.iqRecording.panelOpen = !receiver.iqRecording.panelOpen;
 	else {
 		const panels = {
 			whisper: receiver.whisper,
@@ -133,6 +149,7 @@ function selectTool(receiver: AppInstance, id: string, openOnly = false): void {
 			ble: receiver.ble,
 			ais: receiver.ais,
 			radiosonde: receiver.radiosonde,
+			rtk: receiver.rtk,
 			acars: receiver.acars,
 		};
 		const panel = panels[id as keyof typeof panels];

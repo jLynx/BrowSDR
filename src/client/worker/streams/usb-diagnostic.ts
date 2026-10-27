@@ -2,6 +2,10 @@ import type { SdrDevice } from '@/radio/types';
 import type { Backend } from '@/worker/runtime/backend';
 import { initializePerformanceReporting } from './performance';
 
+export function isUsbOnlyReceive(device: SdrDevice, gains?: Record<string, number>): boolean {
+	return import.meta.env.DEV && device.deviceType === 'limesdr' && gains?.['Receive Mode'] === 1;
+}
+
 export async function configureReceiveGains(device: SdrDevice, gains?: Record<string, number>) {
 	if (!gains) return;
 	if (device.setGains) await device.setGains(gains);
