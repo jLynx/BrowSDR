@@ -560,98 +560,104 @@ describe('LimeSDR receive configuration', () => {
 		[1, 393216, true],
 		[0, 524288, false, true],
 		[1, 393216, true, true],
-	])('waits for RX channel %i samples with %i-byte reads (packed=%s, usbOnly=%s)', async (channel, size, packed, usbOnly = false) => {
-		const { driver, usb } = await createDriver();
-		let releaseLock;
-		driver.sxReady = true;
-		const verifyLock = vi
-			.spyOn(driver, 'verifyStreamingSXLock')
-			.mockImplementation(() => new Promise((resolve) => (releaseLock = resolve)));
-		driver.rxChannel = channel;
-		driver.setLinkFormat(packed ? 12 : 16);
-		vi.spyOn(driver, 'readFPGA').mockImplementation(async (address) => (address === 0x0008 && packed ? 0x0102 : 0));
-		const fpgaWrite = vi.spyOn(driver, 'writeFPGA').mockResolvedValue(undefined);
-		vi.spyOn(driver, 'readLMS7002').mockResolvedValue(0xff15);
-		const lmsWrite = vi.spyOn(driver, 'writeLMS7002').mockResolvedValue(undefined);
-		const meter = vi.spyOn(driver.rxLevel, 'observe');
-		const readResolvers = [];
-		usb.transferIn.mockImplementation((endpoint) => {
-			if (endpoint === 15) {
-				const response = new Uint8Array(64);
-				response[0] = 0x40;
-				response[1] = 1;
-				return Promise.resolve({ status: 'ok', data: new DataView(response.buffer) });
-			}
-			return new Promise((resolve) => readResolvers.push(resolve));
-		});
-		const callback = vi.fn(() => expect(readResolvers).toHaveLength(16));
-		let active = false;
-		const starting = driver.startStreaming(callback, usbOnly).then(() => {
-			active = true;
-		});
-		await vi.waitFor(() => expect(readResolvers).toHaveLength(16));
-		expect(active).toBe(false);
-		const packet = new DataView(new ArrayBuffer(size));
-		for (let base = 0; base < size; base += 4096) {
-			packet.setBigUint64(base + 8, BigInt((base / 4096) * (packed ? 1360 : 1020)), true);
-			for (let offset = base + 16; offset < base + 4096; offset += packed ? 3 : 4) {
-				if (packed) {
-					// I=1024, Q=-128 in signed12, equivalent to 16384/-2048 left-aligned.
-					packet.setUint8(offset, 0);
-					packet.setUint8(offset + 1, 4);
-					packet.setUint8(offset + 2, 248);
-				} else {
-					packet.setInt16(offset, 16384, true);
-					packet.setInt16(offset + 2, -2048, true);
+		[0, 28672, false, false, 1e6, 28672],
+		[1, 20480, true, false, 1e6, 20480],
+	])(
+		'waits for RX channel %i samples with %i-byte reads (packed=%s, usbOnly=%s)',
+		async (channel, size, packed, usbOnly = false, rate = 61.44e6, requestedSize = packed ? 393216 : 524288) => {
+			const { driver, usb } = await createDriver();
+			driver.currentSampleRate = rate;
+			let releaseLock;
+			driver.sxReady = true;
+			const verifyLock = vi
+				.spyOn(driver, 'verifyStreamingSXLock')
+				.mockImplementation(() => new Promise((resolve) => (releaseLock = resolve)));
+			driver.rxChannel = channel;
+			driver.setLinkFormat(packed ? 12 : 16);
+			vi.spyOn(driver, 'readFPGA').mockImplementation(async (address) => (address === 0x0008 && packed ? 0x0102 : 0));
+			const fpgaWrite = vi.spyOn(driver, 'writeFPGA').mockResolvedValue(undefined);
+			vi.spyOn(driver, 'readLMS7002').mockResolvedValue(0xff15);
+			const lmsWrite = vi.spyOn(driver, 'writeLMS7002').mockResolvedValue(undefined);
+			const meter = vi.spyOn(driver.rxLevel, 'observe');
+			const readResolvers = [];
+			usb.transferIn.mockImplementation((endpoint) => {
+				if (endpoint === 15) {
+					const response = new Uint8Array(64);
+					response[0] = 0x40;
+					response[1] = 1;
+					return Promise.resolve({ status: 'ok', data: new DataView(response.buffer) });
+				}
+				return new Promise((resolve) => readResolvers.push(resolve));
+			});
+			const callback = vi.fn(() => expect(readResolvers).toHaveLength(16));
+			let active = false;
+			const starting = driver.startStreaming(callback, usbOnly).then(() => {
+				active = true;
+			});
+			await vi.waitFor(() => expect(readResolvers).toHaveLength(16));
+			expect(active).toBe(false);
+			const packet = new DataView(new ArrayBuffer(size));
+			for (let base = 0; base < size; base += 4096) {
+				packet.setBigUint64(base + 8, BigInt((base / 4096) * (packed ? 1360 : 1020)), true);
+				for (let offset = base + 16; offset < base + 4096; offset += packed ? 3 : 4) {
+					if (packed) {
+						// I=1024, Q=-128 in signed12, equivalent to 16384/-2048 left-aligned.
+						packet.setUint8(offset, 0);
+						packet.setUint8(offset + 1, 4);
+						packet.setUint8(offset + 2, 248);
+					} else {
+						packet.setInt16(offset, 16384, true);
+						packet.setInt16(offset + 2, -2048, true);
+					}
 				}
 			}
-		}
-		readResolvers.shift()({ status: 'ok', data: packet });
-		await vi.waitFor(() => expect(verifyLock).toHaveBeenCalledOnce());
-		expect(callback).not.toHaveBeenCalled();
-		expect(active).toBe(false);
-		releaseLock();
-		await starting;
-		expect(fpgaWrite).toHaveBeenCalledWith(0x0007, 1 << channel);
-		expect(fpgaWrite).toHaveBeenCalledWith(0x0008, packed ? 0x0102 : 0x0100);
-		expect(usb.transferIn).toHaveBeenCalledWith(1, packed ? 393216 : 524288);
-		expect(active).toBe(true);
-		expect(verifyLock).toHaveBeenCalledOnce();
-		expect(driver.streamStats.report).toMatchObject({
-			sourceGapCount: 0,
-			sourceMissingSamples: 0,
-			sourceDiscontinuities: 0,
-			usbOutOfOrderTransfers: 0,
-			usbDiagnosticMode: usbOnly ? 1 : 0,
-			usbReceivedBytes: size,
-			usbReceivedSamples: (size / 4096) * (packed ? 1360 : 1020),
-		});
-		expect(driver.streamStats.report.usbServiceAvgMs).toBeGreaterThanOrEqual(0);
-		expect(lmsWrite.mock.calls).toEqual([
-			[0x0020, 0x5515],
-			[0x0020, 0xff15],
-		]);
-		readResolvers.shift()({ status: 'ok', data: packet });
-		await vi.waitFor(() => expect(driver.streamStats.report.usbTransferCount).toBe(2));
-		if (usbOnly) {
+			readResolvers.shift()({ status: 'ok', data: packet });
+			await vi.waitFor(() => expect(verifyLock).toHaveBeenCalledOnce());
 			expect(callback).not.toHaveBeenCalled();
-			expect(meter).not.toHaveBeenCalled();
-		} else {
-			expect(callback).toHaveBeenCalledOnce();
-			expect(callback.mock.calls[0][0]).toHaveLength((size / 4096) * (packed ? 2720 : 2040));
-			expect(Array.from(callback.mock.calls[0][0].slice(0, 4))).toEqual([64, -8, 64, -8]);
-		}
-		// Keep USB reads fed, but exclude IQ while the LO is being recovered.
-		driver.sxReady = false;
-		readResolvers.shift()({ status: 'ok', data: packet });
-		await vi.waitFor(() => expect(driver.streamStats.report.usbTransferCount).toBe(3));
-		expect(callback).toHaveBeenCalledTimes(usbOnly ? 0 : 1);
-		const stopping = driver.stopStreaming();
-		for (const resolve of readResolvers) resolve({ status: 'ok', data: packet });
-		await stopping;
-		expect(callback).toHaveBeenCalledTimes(usbOnly ? 0 : 1);
-		expect(usb.close).not.toHaveBeenCalled();
-	});
+			expect(active).toBe(false);
+			releaseLock();
+			await starting;
+			expect(fpgaWrite).toHaveBeenCalledWith(0x0007, 1 << channel);
+			expect(fpgaWrite).toHaveBeenCalledWith(0x0008, packed ? 0x0102 : 0x0100);
+			expect(usb.transferIn).toHaveBeenCalledWith(1, requestedSize);
+			expect(active).toBe(true);
+			expect(verifyLock).toHaveBeenCalledOnce();
+			expect(driver.streamStats.report).toMatchObject({
+				sourceGapCount: 0,
+				sourceMissingSamples: 0,
+				sourceDiscontinuities: 0,
+				usbOutOfOrderTransfers: 0,
+				usbDiagnosticMode: usbOnly ? 1 : 0,
+				usbReceivedBytes: size,
+				usbReceivedSamples: (size / 4096) * (packed ? 1360 : 1020),
+			});
+			expect(driver.streamStats.report.usbServiceAvgMs).toBeGreaterThanOrEqual(0);
+			expect(lmsWrite.mock.calls).toEqual([
+				[0x0020, 0x5515],
+				[0x0020, 0xff15],
+			]);
+			readResolvers.shift()({ status: 'ok', data: packet });
+			await vi.waitFor(() => expect(driver.streamStats.report.usbTransferCount).toBe(2));
+			if (usbOnly) {
+				expect(callback).not.toHaveBeenCalled();
+				expect(meter).not.toHaveBeenCalled();
+			} else {
+				expect(callback).toHaveBeenCalledOnce();
+				expect(callback.mock.calls[0][0]).toHaveLength((size / 4096) * (packed ? 2720 : 2040));
+				expect(Array.from(callback.mock.calls[0][0].slice(0, 4))).toEqual([64, -8, 64, -8]);
+			}
+			// Keep USB reads fed, but exclude IQ while the LO is being recovered.
+			driver.sxReady = false;
+			readResolvers.shift()({ status: 'ok', data: packet });
+			await vi.waitFor(() => expect(driver.streamStats.report.usbTransferCount).toBe(3));
+			expect(callback).toHaveBeenCalledTimes(usbOnly ? 0 : 1);
+			const stopping = driver.stopStreaming();
+			for (const resolve of readResolvers) resolve({ status: 'ok', data: packet });
+			await stopping;
+			expect(callback).toHaveBeenCalledTimes(usbOnly ? 0 : 1);
+			expect(usb.close).not.toHaveBeenCalled();
+		},
+	);
 
 	it('rejects packed mode when the FPGA format register does not agree', async () => {
 		const { driver, usb } = await createDriver();

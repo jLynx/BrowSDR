@@ -34,6 +34,7 @@ import { isNextrtl, Nextrtl } from './nextrtl';
 import type { TunerDriver } from './tuners/types';
 import { registerDriver } from '@/radio/sdr-device';
 import type { SdrDevice, SdrDeviceInfo, GainControl } from '@/radio/types';
+import { receiveTransferSize } from '@/radio/receive-transfer';
 
 // ── RTL-SDR Device ────────────────────────────────────────────────
 export class RtlSdrDevice implements SdrDevice {
@@ -55,6 +56,7 @@ export class RtlSdrDevice implements SdrDevice {
 	private rxRunning: Array<Promise<void>> | null = null;
 	private rxCallback: ((data: ArrayBufferView) => void) | null = null;
 	private ppm = 0;
+	private sampleRate = 2048000;
 	private usbLock: Promise<void> = Promise.resolve();
 
 	async open(device: USBDevice): Promise<void> {
@@ -380,6 +382,7 @@ export class RtlSdrDevice implements SdrDevice {
 				await this.com.writeDemodReg(1, 0x3f, ppmOffset & 0xff, 1);
 				await this.com.writeDemodReg(1, 0x01, 0x14, 1);
 				await this.com.writeDemodReg(1, 0x01, 0x10, 1);
+				this.sampleRate = rate;
 				console.log('RTL-SDR: setSampleRate complete');
 			} finally {
 				this.resumeRx();
@@ -503,12 +506,16 @@ export class RtlSdrDevice implements SdrDevice {
 
 	private launchBulkLoops(callback: (data: ArrayBufferView) => void): void {
 		console.log('RTL-SDR: startRx — bulk transfer loops starting');
+		const transferSize = receiveTransferSize(this.sampleRate, TRANSFER_BUFFER_SIZE, 2);
+		const session: Array<Promise<void>> = [];
+		this.rxRunning = session;
 		let rxCount = 0;
 		const transfer = async (): Promise<void> => {
 			await Promise.resolve();
-			while (this.rxRunning) {
+			while (this.rxRunning === session) {
 				try {
-					const buf = await this.com.readBulk(TRANSFER_BUFFER_SIZE);
+					const buf = await this.com.readBulk(transferSize);
+					if (this.rxRunning !== session) break;
 					rxCount++;
 					if (rxCount <= 3) console.log(`RTL-SDR: bulk read #${rxCount}, ${buf.byteLength} bytes`);
 					const uint8Data = new Uint8Array(buf);
@@ -525,7 +532,7 @@ export class RtlSdrDevice implements SdrDevice {
 					}
 					callback(new Uint8Array(int8Data.buffer));
 				} catch (e: unknown) {
-					if (this.rxRunning) {
+					if (this.rxRunning === session) {
 						const msg = e instanceof Error ? errorMessage(e) : String(e);
 						console.error('RTL-SDR: transfer error:', msg);
 					}
@@ -533,7 +540,7 @@ export class RtlSdrDevice implements SdrDevice {
 				}
 			}
 		};
-		this.rxRunning = Array.from({ length: 4 }, transfer);
+		session.push(...Array.from({ length: 4 }, transfer));
 	}
 
 	async stopRx(): Promise<void> {

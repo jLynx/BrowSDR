@@ -1,4 +1,5 @@
 import { errorMessage } from '@/platform/errors';
+import { receiveTransferSize } from '@/radio/receive-transfer';
 /*
 Airspy HF+ WebUSB driver for BrowSDR
 Copyright (c) 2026, jLynx <https://github.com/jLynx>
@@ -58,6 +59,7 @@ export class AirspyHfDevice implements SdrDevice {
 
 	private dev!: USBDevice;
 	private rxRunning: Array<Promise<void>> | null = null;
+	private sampleRate = 768000;
 
 	async open(device: USBDevice): Promise<void> {
 		this.dev = device;
@@ -127,6 +129,7 @@ export class AirspyHfDevice implements SdrDevice {
 		const data = new ArrayBuffer(4);
 		new DataView(data).setUint32(0, rate, true);
 		await this.vendorOut(AIRSPYHF_SET_SAMPLERATE, 0, 0, data);
+		this.sampleRate = rate;
 	}
 
 	async setFrequency(freqHz: number): Promise<void> {
@@ -164,14 +167,18 @@ export class AirspyHfDevice implements SdrDevice {
 
 		// Enable receiver
 		await this.vendorOut(AIRSPYHF_RECEIVER_MODE, 1, 0);
+		const transferSize = receiveTransferSize(this.sampleRate, TRANSFER_BUFFER_SIZE, 8);
+		const session: Array<Promise<void>> = [];
+		this.rxRunning = session;
 
 		const transfer = async (): Promise<void> => {
 			await Promise.resolve();
-			while (this.rxRunning) {
+			while (this.rxRunning === session) {
 				try {
-					const result = await this.dev.transferIn(1, TRANSFER_BUFFER_SIZE);
-					if (result.status !== 'ok') break;
-					const raw = new Uint8Array(result.data.buffer, 0, result.data.byteLength);
+					const result = await this.dev.transferIn(1, transferSize);
+					if (this.rxRunning !== session) break;
+					if (result.status !== 'ok' || !result.data) break;
+					const raw = new Uint8Array(result.data.buffer, result.data.byteOffset, result.data.byteLength);
 
 					// Airspy HF+ sends complex float32 IQ pairs
 					// Convert to int8 IQ for the DSP pipeline
@@ -186,7 +193,7 @@ export class AirspyHfDevice implements SdrDevice {
 					}
 					callback(new Uint8Array(int8Data.buffer));
 				} catch (e: unknown) {
-					if (this.rxRunning) {
+					if (this.rxRunning === session) {
 						const msg = e instanceof Error ? errorMessage(e) : String(e);
 						console.error('AirspyHF: transfer error:', msg);
 					}
@@ -194,7 +201,7 @@ export class AirspyHfDevice implements SdrDevice {
 				}
 			}
 		};
-		this.rxRunning = Array.from({ length: 4 }, transfer);
+		session.push(...Array.from({ length: 4 }, transfer));
 	}
 
 	async stopRx(): Promise<void> {

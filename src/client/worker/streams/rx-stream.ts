@@ -39,17 +39,14 @@ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABI
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-import * as Comlink from 'comlink';
-import { FFT } from '@/worker/runtime/wasm-init';
+import { SpectrumStream } from './spectrum-stream';
 import type { ChannelPlan } from './types';
 import type { RxStreamOpts, VfoParams } from '@/worker/runtime/types';
 import type { Backend } from '@/worker/runtime/backend';
 import { displayToDeviceFrequencyHz } from '@/radio/frequency-shift';
-import { spectrumSmoothingAlpha } from '@/display/spectrum-rate';
 
 let _streamStarting = false;
 
-// eslint-disable-next-line max-lines-per-function
 export async function startRxStream(
 	backend: Backend,
 	opts: RxStreamOpts,
@@ -85,15 +82,7 @@ export async function startRxStream(
 		}
 
 		// ── Spectrum FFT setup ────────────────────────────────────────
-		const { spectrumFft, spectrumOutput } = initializeSpectrum(fftSize, backend);
-
-		// Double buffer for Comlink zero-copy memory transfers
-		let specFlip = new Float32Array(fftSize);
-		let specFlop = new Float32Array(fftSize);
-		let useFlip = true;
-
-		const iqBuffer = new Int8Array(fftSize * 2);
-		let iqBufferPos = 0;
+		const spectrum = new SpectrumStream(backend, fftSize, spectrumCallback);
 		backend.setSpectrumFps(opts.spectrumFps ?? 20);
 		backend._sharedChannelization = opts.sharedChannelization !== false;
 		backend.setWhisperEnabled(opts.whisperEnabled === true);
@@ -106,7 +95,6 @@ export async function startRxStream(
 			perf: { calls: 0, sum: 0, max: 0 },
 		};
 		installChannelCleanup(backend, channel);
-		let lastSpectrumTime = 0;
 
 		// ── Audio DDC setup ───────────────────────────────────────────
 		// Full SDR++ pipeline in Rust: NCO → polyphase resampler (→50kHz)
@@ -153,21 +141,7 @@ export async function startRxStream(
 
 			chunkCounter++;
 
-			// Bulk copy for spectrum buffer
-			({ iqBufferPos, lastSpectrumTime, useFlip, specFlip, specFlop } = processSpectrumChunk(
-				signed,
-				iqBuffer,
-				iqBufferPos,
-				lastSpectrumTime,
-				backend,
-				spectrumFft,
-				spectrumOutput,
-				useFlip,
-				specFlip,
-				specFlop,
-				fftSize,
-				spectrumCallback,
-			));
+			spectrum.push(signed);
 
 			// Broadcast to DSP workers
 			dispatchIqChunk(backend, sampleRate, centerFreq, channel, perf, signed, chunkCounter);
@@ -183,83 +157,6 @@ export async function startRxStream(
 	} finally {
 		_streamStarting = false;
 	}
-}
-
-function initializeSpectrum(fftSize: number, backend: Backend) {
-	const spectrumWindowFunc = (x: number): number => {
-		const n = x * fftSize;
-		const N = fftSize;
-		const a0 = 0.355768;
-		const a1 = 0.487396;
-		const a2 = 0.144232;
-		const a3 = 0.012604;
-		return a0 - a1 * Math.cos((2.0 * Math.PI * n) / N) + a2 * Math.cos((4.0 * Math.PI * n) / N) - a3 * Math.cos((6.0 * Math.PI * n) / N);
-	};
-	const spectrumWindow = new Float32Array(fftSize);
-	for (let i = 0; i < fftSize; i++) {
-		spectrumWindow[i] = spectrumWindowFunc(i / fftSize);
-	}
-	const spectrumFft = new FFT(fftSize, spectrumWindow);
-	backend._disposeSpectrum?.();
-	backend._disposeSpectrum = () => spectrumFft.free();
-	spectrumFft.set_smoothing_speed(0.6);
-	const spectrumOutput = new Float32Array(fftSize);
-	return { spectrumFft, spectrumOutput };
-}
-
-function processSpectrumChunk(
-	signed: Int8Array<ArrayBufferLike>,
-	iqBuffer: Int8Array<ArrayBuffer>,
-	iqBufferPos: number,
-	lastSpectrumTime: number,
-	backend: Backend,
-	spectrumFft: FFT,
-	spectrumOutput: Float32Array<ArrayBuffer>,
-	useFlip: boolean,
-	specFlip: Float32Array<ArrayBuffer>,
-	specFlop: Float32Array<ArrayBuffer>,
-	fftSize: number,
-	spectrumCallback: SamplesCallback,
-) {
-	{
-		let srcOff = 0;
-		while (srcOff < signed.length) {
-			const space = iqBuffer.length - iqBufferPos;
-			const toCopy = Math.min(space, signed.length - srcOff);
-			iqBuffer.set(signed.subarray(srcOff, srcOff + toCopy), iqBufferPos);
-			iqBufferPos += toCopy;
-			srcOff += toCopy;
-			if (iqBufferPos >= iqBuffer.length) {
-				iqBufferPos = 0;
-				const now = performance.now();
-				if (now - lastSpectrumTime >= 1000 / backend._spectrumFps) {
-					spectrumFft.set_smoothing_speed(spectrumSmoothingAlpha(lastSpectrumTime === 0 ? 50 : now - lastSpectrumTime));
-					lastSpectrumTime = now;
-					// Revert back to copy-based FFT for the spectrum waterfall
-					// because `iqBuffer` batches data across USB chunk boundaries.
-					spectrumFft.fft(iqBuffer, spectrumOutput);
-
-					// Double buffer the output since Comlink.transfer neuters the buffer on this side.
-					let specCopy = useFlip ? specFlip : specFlop;
-					if (specCopy.length === 0) {
-						// Was neutered by Comlink
-						specCopy = new Float32Array(fftSize);
-						if (useFlip) specFlip = specCopy;
-						else specFlop = specCopy;
-					}
-
-					specCopy.set(spectrumOutput);
-					useFlip = !useFlip;
-
-					// Slice for remote BEFORE Comlink.transfer — transfer detaches specCopy.buffer,
-					// making any subsequent .slice() throw "detached ArrayBuffer".
-					if (backend._remoteHostFftCb) backend._remoteHostFftCb(specCopy.slice());
-					if (spectrumCallback) spectrumCallback(Comlink.transfer(specCopy, [specCopy.buffer]));
-				}
-			}
-		}
-	}
-	return { iqBufferPos, lastSpectrumTime, useFlip, specFlip, specFlop };
 }
 
 function skipRetuningInput(backend: Backend): boolean {

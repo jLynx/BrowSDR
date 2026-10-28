@@ -19,6 +19,7 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 */
 
 import type { SdrDevice, SdrDeviceInfo, GainControl } from '@/radio/types';
+import { receiveTransferSize } from '@/radio/receive-transfer';
 
 export class MockHackRF implements SdrDevice {
 	readonly deviceType = 'mock';
@@ -57,10 +58,10 @@ export class MockHackRF implements SdrDevice {
 
 	startRx(callback: (data: ArrayBufferView) => void): Promise<void> {
 		this.running = true;
+		const chunkSize = receiveTransferSize(this.sampleRate, 262144, 2, 2);
 		this.thread = setInterval(
 			() => {
 				if (!this.running) return;
-				const chunkSize = 262144;
 				const buffer = new ArrayBuffer(chunkSize);
 				const view = new Int8Array(buffer);
 				// Generate a 100 kHz tone relative to center freq + noise
@@ -76,7 +77,7 @@ export class MockHackRF implements SdrDevice {
 				}
 				callback(new Uint8Array(buffer, 0, chunkSize));
 			},
-			(262144 / 2 / this.sampleRate) * 1000,
+			(chunkSize / 2 / this.sampleRate) * 1000,
 		);
 
 		return Promise.resolve();
