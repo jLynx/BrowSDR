@@ -1,5 +1,6 @@
-import type { RtkStation } from './types';
+import type { RtkIdentity } from './types';
 
-export function stationKey(station: Pick<RtkStation, 'scan' | 'channel' | 'netId'>): string {
+export function stationKey(station: RtkIdentity): string {
+	if (station.address !== undefined) return `rtk3-${station.address}`;
 	return `${station.scan}.${station.channel}.${station.netId}`;
 }

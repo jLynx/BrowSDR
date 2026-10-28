@@ -10,6 +10,14 @@ export function receptionState(value: RtkReception): { label: string; detail: st
 	if (value.station?.lastCorrection && value.now - value.station.lastCorrection < 5000)
 		return { label: 'Live corrections', detail: 'Receiving verified correction data from this base.', tone: 'live' };
 	if (value.station) return { label: 'Waiting for corrections', detail: 'Showing the last received base data.', tone: 'idle' };
+	if (value.status?.beacons)
+		return { label: 'Verified beacons', detail: 'RTK3 base beacons received. Waiting for verified corrections.', tone: 'idle' };
+	if (value.status?.packets && value.status.containers !== undefined)
+		return {
+			label: 'Verified radio frames',
+			detail: 'RTK3 frames received. Waiting for complete, verified RTCM corrections.',
+			tone: 'idle',
+		};
 	if (value.status?.payloads)
 		return {
 			label: 'Payload unverified',

@@ -1,21 +1,14 @@
 import type { LoraPacket, RtkStation, RtkMessage } from './types';
-import { decodeRtcmFields } from './rtcm-fields';
+import { crc24q } from './rtcm-frame';
+import { RtkStations } from './stations';
 import { stationKey } from './station-key';
 
-export function crc24q(bytes: Uint8Array): number {
-	let crc = 0;
-	for (const byte of bytes) {
-		crc ^= byte << 16;
-		for (let bit = 0; bit < 8; bit++) crc = ((crc << 1) ^ (crc & 0x800000 ? 0x1864cfb : 0)) & 0xffffff;
-	}
-	return crc;
-}
+export { crc24q } from './rtcm-frame';
 
 /** Reassemble only verified Mammotion radio bodies; RTCM has its own CRC. */
 export class RtkTracker {
 	private partial = new Map<string, Uint8Array>();
-	private stations = new Map<string, RtkStation>();
-	private pending: RtkMessage['rtcm'] = [];
+	private stations = new RtkStations();
 	process(packet: LoraPacket): void {
 		const data = packet.data;
 		if (!packet.verified || data.length < 8 || data[0] !== 0x2c || data[7] !== data.length - 8) {
@@ -26,33 +19,11 @@ export class RtkTracker {
 			channel = data[1],
 			netId = data[4];
 		const key = stationKey({ scan, channel, netId });
-		let station = this.stations.get(key);
-		if (!station) {
-			if (this.stations.size >= 16) {
-				const oldest = this.stations.keys().next().value!;
-				this.stations.delete(oldest);
-				this.partial.delete(oldest);
-			}
-			station = {
-				name: 'RTK base station',
-				scan,
-				channel,
-				netId,
-				packets: 0,
-				lastSeen: 0,
-				rtcmCount: 0,
-				rtcmTypes: {},
-				cfoHz: 0,
-			};
-			this.stations.set(key, station);
-		}
-		station.packets++;
-		station.lastSeen = Date.now();
-		station.cfoHz = packet.cfoHz;
-		// Refresh eviction order and retain partial RTCM independently for interleaved bases.
-		this.stations.delete(key);
-		this.stations.set(key, station);
+		const station = this.stations.observe({ scan, channel, netId }, packet);
+		// Keep fragment eviction in the same order as station telemetry.
 		const partial = this.partial.get(key) ?? new Uint8Array(0);
+		this.partial.delete(key);
+		if (this.partial.size >= 16) this.partial.delete(this.partial.keys().next().value!);
 		const merged = new Uint8Array(partial.length + data.length - 8);
 		merged.set(partial);
 		for (let i = 8; i < data.length; i++) merged[partial.length + i - 8] = data[i] ^ 0x12;
@@ -77,22 +48,7 @@ export class RtkTracker {
 				offset++;
 				continue;
 			}
-			const type = (frame[3] << 4) | (frame[4] >> 4),
-				stationId = ((frame[4] & 15) << 8) | frame[5];
-			station.rtcmCount++;
-			station.lastCorrection = Date.now();
-			station.rtcmTypes[type] = (station.rtcmTypes[type] ?? 0) + 1;
-			const fields = decodeRtcmFields(frame.subarray(3, length + 3));
-			if (fields.reference) station.reference = fields.reference;
-			if (fields.equipment) {
-				station.equipment = fields.equipment;
-				station.name = fields.equipment.receiver.trim() || 'RTK base station';
-			}
-			if (fields.observation) {
-				station.observations ??= {};
-				station.observations[fields.observation.constellation] = fields.observation;
-			}
-			if (this.pending.length < 64) this.pending.push({ type, stationId, source: stationKey(station), data: frame.slice() });
+			this.stations.record(frame, station);
 			offset += frame.length;
 		}
 		this.partial.set(stationKey(station), data.slice(offset));
@@ -101,11 +57,9 @@ export class RtkTracker {
 		this.partial.clear();
 	}
 	snapshot(): RtkStation[] {
-		return structuredClone([...this.stations.values()]);
+		return this.stations.snapshot();
 	}
 	flush(): RtkMessage['rtcm'] {
-		const result = this.pending;
-		this.pending = [];
-		return result;
+		return this.stations.flush();
 	}
 }

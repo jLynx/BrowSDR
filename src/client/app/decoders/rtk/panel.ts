@@ -8,6 +8,7 @@ import { receptionState } from './reception';
 import { gnssSummary } from './signal-summary';
 import { useBaseMap } from './map-view';
 import { useStationSelection } from './station-selection';
+import { stationKey } from '@/worker/decoders/rtk/station-key';
 
 export default defineComponent({
 	name: 'RtkPanel',
@@ -35,9 +36,7 @@ export default defineComponent({
 		);
 		const gnss = computed(() => gnssSummary(freshObservations.value));
 		const position = computed(() => station.value?.reference);
-		const identity = computed(
-			() => `${vfo.value?.freq}:${station.value?.scan}:${station.value?.channel}:${station.value?.netId}:${position.value?.stationId}`,
-		);
+		const identity = computed(() => `${vfo.value?.freq}:${station.value ? stationKey(station.value) : ''}:${position.value?.stationId}`);
 		const mapView = useBaseMap(() => receiver.rtk.panelOpen, mapElement, position, identity, title);
 		const reception = computed(() =>
 			receptionState({
@@ -50,7 +49,7 @@ export default defineComponent({
 				now: now.value,
 			}),
 		);
-		const presetFrequency = computed(() => (vfo.value?.rtkProfile === 'lower' ? undefined : 923.118));
+		const presetFrequency = computed(() => ((vfo.value?.rtkProfile ?? 'luba1') === 'luba1' ? 923.118 : undefined));
 		const canDownload = computed(() => (exportFormat.value === 'corrections' ? frames.value.length > 0 : !!station.value));
 		return {
 			...mapView,
@@ -74,7 +73,11 @@ export default defineComponent({
 			signalStrength,
 			update: () => receiver.updateBackendVfoParams(index.value),
 			changeProfile: () => {
-				vfo.value.rtkClockPpm = vfo.value.rtkProfile === 'luba1' ? 20 : 10;
+				vfo.value.rtkClockPpm = vfo.value.rtkProfile === 'rtk3' ? 0 : vfo.value.rtkProfile === 'luba1' ? 20 : 10;
+				// Profile changes invalidate results even when the frequency stays the same.
+				receiver.rtk.sources[index.value] = [];
+				receiver.rtk.frames[index.value] = [];
+				receiver.rtk.status[index.value] = null;
 				receiver.updateBackendVfoParams(index.value);
 			},
 			exportData: () => {

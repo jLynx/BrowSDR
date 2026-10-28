@@ -21,3 +21,12 @@ Tests compare the entire decoded payload with the mock bytes, verify both
 checksums and assert the exact invented pairing and reference coordinates.
 Keep future fixture changes synthetic and inspectable; do not add RF captures
 or decoded files from a real installation to this folder.
+
+## RTK3 synthetic fixtures
+
+`mock-rtk3.js` models the published RBS03 protocol with invented address 4242
+and RTCM references at 0°,0° or 0°,90°. Its standard private sync word 0x12 uses
+SF7 bins [8,16]. `mock-iq.js` synthesizes the resulting SF7/BW250 waveform with
+CR4/5, preamble16, no LoRa CRC and 0 ppm timing. No RTK3 hardware or captured
+traffic was used. These tests check framing and the browser worker path;
+they do not establish compatibility with real RTK3 units.

@@ -1,4 +1,4 @@
-export type RtkProfile = 'luba1' | 'lower';
+export type RtkProfile = 'luba1' | 'lower' | 'rtk3';
 
 export interface LoraProfile {
 	bandwidth: number;
@@ -35,13 +35,21 @@ export interface RtkStatus {
 	crcErrors: number;
 	discontinuities: number;
 	syncSymbols?: [number, number];
+	beacons?: number;
+	containers?: number;
+	containerErrors?: number;
+	sequenceGaps?: number;
 }
 
-export interface RtkStation {
-	name: string;
-	scan: number;
-	channel: number;
+export interface RtkIdentity {
+	scan?: number;
+	channel?: number;
 	netId: number;
+	address?: number;
+}
+
+export interface RtkStation extends RtkIdentity {
+	name: string;
 	packets: number;
 	lastSeen: number;
 	lastCorrection?: number;
@@ -99,6 +107,7 @@ export interface RtcmEquipment {
 export interface RtkMessage {
 	type: 'rtk';
 	freq: number;
+	profile?: RtkProfile;
 	status: RtkStatus;
 	stations: RtkStation[];
 	rtcm: Array<{ type: number; stationId: number; source?: string; data: Uint8Array }>;

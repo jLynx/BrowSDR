@@ -15,6 +15,7 @@ export function referencePosition(reference: RtcmReference): string {
 }
 
 export function loraNumber(station: RtkStation): string {
+	if (station.address !== undefined) return `address ${station.address}`;
 	// The supported radio wrapper exposes three of the four Mammotion pairing fields.
 	return `${station.scan}.${station.channel}.?.${station.netId}`;
 }

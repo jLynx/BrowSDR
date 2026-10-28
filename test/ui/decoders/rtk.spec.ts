@@ -55,6 +55,58 @@ async function setup() {
 }
 
 describe('live RTK receiver tools', () => {
+	it('selects RTK3 without a guessed frequency, clears prior-profile results and exports by address', async () => {
+		await setup();
+		wrapper.vm.rtk.panelOpen = true;
+		wrapper.vm.vfos[0].rtk = true;
+		wrapper.vm._onRtkMessage(0, 923.118, message());
+		await nextTick();
+		await wrapper.get('select[aria-label="RTK signal profile"]').setValue('rtk3');
+		expect(wrapper.vm.vfos[0]).toMatchObject({ rtkProfile: 'rtk3', rtkClockPpm: 0, freq: 923.118, enabled: false });
+		expect(wrapper.vm.rtk.frames[0]).toEqual([]);
+		expect(wrapper.find('[aria-label="LoRa number"]').exists()).toBe(false);
+		expect(wrapper.findAll('button').some((button) => button.text().startsWith('Tune to'))).toBe(false);
+		expect(wrapper.text()).toContain('automatic hop following is not available');
+		wrapper.vm._onRtkMessage(0, 923.118, { ...message(), profile: 'luba1' });
+		expect(wrapper.vm.rtk.sources[0]).toEqual([]);
+		const packet = message();
+		packet.profile = 'rtk3';
+		packet.stations = [{ ...packet.stations[0], scan: undefined, channel: undefined, netId: 4242, address: 4242 }];
+		packet.rtcm[0].source = 'rtk3-4242';
+		packet.status.beacons = 1;
+		packet.status.containers = 1;
+		wrapper.vm._onRtkMessage(0, 923.118, packet);
+		await nextTick();
+		expect(wrapper.get('[aria-label="LoRa station address"]').text()).toContain('address 4242');
+		expect(wrapper.get('.rtk-heading').text()).not.toContain('loc unknown');
+		expect(wrapper.get('.rtk-diagnostics').text()).toContain('Verified beacons1');
+		await wrapper.get('select[aria-label="RTK export format"]').setValue('corrections');
+		await wrapper
+			.findAll('.rtk-section button')
+			.find((button) => button.text() === 'Download file')!
+			.trigger('click');
+		expect(downloadCorrections).toHaveBeenCalledWith(packet.rtcm, 923.118, 'rtk3-4242');
+		wrapper.vm.tuneRtkVfo(924.6);
+		expect(wrapper.vm.vfos[0].rtkProfile).toBe('rtk3');
+	});
+
+	it('distinguishes verified RTK3 beacons from verified correction data', async () => {
+		await setup();
+		wrapper.vm.rtk.panelOpen = true;
+		wrapper.vm.vfos[0].rtk = true;
+		wrapper.vm.vfos[0].rtkProfile = 'rtk3';
+		const packet = { ...message(), profile: 'rtk3' as const, stations: [], rtcm: [] };
+		packet.status.beacons = 1;
+		wrapper.vm._onRtkMessage(0, 923.118, packet);
+		await nextTick();
+		expect(wrapper.get('.rtk-heading .rtk-state').text()).toBe('Verified beacons');
+		expect(wrapper.find('[aria-label="Base station position"]').exists()).toBe(false);
+		expect(wrapper.find('[aria-label="RTK base stations"]').exists()).toBe(false);
+		packet.status = { ...packet.status, beacons: 0, containers: 0 };
+		wrapper.vm._onRtkMessage(0, 923.118, packet);
+		await nextTick();
+		expect(wrapper.get('.rtk-heading .rtk-state').text()).toBe('Verified radio frames');
+	});
 	it('opens without enabling, decodes muted VFOs, and continues with the panel closed', async () => {
 		await setup();
 		await wrapper.get('.tools-trigger').trigger('click');

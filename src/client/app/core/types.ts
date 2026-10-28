@@ -1,9 +1,10 @@
 import type { CharsetKey } from '@/worker/decoders/charsets';
 import type { PocsagMode } from '@/worker/decoders/types';
+import type { RtkProfile } from '@/worker/decoders/rtk/types';
 
 export interface Vfo {
 	rtk?: boolean;
-	rtkProfile?: 'luba1' | 'lower';
+	rtkProfile?: RtkProfile;
 	rtkClockPpm?: number;
 	adsb?: boolean;
 	ais?: boolean;

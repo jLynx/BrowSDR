@@ -5,14 +5,13 @@ export const rtkMethods = {
 	tuneRtkVfo(this: AppInstance, frequency: number): void {
 		const index = this.activeVfoIndex;
 		if (!this.vfos[index]) return;
-		this.vfos[index].rtkProfile = frequency > 920 ? 'luba1' : 'lower';
-		this.vfos[index].rtkClockPpm = frequency > 920 ? 20 : 10;
 		this.validateAndApplyVfoFreq(index, frequency);
 		this.updateBackendVfoParams(index);
 	},
 	_onRtkMessage(this: AppInstance, index: number, frequency: number, message: RtkMessage): void {
 		const vfo = this.vfos[index];
 		if (!this.running || !vfo?.rtk || vfo.freq !== frequency || message.freq !== frequency) return;
+		if (message.profile !== undefined && message.profile !== (vfo.rtkProfile ?? 'luba1')) return;
 		if (this.rtk.frequencies[index] !== frequency) this.rtk.frames[index] = [];
 		this.rtk.frequencies[index] = frequency;
 		this.rtk.status[index] = message.status;

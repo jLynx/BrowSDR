@@ -49,8 +49,14 @@
 			<div>
 				<h3>{{ title }}</h3>
 				<p>{{ vfo.freq.toFixed(3) }} MHz</p>
-				<p v-if="station" class="rtk-pairing" aria-label="LoRa number" title="scan.channel.loc.net · The loc field has not been decoded.">
-					LoRa <span class="rtk-lora-number">{{ loraNumber(station) }}</span> <span class="rtk-caption">· loc unknown</span>
+				<p
+					v-if="station"
+					class="rtk-pairing"
+					:aria-label="station.address !== undefined ? 'LoRa station address' : 'LoRa number'"
+					:title="station.address !== undefined ? '16-bit address from verified RTK3 frames.' : 'scan.channel.loc.net · The loc field has not been decoded.'"
+				>
+					LoRa <span class="rtk-lora-number">{{ loraNumber(station) }}</span>
+					<span v-if="station.address === undefined" class="rtk-caption">· loc unknown</span>
 				</p>
 			</div>
 			<span class="rtk-state" :class="'rtk-state-' + reception.tone" role="status">{{ reception.label }}</span>
@@ -118,6 +124,7 @@
 					>Signal to decode<select v-model="vfo.rtkProfile" aria-label="RTK signal profile" @change="changeProfile">
 						<option value="luba1">Mammotion LoRa · 500 kHz</option>
 						<option value="lower">LoRa · 250 kHz (experimental)</option>
+						<option value="rtk3">Mammotion RTK3 / RBS03 · 250 kHz (experimental)</option>
 					</select></label
 				>
 				<template v-if="presetFrequency !== undefined">
@@ -126,6 +133,10 @@
 					>
 					<p class="rtk-caption">Changes the selected VFO to the measured signal frequency.</p>
 				</template>
+				<p v-else-if="vfo.rtkProfile === 'rtk3'" class="rtk-caption">
+					RTK3 support follows the published RBS03 protocol and has not been tested with hardware. Tune the VFO to an active channel in the
+					waterfall. Hopping bases send intermittent bursts on each channel; automatic hop following is not available.
+				</p>
 				<p v-else class="rtk-caption">Tune the VFO to the active signal in the waterfall. This experimental signal can change channel.</p>
 				<label class="rtk-field"
 					>Sample timing adjustment (ppm)<input
@@ -138,7 +149,7 @@
 						@change="update"
 				/></label>
 				<p class="rtk-caption">
-					Measured presets: 20 for the 500 kHz profile, 10 for the experimental signal. Other receivers may need different timing.
+					Measured presets: 20 for the 500 kHz profile, 10 for the unidentified 250 kHz signal. RTK3 starts at 0; adjust for your receiver.
 				</p>
 			</div>
 		</details>
@@ -171,26 +182,44 @@
 						<dt>LoRa headers detected</dt>
 						<dd>{{ status.headers }}</dd>
 					</div>
-					<div v-if="vfo.rtkProfile === 'lower'">
+					<div v-if="vfo.rtkProfile === 'lower' || vfo.rtkProfile === 'rtk3'">
 						<dt>Payloads recovered</dt>
 						<dd>{{ status.payloads ?? 0 }}</dd>
 					</div>
-					<div v-if="vfo.rtkProfile === 'lower'">
+					<div v-if="vfo.rtkProfile === 'lower' || vfo.rtkProfile === 'rtk3'">
 						<dt>Coding parity errors</dt>
 						<dd>{{ status.codingErrors ?? 0 }}</dd>
 					</div>
-					<div v-if="vfo.rtkProfile === 'lower' && status.syncSymbols">
+					<div v-if="(vfo.rtkProfile === 'lower' || vfo.rtkProfile === 'rtk3') && status.syncSymbols">
 						<dt>Observed LoRa sync symbols</dt>
 						<dd>{{ status.syncSymbols.join(', ') }}</dd>
 					</div>
 					<div>
-						<dt>Checksum errors</dt>
+						<dt>{{ vfo.rtkProfile === 'rtk3' ? 'Rejected radio frames' : 'Checksum errors' }}</dt>
 						<dd>{{ status.crcErrors }}</dd>
 					</div>
 					<div>
 						<dt>Lost IQ chunks</dt>
 						<dd>{{ status.discontinuities }}</dd>
 					</div>
+					<template v-if="vfo.rtkProfile === 'rtk3'">
+						<div>
+							<dt>Verified beacons</dt>
+							<dd>{{ status.beacons ?? 0 }}</dd>
+						</div>
+						<div>
+							<dt>Validated containers</dt>
+							<dd>{{ status.containers ?? 0 }}</dd>
+						</div>
+						<div>
+							<dt>Invalid RTCM containers</dt>
+							<dd>{{ status.containerErrors ?? 0 }}</dd>
+						</div>
+						<div>
+							<dt>Container sequence gaps</dt>
+							<dd>{{ status.sequenceGaps ?? 0 }}</dd>
+						</div>
+					</template>
 				</dl>
 				<p v-else class="rtk-caption">No reception statistics yet.</p>
 				<p v-if="status" class="rtk-caption">Radio counters cover this VFO. Correction details below are for the selected base.</p>
@@ -198,8 +227,13 @@
 					Recovered payloads without a LoRa checksum remain unverified, even with zero parity errors. The sync symbols describe this VFO's
 					latest valid header.
 				</p>
+				<p v-if="status && vfo.rtkProfile === 'rtk3'" class="rtk-caption">
+					Radio frames require CRC16/MODBUS; correction containers also require RTCM CRC24Q. Beacons carry no corrections. Sequence gaps are
+					observed counter increments, not a measurement of USB loss.
+				</p>
 				<template v-if="station">
-					<p>Pairing fields: scan {{ station.scan }}, channel {{ station.channel }}, net ID {{ station.netId }}.</p>
+					<p v-if="station.address !== undefined">RTK3 station address: {{ station.address }}. Other pairing fields are not decoded.</p>
+					<p v-else>Pairing fields: scan {{ station.scan }}, channel {{ station.channel }}, net ID {{ station.netId }}.</p>
 					<p>{{ station.rtcmCount }} verified correction messages · RTCM types {{ Object.keys(station.rtcmTypes).join(', ') }}</p>
 					<p v-if="station.reference">RTCM station ID {{ station.reference.stationId }} · ITRF realization {{ station.reference.itrf }}</p>
 					<p v-if="station.reference && station.reference.antennaHeightM !== undefined">

@@ -1,14 +1,22 @@
 import type { DspProcessor } from '/wasm/dsp/browsdr_dsp.js';
 import type { VfoParams } from '@/worker/runtime/types';
-import type { LoraProfile, RtkMessage, RtkStatus } from './types';
+import type { LoraProfile, RtkMessage, RtkStatus, RtkProfile } from './types';
 import { LoraReceiver } from './lora';
 import { RtkTracker } from './rtcm';
+import { Rtk3Tracker } from './rtk3/tracker';
 import { errorMessage } from '@/platform/errors';
 
 export const RTK_RATE = 1000000;
 export const RTK_PROFILES: Record<string, LoraProfile> = {
 	luba1: { bandwidth: 500000, oversample: 2, sync: [40, 36], ldro: true },
 	lower: { bandwidth: 250000, oversample: 4, sync: [16, 8], ldro: false },
+	// Standard private sync word 0x12 maps to SF7 symbol bins [8, 16].
+	rtk3: { bandwidth: 250000, oversample: 4, sync: [8, 16], ldro: false },
+};
+const profileName: Record<RtkProfile, string> = {
+	luba1: 'Mammotion 500 kHz profile',
+	lower: 'unverified lower profile',
+	rtk3: 'RTK3 / RBS03 experimental profile',
 };
 const initialStatus = (): RtkStatus => ({
 	state: 'off',
@@ -26,11 +34,12 @@ const initialStatus = (): RtkStatus => ({
 export class RtkStream {
 	private key = '';
 	private frequency = 923.118;
+	private profile: RtkProfile = 'luba1';
 	private ddc?: DspProcessor;
 	private direct = false;
 	private scratch = new Float32Array(0);
 	private lastChunk?: number;
-	private tracker = new RtkTracker();
+	private tracker: RtkTracker | Rtk3Tracker = new RtkTracker();
 	private lora?: LoraReceiver;
 	private lastEmit = 0;
 	private status = initialStatus();
@@ -50,7 +59,7 @@ export class RtkStream {
 		}
 		const name = params.rtkProfile ?? 'luba1',
 			profile = RTK_PROFILES[name];
-		const ppm = params.rtkClockPpm ?? (name === 'luba1' ? 20 : 10);
+		const ppm = params.rtkClockPpm ?? (name === 'rtk3' ? 0 : name === 'luba1' ? 20 : 10);
 		const key = JSON.stringify([params.freq, rate, center, name, ppm]);
 		if (this.key === key) return;
 		this.reset();
@@ -69,6 +78,8 @@ export class RtkStream {
 			return;
 		}
 		try {
+			this.profile = name;
+			this.tracker = name === 'rtk3' ? new Rtk3Tracker() : new RtkTracker();
 			this.direct = rate === RTK_RATE && Math.abs(params.freq - center) < 0.000001;
 			if (!this.direct) {
 				this.ddc = new this.Processor(rate, (params.freq - center) * 1e6, RTK_RATE);
@@ -82,7 +93,7 @@ export class RtkStream {
 				() => this.tracker.discontinuity(),
 			);
 			this.status.state = 'receiving';
-			this.status.message = `Listening on ${params.freq.toFixed(3)} MHz · ${name === 'luba1' ? 'Mammotion 500 kHz profile' : 'unverified lower profile'}`;
+			this.status.message = `Listening on ${params.freq.toFixed(3)} MHz · ${profileName[name]}`;
 			this.emit();
 		} catch (error) {
 			this.fail(errorMessage(error));
@@ -140,9 +151,11 @@ export class RtkStream {
 	private emit(): void {
 		this.lastEmit = performance.now();
 		if (this.lora) Object.assign(this.status, this.lora.counters);
+		if (this.tracker instanceof Rtk3Tracker) Object.assign(this.status, this.tracker.counters);
 		this.post({
 			type: 'rtk',
 			freq: this.frequency,
+			profile: this.profile,
 			status: { ...this.status },
 			stations: this.tracker.snapshot(),
 			rtcm: this.tracker.flush(),

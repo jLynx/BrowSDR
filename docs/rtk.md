@@ -5,8 +5,65 @@ streaming path as the other packet decoders. The SDR supplies IQ; TypeScript
 handles LoRa acquisition, coding, station identification and RTCM reassembly.
 Live reception needs no companion script, service or GNU Radio installation.
 The station browser is general RTK UI. Radio decoding currently supports the
-verified Mammotion LoRa wrapper and an experimental LoRa profile; other RTK
-radio protocols still need their own decoders.
+verified Mammotion LoRa wrapper, an experimental RTK3 / RBS03 decoder, and an
+unidentified experimental LoRa profile. Other RTK radio protocols still need
+their own decoders.
+
+## Experimental RTK3 / RBS03 support
+
+Select **Decoder settings → Mammotion RTK3 / RBS03 · 250 kHz (experimental)**
+to decode the format documented by
+[Martin Boissonneault (VE2MRX)](https://github.com/Ve2mrx/mammotion-rtk-lora/blob/7cb61c36187c4becd408a99be4f0050d416e65bf/PROTOCOL.md)
+from an RBS03 base with a Luba mini in the US. This implementation was checked
+with invented packets and synthetic IQ, **without RTK3 hardware or real RTK3
+captures**. Firmware and regional variations remain unverified.
+
+The profile uses LoRa SF7, BW250 kHz, CR4/5, explicit header, preamble16,
+no LoRa payload CRC and LDRO off. Standard private sync word **0x12** maps to
+SF7 sync symbols **[8,16]**; this differs from the unidentified Luba 2 candidate's
+observed **[16,8]**. The profiles remain separate. Timing starts at 0 ppm because
+no RTK3/SDR clock error has been measured; adjust it for your receiver.
+
+Tune the VFO to an active channel in the waterfall within the received band
+(currently 900–930 MHz, at 1 MSPS or higher). There is no guessed frequency
+preset or automatic hop follower. VE2MRX reports 25 ascending US slots spaced
+1 MHz apart, 600 ms per slot and a 15-second lap, with the lowest slot silent.
+A fixed VFO can decode intermittent bursts during visits to its channel; it
+will miss most of that hopping stream and may not receive all base details.
+The reported US plan is not assumed to apply to New Zealand or other regions.
+
+Every accepted radio frame must have the documented `00 00` prefix, a
+little-endian 16-bit address, length no greater than 231 bytes, and valid
+**CRC16/MODBUS** over the full frame including its address. Frames with detected
+coding parity errors are rejected. Complete 21-byte beacons with marker
+`55 55 00 40`, five padding zeros and `AA AA` are counted separately; neither
+beacons nor the address and CRC trailers enter the container stream.
+
+Data containers use:
+
+```text
+A5 5A 04 01 04 TYPE LENGTH_LE16 SEQUENCE_LE16 <payload>
+```
+
+Type `01` must contain exactly one complete RTCM3 frame, including its matching
+length and valid **CRC24Q**. Type `00` is consumed without interpreting or
+exporting its contents. Containers may span radio frames and interleaved beacons.
+Reassembly is isolated by address and bounded to 16 bases. Invalid radio frames,
+lost IQ chunks, retunes, profile/rate changes and more than two seconds of silence
+discard incomplete containers. A decreasing beacon uptime also clears that
+base's partial stream and sequence state. Repeated container sequence numbers
+are suppressed; forward increments, including 16-bit wrap, provide gap
+diagnostics. These increments do not directly measure lost radio frames or USB
+samples.
+
+Checksum-verified corrections feed the existing station list, position/map,
+GNSS observations and per-base RTCM exports. The UI shows only the decoded
+**LoRa station address**, without inventing scan/channel/loc values. Beacons
+alone show **Verified beacons** and never create a correction station row or map.
+Radio rejection and invalid RTCM-container counters remain separate.
+
+RTK3 support does not resolve Luba 2. The existing recorded Luba 2 candidate
+matches neither the RTK3 application checksum nor its expected markers.
 
 ## Measured signals
 
@@ -281,8 +338,9 @@ The two labelled checksum bytes and the loc field remain uninterpreted.
 Bodies use XOR `0x12`; RTCM frames can span radio packets. Both LoRa payload CRC and
 RTCM CRC24Q must pass. Invalid packets and lost IQ chunks clear incomplete
 buffers; alternating station identities retain separate buffers. RTCM reference-station IDs differ from Mammotion pairing
-IDs. The lower PHY has no payload CRC, so its payload remains untrusted;
-this does not establish encryption.
+IDs. The unidentified lower profile has no established application checksum,
+so its payload remains untrusted; this does not establish encryption. RTK3's
+separate profile validates the documented CRC16/MODBUS frame layer instead.
 
 The implementation uses bounded IQ history, throttled UI messages and
 existing worker backpressure. Retunes, profile changes, sample-rate changes
