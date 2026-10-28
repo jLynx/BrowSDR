@@ -46,7 +46,7 @@ export const EP_STREAM_IN_NUM = 1; // IQ stream input (endpoint number for trans
 // Streaming constants
 // 128 packets yield 130560 IQ samples, within the DSP's 131072-sample capacity.
 // At 61.44 MSPS this halves callbacks compared with 256KB reads.
-export const TRANSFER_SIZE = 524288; // 512 KB per bulk transfer
+export const TRANSFER_SIZE = 524288; // Maximum 512 KB per bulk transfer; smaller reads at low sample rates
 export const STREAM_PKT_SIZE = 4096; // FPGA packet size
 export const STREAM_HDR_SIZE = 16; // Packet header bytes
 export const STREAM_PAYLOAD = STREAM_PKT_SIZE - STREAM_HDR_SIZE; // 4080 bytes of IQ data

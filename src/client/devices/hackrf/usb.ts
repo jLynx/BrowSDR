@@ -1,5 +1,6 @@
 import type { PartIdSerialNo, RxCallback } from './types';
 import { errorMessage } from '@/platform/errors';
+import { receiveTransferSize } from '@/radio/receive-transfer';
 /*
 Original: https://github.com/mossmann/hackrf/blob/master/host/libhackrf/src/hackrf.c
 Copyright (c) 2012, Jared Boone <jared@sharebrained.com>
@@ -156,6 +157,7 @@ class HackRF {
 
 	device!: USBDevice;
 	rxRunning: Array<Promise<void>> | null = null;
+	private sampleRate = 10e6;
 
 	static computeBasebandFilterBw(bandwidthHz: number): number {
 		const i = HackRF.MAX2837_FT.findIndex((e) => e >= bandwidthHz);
@@ -325,6 +327,7 @@ class HackRF {
 		}
 
 		await this.setBasebandFilterBandwidth(HackRF.computeBasebandFilterBw((0.75 * freqHz) / divider));
+		this.sampleRate = freqHz / divider;
 	}
 
 	async setBasebandFilterBandwidth(bandwidthHz: number): Promise<void> {
@@ -425,13 +428,14 @@ class HackRF {
 		}
 
 		await this.setTransceiverMode(HackRF.HACKRF_TRANSCEIVER_MODE_RECEIVE);
+		const transferSize = receiveTransferSize(this.sampleRate, HackRF.TRANSFER_BUFFER_SIZE, 2);
 		const session: Array<Promise<void>> = [];
 		this.rxRunning = session;
 		const transfer = async (): Promise<void> => {
 			await Promise.resolve();
 			while (this.rxRunning === session) {
 				try {
-					const result = await this.device.transferIn(1, HackRF.TRANSFER_BUFFER_SIZE);
+					const result = await this.device.transferIn(1, transferSize);
 					if (this.rxRunning !== session) break;
 					if (result.status !== 'ok') {
 						console.error('startRx: transfer status not ok:', result.status);
