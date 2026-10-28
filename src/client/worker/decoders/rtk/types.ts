@@ -1,4 +1,4 @@
-export type RtkProfile = 'luba1' | 'lower' | 'rtk3';
+export type RtkProfile = 'luba1' | 'lower' | 'rtk2' | 'rtk3';
 
 export interface LoraProfile {
 	bandwidth: number;
@@ -42,6 +42,8 @@ export interface RtkStatus {
 }
 
 export interface RtkIdentity {
+	protocol?: 'rtk2';
+	network?: string;
 	scan?: number;
 	channel?: number;
 	netId: number;

@@ -4,18 +4,21 @@ import type { LoraProfile, RtkMessage, RtkStatus, RtkProfile } from './types';
 import { LoraReceiver } from './lora';
 import { RtkTracker } from './rtcm';
 import { Rtk3Tracker } from './rtk3/tracker';
+import { Rtk2Tracker } from './rtk2/tracker';
 import { errorMessage } from '@/platform/errors';
 
 export const RTK_RATE = 1000000;
 export const RTK_PROFILES: Record<string, LoraProfile> = {
 	luba1: { bandwidth: 500000, oversample: 2, sync: [40, 36], ldro: true },
 	lower: { bandwidth: 250000, oversample: 4, sync: [16, 8], ldro: false },
+	rtk2: { bandwidth: 250000, oversample: 4, sync: [16, 8], ldro: false },
 	// Standard private sync word 0x12 maps to SF7 symbol bins [8, 16].
 	rtk3: { bandwidth: 250000, oversample: 4, sync: [8, 16], ldro: false },
 };
 const profileName: Record<RtkProfile, string> = {
 	luba1: 'Mammotion 500 kHz profile',
 	lower: 'unverified lower profile',
+	rtk2: 'Mammotion RTK2 / DU1021D profile',
 	rtk3: 'RTK3 / RBS03 experimental profile',
 };
 const initialStatus = (): RtkStatus => ({
@@ -39,7 +42,7 @@ export class RtkStream {
 	private direct = false;
 	private scratch = new Float32Array(0);
 	private lastChunk?: number;
-	private tracker: RtkTracker | Rtk3Tracker = new RtkTracker();
+	private tracker: RtkTracker | Rtk2Tracker | Rtk3Tracker = new RtkTracker();
 	private lora?: LoraReceiver;
 	private lastEmit = 0;
 	private status = initialStatus();
@@ -79,7 +82,7 @@ export class RtkStream {
 		}
 		try {
 			this.profile = name;
-			this.tracker = name === 'rtk3' ? new Rtk3Tracker() : new RtkTracker();
+			this.tracker = name === 'rtk3' ? new Rtk3Tracker() : name === 'rtk2' ? new Rtk2Tracker() : new RtkTracker();
 			this.direct = rate === RTK_RATE && Math.abs(params.freq - center) < 0.000001;
 			if (!this.direct) {
 				this.ddc = new this.Processor(rate, (params.freq - center) * 1e6, RTK_RATE);
@@ -151,7 +154,7 @@ export class RtkStream {
 	private emit(): void {
 		this.lastEmit = performance.now();
 		if (this.lora) Object.assign(this.status, this.lora.counters);
-		if (this.tracker instanceof Rtk3Tracker) Object.assign(this.status, this.tracker.counters);
+		if (this.tracker instanceof Rtk3Tracker || this.tracker instanceof Rtk2Tracker) Object.assign(this.status, this.tracker.counters);
 		this.post({
 			type: 'rtk',
 			freq: this.frequency,

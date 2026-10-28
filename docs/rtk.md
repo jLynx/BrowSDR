@@ -5,9 +5,61 @@ streaming path as the other packet decoders. The SDR supplies IQ; TypeScript
 handles LoRa acquisition, coding, station identification and RTCM reassembly.
 Live reception needs no companion script, service or GNU Radio installation.
 The station browser is general RTK UI. Radio decoding currently supports the
-verified Mammotion LoRa wrapper, an experimental RTK3 / RBS03 decoder, and an
-unidentified experimental LoRa profile. Other RTK radio protocols still need
+verified Mammotion RTK1 and RTK2 wrappers, an experimental RTK3 / RBS03 decoder,
+and an unidentified experimental LoRa profile. Other RTK radio protocols still need
 their own decoders.
+
+## RTK2 / DU1021D support
+
+Select **Decoder settings → Mammotion RTK2 / DU1021D · 250 kHz**. This decoder
+was validated against a recorded RTK2 power cycle: 619 complete recovered radio
+packets passed CRC8/MAXIM and container CRC16/MODBUS, yielding 270 RTCM frames
+with valid CRC24Q. Independent gr-lora_sdr replay also matched 96 complete radio
+payloads, including 38 maximum-length packets. This is recorded-RF validation;
+fresh live hardware validation of the integrated profile remains outstanding.
+
+The PHY is SF7, BW250 kHz, CR4/5, explicit header, preamble16, no LoRa payload
+CRC, LDRO off and sync **[16,8]**. Timing starts at +10 ppm for the measured
+receiver. Tune to the active signal in the waterfall: the recording shows
+startup channel changes between approximately 915.191 and 924.116 MHz, without
+establishing continuous hopping or a universal regional channel plan. Automatic
+channel following is not available.
+
+DU1021D applies a reversible bit transpose, nibble substitution, parity mixing
+and fixed mask after application framing. The decoder undoes that transform
+after standard LoRa dewhitening. The resulting outer frame is:
+
+```text
+5D A6 NETWORK[8] ADDRESS_LE16 BODY_LENGTH_LE16 RADIO_SEQUENCE_U8
+<body> CRC8/MAXIM 0D 0A
+```
+
+The body is one container:
+
+```text
+A5 5A 04 01 04 01 LENGTH_LE16 SEQUENCE_LE16
+<correction stream chunk> CRC16/MODBUS_LE16
+```
+
+Both checksums include their respective headers and exclude checksum trailers.
+Zero-length containers are keepalives; they contain no RTCM. Nonempty containers
+carry arbitrary chunks of the RTCM byte stream, so one RTCM frame can span
+several containers and one container can include several RTCM frame boundaries.
+Each reconstructed RTCM frame must pass CRC24Q before appearing in the station
+map, satellite observations or correction exports.
+
+Reassembly is isolated by the raw eight-byte network field and 16-bit address,
+bounded to 16 bases and a maximum RTCM frame per partial stream. Duplicate
+container sequences are suppressed. Gaps, counter restarts, corrupt packets,
+IQ discontinuities, retunes, profile changes and more than two seconds of
+silence discard incomplete corrections. Keepalives preserve adjacent fragments.
+The UI displays the validated address; the complete pairing-number mapping
+has not been established. No pairing number is required as a decoding key.
+
+The recorded base reports **UNICORE** in RTCM1033, without a receiver model or
+firmware descriptor. This does not establish whether that base uses UM960.
+RTCM1006, 1033, 1074, 1084, 1094 and 1124 were recovered, covering reference
+position, equipment and GPS/GLONASS/Galileo/BeiDou MSM4 observations.
 
 ## Experimental RTK3 / RBS03 support
 
@@ -20,7 +72,7 @@ captures**. Firmware and regional variations remain unverified.
 
 The profile uses LoRa SF7, BW250 kHz, CR4/5, explicit header, preamble16,
 no LoRa payload CRC and LDRO off. Standard private sync word **0x12** maps to
-SF7 sync symbols **[8,16]**; this differs from the unidentified Luba 2 candidate's
+SF7 sync symbols **[8,16]**; this differs from RTK2's
 observed **[16,8]**. The profiles remain separate. Timing starts at 0 ppm because
 no RTK3/SDR clock error has been measured; adjust it for your receiver.
 
@@ -62,22 +114,22 @@ GNSS observations and per-base RTCM exports. The UI shows only the decoded
 alone show **Verified beacons** and never create a correction station row or map.
 Radio rejection and invalid RTCM-container counters remain separate.
 
-RTK3 support does not resolve Luba 2. The existing recorded Luba 2 candidate
-matches neither the RTK3 application checksum nor its expected markers.
+RTK2 uses its own transformed outer wrapper and CRC8, rather than the RTK3
+address-and-CRC16 radio wrapper. The profiles remain separate.
 
 ## Measured signals
 
 These profiles were verified with LimeSDR-USB, RX1_L (RX1 / LNAL).
 
-| Signal       | Measured centre                                                     | PHY                                                                                         | Identity                                                                      |
-| ------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Upper        | approximately 923.118 MHz                                           | SF7, BW500 kHz, CR4/6, explicit header, payload CRC, preamble32, sync [40,36], LDRO enabled | Mammotion wrapper and RTCM verified; receiver UNICORE UM960                   |
-| Experimental | approximately 915.190 MHz before restart; 918.060 MHz after restart | SF7, BW250 kHz, CR4/5, explicit header, no payload CRC, preamble16, sync [16,8]             | **Luba 2 candidate**; power-cycle association, pairing and payload unverified |
+| Signal | Measured centre                                                                                        | PHY                                                                                         | Identity                                                                    |
+| ------ | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Upper  | approximately 923.118 MHz                                                                              | SF7, BW500 kHz, CR4/6, explicit header, payload CRC, preamble32, sync [40,36], LDRO enabled | Mammotion wrapper and RTCM verified; receiver UNICORE UM960                 |
+| RTK2   | approximately 915.191 MHz; startup at 924.116 MHz in the long recording, 918.060 MHz in earlier slices | SF7, BW250 kHz, CR4/5, explicit header, no payload CRC, preamble16, sync [16,8]             | DU1021D wrapper and RTCM verified; receiver reports UNICORE without a model |
 
 These are uncalibrated receiver measurements. The antenna label does not
 establish an exact frequency. A Mammotion pairing code describes
 scan/channel/loc/net fields; its first number is not a frequency. The experimental
-signal's pairing fields have not been identified.
+signal's full pairing-field mapping has not been identified.
 The bases are not interchangeable, and the Luba 1 wrapper is not assumed to
 apply to Luba 2.
 
@@ -150,6 +202,10 @@ not independently assign the second stream to one base or verify its payload.
 
 ### Recorded power-cycle results
 
+The following short-slice experiments are historical. Their application bytes
+were subsequently resolved by the RTK2 decoder described above; the long
+recording provides the current checksum and RTCM validation.
+
 A subsequent restart of both bases was recorded in fourteen short IQ slices
 at 10 MSPS, centred at 919.500 MHz. This nominally covers 914.5–924.5 MHz,
 so it cannot establish activity on the upper New Zealand channels. The slices
@@ -178,8 +234,8 @@ the restart, but continuous hopping has not been demonstrated.
 
 The experimental VFO also recovers live headers and payloads at 40 MSPS with
 the receiver centre restored to 923.125 MHz. Live reception can still produce
-coding parity errors. No experimental application checksum, pairing identity,
-or RTCM CRC has passed; recovered bytes remain unverified.
+coding parity errors. At the time of that experiment, no application checksum
+or RTCM CRC had passed. The RTK2 profile now validates those protocol layers.
 
 ### Related RTK 3 protocol clues
 
@@ -198,9 +254,8 @@ excluded from the correction stream before reassembly.
 None of the 49 clean baseline/startup packets passes that whole-frame MODBUS
 checksum or contains its beacon or container markers in the expected decoded
 format. Nibble-order and whitening-phase checks also produce no matching
-structures. These are useful investigative leads, not established Luba 2 support.
-The next protocol step remains identifying and validating this stream's own
-application framing before displaying station identity or GNSS information.
+structures before undoing the DU1021D transform. RTK2 support now uses its own
+validated outer frame and container checksums before displaying GNSS information.
 
 ## Live browser workflow
 

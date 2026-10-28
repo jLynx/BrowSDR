@@ -55,6 +55,31 @@ async function setup() {
 }
 
 describe('live RTK receiver tools', () => {
+	it('selects RTK2 with measured timing and exports verified corrections by network and address', async () => {
+		await setup();
+		wrapper.vm.rtk.panelOpen = true;
+		wrapper.vm.vfos[0].rtk = true;
+		await nextTick();
+		await wrapper.get('select[aria-label="RTK signal profile"]').setValue('rtk2');
+		expect(wrapper.vm.vfos[0]).toMatchObject({ rtkProfile: 'rtk2', rtkClockPpm: 10, freq: 923.118 });
+		const packet = message();
+		packet.profile = 'rtk2';
+		packet.stations = [{ ...packet.stations[0], protocol: 'rtk2', network: '544553544e455431', address: 4242, netId: 0 }];
+		packet.rtcm[0].source = 'rtk2-544553544e455431-4242';
+		packet.status.beacons = 1;
+		wrapper.vm._onRtkMessage(0, 923.118, packet);
+		await nextTick();
+		expect(wrapper.get('[aria-label="LoRa station address"]').text()).toContain('address 4242');
+		expect(wrapper.get('.rtk-diagnostics').text()).toContain('Verified keepalives1');
+		expect(wrapper.text()).toContain('RTK2 station address: 4242');
+		await wrapper.get('select[aria-label="RTK export format"]').setValue('corrections');
+		await wrapper
+			.findAll('.rtk-section button')
+			.find((button) => button.text() === 'Download file')!
+			.trigger('click');
+		expect(downloadCorrections).toHaveBeenCalledWith(packet.rtcm, 923.118, packet.rtcm[0].source);
+	});
+
 	it('selects RTK3 without a guessed frequency, clears prior-profile results and exports by address', async () => {
 		await setup();
 		wrapper.vm.rtk.panelOpen = true;
