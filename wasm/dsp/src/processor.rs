@@ -294,10 +294,28 @@ impl DspProcessor {
         self.last_squelch_db
     }
 
+    /// FM-demod diagnostics over the last processed block. Raw phase step is
     /// Enable or disable audio filters (LowPass, HighPass) for NFM.
     pub fn set_audio_filters(&mut self, low_pass: bool, high_pass: bool) {
         self.use_lp = low_pass;
         self.use_hp = high_pass;
+    }
+
+    /// Override the FM deviation reference used for output normalization.
+    ///
+    /// By default, `set_bandwidth` sets the deviation reference to `bandwidth/2`,
+    /// so a tone at the channel edge maps to ±1.0. For 2-FSK pager decoders the
+    /// nominal deviation is well-known and narrower than the channel (e.g. POCSAG
+    /// and GSC use ±4.5 kHz within a 12.5 kHz channel), so the default reference
+    /// of 6.25 kHz causes the demod to over-range on any burst that exceeds it.
+    /// Calling this method with the known deviation (e.g. 4500.0) re-scales the
+    /// output so a tone at that exact deviation maps to ±1.0, giving headroom for
+    /// over-deviation without railing. Pass 0.0 to revert to the bandwidth/2
+    /// default (the reference is restored on the next `set_bandwidth` call).
+    pub fn set_fm_deviation(&mut self, deviation_hz: f32) {
+        let dev = if deviation_hz > 0.0 { deviation_hz } else { self.bandwidth / 2.0 };
+        let deviation_rad = 2.0 * PI * dev / self.if_sample_rate;
+        self.inv_deviation = 1.0 / deviation_rad;
     }
 
     /// Enable or disable WFM mode. When enabled, uses SDR++ broadcast_fm.h
@@ -557,7 +575,8 @@ impl DspProcessor {
             } else if diff <= -PI {
                 diff += 2.0 * PI;
             }
-            self.scratch_audio[k] = diff * self.inv_deviation;
+            let audio = diff * self.inv_deviation;
+            self.scratch_audio[k] = audio;
             prev_phase = cur_phase;
         }
         self.prev_phase = prev_phase;

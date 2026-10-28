@@ -1,5 +1,6 @@
 import { errorMessage } from '@/platform/errors';
 import { AirspyIqConverter } from './airspy/iq-converter';
+import { receiveTransferSize } from '@/radio/receive-transfer';
 /*
 Airspy WebUSB driver for BrowSDR
 Copyright (c) 2026, jLynx <https://github.com/jLynx>
@@ -52,6 +53,7 @@ export class AirspyDevice implements SdrDevice {
 
 	sampleRates: number[] = [2500000, 10000000];
 	private firmwareRates = [10000000, 2500000];
+	private sampleRate = 10000000;
 	private dev!: USBDevice;
 	private rxRunning: Array<Promise<void>> | null = null;
 
@@ -120,6 +122,7 @@ export class AirspyDevice implements SdrDevice {
 		await this.stopRx();
 		await this.dev.clearHalt('in', 1);
 		await this.vendorIn(AIRSPY_SET_SAMPLERATE, 0, index, 1);
+		this.sampleRate = rate;
 	}
 
 	async setFrequency(freqHz: number): Promise<void> {
@@ -162,10 +165,12 @@ export class AirspyDevice implements SdrDevice {
 
 	private async receive(session: Array<Promise<void>>, callback: (data: ArrayBufferView) => void): Promise<void> {
 		const converter = new AirspyIqConverter();
+		// Each IQ sample comes from two unpacked 16-bit real ADC samples.
+		const transferSize = receiveTransferSize(this.sampleRate, TRANSFER_BUFFER_SIZE, 4);
 		// Submit several reads, but consume in submission order: the converter is stateful.
 		// Catch each queued rejection immediately, even if an earlier read is pending.
 		const read = (): Promise<USBInTransferResult | Error> =>
-			this.dev.transferIn(1, TRANSFER_BUFFER_SIZE).catch((error: unknown) => new Error(errorMessage(error)));
+			this.dev.transferIn(1, transferSize).catch((error: unknown) => new Error(errorMessage(error)));
 		const pending = Array.from({ length: 4 }, read);
 		try {
 			while (this.rxRunning === session) {

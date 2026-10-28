@@ -5,8 +5,9 @@ import type { RtkMessage } from '@/worker/decoders/rtk/types';
 import type { AcarsMessage } from '@/worker/decoders/acars/types';
 import type { AdsbMessage } from '@/worker/decoders/adsb/types';
 import type { VfoParams } from './types';
-import type { RDSMessage, Rtl433Message } from '@/worker/decoders/types';
+import type { RDSMessage, RdsStatus, Rtl433Message } from '@/worker/decoders/types';
 import type { DSDStatus } from '@/worker/decoders/dsd/types';
+import type { PagerProtocol } from '@/worker/decoders/charsets';
 
 export interface SharedBandOutput {
 	centerBin: number;
@@ -24,6 +25,7 @@ export type DspOutput =
 	| BleMessage
 	| AcarsMessage
 	| { type: 'rds'; msg: RDSMessage }
+	| { type: 'rds_status'; status: RdsStatus }
 	| { type: 'dsd_status'; status: DSDStatus }
 	| { type: 'dsp_debug_log'; level: 'log' | 'warn' | 'error'; message: string }
 	| { type: 'error'; error: string; inputSamples?: number; chunkId?: number }
@@ -78,4 +80,11 @@ export interface DspAudio {
 	squelchOpen: boolean;
 	squelchDb: number;
 	dspTime: number;
+	/**
+	 * When set, this buffer is a pager channel leg demodulated at the protocol's
+	 * own RX bandwidth and must feed ONLY that protocol's decoder, not playback,
+	 * whisper, or the other pager decoders. An untagged buffer is the main VFO
+	 * audio (voice/playback) and carries no pager decode.
+	 */
+	pager?: PagerProtocol;
 }

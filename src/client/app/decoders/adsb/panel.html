@@ -1,6 +1,6 @@
 <section v-if="receiver.adsb.panelOpen" class="adsb-panel" :class="{ 'adsb-fullscreen': fullscreen }" aria-label="ADS-B aircraft">
-	<UiToolHeader variant="pocsag" closable close-label="Close ADS-B panel" @close="receiver.toggleAdsbPanel">
-		ADS-B Aircraft <span class="pocsag-count">{{ aircraft.length }} aircraft · {{ positioned.length }} located</span>
+	<UiToolHeader variant="msgcenter" closable close-label="Close ADS-B panel" @close="receiver.toggleAdsbPanel">
+		ADS-B Aircraft <span class="msgcenter-count">{{ aircraft.length }} aircraft · {{ positioned.length }} located</span>
 		<template #actions>
 			<UiSelect v-model.number="receiver.activeVfoIndex" aria-label="ADS-B VFO" class="decoder-vfo-select">
 				<option v-for="(vfo, i) in receiver.vfos" :key="i" :value="i">VFO {{ i + 1 }} · {{ vfo.freq.toFixed(3) }} MHz</option>
@@ -54,10 +54,10 @@
 					>Look up ICAO</UiButton
 				></UiInputGroup
 			>
-			<UiEmptyState v-if="!selected && !aircraft.length" variant="pocsag"
+			<UiEmptyState v-if="!selected && !aircraft.length" variant="msgcenter"
 				>Waiting for aircraft transmissions. Use an SDR and antenna covering 1090 MHz, with at least 2 MS/s.</UiEmptyState
 			>
-			<UiEmptyState v-else-if="!selected && !filtered.length" variant="pocsag">No aircraft match your search.</UiEmptyState>
+			<UiEmptyState v-else-if="!selected && !filtered.length" variant="msgcenter">No aircraft match your search.</UiEmptyState>
 			<div class="adsb-table-wrap" v-show="!selected" v-if="filtered.length">
 				<table class="adsb-table">
 					<thead>

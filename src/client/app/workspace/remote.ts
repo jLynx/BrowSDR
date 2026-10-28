@@ -6,6 +6,9 @@ import type { AppInstance } from '@/app/core/receiver.types';
 import * as Comlink from 'comlink';
 import { WebRTCHandler, PEER_ID_PREFIX } from '@/remote/webrtc';
 
+/** Pager-decoder command types dispatched together (POCSAG + GSC). */
+const PAGER_COMMANDS = new Set<ReceiverCommand['type']>(['pocsag', 'pocsag_status', 'gsc', 'gsc_status', 'flex', 'flex_status']);
+
 export const remoteMethods = {
 	applySharedChannelization(this: AppInstance) {
 		if (this.remoteMode === 'client') {
@@ -257,6 +260,14 @@ export const remoteMethods = {
 		}
 
 		if (handlePacketTelemetry.call(this, cmd)) return;
+		if (PAGER_COMMANDS.has(cmd.type)) {
+			handlePagerCommand.call(
+				this,
+				cmd as Extract<ReceiverCommand, { type: 'pocsag' | 'pocsag_status' | 'gsc' | 'gsc_status' | 'flex' | 'flex_status' }>,
+				clientId,
+			);
+			return;
+		}
 		switch (cmd.type) {
 			case 'sync':
 				handleSync.call(this, cmd, clientId);
@@ -287,12 +298,6 @@ export const remoteMethods = {
 				break;
 			case 'rtl433':
 				handleRtl433.call(this, cmd, clientId);
-				break;
-			case 'pocsag':
-				handlePocsag.call(this, cmd, clientId);
-				break;
-			case 'pocsag_status':
-				handlePocsagStatus.call(this, cmd, clientId);
 				break;
 			case 'rds':
 				handleRds.call(this, cmd, clientId);
@@ -369,21 +374,7 @@ async function installHostStreamCallbacks(this: AppInstance) {
 		}),
 	);
 	// Setup POCSAG message callback — forward decoded messages to the specific remote client
-	await this.backend.setRemoteHostPocsagCallback(
-		Comlink.proxy((clientId: string, vfoIndex: number, freq: number, msg: Parameters<AppInstance['_onPocsagMessage']>[2]) => {
-			if (this._webrtc) {
-				this._webrtc?.sendCommandTo(clientId, { type: 'pocsag', vfoIndex, freq, msg });
-			}
-		}),
-	);
-	// Setup POCSAG link-status callback — forward sync/speed/inversion/BER to the client
-	await this.backend.setRemoteHostPocsagStatusCallback(
-		Comlink.proxy((clientId: string, vfoIndex: number, freq: number, status: Parameters<AppInstance['_onPocsagStatus']>[2]) => {
-			if (this._webrtc) {
-				this._webrtc?.sendCommandTo(clientId, { type: 'pocsag_status', vfoIndex, freq, status });
-			}
-		}),
-	);
+	await installPagerHostCallbacks(this);
 	// RDS is decoded from MPX on the host; the client receives metadata
 	// over the command channel because streamed audio excludes 57 kHz RDS.
 	await this.backend.setRemoteHostRdsCallback(
@@ -529,15 +520,64 @@ function handleRtl433(this: AppInstance, cmd: Extract<ReceiverCommand, { type: '
 	if (this.remoteMode === 'client') this._onRtl433Message(cmd.vfoIndex, cmd.freq, cmd.msg);
 }
 
-function handlePocsag(this: AppInstance, cmd: Extract<ReceiverCommand, { type: 'pocsag' }>, _clientId: string | null) {
-	if (this.remoteMode === 'client') {
-		this._onPocsagMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
-	}
+async function installPagerHostCallbacks(app: AppInstance): Promise<void> {
+	await app.backend.setRemoteHostPocsagCallback(
+		Comlink.proxy((clientId: string, vfoIndex: number, freq: number, msg: Parameters<AppInstance['_onPocsagMessage']>[2]) => {
+			app._webrtc?.sendCommandTo(clientId, { type: 'pocsag', vfoIndex, freq, msg });
+		}),
+	);
+	await app.backend.setRemoteHostPocsagStatusCallback(
+		Comlink.proxy((clientId: string, vfoIndex: number, freq: number, status: Parameters<AppInstance['_onPocsagStatus']>[2]) => {
+			app._webrtc?.sendCommandTo(clientId, { type: 'pocsag_status', vfoIndex, freq, status });
+		}),
+	);
+	await app.backend.setRemoteHostGscCallback(
+		Comlink.proxy((clientId: string, vfoIndex: number, freq: number, msg: Parameters<AppInstance['_onGscMessage']>[2]) => {
+			app._webrtc?.sendCommandTo(clientId, { type: 'gsc', vfoIndex, freq, msg });
+		}),
+	);
+	await app.backend.setRemoteHostGscStatusCallback(
+		Comlink.proxy((clientId: string, vfoIndex: number, freq: number, status: Parameters<AppInstance['_onGscStatus']>[2]) => {
+			app._webrtc?.sendCommandTo(clientId, { type: 'gsc_status', vfoIndex, freq, status });
+		}),
+	);
+	await app.backend.setRemoteHostFlexCallback(
+		Comlink.proxy((clientId: string, vfoIndex: number, freq: number, msg: Parameters<AppInstance['_onFlexMessage']>[2]) => {
+			app._webrtc?.sendCommandTo(clientId, { type: 'flex', vfoIndex, freq, msg });
+		}),
+	);
+	await app.backend.setRemoteHostFlexStatusCallback(
+		Comlink.proxy((clientId: string, vfoIndex: number, freq: number, status: Parameters<AppInstance['_onFlexStatus']>[2]) => {
+			app._webrtc?.sendCommandTo(clientId, { type: 'flex_status', vfoIndex, freq, status });
+		}),
+	);
 }
 
-function handlePocsagStatus(this: AppInstance, cmd: Extract<ReceiverCommand, { type: 'pocsag_status' }>, _clientId: string | null) {
-	if (this.remoteMode === 'client') {
-		this._onPocsagStatus(cmd.vfoIndex, cmd.freq, cmd.status);
+function handlePagerCommand(
+	this: AppInstance,
+	cmd: Extract<ReceiverCommand, { type: 'pocsag' | 'pocsag_status' | 'gsc' | 'gsc_status' | 'flex' | 'flex_status' }>,
+	_clientId: string | null,
+) {
+	if (this.remoteMode !== 'client') return;
+	switch (cmd.type) {
+		case 'pocsag':
+			this._onPocsagMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
+			break;
+		case 'pocsag_status':
+			this._onPocsagStatus(cmd.vfoIndex, cmd.freq, cmd.status);
+			break;
+		case 'gsc':
+			this._onGscMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
+			break;
+		case 'gsc_status':
+			this._onGscStatus(cmd.vfoIndex, cmd.freq, cmd.status);
+			break;
+		case 'flex':
+			this._onFlexMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
+			break;
+		case 'flex_status':
+			this._onFlexStatus(cmd.vfoIndex, cmd.freq, cmd.status);
+			break;
 	}
 }
 

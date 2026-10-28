@@ -27,11 +27,11 @@ function toolGroups(receiver: AppInstance): UiMenuGroup[] {
 				},
 				{
 					id: 'pocsag',
-					label: 'POCSAG',
-					description: 'Pager messages',
+					label: 'Pager',
+					description: 'Pager messages (POCSAG, GSC, FLEX)',
 					icon: 'pager',
-					active: vfos.some((vfo) => vfo.pocsag),
-					open: receiver.pocsag.panelOpen,
+					active: vfos.some((vfo) => vfo.pocsag || vfo.gsc || vfo.flex),
+					open: receiver.pager.panelOpen,
 				},
 				{
 					id: 'rds',
@@ -101,9 +101,10 @@ function utilityGroup(receiver: AppInstance): UiMenuGroup {
 		items: [
 			{
 				id: 'iqRecording',
-				label: 'IQ Capture',
-				description: 'Record raw samples for decoder development',
+				label: 'IQ Recorder',
+				description: 'Save radio signals for later analysis',
 				icon: 'radio',
+				active: receiver.iqRecording.active,
 				open: receiver.iqRecording.panelOpen,
 			},
 			{
@@ -142,7 +143,7 @@ function selectTool(receiver: AppInstance, id: string, openOnly = false): void {
 	else {
 		const panels = {
 			whisper: receiver.whisper,
-			pocsag: receiver.pocsag,
+			pocsag: receiver.pager,
 			rds: receiver.rds,
 			rtl433: receiver.rtl433,
 			adsb: receiver.adsb,

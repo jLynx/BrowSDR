@@ -69,7 +69,7 @@
 		"vite": "^6.4.1",
 		"vite-plugin-pwa": "^1.2.0",
 		"vitest": "~3.2.7",
-		"wrangler": "^4.69.0"
+		"wrangler": "^4.154.0"
 	},
 	"engines": {
 		"node": "^22.13.0 || >=24"

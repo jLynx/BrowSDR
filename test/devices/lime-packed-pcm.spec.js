@@ -44,12 +44,24 @@ describe('LimeSDR packed 12-bit transport', () => {
 	});
 	it('keeps callback sample count within DSP capacity with 25% fewer USB bytes', () => {
 		for (const packed of [false, true]) {
-			const data = new DataView(new ArrayBuffer(streamTransferSize(packed)));
+			const data = new DataView(new ArrayBuffer(streamTransferSize(packed, 61.44e6)));
 			const out = new Int8Array(131072 * 2);
 			expect(decodeStreamPcm(data, out, packed)).toBe(130560 * 2);
 		}
-		expect(streamTransferSize(true)).toBe(streamTransferSize(false) * 0.75);
+		expect(streamTransferSize(true, 61.44e6)).toBe(streamTransferSize(false, 61.44e6) * 0.75);
 		expect(streamSamplesPerPacket(true)).toBe(1360);
+	});
+	it.each([false, true])('bounds low-rate transfer latency and preserves DSP capacity (packed=%s)', (packed) => {
+		for (const rate of [1e6, 2e6, 5e6, 10e6, 20e6, 30.72e6, 40e6, 50e6, 61.44e6]) {
+			const bytes = streamTransferSize(packed, rate);
+			const samples = (bytes / 4096) * streamSamplesPerPacket(packed);
+			expect(bytes % 4096).toBe(0);
+			expect(samples / rate).toBeLessThanOrEqual(0.008);
+			expect(samples).toBeLessThanOrEqual(131072);
+			expect(bytes).toBeLessThanOrEqual(packed ? 393216 : 524288);
+			const out = new Int8Array(samples * 2);
+			expect(decodeStreamPcm(new DataView(new ArrayBuffer(bytes)), out, packed)).toBe(out.length);
+		}
 	});
 	it('rejects partial packets and oversized decoded inputs', () => {
 		expect(() => decodeStreamPcm(new DataView(new ArrayBuffer(4095)), new Int8Array(2720), true)).toThrow('incomplete');

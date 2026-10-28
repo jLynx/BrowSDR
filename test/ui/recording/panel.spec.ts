@@ -21,11 +21,22 @@ function panel() {
 	receiver.radio.sampleRate = 2e6;
 	receiver.iqRecording.panelOpen = true;
 	const wrapper = mount(IqCapturePanel, { global: { provide: { receiver } } });
-	const button = () => wrapper.findAll('button').find((value) => value.text() === 'Capture IQ')!;
+	const button = () => wrapper.findAll('button').find((value) => value.text() === 'Start recording')!;
 	return { receiver, backend, wrapper, button };
 }
 
 describe('IQ capture panel', () => {
+	it('uses the shared header and inputs and explains general signal analysis', () => {
+		const { wrapper } = panel();
+		expect(wrapper.get('.msgcenter-header .msgcenter-title').text()).toContain('IQ Recorder');
+		expect(wrapper.find('.pocsag-header').exists()).toBe(false);
+		expect(wrapper.get('.input-group input').attributes('aria-label')).toBe('Recording duration');
+		expect(wrapper.get('label').attributes('for')).toBe(wrapper.get('input').attributes('id'));
+		expect(wrapper.text()).toContain('analyse later');
+		expect(wrapper.text()).not.toContain('decoder development');
+		wrapper.unmount();
+	});
+
 	it('starts a 15-minute file capture and offers its matching metadata', async () => {
 		const file = { name: 'flex-traffic.sigmf-data' };
 		const picker = vi.fn(async () => file);
@@ -41,7 +52,7 @@ describe('IQ capture panel', () => {
 		expect(picker).toHaveBeenCalledWith({ suggestedName: expect.stringMatching(/\.sigmf-data$/) });
 		expect(backend.captureIqToFile).toHaveBeenCalledWith(900, file);
 		expect(backend.captureIq).not.toHaveBeenCalled();
-		expect(wrapper.text()).toContain('IQ file saved');
+		expect(wrapper.text()).toContain('IQ data saved');
 		expect(wrapper.text()).toContain('Download metadata');
 		expect(wrapper.text()).not.toContain('Download IQ');
 		const metadata = JSON.parse((wrapper.vm as unknown as { metadata: string }).metadata);
@@ -56,7 +67,7 @@ describe('IQ capture panel', () => {
 		const { wrapper, button, backend } = panel();
 		await wrapper.get('input').setValue(240);
 		expect(button().attributes('disabled')).toBeDefined();
-		expect(wrapper.get('[role="status"]').text()).toContain('64 MiB memory limit');
+		expect(wrapper.get('[role="status"]').text()).toContain('64 MiB download limit');
 		expect(wrapper.get('[role="status"]').text()).toContain('Chrome or Edge');
 		expect(backend.captureIq).not.toHaveBeenCalled();
 		wrapper.unmount();
@@ -64,12 +75,16 @@ describe('IQ capture panel', () => {
 
 	it('keeps small captures available for download without a file picker', async () => {
 		vi.stubGlobal('showSaveFilePicker', undefined);
-		const { wrapper, button, backend } = panel();
+		const { wrapper, button, backend, receiver } = panel();
 		await button().trigger('click');
 		await flushPromises();
 		expect(backend.captureIq).toHaveBeenCalledWith(5);
 		expect(wrapper.text()).toContain('Download IQ');
 		expect(wrapper.text()).toContain('Download metadata');
+		receiver.running = false;
+		await flushPromises();
+		expect(wrapper.get('[role="status"]').text()).toContain('Your recording is ready to download');
+		expect(button().attributes('disabled')).toBeDefined();
 		wrapper.unmount();
 	});
 
@@ -108,6 +123,10 @@ describe('IQ capture panel', () => {
 		await flushPromises();
 		await vi.advanceTimersByTimeAsync(1000);
 		expect(wrapper.get('[role="status"]').text()).toContain('1.0 / 900.0 s');
+		expect(wrapper.get('progress').attributes('aria-label')).toBe('Recording progress');
+		expect(wrapper.get('input').attributes('disabled')).toBeDefined();
+		expect(wrapper.get('select').attributes('disabled')).toBeDefined();
+		expect(wrapper.findAll('button').some((value) => value.text().startsWith('Download'))).toBe(false);
 		wrapper.unmount();
 		expect(backend.cancelIqCapture).toHaveBeenCalledOnce();
 		finish({ byteLength: 3600000000, missingSamples: 0 });

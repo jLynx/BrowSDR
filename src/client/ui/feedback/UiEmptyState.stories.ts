@@ -16,6 +16,6 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 export const Bookmark: Story = {};
 export const Transcript: Story = { args: { variant: 'transcript' } };
-export const Pager: Story = { args: { variant: 'pocsag' } };
+export const Pager: Story = { args: { variant: 'msgcenter' } };
 export const Activity: Story = { args: { variant: 'activity' } };
 export const Clients: Story = { args: { variant: 'remote-clients' } };

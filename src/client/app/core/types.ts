@@ -35,6 +35,17 @@ export interface Vfo {
 	pocsagMode?: PocsagMode;
 	/** Show the runner-up interpretation (auto mode) dimmed; default false. */
 	pocsagSecondGuess?: boolean;
+	/** Decode GSC (Golay Sequential Code) on this NFM VFO. */
+	gsc?: boolean;
+	/** When true, a GSC voice page auto-unmutes and opens squelch so the user
+	 * hears the announcement, restoring the prior state when it ends. */
+	gscAutoListen?: boolean;
+	/** Show the runner-up alpha/numeric interpretation (dimmed); default false. */
+	gscSecondGuess?: boolean;
+	/** Decode FLEX (Motorola FLEX paging) on this NFM VFO. */
+	flex?: boolean;
+	/** Selected FLEX charset (ASCII default, or Kanji which switches decoding). */
+	flexCharset?: CharsetKey;
 	displayFreq: string;
 	focused: boolean;
 }

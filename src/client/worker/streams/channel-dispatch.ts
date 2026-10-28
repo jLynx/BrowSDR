@@ -187,6 +187,8 @@ function needsIq(params: VfoParams): boolean {
 	return (
 		params.enabled ||
 		params.pocsag ||
+		params.gsc === true ||
+		params.flex === true ||
 		(params.rds && params.mode === 'wfm') ||
 		params.rtl433 === true ||
 		params.adsb === true ||
@@ -203,6 +205,8 @@ function disabledDecoders(params: VfoParams): VfoParams {
 		...params,
 		enabled: false,
 		pocsag: false,
+		gsc: false,
+		flex: false,
 		rds: false,
 		rtl433: false,
 		adsb: false,

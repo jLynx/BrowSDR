@@ -1,0 +1,76 @@
+	<!-- Pager Decoder Panel (POCSAG now; GSC / FLEX later) -->
+	<div class="msgcenter-panel" v-if="pager.panelOpen">
+		<UiToolHeader variant="msgcenter" closable close-label="Close pager panel" @close="togglePagerPanel">
+				<svg viewBox="0 0 24 24" width="16" height="16" style="vertical-align:middle;margin-right:4px"><path fill="currentColor" d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-3 12H7v-2h10v2zm0-3H7V9h10v2zm0-3H7V6h10v2z"/></svg>
+			Pager Decoder
+			<span class="msgcenter-count" v-if="pager.log.length">{{ pager.log.length }} msg{{ pager.log.length !== 1 ? 's' : '' }}</span>
+			<template #actions>
+				<select class="decoder-vfo-select" :value="pager.filter" @change="setPagerFilter($event.target.value)" title="Filter by protocol" style="margin-right:6px;">
+					<option value="all">All</option>
+					<option v-for="p in pagerProtocols()" :key="p.id" :value="p.id">{{ p.label }}</option>
+				</select>
+				<UiButton variant="transcript" @click="clearPager" title="Clear log">Clear</UiButton>
+				<UiButton variant="transcript" @click="exportPager" title="Export as text" :disabled="pager.log.length === 0">Export</UiButton>
+			</template>
+		</UiToolHeader>
+		<div class="msgcenter-body" ref="pagerBody">
+			<UiEmptyState v-if="pagerRows().length === 0" variant="msgcenter">
+				No messages yet. Enable a pager protocol (POCSAG, GSC or FLEX) on an NFM VFO, or enable RDS paging / TMC on a WFM VFO.
+			</UiEmptyState>
+			<div v-for="(entry, i) in pagerRows()" :key="i" class="msgcenter-entry"
+				:style="[entry.vfoIndex != null ? { borderLeftColor: vfoColor(entry.vfoIndex) } : {}, (entry.protocol === 'flex' && entry.reasmKey && !entry.complete) ? { borderLeftColor: '#ffb74d', opacity: 0.65 } : {}]">
+				<span class="msgcenter-vfo-dot" v-if="entry.vfoIndex != null" :style="{ background: vfoColor(entry.vfoIndex) }" :title="'VFO ' + (entry.vfoIndex + 1)"></span>
+				<span class="msgcenter-time">{{ entry.time }}</span>
+				<span class="pager-proto" :title="'Protocol: ' + entry.protocol" style="flex-shrink:0;font-size:9px;font-weight:700;letter-spacing:0.5px;padding:1px 4px;border-radius:3px;background:rgba(255,255,255,0.1);">{{ entry.protocol.toUpperCase() }}</span>
+				<span class="msgcenter-freq" :style="entry.vfoIndex != null ? { color: vfoColor(entry.vfoIndex) } : {}">{{ entry.freq }}</span>
+				<span class="pager-capcode" title="Capcode (pager address)">CAP:{{ entry.capcode }}</span>
+				<span v-if="entry.protocol === 'flex' && entry.capClass && entry.capClass !== 'short' && entry.capClass !== 'long'" :title="'Capcode class: ' + entry.capClass" style="color:#ce93d8;flex-shrink:0;font-size:9px;font-weight:700;text-transform:uppercase;">{{ flexCapClassLabel(entry.capClass) }}</span>
+				<span v-if="entry.protocol === 'flex' && entry.groupMembers && entry.groupMembers.length" :title="'Group members: ' + flexMembers(entry.groupMembers)" style="color:#80cbc4;flex-shrink:0;font-size:9px;font-weight:700;">&#128101;{{ entry.groupMembers.length }}</span>
+				<span class="pager-func" v-if="entry.func != null" title="Function / sub-address (A-D)" style="color:#b39ddb;flex-shrink:0;font-size:10px;">F:{{ ['A','B','C','D'][entry.func] || '?' }}</span>
+				<!-- FLEX per-message flags: phase (func-tag style), polarity (NORM/INV like POCSAG/GSC) -->
+				<span v-if="entry.protocol === 'flex' && entry.phase" class="pager-flex-phase" title="FLEX phase (A-D)">PH:{{ entry.phase }}</span>
+				<span v-if="entry.protocol === 'flex' && entry.flexCycle != null && entry.flexCycle >= 0" class="pager-flex-phase" title="FLEX cycle / frame">C{{ String(entry.flexCycle).padStart(2, '0') }}/F{{ String(entry.flexFrame).padStart(3, '0') }}</span>
+				<span v-if="entry.inverted != null" class="pager-pol" :class="entry.inverted ? 'pager-pol-inv' : 'pager-pol-norm'" :title="entry.inverted ? 'Inverted polarity' : 'Normal polarity'">{{ entry.inverted ? 'I' : 'N' }}</span>
+				<span v-if="entry.protocol === 'flex' && entry.reasmKey && !entry.complete" title="Incomplete message, reassembling (updates in place)" style="color:#ffb74d;flex-shrink:0;font-size:9px;font-weight:700;">&#8943; PARTIAL<template v-if="entry.fragCount"> ({{ entry.fragCount }})</template></span>
+				<span v-else-if="entry.protocol === 'flex' && entry.reasmKey && entry.complete" title="Reassembled from fragments" style="color:#4fc3f7;flex-shrink:0;font-size:9px;font-weight:700;">REASM<template v-if="entry.fragCount"> ({{ entry.fragCount }})</template></span>
+				<span v-if="entry.protocol === 'flex' && entry.complete && entry.incomplete" title="Reassembled but missing fragment(s) -- partial content" style="color:#ff8a65;flex-shrink:0;font-size:9px;font-weight:700;">INCOMPLETE</span>
+				<span v-if="entry.protocol === 'flex' && entry.dedup === 'dup'" title="Exact retransmission (duplicate)" style="color:#bbb;flex-shrink:0;font-size:9px;font-weight:700;">DUP</span>
+				<span v-else-if="entry.protocol === 'flex' && entry.dedup === 'dup+'" title="Improved retransmission: cleaner words merged from this copy and re-decoded" style="color:#66bb6a;flex-shrink:0;font-size:9px;font-weight:700;">DUP+</span>
+				<span v-if="entry.protocol === 'flex' && entry.msgNumber != null" title="Numbered message: number (displayed N+1)" style="color:#90caf9;flex-shrink:0;font-size:9px;">#{{ entry.msgNumber + 1 }}</span>
+				<span v-if="entry.protocol === 'flex' && entry.isNew === false" title="Retransmission of an earlier message" style="color:#bbb;flex-shrink:0;font-size:9px;font-weight:700;">RETX</span>
+				<span v-else-if="entry.protocol === 'flex' && entry.isNew === true" title="New message" style="color:#66bb6a;flex-shrink:0;font-size:9px;font-weight:700;">NEW</span>
+				<span v-if="entry.protocol === 'flex' && entry.mailDrop" title="Mail drop (stored message)" style="color:#ce93d8;flex-shrink:0;font-size:9px;font-weight:700;">MD</span>
+				<span v-if="entry.protocol === 'flex' && entry.retrieval" title="Retrieval flag (R)" style="color:#90caf9;flex-shrink:0;font-size:9px;font-weight:700;">R</span>
+				<!-- FLEX checksum (K) + signature (S) quality, colored ok/bad -->
+				<span v-if="entry.protocol === 'flex' && entry.kOk === true" title="K checksum OK" style="color:#66bb6a;flex-shrink:0;font-size:9px;font-weight:700;">K&#10003;</span>
+				<span v-else-if="entry.protocol === 'flex' && entry.kOk === false" title="K checksum FAILED" style="color:#ff5252;flex-shrink:0;font-size:9px;font-weight:700;">K&#10007;</span>
+				<span v-if="entry.protocol === 'flex' && entry.sigOk === true" title="Signature OK" style="color:#66bb6a;flex-shrink:0;font-size:9px;font-weight:700;">S&#10003;</span>
+				<span v-else-if="entry.protocol === 'flex' && entry.sigOk === false" title="Signature FAILED" style="color:#ff5252;flex-shrink:0;font-size:9px;font-weight:700;">S&#10007;</span>
+				<span v-if="entry.protocol === 'flex' && entry.flexBaud" class="pager-flex-mode" :title="'Air mode: ' + entry.flexBaud + 'bps / ' + entry.flexLevels + '-FSK'">{{ entry.flexBaud }}/{{ entry.flexLevels }}FSK</span>
+				<span v-if="entry.protocol === 'flex' && entry.flexTime" class="pager-flex-time" title="Calculated FLEX network time (over-the-air clock)">&#128340; {{ entry.flexTime }}</span>
+				<span class="msgcenter-type" :class="'pager-type-' + (entry.voiceEvent ? 'voice' : entry.type)">{{ entry.type.toUpperCase() }}</span>
+				<span class="pager-baud" v-if="entry.baud">{{ entry.baud }}Bd</span>
+				<span class="pager-check" v-if="entry.uncorrectableCount" title="Uncorrectable codewords (FEC decode failed)" style="flex-shrink:0;font-size:9px;font-weight:700;color:#ff5252;">✗{{ entry.uncorrectableCount }}</span>
+				<span class="pager-check" v-else-if="entry.errorCount" title="FEC-corrected codewords (checksum OK)" style="flex-shrink:0;font-size:9px;font-weight:700;color:#ffca28;">✓~{{ entry.errorCount }}</span>
+				<span class="pager-check" v-else-if="entry.protocol === 'gsc' && (entry.type === 'alpha' || entry.type === 'numeric')" title="Checksum OK, no errors" style="flex-shrink:0;font-size:9px;font-weight:700;color:#66bb6a;">✓</span>
+				<span class="pager-voice" v-if="entry.voiceEvent === 'start'" style="flex:1;min-width:0;color:#4fc3f7;font-weight:700;">▶ VOICE START — listen</span>
+				<span class="pager-voice" v-else-if="entry.voiceEvent === 'stop'" style="flex:1;min-width:0;color:#4fc3f7;">■ VOICE END<span v-if="entry.voiceEndReason" style="opacity:0.7;font-size:10px;">&nbsp;({{ entry.voiceEndReason }})</span></span>
+				<!-- TMC message fields -->
+				<template v-else-if="entry.protocol === 'tmc'">
+					<span style="flex:1;min-width:0;font-size:11px;">
+						<span style="color:#ef9a9a;font-weight:700;" :title="'TMC event code: ' + entry.tmcEvent">EVT:{{ entry.tmcEvent }}</span>
+						<span style="margin-left:4px;color:#90caf9;" :title="'TMC location code: ' + entry.tmcLocation">LOC:{{ entry.tmcLocation }}</span>
+						<span style="margin-left:4px;" :title="'Direction: ' + entry.tmcDirection">{{ entry.tmcDirection === 'negative' ? '◄' : '►' }}</span>
+						<span style="margin-left:4px;opacity:0.7;" :title="'Extent: ' + entry.tmcExtent + ' additional locations'">EXT:{{ entry.tmcExtent }}</span>
+						<span v-if="entry.tmcDiversion" style="margin-left:4px;color:#ffcc44;font-size:9px;font-weight:700;" title="Diversion advised">DIV</span>
+						<span v-if="entry.tmcDuration" style="margin-left:4px;opacity:0.6;font-size:9px;" :title="'Duration code: ' + entry.tmcDuration">D{{ entry.tmcDuration }}</span>
+					</span>
+				</template>
+				<span class="msgcenter-text" v-else-if="entry.text"><span v-for="(seg, si) in pagerSegments(entry)" :key="si"
+					:class="'pager-seg-' + seg.status">{{ seg.text }}</span></span>
+				<span class="msgcenter-text pager-tone" v-else>(tone only)</span>
+				<span class="pager-alt" v-if="entry.alt && entry.alt.text" title="Second guess (runner-up interpretation)">({{ entry.alt.type }}: {{ pagerDisplayText(entry.alt.text) }})</span>
+				<span class="pager-detect" v-if="entry.detectDebug" style="color:#777;font-size:9px;flex-shrink:0;">{{ entry.detectDebug }}</span>
+			</div>
+		</div>
+	</div>

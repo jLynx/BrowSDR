@@ -15,6 +15,9 @@
 	"triggers": { "crons": ["17 3 * * MON"] },
 	// Shared receiver databases, served through db.browser.jlynx.net.
 	"r2_buckets": [{ "binding": "DATABASES", "bucket_name": "browsdr-databases" }],
+	// Branch previews serve the app without the production database refresh binding.
+	// Cron triggers do not run in previews; public database reads use db.browser.jlynx.net.
+	"previews": {},
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement

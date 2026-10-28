@@ -44,6 +44,7 @@
 }
 
 .rds-ps {
+	font-family: 'Roboto Mono', monospace;
 	font-size: 15px;
 	font-weight: 700;
 	color: #4fc3f7;
@@ -81,6 +82,12 @@
 	background: #1b5e20;
 	color: #a5d6a7;
 	letter-spacing: 0.5px;
+}
+
+.rds-flag-off {
+	background: transparent;
+	color: #555;
+	border: 1px solid #333;
 }
 
 .rds-ta {

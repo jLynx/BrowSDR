@@ -20,7 +20,7 @@ describe('BLE routing and remote validation', () => {
 			removed = {},
 			callback = vi.fn();
 		const backend = { dspWorkers: [removed, worker], vfoParams: [params, params] };
-		const send = (target) => routeLocalWorkerMessage(backend, target, message, null, null, null, null, null, callback);
+		const send = (target) => routeLocalWorkerMessage(backend, target, message, null, null, null, null, null, null, callback);
 		send(worker);
 		expect(callback).toHaveBeenLastCalledWith(1, 2402, message);
 		backend.dspWorkers.splice(0, 1);

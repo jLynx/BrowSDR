@@ -1,21 +1,39 @@
-import type { AudioCallback, WhisperCallback, PocsagCallback, PocsagStatusCallback } from '@/worker/runtime/callbacks.types';
+import type { AudioCallback, WhisperCallback, PagerCallbacks } from '@/worker/runtime/callbacks.types';
 import { downmix } from '@/audio/pcm';
 import type { AudioChannels } from '@/audio/types';
 import type { DspAudio } from '@/worker/runtime/dsp-messages.types';
 import * as Comlink from 'comlink';
 import { POCSAGDecoder } from '@/worker/decoders/pocsag';
+import { GSCDecoder } from '@/worker/decoders/golay';
+import { FlexDecoder } from '@/worker/decoders/flex/decoder';
 import type { VfoParams, VfoState, PerfCounters } from '@/worker/runtime/types';
+import type { PagerProtocol } from '@/worker/decoders/charsets';
 import { AUDIO_RATE } from '@/worker/runtime/constants';
 import type { Backend } from '@/worker/runtime/backend';
 import { appendPcm, mixLength } from './audio-queue';
+
+/** Whisper transcription runs on a VFO only when no pager protocol is decoding
+ * it (pager audio is data, not speech). */
+function shouldFeedWhisper(backend: Backend, params: VfoParams): boolean {
+	return !!backend._whisperEnabled && !params.pocsag && !params.gsc && !params.flex;
+}
+
+/** Only main-channel audio may update the VFO's squelch and RX latch. */
+function updateLocalSquelch(backend: Backend, state: VfoState, v: number, msg: DspAudio): void {
+	if (msg.pager) return;
+	state.squelchOpen = msg.squelchOpen;
+	state.squelchDb = msg.squelchDb ?? -120;
+	backend._latchedSquelchOpen ??= [];
+	if (msg.squelchOpen) backend._latchedSquelchOpen[v] = true;
+}
+
 export function installWorkerAudioHandler(
 	backend: Backend,
 	_audioDebugCounter: number,
 	perf: PerfCounters,
 	whisperCallback: WhisperCallback | null,
 	pushWhisper: (v: number, freq: number, samples: Float32Array) => void,
-	pocsagCallback: PocsagCallback | null,
-	pocsagStatusCallback: PocsagStatusCallback | null,
+	pager: PagerCallbacks,
 	pushAudio: AudioCallback,
 ) {
 	const handleWorkerAudio = (v: number, msg: DspAudio): void => {
@@ -30,10 +48,7 @@ export function installWorkerAudioHandler(
 			return;
 		}
 
-		state.squelchOpen = msg.squelchOpen;
-		state.squelchDb = msg.squelchDb ?? -120;
-		if (!backend._latchedSquelchOpen) backend._latchedSquelchOpen = [];
-		if (msg.squelchOpen) backend._latchedSquelchOpen[v] = true;
+		updateLocalSquelch(backend, state, v, msg);
 		if (msg.dspTime) {
 			perf.dspTimeSum += msg.dspTime;
 			if (msg.dspTime > perf.dspTimeMax) perf.dspTimeMax = msg.dspTime;
@@ -43,17 +58,27 @@ export function installWorkerAudioHandler(
 		if (msg.samples) {
 			const out = new Float32Array(msg.samples);
 			const channels = msg.channels ?? 1;
-			perf.audioSamplesOut += out.length / channels;
 
-			if (params.enabled) {
-				queueLocalPcm(state, out, channels);
-
-				if (backend._whisperEnabled && !params.pocsag && whisperCallback) {
-					pushWhisper(v, params.freq, downmix(out, channels));
+			if (msg.pager) {
+				// A pager-leg buffer: demodulated at the protocol's own RX
+				// bandwidth, it feeds ONLY that decoder — never playback, whisper,
+				// or the other pager decoders.
+				decodeLocalPager(pager, params, state, v, out, msg.pager);
+			} else {
+				// Main VFO audio: playback + whisper only. Pager decode runs off
+				// the tagged per-protocol legs above, not this shared buffer. The
+				// untagged buffer still drives a teardown sweep so a decoder is
+				// released when its protocol is disabled (no tagged buffer then
+				// arrives to carry the teardown).
+				perf.audioSamplesOut += out.length / channels;
+				if (params.enabled) {
+					queueLocalPcm(state, out, channels);
+					if (whisperCallback && shouldFeedWhisper(backend, params)) {
+						pushWhisper(v, params.freq, downmix(out, channels));
+					}
 				}
+				decodeLocalPager(pager, params, state, v, out, undefined);
 			}
-
-			decodeLocalPager(pocsagCallback, pocsagStatusCallback, params, state, v, out);
 
 			// Clean up RDS decoder when disabled
 			if ((!params.rds || params.mode !== 'wfm') && state.rdsDecoder) {
@@ -80,25 +105,44 @@ function queueLocalPcm(state: VfoState, samples: Float32Array, channels: AudioCh
 }
 
 export function decodeLocalPager(
-	pocsagCallback: PocsagCallback | null,
-	pocsagStatusCallback: PocsagStatusCallback | null,
+	pager: PagerCallbacks,
 	params: VfoParams,
 	state: VfoState,
 	v: number,
 	out: Float32Array<ArrayBuffer>,
+	tag: PagerProtocol | undefined,
 ) {
-	if (pocsagCallback && params.pocsag && params.mode === 'nfm') {
+	// POCSAG, GSC and FLEX are peer pager protocols, each demodulated on its own
+	// RX-bandwidth leg in the DSP worker and delivered as a tagged audio buffer.
+	// `tag` names which leg this buffer belongs to; only that decoder processes
+	// it. An untagged call (the main VFO buffer) carries no samples to decode and
+	// is used only to run each branch's teardown when its protocol is disabled.
+	decodeLocalPocsag(pager, params, state, v, out, tag);
+	decodeLocalGsc(pager, params, state, v, out, tag);
+	decodeLocalFlex(pager, params, state, v, out, tag);
+}
+
+/** POCSAG decode branch (a peer of the GSC and FLEX branches). */
+function decodeLocalPocsag(
+	pager: PagerCallbacks,
+	params: VfoParams,
+	state: VfoState,
+	v: number,
+	out: Float32Array<ArrayBuffer>,
+	tag: PagerProtocol | undefined,
+) {
+	if (pager.pocsag && params.pocsag && params.mode === 'nfm' && tag === 'pocsag') {
 		if (!state.pocsagDecoder) {
 			state.pocsagDecoder = new POCSAGDecoder(
 				AUDIO_RATE,
 				(pmsg) => {
-					pocsagCallback(v, params.freq, pmsg);
+					pager.pocsag?.(v, params.freq, pmsg);
 				},
 				params.pocsagCharset,
 			);
 			state.pocsagCharset = params.pocsagCharset;
 		} else if (params.pocsagCharset !== state.pocsagCharset) {
-			// Live charset change — re-point the decoder's codepage.
+			// Live charset change -- re-point the decoder's codepage.
 			if (params.pocsagCharset) state.pocsagDecoder.setCharset(params.pocsagCharset);
 			state.pocsagCharset = params.pocsagCharset;
 		}
@@ -107,16 +151,90 @@ export function decodeLocalPager(
 		state.pocsagDecoder.setShowSecondGuess(params.pocsagSecondGuess ?? false);
 		state.pocsagDecoder.process(out);
 		// Emit a throttled link-status snapshot (sync / baud / inversion / BER).
-		if (pocsagStatusCallback) {
+		if (pager.pocsagStatus) {
 			const now = Date.now();
 			if (state.pocsagStatusAt == null || now - state.pocsagStatusAt >= 500) {
 				state.pocsagStatusAt = now;
-				pocsagStatusCallback(v, params.freq, state.pocsagDecoder.getStatus());
+				pager.pocsagStatus(v, params.freq, state.pocsagDecoder.getStatus());
 			}
 		}
 	} else if (!params.pocsag && state.pocsagDecoder) {
+		state.pocsagDecoder.reset();
+		if (pager.pocsagStatus) pager.pocsagStatus(v, params.freq, state.pocsagDecoder.getStatus());
 		state.pocsagDecoder = null;
 		state.pocsagStatusAt = undefined;
+	}
+}
+
+/** FLEX decode branch (separate so decodeLocalPager stays simple). */
+function decodeLocalFlex(
+	pager: PagerCallbacks,
+	params: VfoParams,
+	state: VfoState,
+	v: number,
+	out: Float32Array<ArrayBuffer>,
+	tag: PagerProtocol | undefined,
+) {
+	if (pager.flex && params.flex && params.mode === 'nfm' && tag === 'flex') {
+		if (!state.flexDecoder) {
+			state.flexDecoder = new FlexDecoder(
+				AUDIO_RATE,
+				(fmsg) => {
+					pager.flex?.(v, params.freq, fmsg);
+				},
+				params.flexCharset,
+			);
+			state.flexCharset = params.flexCharset;
+		} else if (params.flexCharset !== state.flexCharset) {
+			// Live charset change (e.g. ASCII <-> Kanji) re-points the decoder.
+			if (params.flexCharset) state.flexDecoder.setCharset(params.flexCharset);
+			state.flexCharset = params.flexCharset;
+		}
+		state.flexDecoder.process(out);
+		if (pager.flexStatus) {
+			const now = Date.now();
+			if (state.flexStatusAt == null || now - state.flexStatusAt >= 500) {
+				state.flexStatusAt = now;
+				pager.flexStatus(v, params.freq, state.flexDecoder.getStatus());
+			}
+		}
+	} else if (!params.flex && state.flexDecoder) {
+		state.flexDecoder.reset();
+		if (pager.flexStatus) pager.flexStatus(v, params.freq, state.flexDecoder.getStatus());
+		state.flexDecoder = null;
+		state.flexStatusAt = undefined;
+	}
+}
+
+/** GSC decode branch (separate so decodeLocalPager stays simple). */
+function decodeLocalGsc(
+	pager: PagerCallbacks,
+	params: VfoParams,
+	state: VfoState,
+	v: number,
+	out: Float32Array<ArrayBuffer>,
+	tag: PagerProtocol | undefined,
+) {
+	if (pager.gsc && params.gsc && params.mode === 'nfm' && tag === 'gsc') {
+		if (!state.gscDecoder) {
+			state.gscDecoder = new GSCDecoder(AUDIO_RATE, (gmsg) => {
+				pager.gsc?.(v, params.freq, gmsg);
+			});
+		}
+		state.gscDecoder.setShowSecondGuess(params.gscSecondGuess ?? false);
+		state.gscDecoder.process(out);
+		if (pager.gscStatus) {
+			const now = Date.now();
+			if (state.gscStatusAt == null || now - state.gscStatusAt >= 500) {
+				state.gscStatusAt = now;
+				pager.gscStatus(v, params.freq, state.gscDecoder.getStatus());
+			}
+		}
+	} else if (!params.gsc && state.gscDecoder) {
+		state.gscDecoder.reset();
+		if (pager.gscStatus) pager.gscStatus(v, params.freq, state.gscDecoder.getStatus());
+		state.gscDecoder = null;
+		state.gscStatusAt = undefined;
 	}
 }
 

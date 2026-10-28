@@ -73,6 +73,36 @@ const validators: Record<string, (value: Record<string, unknown>) => boolean> = 
 		(value.status.baud === null || typeof value.status.baud === 'number') &&
 		(value.status.ber === null || typeof value.status.ber === 'number') &&
 		typeof value.status.codewords === 'number',
+	gsc: (value: Record<string, unknown>) =>
+		numbers(value, ['vfoIndex', 'freq']) &&
+		isRecord(value.msg) &&
+		typeof value.msg.text === 'string' &&
+		typeof value.msg.address === 'string' &&
+		numbers(value.msg, ['addressNumber', 'errorCount', 'uncorrectableCount', 'preambleIndex']) &&
+		['alpha', 'numeric', 'tone', 'voice'].includes(String(value.msg.type)) &&
+		(value.msg.charStatus === undefined ||
+			(Array.isArray(value.msg.charStatus) && value.msg.charStatus.every((s: unknown) => typeof s === 'number'))),
+	gsc_status: (value: Record<string, unknown>) =>
+		numbers(value, ['vfoIndex', 'freq']) &&
+		isRecord(value.status) &&
+		typeof value.status.synced === 'boolean' &&
+		(value.status.baud === null || typeof value.status.baud === 'number') &&
+		(value.status.ber === null || typeof value.status.ber === 'number') &&
+		typeof value.status.codewords === 'number',
+	flex: (value: Record<string, unknown>) =>
+		numbers(value, ['vfoIndex', 'freq']) &&
+		isRecord(value.msg) &&
+		typeof value.msg.text === 'string' &&
+		numbers(value.msg, ['capcode', 'vectorType']) &&
+		typeof value.msg.kind === 'string' &&
+		typeof value.msg.phase === 'string' &&
+		typeof value.msg.long === 'boolean',
+	flex_status: (value: Record<string, unknown>) =>
+		numbers(value, ['vfoIndex', 'freq']) &&
+		isRecord(value.status) &&
+		typeof value.status.locked === 'boolean' &&
+		typeof value.status.stage === 'string' &&
+		typeof value.status.inverted === 'boolean',
 	rds: (value: Record<string, unknown>) => validIndex(value.vfoIndex) && numbers(value, ['freq']) && validRdsMessage(value.msg),
 };
 
@@ -117,13 +147,15 @@ function validVfoParams(value: unknown): boolean {
 		isRecord(value) &&
 		typedFields(value, ['mode', 'deEmphasis', 'rdsRegion'], 'string') &&
 		typedFields(value, ['enabled', 'squelchEnabled', 'lowPass', 'highPass', 'pocsag', 'rds'], 'boolean') &&
-		optionalFields(value, ['rtl433', 'audioMuted', 'adsb', 'ais', 'radiosonde', 'ble', 'acars'], 'boolean') &&
+		optionalFields(value, ['rtl433', 'audioMuted', 'adsb', 'ais', 'radiosonde', 'ble', 'acars', 'gsc', 'flex'], 'boolean') &&
 		optionalFields(value, ['rtl433SampleRate'], 'number') &&
 		optionalFields(value, ['rtl433Protocols'], 'string') &&
 		(value.pocsagCharset === undefined ||
 			(isRecord(value.pocsagCharset) && typedFields(value.pocsagCharset, ['vendor', 'model', 'codepage'], 'string'))) &&
 		(value.pocsagMode === undefined || (typeof value.pocsagMode === 'string' && ['auto', 'alpha', 'numeric'].includes(value.pocsagMode))) &&
-		optionalFields(value, ['pocsagSecondGuess'], 'boolean')
+		(value.flexCharset === undefined ||
+			(isRecord(value.flexCharset) && typedFields(value.flexCharset, ['vendor', 'model', 'codepage'], 'string'))) &&
+		optionalFields(value, ['pocsagSecondGuess', 'gscSecondGuess'], 'boolean')
 	);
 }
 function validDspStats(value: unknown): boolean {

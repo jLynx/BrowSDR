@@ -1,6 +1,6 @@
 <section v-if="receiver.ais.panelOpen" class="adsb-panel ais-panel" :class="{ 'adsb-fullscreen': fullscreen }" aria-label="AIS vessels">
-	<UiToolHeader variant="pocsag" closable close-label="Close AIS panel" @close="receiver.toggleAisPanel">
-		AIS Vessels <span class="pocsag-count">{{ vessels.length }} vessels · {{ positioned.length }} located</span>
+	<UiToolHeader variant="msgcenter" closable close-label="Close AIS panel" @close="receiver.toggleAisPanel">
+		AIS Vessels <span class="msgcenter-count">{{ vessels.length }} vessels · {{ positioned.length }} located</span>
 		<template #actions>
 			<UiSelect v-model.number="receiver.activeVfoIndex" aria-label="AIS VFO" class="decoder-vfo-select">
 				<option v-for="(vfo, i) in receiver.vfos" :key="i" :value="i">VFO {{ i + 1 }} · {{ vfo.freq.toFixed(3) }} MHz</option>
@@ -97,10 +97,10 @@
 			<UiInputGroup v-show="!selectedVessel" class="adsb-search"
 				><UiInput v-model="query" aria-label="Search vessels" placeholder="Vessel name, callsign or MMSI"></UiInput
 			></UiInputGroup>
-			<UiEmptyState v-if="!selectedVessel && !vessels.length" variant="pocsag"
+			<UiEmptyState v-if="!selectedVessel && !vessels.length" variant="msgcenter"
 				>Waiting for vessel transmissions. Use an SDR and antenna covering 162 MHz. Use two VFOs to receive both AIS channels.</UiEmptyState
 			>
-			<UiEmptyState v-else-if="!selectedVessel && !filtered.length" variant="pocsag">No vessels match your search.</UiEmptyState>
+			<UiEmptyState v-else-if="!selectedVessel && !filtered.length" variant="msgcenter">No vessels match your search.</UiEmptyState>
 			<div class="adsb-table-wrap" v-show="!selectedVessel" v-if="filtered.length">
 				<table class="adsb-table">
 					<thead>

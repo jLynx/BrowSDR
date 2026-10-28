@@ -72,16 +72,16 @@ describe('RDS decoding', () => {
 		decoder.blocks = [0x9240, 10 << 5, 0, 0];
 		decoder.blockValid = [true, true, false, false];
 		decoder.decodeGroup();
-		expect(messages.at(-1)).toEqual({ pty: 10, ptyLabel: 'Pop Music' });
+		expect(messages.at(-1)).toEqual(expect.objectContaining({ pty: 10, ptyLabel: 'Pop Music' }));
 		const text = decoder.buildRT();
 		decoder.setRegion('na');
-		expect(messages.at(-1)).toEqual({ pty: 10, ptyLabel: 'Country' });
+		expect(messages.at(-1)).toEqual(expect.objectContaining({ pty: 10, ptyLabel: 'Country' }));
 		expect(decoder.buildRT()).toBe(text);
 		const count = messages.length;
 		decoder.setRegion('na');
 		expect(messages).toHaveLength(count);
 		decoder.setRegion('eu');
-		expect(messages.at(-1)).toEqual({ pty: 10, ptyLabel: 'Pop Music' });
+		expect(messages.at(-1)).toEqual(expect.objectContaining({ pty: 10, ptyLabel: 'Pop Music' }));
 	});
 	it.each([0, Math.PI / 2])('decodes biphase RadioText and PS from MPX at carrier phase %s', (phase) => {
 		const messages = [];
@@ -89,8 +89,8 @@ describe('RDS decoding', () => {
 		const bits = Array.from({ length: 5 }, stationBits).flat();
 		const samples = makeMpx(bits, 250000, phase, 0.01);
 		for (let start = 0; start < samples.length; start += 813) decoder.process(samples.subarray(start, start + 813));
-		expect(messages).toContainEqual({ ps: 'channelX' });
-		expect(messages).toContainEqual({ rt: 'Madness - Our House' });
+		expect(messages).toContainEqual(expect.objectContaining({ ps: 'channelX' }));
+		expect(messages).toContainEqual(expect.objectContaining({ rt: 'Madness - Our House' }));
 	});
 	it('reacquires after reset at another sample rate with irregular chunk boundaries', () => {
 		const messages = [];
@@ -100,12 +100,12 @@ describe('RDS decoding', () => {
 			for (let start = 0; start < samples.length; start += 719) decoder.process(samples.subarray(start, start + 719));
 		};
 		feed();
-		expect(messages).toContainEqual({ rt: 'Madness - Our House' });
+		expect(messages).toContainEqual(expect.objectContaining({ rt: 'Madness - Our House' }));
 		messages.length = 0;
 		decoder.reset();
 		feed();
-		expect(messages).toContainEqual({ ps: 'channelX' });
-		expect(messages).toContainEqual({ rt: 'Madness - Our House' });
+		expect(messages).toContainEqual(expect.objectContaining({ ps: 'channelX' }));
+		expect(messages).toContainEqual(expect.objectContaining({ rt: 'Madness - Our House' }));
 	});
 	it('assembles independently valid C/D pairs without displaying gaps or a terminator', () => {
 		const messages = [];
@@ -125,14 +125,14 @@ describe('RDS decoding', () => {
 		send(0, 'Madn', [true, false]);
 		expect(messages.some((message) => message.rt)).toBe(false);
 		send(0, 'Madn', [false, true]);
-		expect(messages).toContainEqual({ rt: 'Madness' });
+		expect(messages).toContainEqual(expect.objectContaining({ rt: 'Madness' }));
 		send(2, '- Ou', [true, true]);
 		send(3, 'r Ho', [true, true]);
 		send(4, 'use\r', [true, true]);
 		send(5, 'JUNK', [true, true]);
-		expect(messages.at(-1)).toEqual({ rt: 'Madness - Our House' });
+		expect(messages.at(-1)).toEqual(expect.objectContaining({ rt: 'Madness - Our House' }));
 		send(0, 'Next', [true, true], 1);
-		expect(messages.at(-1)).toEqual({ rt: 'Next' });
+		expect(messages.at(-1)).toEqual(expect.objectContaining({ rt: 'Next' }));
 	});
 	it('reacquires block alignment promptly after a bit slip', () => {
 		const messages = [];
@@ -144,7 +144,7 @@ describe('RDS decoding', () => {
 		for (const bit of first.slice(0, 110)) decoder.processBit(bit);
 		decoder.processBit(1);
 		for (const bit of [...first.slice(110), ...stationBits(), ...stationBits()]) decoder.processBit(bit);
-		expect(messages).toContainEqual({ ps: 'channelX' });
-		expect(messages).toContainEqual({ rt: 'Madness - Our House' });
+		expect(messages).toContainEqual(expect.objectContaining({ ps: 'channelX' }));
+		expect(messages).toContainEqual(expect.objectContaining({ rt: 'Madness - Our House' }));
 	});
 });

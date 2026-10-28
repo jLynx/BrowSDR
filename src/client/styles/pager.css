@@ -1,4 +1,5 @@
-/* ────── POCSAG Decoder Panel ────── */
+/* Pager + shared message-center panel styles (POCSAG / GSC / FLEX and the
+ * message-center chrome reused by other decoder panels). */
 .decoder-vfo-select {
 	width: 170px;
 	font-size: 11px;
@@ -50,7 +51,7 @@
 	height: 320px !important;
 	border-top-color: #4db6ac !important;
 }
-.rtl433-panel .pocsag-controls .custom-checkbox {
+.rtl433-panel .msgcenter-controls .custom-checkbox {
 	font-size: 11px;
 	white-space: nowrap;
 }
@@ -63,15 +64,15 @@
 		width: 100%;
 	}
 }
-.rtl433-panel .pocsag-header {
+.rtl433-panel .msgcenter-header {
 	background: #102a2a;
 	gap: 8px;
 	flex-wrap: wrap;
 }
-.rtl433-panel .pocsag-title {
+.rtl433-panel .msgcenter-title {
 	color: #80cbc4;
 }
-.rtl433-panel .pocsag-count {
+.rtl433-panel .msgcenter-count {
 	background: #287e76;
 }
 .rtl433-receivers {
@@ -112,7 +113,7 @@
 	text-align: left;
 	font-family: inherit;
 }
-.pocsag-panel {
+.msgcenter-panel {
 	flex-shrink: 0;
 	display: flex;
 	flex-direction: column;
@@ -122,7 +123,7 @@
 	background: var(--bg-panel);
 }
 
-.pocsag-header {
+.msgcenter-header {
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -132,7 +133,7 @@
 	flex-shrink: 0;
 }
 
-.pocsag-title {
+.msgcenter-title {
 	font-size: 12px;
 	font-weight: 600;
 	text-transform: uppercase;
@@ -142,7 +143,7 @@
 	gap: 6px;
 }
 
-.pocsag-count {
+.msgcenter-count {
 	font-size: 10px;
 	padding: 1px 6px;
 	border-radius: 8px;
@@ -152,13 +153,13 @@
 	text-transform: none;
 }
 
-.pocsag-controls {
+.msgcenter-controls {
 	display: flex;
 	align-items: center;
 	gap: 6px;
 }
 
-.pocsag-body {
+.msgcenter-body {
 	flex: 1;
 	overflow-y: auto;
 	padding: 6px 12px;
@@ -167,7 +168,7 @@
 	line-height: 1.8;
 }
 
-.pocsag-empty {
+.msgcenter-empty {
 	color: var(--text-muted);
 	font-style: italic;
 	font-family: 'Inter', sans-serif;
@@ -175,7 +176,7 @@
 	padding: 12px 0;
 }
 
-.pocsag-entry {
+.msgcenter-entry {
 	display: flex;
 	flex-wrap: nowrap;
 	gap: 8px;
@@ -187,7 +188,7 @@
 	overflow: hidden;
 }
 
-.pocsag-vfo-dot {
+.msgcenter-vfo-dot {
 	width: 7px;
 	height: 7px;
 	border-radius: 50%;
@@ -196,23 +197,23 @@
 	opacity: 0.9;
 }
 
-.pocsag-time {
+.msgcenter-time {
 	color: var(--text-muted);
 	flex-shrink: 0;
 }
 
-.pocsag-freq {
+.msgcenter-freq {
 	color: #ff9800;
 	flex-shrink: 0;
 }
 
-.pocsag-capcode {
+.pager-capcode {
 	color: #80cbc4;
 	flex-shrink: 0;
 	font-size: 10px;
 }
 
-.pocsag-type {
+.msgcenter-type {
 	font-size: 9px;
 	font-weight: 700;
 	padding: 0px 4px;
@@ -221,26 +222,86 @@
 	letter-spacing: 0.5px;
 }
 
-.pocsag-type-alpha {
+.pager-type-alpha {
 	background: #1b5e20;
 	color: #a5d6a7;
 }
-.pocsag-type-numeric {
+.pager-type-numeric {
 	background: #1a237e;
 	color: #90caf9;
 }
-.pocsag-type-tone {
+.pager-type-tone {
 	background: #4a148c;
 	color: #ce93d8;
 }
+.pager-type-voice {
+	background: #01579b;
+	color: #81d4fa;
+}
 
-.pocsag-baud {
+.pager-baud {
 	color: #666;
 	font-size: 9px;
 	flex-shrink: 0;
 }
 
-.pocsag-text {
+/* FLEX air-mode chip (speed / FSK), styled like the .msgcenter-type chips. */
+.pager-flex-mode {
+	font-size: 9px;
+	font-weight: 700;
+	padding: 0px 4px;
+	border-radius: 3px;
+	flex-shrink: 0;
+	letter-spacing: 0.5px;
+	background: #004d40;
+	color: #80cbc4;
+}
+
+/* FLEX calculated network-time tag (over-the-air clock), muted green. */
+.pager-flex-time {
+	font-size: 9px;
+	font-weight: 700;
+	padding: 0px 4px;
+	border-radius: 3px;
+	flex-shrink: 0;
+	letter-spacing: 0.3px;
+	background: #1b3a1b;
+	color: #8bc34a;
+}
+
+/* FLEX phase tag, styled like the POCSAG function tag (plain light-purple). */
+.pager-flex-phase {
+	color: #b39ddb;
+	font-size: 10px;
+	flex-shrink: 0;
+}
+
+/* FLEX polarity, matching the POCSAG/GSC status NORM/INV convention. */
+/* Polarity badge: a single letter (N normal / I inverted) in a small rounded
+ * chip, hover for the full label. Shared by POCSAG, GSC, and FLEX rows. */
+.pager-pol {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 13px;
+	height: 13px;
+	border-radius: 3px;
+	font-size: 9px;
+	font-weight: 700;
+	line-height: 1;
+	flex-shrink: 0;
+	cursor: help;
+}
+.pager-pol-norm {
+	color: #0d1a2a;
+	background: #88aacc;
+}
+.pager-pol-inv {
+	color: #2a1f00;
+	background: #ffcc44;
+}
+
+.msgcenter-text {
 	color: #e0e0e0;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -249,15 +310,15 @@
 	min-width: 0;
 }
 
-.pocsag-tone {
+.pager-tone {
 	color: #888;
 	font-style: italic;
 }
 
 /* Second-guess (runner-up interpretation): dimmed, and allowed to SHRINK and
  * ellipsize so it never covers the primary decoded text. The primary
- * .pocsag-text keeps priority; the alt is capped to a fraction of the row. */
-.pocsag-alt {
+ * .msgcenter-text keeps priority; the alt is capped to a fraction of the row. */
+.pager-alt {
 	color: #777;
 	font-style: italic;
 	opacity: 0.7;
@@ -272,15 +333,15 @@
 }
 
 /* Per-character decode confidence colouring */
-.pocsag-seg-0 {
+.pager-seg-0 {
 	/* ok — inherits normal text colour */
 	color: inherit;
 }
-.pocsag-seg-1 {
+.pager-seg-1 {
 	/* BCH-corrected — amber so it reads clearly as "repaired", not just dim */
 	color: #ffca28;
 }
-.pocsag-seg-2 {
+.pager-seg-2 {
 	/* uncorrectable — bold red on a red tint; glyph is a plain '?' placeholder */
 	color: #ff5252;
 	font-weight: 700;

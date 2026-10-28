@@ -89,6 +89,7 @@ function restoreFrequencySettings(receiver: AppInstance) {
 	for (const vfo of receiver.vfos ?? []) {
 		if (!isValidDisplayFrequencyMhz(vfo.freq, shift)) vfo.freq = floor;
 		vfo.displayFreq = formatFrequencyMhz(vfo.freq);
+		if (vfo.rdsRegion !== 'na') vfo.rdsRegion = 'eu';
 	}
 }
 

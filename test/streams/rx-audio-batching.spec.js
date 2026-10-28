@@ -31,7 +31,12 @@ async function createStream(vfoCount = 1) {
 		setWhisperEnabled: Backend.prototype.setWhisperEnabled,
 		_reinitRemoteClientWorkers: vi.fn(),
 	};
-	await startRxStream(backend, { centerFreq: 95, sampleRate: 61440000, fftSize: 65536 }, null, audio, whisper, null);
+	await startRxStream(backend, { centerFreq: 95, sampleRate: 61440000, fftSize: 65536 }, null, audio, whisper, {
+		pocsag: null,
+		pocsagStatus: null,
+		gsc: null,
+		gscStatus: null,
+	});
 	for (let index = 1; index < vfoCount; index++) {
 		backend.vfoParams.push({ ...backend.vfoParams[0], freq: 89 + index / 10 });
 		backend.vfoStates.push(backend._makeVfoState());

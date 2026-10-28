@@ -25,7 +25,15 @@ function stream() {
 	const audio = vi.fn();
 	const whisper = vi.fn();
 	const batch = createAudioBatchers(backend, whisper, perf, audio);
-	installWorkerAudioHandler(backend, 0, perf, whisper, batch.pushWhisper, null, null, batch.pushAudio);
+	installWorkerAudioHandler(
+		backend,
+		0,
+		perf,
+		whisper,
+		batch.pushWhisper,
+		{ pocsag: null, pocsagStatus: null, gsc: null, gscStatus: null },
+		batch.pushAudio,
+	);
 	const feed = (index, samples, channels) => backend._handleWorkerAudio(index, { samples: samples.buffer, channels, squelchOpen: true });
 	return { backend, audio, whisper, feed };
 }

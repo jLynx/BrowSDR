@@ -67,9 +67,9 @@ async function createStream(rdsCallback = null, dsdStatusCallback = null, rtl433
 		spectrumCallback,
 		null,
 		null,
-		null,
-		null,
+		{ pocsag: null, pocsagStatus: null, gsc: null, gscStatus: null, flex: null, flexStatus: null },
 		rdsCallback,
+		null,
 		dsdStatusCallback,
 		rtl433Callback,
 	);
@@ -84,6 +84,18 @@ async function createStream(rdsCallback = null, dsdStatusCallback = null, rtl433
 }
 
 describe('shared VFO worker routing', () => {
+	it('records full-band IQ with muted VFOs before DSP routing', async () => {
+		const { backend, receive } = await createStream();
+		backend.vfoParams.forEach((params) => {
+			params.enabled = false;
+		});
+		const done = backend.iqCapture.start(3, 1);
+		const input = new Int8Array([-128, 127, 1, -1]);
+		receive(input);
+		input.fill(42);
+		receive(new Int8Array([2, -2, 3, -3]));
+		expect(Array.from(await done)).toEqual([-128, 127, 1, -1, 2, -2]);
+	});
 	it('releases each band batch after the slowest VFO and gives decoders contiguous batch numbers', async () => {
 		const { backend, workers, receive } = await createStream();
 		for (const chunkId of [5, 10]) {

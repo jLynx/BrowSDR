@@ -4,6 +4,8 @@ import type { BookmarkCategory } from '@/app/workspace/types';
 import type { PocsagMode } from '@/worker/decoders/types';
 import type { RtkProfile } from '@/worker/decoders/rtk/types';
 
+export const DISCORD_INVITE_URL = 'https://discord.gg/m8BtU4ebSH';
+
 export const VFO_COLORS = ['#ff4444', '#4488ff', '#44cc44', '#ff44ff', '#ffaa44', '#44cccc', '#cccc44', '#ff8844'];
 
 export const makeDefaultVfo = (freq = 100.0) => ({
@@ -26,6 +28,11 @@ export const makeDefaultVfo = (freq = 100.0) => ({
 	pocsagCharset: { vendor: 'generic', model: 'generic', codepage: 'ascii' },
 	pocsagMode: 'auto' as PocsagMode,
 	pocsagSecondGuess: false,
+	gsc: false,
+	gscAutoListen: false,
+	gscSecondGuess: false,
+	flex: false,
+	flexCharset: { vendor: 'generic', model: 'generic', codepage: 'ascii' },
 	adsb: false,
 	ais: false,
 	radiosonde: false,

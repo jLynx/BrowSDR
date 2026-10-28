@@ -32,6 +32,12 @@ describe('decoder tools menu', () => {
 		expect(wrapper.vm.vfos[0].radiosonde).toBe(false);
 		expect(wrapper.findAll('.active-decoder-tool')).toHaveLength(0);
 		expect(wrapper.find('.ui-menu-list').exists()).toBe(false);
+		await wrapper.get('.tools-trigger').trigger('click');
+		await wrapper.get('button[aria-label="IQ Recorder"]').trigger('click');
+		expect(wrapper.vm.iqRecording.panelOpen).toBe(true);
+		expect(wrapper.get('section[aria-label="IQ Recorder"]').exists()).toBe(true);
+		await wrapper.get('button[aria-label="Close IQ Recorder"]').trigger('click');
+		expect(wrapper.vm.iqRecording.panelOpen).toBe(false);
 	});
 
 	it('deduplicates enabled decoders across VFOs and reopens their panels without changing configuration', async () => {

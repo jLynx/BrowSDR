@@ -6,7 +6,7 @@ const meta = {
 	title: 'UI/Tool Header',
 	component: UiToolHeader,
 	tags: ['autodocs'],
-	args: { variant: 'pocsag' },
+	args: { variant: 'msgcenter' },
 	render: (args) => ({
 		components: { UiToolHeader, UiButton, UiBadge, UiEmptyState },
 		setup: () => ({ args }),
@@ -38,6 +38,6 @@ export const Sensors: Story = {
 	render: () => ({
 		components: { UiToolHeader, UiButton },
 		template:
-			'<div class="rtl433-panel"><UiToolHeader>Wireless Sensors <span class="pocsag-count">0 events</span><template #actions><UiButton variant="transcript">Protocols</UiButton><UiButton variant="transcript">Clear</UiButton><UiButton variant="transcript" disabled>Export JSONL</UiButton></template></UiToolHeader></div>',
+			'<div class="rtl433-panel"><UiToolHeader>Wireless Sensors <span class="msgcenter-count">0 events</span><template #actions><UiButton variant="transcript">Protocols</UiButton><UiButton variant="transcript">Clear</UiButton><UiButton variant="transcript" disabled>Export JSONL</UiButton></template></UiToolHeader></div>',
 	}),
 };

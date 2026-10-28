@@ -57,6 +57,7 @@ export class DspProcessor {
      */
     reset(): void;
     /**
+     * FM-demod diagnostics over the last processed block. Raw phase step is
      * Enable or disable audio filters (LowPass, HighPass) for NFM.
      */
     set_audio_filters(low_pass: boolean, high_pass: boolean): void;
@@ -64,6 +65,20 @@ export class DspProcessor {
      * Update the channel bandwidth and rebuild filters.
      */
     set_bandwidth(bandwidth: number): void;
+    /**
+     * Override the FM deviation reference used for output normalization.
+     *
+     * By default, `set_bandwidth` sets the deviation reference to `bandwidth/2`,
+     * so a tone at the channel edge maps to ±1.0. For 2-FSK pager decoders the
+     * nominal deviation is well-known and narrower than the channel (e.g. POCSAG
+     * and GSC use ±4.5 kHz within a 12.5 kHz channel), so the default reference
+     * of 6.25 kHz causes the demod to over-range on any burst that exceeds it.
+     * Calling this method with the known deviation (e.g. 4500.0) re-scales the
+     * output so a tone at that exact deviation maps to ±1.0, giving headroom for
+     * over-deviation without railing. Pass 0.0 to revert to the bandwidth/2
+     * default (the reference is restored on the next `set_bandwidth` call).
+     */
+    set_fm_deviation(deviation_hz: number): void;
     /**
      * Change the IF sample rate and rebuild the entire resampler/filter chain.
      * SDR++ uses different IF rates per demodulator mode:
@@ -153,6 +168,7 @@ export interface InitOutput {
     readonly alloc_iq_buffer: (a: number) => number;
     readonly dspprocessor_get_iq_output_len: (a: number) => number;
     readonly dspprocessor_get_output_channels: (a: number) => number;
+    readonly dspprocessor_get_output_len: (a: number) => number;
     readonly dspprocessor_get_squelch_db: (a: number) => number;
     readonly dspprocessor_new: (a: number, b: number, c: number) => number;
     readonly dspprocessor_process: (a: number, b: number, c: number, d: number, e: number, f: any) => number;
@@ -164,6 +180,7 @@ export interface InitOutput {
     readonly dspprocessor_reset: (a: number) => void;
     readonly dspprocessor_set_audio_filters: (a: number, b: number, c: number) => void;
     readonly dspprocessor_set_bandwidth: (a: number, b: number) => void;
+    readonly dspprocessor_set_fm_deviation: (a: number, b: number) => void;
     readonly dspprocessor_set_if_sample_rate: (a: number, b: number) => void;
     readonly dspprocessor_set_shift: (a: number, b: number, c: number) => void;
     readonly dspprocessor_set_squelch: (a: number, b: number, c: number) => void;
@@ -174,13 +191,12 @@ export interface InitOutput {
     readonly fft_new: (a: number, b: number, c: number) => number;
     readonly fft_set_smoothing_speed: (a: number, b: number) => void;
     readonly free_iq_buffer: (a: number, b: number) => void;
+    readonly set_panic_hook: () => void;
     readonly sharedchannelizer_new: (a: number, b: number, c: number) => number;
     readonly sharedchannelizer_output_len: (a: number, b: number) => number;
     readonly sharedchannelizer_output_ptr: (a: number, b: number) => number;
     readonly sharedchannelizer_process: (a: number, b: number, c: number) => void;
     readonly sharedchannelizer_set_batch_samples: (a: number, b: number) => void;
-    readonly set_panic_hook: () => void;
-    readonly dspprocessor_get_output_len: (a: number) => number;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

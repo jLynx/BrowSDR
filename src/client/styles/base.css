@@ -407,12 +407,12 @@ body {
 	opacity: 0.3;
 	cursor: not-allowed;
 }
-.github-link {
+.community-link {
 	text-decoration: none;
 	margin-right: 6px;
 	color: var(--text-dim);
 }
-.github-link:hover {
+.community-link:hover {
 	color: var(--text-main);
 }
 

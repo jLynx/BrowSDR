@@ -3,6 +3,7 @@
 [![BrowSDR Live](https://img.shields.io/badge/Live-browsdr.jlynx.net-success?style=for-the-badge&logo=cloudflare)](https://browsdr.jlynx.net)
 [![Rust](https://img.shields.io/badge/Rust-High%20Performance-orange?style=for-the-badge&logo=rust)](https://www.rust-lang.org/)
 [![WebAssembly](https://img.shields.io/badge/Wasm-Powered-blue?style=for-the-badge&logo=webassembly)](https://webassembly.org/)
+[![Discord](https://img.shields.io/badge/Discord-Join%20the%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/m8BtU4ebSH)
 
 A blazing fast, next-generation browser-based Software Defined Radio (SDR) receiver for HackRF, HackRF Pro, RTL-SDR, Airspy, and LimeSDR devices. Connect a compatible SDR directly to your browser via WebUSB and tune into FM, AM, SSB, CW, and more — **no drivers, no native software, no hassle.**
 
@@ -238,6 +239,14 @@ npm run test:dsp
 cd wasm/dsp
 cargo make test
 ```
+
+---
+
+## 💬 Community
+
+Join the [BrowSDR Discord community](https://discord.gg/m8BtU4ebSH)
+for setup help, hardware and antenna discussions, sharing receptions,
+and development chat.
 
 ---
 

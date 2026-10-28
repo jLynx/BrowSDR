@@ -7,7 +7,16 @@ import type { DeviceCapabilities } from '@/radio/types';
 import type { RadioState } from '@/app/core/types';
 import type { VfoParams, PerfReport } from '@/worker/runtime/types';
 import type { AdsbMessage } from '@/worker/decoders/adsb/types';
-import type { POCSAGMessage, POCSAGStatus, RDSMessage, Rtl433Message } from '@/worker/decoders/types';
+import type {
+	POCSAGMessage,
+	POCSAGStatus,
+	RDSMessage,
+	Rtl433Message,
+	GSCMessage,
+	GSCStatus,
+	FlexMessage,
+	FlexStatus,
+} from '@/worker/decoders/types';
 
 export interface ReceiverInventory {
 	id: string;
@@ -54,6 +63,10 @@ export type RemoteCommand =
 	| { type: 'rtl433'; vfoIndex: number; freq: number; msg: Rtl433Message }
 	| { type: 'pocsag'; vfoIndex: number; freq: number; msg: POCSAGMessage }
 	| { type: 'pocsag_status'; vfoIndex: number; freq: number; status: POCSAGStatus }
+	| { type: 'gsc'; vfoIndex: number; freq: number; msg: GSCMessage }
+	| { type: 'gsc_status'; vfoIndex: number; freq: number; status: GSCStatus }
+	| { type: 'flex'; vfoIndex: number; freq: number; msg: FlexMessage }
+	| { type: 'flex_status'; vfoIndex: number; freq: number; status: FlexStatus }
 	| { type: 'rds'; vfoIndex: number; freq: number; msg: RDSMessage }
 	| { type: 'squelchState'; squelchOpen: boolean[] }
 	| { type: 'requestChange'; target: string; property: string; value: number };

@@ -109,6 +109,7 @@ export const bookmarkMethods = {
 			this.vfos = bm.vfos.map((v) => ({
 				...makeDefaultVfo(),
 				...v,
+				rdsRegion: (v as { rdsRegion?: string }).rdsRegion || 'eu',
 				enabled: true,
 				focused: false,
 				displayFreq: this.formatFreq(v.freq || bm.centerFreq),

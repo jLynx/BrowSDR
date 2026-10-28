@@ -23,6 +23,7 @@ export function useIqProgress(receiver: AppInstance, seconds: Ref<number>, statu
 	}, 1000);
 	onBeforeUnmount(() => clearInterval(clock));
 	return {
+		percent: computed(() => (progress.value ? (progress.value.capturedBytes / progress.value.totalBytes) * 100 : undefined)),
 		reset() {
 			generation++;
 			progress.value = undefined;
@@ -31,7 +32,7 @@ export function useIqProgress(receiver: AppInstance, seconds: Ref<number>, statu
 			const value = progress.value;
 			if (!isCapturing() || !value) return status.value;
 			const capturedSeconds = value.capturedBytes / 2 / receiver.radio.sampleRate;
-			return `Capturing raw IQ… ${capturedSeconds.toFixed(1)} / ${seconds.value.toFixed(1)} s · ${formatIqSize(value.writtenBytes)} written of ${formatIqSize(value.totalBytes)}`;
+			return `${value.capturedBytes === value.totalBytes ? 'Saving recording' : 'Recording'}… ${capturedSeconds.toFixed(1)} / ${seconds.value.toFixed(1)} s · ${formatIqSize(value.writtenBytes)} saved of ${formatIqSize(value.totalBytes)}`;
 		}),
 	};
 }

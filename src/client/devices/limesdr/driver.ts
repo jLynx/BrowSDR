@@ -344,7 +344,7 @@ export class LimeSDR extends LimeSDRReceiveTuning {
 		if (this.rxRunning) return;
 		this.rxLevel.reset();
 		const packed = this.packed;
-		const transferSize = streamTransferSize(packed);
+		const transferSize = streamTransferSize(packed, this.currentSampleRate);
 		const samplesPerPacket = streamSamplesPerPacket(packed);
 		this.streamStats.reset(samplesPerPacket, packed ? 12 : 16, transferSize, usbOnly);
 

@@ -7,17 +7,20 @@ import { SharedBandPool } from './streams/shared-band-pool';
 import { errorMessage } from '@/platform/errors';
 import init, { DspProcessor, SharedChannelizer, set_panic_hook, alloc_iq_buffer, alloc_float_buffer } from '/wasm/dsp/browsdr_dsp.js';
 import { RationalResampler } from './streams/dsp-pipeline';
-import { demodulateSideband, sidebandOffsetHz } from './decoders/ssb';
+import { sidebandOffsetHz } from './decoders/ssb';
+import { measureSquelch, demodulateAnalogAudio } from './streams/analog-demod';
 import { DSDStream } from './decoders/dsd/dsd-stream';
 import { DSD_IF_RATE } from '@/worker/decoders/dsd/constants';
 import type { DSDStatus } from './decoders/dsd/types';
 import { RDSDecoder } from './decoders/rds';
+import type { RdsStatus } from './decoders/types';
 import { LatestStatus } from './runtime/latest-status';
 import { AdsbStream } from './decoders/adsb';
 import { Rtl433Stream } from './decoders/rtl433';
 import type { InitOutput } from '/wasm/dsp/browsdr_dsp.js';
 import type { DspInput } from './runtime/dsp-messages.types';
 import type { VfoParams } from './runtime/types';
+import { PagerLegs } from './streams/pager-legs';
 
 if (import.meta.env.DEV) {
 	for (const level of ['log', 'warn', 'error'] as const) {
@@ -55,6 +58,13 @@ let sharedSabViews: Int8Array[] | null = null;
 let rdsDdc: DspProcessor | null = null;
 let rdsPrevPhase = 0;
 let rdsDecoder: InstanceType<typeof RDSDecoder> | null = null;
+/**
+ * Independent FM channel legs, one per enabled pager protocol, each a DDC at
+ * that protocol's own RX bandwidth so POCSAG/GSC/FLEX are each filtered to the
+ * width their modulation needs instead of sharing the main VFO bandwidth.
+ * Initialized once the WASM module is ready (needs the DspProcessor class).
+ */
+let pagerLegs: PagerLegs | null = null;
 let sharedFloatPtr = 0;
 let inputIsFloat = false;
 let inputCenterFreq = 100;
@@ -97,6 +107,14 @@ async function startup(): Promise<void> {
 				rtk = new RtkStream(DspProcessor, _wasm.memory, (message) => self.postMessage(message));
 				acars = new AcarsStream(DspProcessor, _wasm.memory, (message) => self.postMessage(message));
 				set_panic_hook();
+				pagerLegs = new PagerLegs(DspProcessor, IF_RATES.nfm, {
+					inputIsFloat: () => inputIsFloat,
+					floatPtr: () => sharedFloatPtr,
+					iqPtr: () => sharedIqPtr,
+					wasmMemory: () => _wasm.memory.buffer,
+					post: (message, transfer) => self.postMessage(message, { transfer }),
+					onError: (error, chunkId) => self.postMessage({ type: 'error', error, chunkId }),
+				});
 
 				// Allocate Wasm memory for this sub-module
 				const MAX_USB_SAMPLES = 131072;
@@ -116,6 +134,7 @@ let systemSampleRate = 2000000;
 // DSD decoder state (per-worker, one DSD decoder per VFO)
 let dsdStream: DSDStream | null = null;
 const dsdStatus = new LatestStatus<DSDStatus>((status) => self.postMessage({ type: 'dsd_status', status }));
+const rdsStatusThrottle = new LatestStatus<RdsStatus>((status) => self.postMessage({ type: 'rds_status', status }), 500);
 
 self.onmessage = async (e: MessageEvent<DspInput>) => {
 	const msg = e.data;
@@ -251,6 +270,8 @@ function configureDDC(params: VfoParams, systemCenterFreq: number): void {
 		}
 		rdsDecoder = null;
 	}
+
+	pagerLegs?.configure(params, systemSampleRate, offsetFreq);
 }
 
 function configureStereo(params: VfoParams) {
@@ -282,7 +303,7 @@ function processVfoAudio(chunkLenBytes: number, params: VfoParams): Float32Array
 
 		const _ddcOut = new Float32Array(_wasm.memory.buffer, outPtr, numOutValues);
 
-		const squelchDb = measureSquelch(numDemodSamples, _ddcOut);
+		const squelchDb = measureSquelch(numDemodSamples, _ddcOut, vfoState);
 
 		if (numDemodSamples > vfoState.scratchBuf.length) {
 			vfoState.scratchBuf = new Float32Array(numDemodSamples + 128);
@@ -308,7 +329,7 @@ function processVfoAudio(chunkLenBytes: number, params: VfoParams): Float32Array
 		vfoState.squelchOpen = params.squelchEnabled && squelchDb >= params.squelchLevel;
 		const ifRate = vfoState.currentIfRate;
 
-		demodulateAnalogAudio(mode, numDemodSamples, _ddcOut, ifRate, audioDemodRateSamples, bw);
+		demodulateAnalogAudio(mode, numDemodSamples, _ddcOut, ifRate, audioDemodRateSamples, bw, vfoState);
 
 		const result = vfoState.audioResampler.process(audioDemodRateSamples);
 		if (result.length === 0) return null;
@@ -319,81 +340,6 @@ function processVfoAudio(chunkLenBytes: number, params: VfoParams): Float32Array
 		}
 
 		return result.slice();
-	}
-}
-
-function measureSquelch(numDemodSamples: number, _ddcOut: Float32Array<ArrayBuffer>) {
-	let squelchMag = 0;
-	for (let i = 0; i < numDemodSamples; i++) {
-		const dI = _ddcOut[i * 2];
-		const dQ = _ddcOut[i * 2 + 1];
-		squelchMag += Math.sqrt(dI * dI + dQ * dQ);
-	}
-	squelchMag /= numDemodSamples;
-	const squelchDb = 10 * Math.log10(squelchMag + 1e-12);
-	vfoState.squelchDb = squelchDb;
-	return squelchDb;
-}
-
-function demodulateAnalogAudio(
-	mode: string,
-	numDemodSamples: number,
-	_ddcOut: Float32Array<ArrayBuffer>,
-	ifRate: number,
-	audioDemodRateSamples: Float32Array<ArrayBufferLike>,
-	bw: number,
-) {
-	if (mode === 'am') {
-		for (let i = 0; i < numDemodSamples; i++) {
-			const dI = _ddcOut[i * 2];
-			const dQ = _ddcOut[i * 2 + 1];
-			const mag = Math.sqrt(dI * dI + dQ * dQ);
-			const dcAlpha = 0.9999;
-			vfoState.dcAvg = dcAlpha * vfoState.dcAvg + (1 - dcAlpha) * mag;
-			const demodSample = mag - vfoState.dcAvg;
-			const agcAttack = 50.0 / ifRate;
-			const agcDecay = 5.0 / ifRate;
-			const absSample = Math.abs(demodSample);
-			if (absSample > vfoState.agcGain) {
-				vfoState.agcGain = vfoState.agcGain * (1 - agcAttack) + absSample * agcAttack;
-			} else {
-				vfoState.agcGain = vfoState.agcGain * (1 - agcDecay) + absSample * agcDecay;
-			}
-			const agcScale = vfoState.agcGain > 1e-6 ? 0.5 / vfoState.agcGain : 1.0;
-			audioDemodRateSamples[i] = demodSample * agcScale;
-		}
-	} else if (mode === 'usb' || mode === 'lsb' || mode === 'dsb') {
-		demodulateSideband(_ddcOut, audioDemodRateSamples, mode, bw, ifRate, vfoState);
-	} else if (mode === 'cw') {
-		for (let i = 0; i < numDemodSamples; i++) {
-			const dI = _ddcOut[i * 2];
-			const dQ = _ddcOut[i * 2 + 1];
-			const cwTone = 700;
-			const phaseInc = (cwTone / ifRate) * 2 * Math.PI;
-			vfoState.ssbPhase += phaseInc;
-			if (vfoState.ssbPhase > Math.PI) vfoState.ssbPhase -= 2 * Math.PI;
-			if (vfoState.ssbPhase < -Math.PI) vfoState.ssbPhase += 2 * Math.PI;
-			const cosP = Math.cos(vfoState.ssbPhase);
-			const sinP = Math.sin(vfoState.ssbPhase);
-			const rI = dI * cosP - dQ * sinP;
-			const demodSample = rI;
-			const agcAttack = 50.0 / ifRate;
-			const agcDecay = 5.0 / ifRate;
-			const absSample = Math.abs(demodSample);
-			if (absSample > vfoState.agcGain) {
-				vfoState.agcGain = vfoState.agcGain * (1 - agcAttack) + absSample * agcAttack;
-			} else {
-				vfoState.agcGain = vfoState.agcGain * (1 - agcDecay) + absSample * agcDecay;
-			}
-			const agcScale = vfoState.agcGain > 1e-6 ? 0.5 / vfoState.agcGain : 1.0;
-			audioDemodRateSamples[i] = demodSample * agcScale;
-		}
-	} else if (mode === 'raw') {
-		for (let i = 0; i < numDemodSamples; i++) {
-			audioDemodRateSamples[i] = _ddcOut[i * 2];
-		}
-	} else {
-		audioDemodRateSamples.fill(0);
 	}
 }
 
@@ -536,7 +482,6 @@ function handleDspConfigure(msg: Extract<DspInput, { type: 'configure' }>) {
 	configureDDC(msg.params, inputCenterFreq);
 	self.postMessage({ type: 'config_done' });
 }
-
 function handleDspProcess(msg: Extract<DspInput, { type: 'process' }>) {
 	if (!ddc || !vfoState) {
 		console.log('DSP Worker: ddc/vfoState unavailable');
@@ -563,6 +508,8 @@ function handleDspProcess(msg: Extract<DspInput, { type: 'process' }>) {
 		// Complete decoder work before acknowledging the input. Otherwise replies
 		// let the sender queue more input while RDS is still using this worker.
 		decodeRdsChunk(msg);
+		if (rdsDecoder) rdsStatusThrottle.push(rdsDecoder.getStatus());
+		pagerLegs?.process(msg.chunkLen, msg.chunkId);
 		const processEnd = performance.now();
 		const dspTime = processEnd - processStart;
 
@@ -606,6 +553,7 @@ function configureInputRate(msg: Extract<DspInput, { type: 'process' }>) {
 			rdsDdc = null;
 		}
 		rdsDecoder = null;
+		pagerLegs?.freeAll();
 		systemSampleRate = nextRate;
 		inputCenterFreq = nextCenter;
 		ddc = new DspProcessor(nextRate, 0, msg.params.bandwidth || 150000);
@@ -620,6 +568,7 @@ function configureInputRate(msg: Extract<DspInput, { type: 'process' }>) {
 		inputCenterFreq = nextCenter;
 		ddc.set_shift(nextRate, (msg.params.freq - nextCenter) * 1e6 + sidebandOffsetHz(msg.params.mode, msg.params.bandwidth));
 		rdsDdc?.set_shift(nextRate, (msg.params.freq - nextCenter) * 1e6);
+		pagerLegs?.setShift(nextRate, (msg.params.freq - nextCenter) * 1e6);
 	}
 }
 
@@ -658,6 +607,8 @@ function needsVfoInput(params: VfoParams): boolean {
 	return (
 		params.enabled ||
 		params.pocsag ||
+		params.gsc === true ||
+		params.flex === true ||
 		(params.rds && params.mode === 'wfm') ||
 		params.rtl433 === true ||
 		[params.adsb, params.ais, params.radiosonde, params.rtk, params.ble, params.acars].some((enabled) => enabled === true)
@@ -669,5 +620,5 @@ function configurePacketDecoders(params: VfoParams, center: number): void {
 }
 
 function decodeVfoAudio(length: number, params: VfoParams): Float32Array | null {
-	return params.enabled || params.pocsag || params.rds ? processVfoAudio(length, params) : null;
+	return params.enabled || params.pocsag || params.gsc || params.flex || params.rds ? processVfoAudio(length, params) : null;
 }

@@ -1,6 +1,6 @@
 <section v-if="receiver.ble.panelOpen" class="adsb-panel ble-panel" aria-label="BLE devices">
-	<UiToolHeader variant="pocsag" closable close-label="Close BLE panel" @close="receiver.toggleBlePanel">
-		BLE Devices <span class="pocsag-count">{{ devices.length }} addresses</span>
+	<UiToolHeader variant="msgcenter" closable close-label="Close BLE panel" @close="receiver.toggleBlePanel">
+		BLE Devices <span class="msgcenter-count">{{ devices.length }} addresses</span>
 		<template #actions>
 			<UiSelect v-model.number="receiver.activeVfoIndex" aria-label="BLE VFO" :disabled="receiver.ble.scanning">
 				<option v-for="(vfo, i) in receiver.vfos" :key="i" :value="i">VFO {{ i + 1 }} · {{ vfo.freq.toFixed(3) }} MHz</option>
@@ -93,10 +93,10 @@
 		<UiInputGroup v-show="!selectedDevice" class="adsb-search"
 			><UiInput v-model="query" aria-label="Search BLE devices" placeholder="Name, address, vendor, manufacturer or service UUID"
 		/></UiInputGroup>
-		<UiEmptyState v-if="!selectedDevice && !devices.length" variant="pocsag"
+		<UiEmptyState v-if="!selectedDevice && !devices.length" variant="msgcenter"
 			>Waiting for BLE advertisements. Tune a channel and enable decoding, or scan all three channels. Use a 2.4 GHz antenna.</UiEmptyState
 		>
-		<UiEmptyState v-else-if="!selectedDevice && !filtered.length" variant="pocsag">No devices match your search.</UiEmptyState>
+		<UiEmptyState v-else-if="!selectedDevice && !filtered.length" variant="msgcenter">No devices match your search.</UiEmptyState>
 		<div v-if="filtered.length" v-show="!selectedDevice" class="adsb-table-wrap">
 			<table class="adsb-table">
 				<thead>

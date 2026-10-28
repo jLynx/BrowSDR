@@ -4,6 +4,35 @@ import type { PairedSdr } from './types';
 import { errorMessage, errorName } from '@/platform/errors';
 import type { AppInstance } from '@/app/core/receiver.types';
 import * as Comlink from 'comlink';
+
+/** The six pager-decoder callbacks (POCSAG msg/status, GSC msg/status, FLEX
+ * msg/status) as a tuple of individually Comlink-proxied functions, to be
+ * SPREAD as top-level arguments into startRxStream. They must stay separate
+ * top-level args: Comlink only transfers a callback it sees as a direct
+ * argument, so wrapping them in a plain object triggers a structured-clone
+ * DataCloneError on postMessage. */
+function pagerProxies(app: AppInstance) {
+	return [
+		Comlink.proxy((vfoIndex: number, freq: number, msg: Parameters<AppInstance['_onPocsagMessage']>[2]) =>
+			app._onPocsagMessage(vfoIndex, freq, msg),
+		),
+		Comlink.proxy((vfoIndex: number, freq: number, status: Parameters<AppInstance['_onPocsagStatus']>[2]) =>
+			app._onPocsagStatus(vfoIndex, freq, status),
+		),
+		Comlink.proxy((vfoIndex: number, freq: number, msg: Parameters<AppInstance['_onGscMessage']>[2]) =>
+			app._onGscMessage(vfoIndex, freq, msg),
+		),
+		Comlink.proxy((vfoIndex: number, freq: number, status: Parameters<AppInstance['_onGscStatus']>[2]) =>
+			app._onGscStatus(vfoIndex, freq, status),
+		),
+		Comlink.proxy((vfoIndex: number, freq: number, msg: Parameters<AppInstance['_onFlexMessage']>[2]) =>
+			app._onFlexMessage(vfoIndex, freq, msg),
+		),
+		Comlink.proxy((vfoIndex: number, freq: number, status: Parameters<AppInstance['_onFlexStatus']>[2]) =>
+			app._onFlexStatus(vfoIndex, freq, status),
+		),
+	] as const;
+}
 import { getAllCatalogFilters, lookupDevice } from '@/radio/device-catalog';
 import { localUsbIssue } from '@/platform/browser-capabilities';
 
@@ -303,12 +332,12 @@ export const connectionMethods = {
 				Comlink.proxy((spectrumData: Float32Array) => this.drawSpectrum(spectrumData)),
 				Comlink.proxy((audioSamples: Float32Array, channels: 1 | 2 = 1) => this.playAudio(audioSamples, channels)),
 				Comlink.proxy((vfoIndex: number, freq: number, samples: Float32Array) => this._feedWhisperVfo(vfoIndex, freq, samples)),
-				Comlink.proxy(this._onPocsagMessage.bind(this)),
-				Comlink.proxy((vfoIndex: number, freq: number, status: Parameters<AppInstance['_onPocsagStatus']>[2]) =>
-					this._onPocsagStatus(vfoIndex, freq, status),
-				),
+				...pagerProxies(this),
 				Comlink.proxy((vfoIndex: number, freq: number, msg: Parameters<AppInstance['_onRdsMessage']>[2]) =>
 					this._onRdsMessage(vfoIndex, freq, msg),
+				),
+				Comlink.proxy((vfoIndex: number, freq: number, status: Parameters<AppInstance['_onRdsStatus']>[2]) =>
+					this._onRdsStatus(vfoIndex, freq, status),
 				),
 				Comlink.proxy((vfoIndex: number, status: Parameters<AppInstance['_onDsdStatus']>[1]) => this._onDsdStatus(vfoIndex, status)),
 				Comlink.proxy((vfoIndex: number, freq: number, msg: Parameters<AppInstance['_onRtl433Message']>[2]) =>

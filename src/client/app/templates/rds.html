@@ -1,9 +1,9 @@
 	<!-- RDS Panel -->
-	<div class="pocsag-panel" v-if="rds.panelOpen">
-		<UiToolHeader variant="pocsag" closable close-label="Close RDS panel" @close="toggleRdsPanel">
+	<div class="msgcenter-panel" v-if="rds.panelOpen">
+		<UiToolHeader variant="msgcenter" closable close-label="Close RDS panel" @close="toggleRdsPanel">
 				<svg viewBox="0 0 24 24" width="16" height="16" style="vertical-align:middle;margin-right:4px"><path fill="currentColor" d="M20 6H4c-1.1 0-2 .9-2 2v8c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm0 10H4V8h16v8zM6 10h2v4H6zm3 0h5v4H9z"/></svg>
 			FM RDS Decoder
-			<span class="pocsag-count" v-if="rdsStationList().length">{{ rdsStationList().length }} station{{ rdsStationList().length> 1 ? 's' : '' }}</span>
+			<span class="msgcenter-count" v-if="rdsStationList().length">{{ rdsStationList().length }} station{{ rdsStationList().length> 1 ? 's' : '' }}</span>
 			<template #actions>
 				<UiButton variant="transcript" @click="clearRds" title="Clear RDS data">Clear</UiButton>
 				<UiButton variant="transcript" @click="exportRds" title="Export as text" :disabled="rds.log.length === 0">Export</UiButton>
@@ -12,37 +12,124 @@
 		<div class="rds-split">
 			<!-- Left: Station cards -->
 			<div class="rds-stations-col">
-				<UiEmptyState v-if="rdsStationList().length === 0" variant="pocsag">
+				<UiEmptyState v-if="rdsStationList().length === 0" variant="msgcenter">
 					Enable "Decode RDS" on a WFM VFO and tune to an FM station.
 				</UiEmptyState>
 				<div v-for="stn in rdsStationList()" :key="stn.vfoIndex" class="rds-station-card" :style="{ borderLeftColor: vfoColor(stn.vfoIndex) }">
 					<div class="rds-station">
-						<span class="rds-ps" v-if="stn.ps">{{ stn.ps }}</span>
+						<span class="rds-ps" v-if="stn.ps || stn.pi" style="display:inline-block;min-width:8ch;"><span
+							v-for="ci in 8" :key="ci - 1"
+							:style="{ color: (stn.psCharStatus[ci - 1] === 1) ? '#ffcc44' : (stn.psCharStatus[ci - 1] === 2) ? '#ff5252' : undefined }"
+						>{{ stn.ps && stn.ps[ci - 1] !== undefined ? stn.ps[ci - 1] : '\u00A0' }}</span></span>
+						<span class="rds-ptyn" v-if="stn.ptyn" :title="'Programme type name: ' + stn.ptyn" style="display:inline-block;min-width:8ch;font-family:'Roboto Mono',monospace;">{{ stn.ptyn.padEnd(8, '\u00A0') }}</span>
 						<span class="rds-freq">{{ stn.freq }}</span>
 					</div>
 					<div class="rds-station-meta">
-						<span class="rds-pi" v-if="stn.pi">PI:{{ stn.pi }}</span>
-						<span class="rds-pty" v-if="stn.ptyLabel">{{ stn.ptyLabel }}</span>
-						<span class="rds-flags" v-if="stn.tp || stn.ta">
-							<span v-if="stn.tp" class="rds-flag">TP</span>
-							<span v-if="stn.ta" class="rds-flag rds-ta">TA</span>
+						<span class="rds-pi" v-if="stn.pi"
+						:title="stn.piCallsign
+							? 'PI: 0x' + stn.pi
+							: [
+								'PI: 0x' + stn.pi,
+								stn.piCc ? 'CC: 0x' + stn.piCc.toString(16).toUpperCase() : '',
+								stn.piCoverageName ? 'Coverage: ' + stn.piCoverageName : '',
+								stn.piRef ? 'Ref: 0x' + stn.piRef.toString(16).toUpperCase() : '',
+							].filter(Boolean).join(' | ')">PI:{{ stn.pi }}<template v-if="stn.piCallsign"> ({{ stn.piCallsign }})</template></span>
+						<span class="rds-country" v-if="stn.countryName && stn.countryName !== '--'" :title="'ECC 0x' + stn.ecc.toString(16).toUpperCase()">{{ stn.countryName }}</span>
+						<span class="rds-pty" v-if="stn.ptyLabel" :title="'Programme Type ' + stn.pty + ': ' + stn.ptyLabel">{{ stn.ptyLabel }}</span>
+						<span class="rds-language" v-if="stn.languageName && stn.languageName !== 'Unknown'" :title="'Language Identification Code (LIC): ' + stn.lic">{{ stn.languageName }}</span>
+						<span class="rds-flags" v-if="stn.pi">
+							<span class="rds-flag" :class="stn.tp === true ? '' : 'rds-flag-off'" :title="rdsFlagTitle('tp', stn.tp)">TP</span>
+							<span class="rds-flag" :class="stn.ta === true ? 'rds-ta' : 'rds-flag-off'" :title="rdsFlagTitle('ta', stn.ta)">TA</span>
+							<span v-if="stn.la" class="rds-flag rds-la" :title="rdsFlagTitle('la', true)">LA</span>
+							<span v-if="stn.hasTmc" class="rds-flag rds-tmc" :title="rdsFlagTitle('tmc', true, stn.tmcId)">TMC</span>
+							<span v-if="stn.ewsChannel > 0" class="rds-flag rds-ews" :title="rdsFlagTitle('ews', true, stn.ewsChannel)">EWS</span>
+							<span v-if="stn.rpcGroupDesig > 0" class="rds-flag rds-paging" :title="rdsFlagTitle('rp', true, stn.rpcGroupDesig, stn.rpcBattSync)">RP</span>
+							<span v-if="stn.pagingOpc > 0" class="rds-flag rds-epp" :title="rdsFlagTitle('epp', true, stn.pagingOpc, stn.pagingPac)">EPP</span>
+						</span>
+					<div class="rds-pin" v-if="stn.pinDay > 0" style="font-size:10px;opacity:0.55;"
+						:title="'Programme Item Number: scheduled broadcast time'">
+						📅 PIN: day {{ stn.pinDay }} {{ String(stn.pinHour).padStart(2,'0') }}:{{ String(stn.pinMinute).padStart(2,'0') }}
+					</div>
+					<div v-if="stn.broadcasterData >= 0" style="font-size:10px;opacity:0.45;" :title="'Group 1A variant 6: broadcaster-defined 12-bit data'">
+						IH: 0x{{ stn.broadcasterData.toString(16).toUpperCase().padStart(3, '0') }}
+					</div>
+					</div>
+					<div class="rds-di" v-if="stn.ms !== null || stn.di >= 0" style="font-size:10px;opacity:0.55;margin-top:1px;">
+						<span v-if="stn.ms !== null" title="M/S bit: Music/Speech decoder switch">{{ stn.ms ? '🎵 Music' : '🎤 Speech' }}</span>
+						<span v-if="stn.diStereo" style="margin-left:4px;" title="DI bit 0: stereo decoder">Stereo</span>
+						<span v-if="stn.diArtHead" style="margin-left:4px;" title="DI bit 1: Artificial Head (binaural recording)">AH</span>
+						<span v-if="stn.diCompressed" style="margin-left:4px;" title="DI bit 2: compressed audio">Compressed</span>
+						<span v-if="stn.diDynPty" style="margin-left:4px;" title="Dynamic PTY switching">DynPTY</span>
+					</div>
+					<div class="rds-rt" v-if="stn.rt"><span
+						v-for="(ch, ci) in stn.rt.split('')" :key="ci"
+						:style="{ color: (stn.rtCharStatus[ci] === 1) ? '#ffcc44' : (stn.rtCharStatus[ci] === 2) ? '#ff5252' : undefined }"
+					>{{ ch }}</span></div>
+					<div class="rds-rt" v-if="stn.eRT || stn.eRTPartial" style="opacity:0.8;" :title="stn.eRT ? 'Enhanced RadioText (eRT) - complete' : 'Enhanced RadioText (eRT) - receiving...'">
+						<span style="opacity:0.5;font-size:10px;margin-right:3px;">{{ stn.eRT ? 'eRT' : 'eRT…' }}</span><span
+						v-for="(ch, ci) in [...(stn.eRT || stn.eRTPartial)]" :key="ci"
+						:style="{ color: (stn.eRTCharStatus && stn.eRTCharStatus[ci] === 1) ? '#ffcc44' : (stn.eRTCharStatus && stn.eRTCharStatus[ci] === 2) ? '#ff5252' : undefined }"
+					>{{ ch }}</span></div>
+					<div class="rds-rtplus" v-if="stn.eRTPlusItem1 || stn.eRTPlusItem2" style="font-size:11px;opacity:0.75;margin-top:2px;" title="Enhanced RT+ (eRT+) tags">
+						<span v-if="!stn.eRTPlusRunning" style="opacity:0.5;" title="Item not running">[ended] </span>
+						<span v-if="stn.eRTPlusItem1">
+							<span style="opacity:0.6;font-size:10px;" v-if="stn.eRTPlusItem1Name">{{ stn.eRTPlusItem1Name }}: </span>{{ stn.eRTPlusItem1 }}
+						</span>
+						<span v-if="stn.eRTPlusItem2" style="margin-left:4px;">
+							— <span style="opacity:0.6;font-size:10px;" v-if="stn.eRTPlusItem2Name">{{ stn.eRTPlusItem2Name }}: </span>{{ stn.eRTPlusItem2 }}
 						</span>
 					</div>
-					<div class="rds-rt" v-if="stn.rt">{{ stn.rt }}</div>
+					<div class="rds-rtplus" v-if="stn.rtPlusItem1 || stn.rtPlusItem2" style="font-size:11px;opacity:0.75;margin-top:2px;">
+						<span v-if="!stn.rtPlusRunning" style="opacity:0.5;" title="Item not running">[ended] </span>
+						<span v-if="stn.rtPlusItem1">
+							<span style="opacity:0.6;font-size:10px;" v-if="stn.rtPlusItem1Name">{{ stn.rtPlusItem1Name }}: </span>{{ stn.rtPlusItem1 }}
+						</span>
+						<span v-if="stn.rtPlusItem2" style="margin-left:4px;">
+							— <span style="opacity:0.6;font-size:10px;" v-if="stn.rtPlusItem2Name">{{ stn.rtPlusItem2Name }}: </span>{{ stn.rtPlusItem2 }}
+						</span>
+					</div>
+					<div class="rds-ct" v-if="stn.ct" style="font-size:11px;opacity:0.6;" :title="'Clock Time (Group 4A): UTC time broadcast by station' + (stn.ctUtcOffset != null ? ', local offset ' + (stn.ctUtcOffset >= 0 ? '+' : '') + (stn.ctUtcOffset / 2).toFixed(1) + 'h' : '')">
+						🕐 {{ stn.ct }}<template v-if="stn.ctUtcOffset != null"> UTC{{ stn.ctUtcOffset >= 0 ? '+' : '' }}{{ (stn.ctUtcOffset / 2).toFixed(1) }}h</template>
+					</div>
+					<div class="rds-af" v-if="stn.af && stn.af.length" style="font-size:10px;opacity:0.55;"
+						:title="'Alternative Frequencies, Method ' + (stn.afMethod || 'A') + (stn.afMethod === 'B' ? ' (tuning-paired list, larger networks)' : ' (up to 25 frequencies)') + '\n' + stn.af.map(f => formatAfFreq(null, f) + (f > 1700 ? ' MHz' : ' kHz')).join(', ')">
+						AF<span v-if="stn.afMethod" style="opacity:0.6;font-size:9px;"> ({{ stn.afMethod }})</span>: {{ stn.af.map(f => formatAfFreq(null, f)).join(' · ') }}
+					</div>
+					<!-- EON cross-referenced networks -->
+					<div v-if="Object.keys(stn.eonNetworks).length" style="font-size:10px;opacity:0.6;margin-top:3px;">
+						<span style="opacity:0.5;margin-right:4px;">EON:</span>
+						<span v-for="(eon, pi) in stn.eonNetworks" :key="pi"
+							style="display:inline-block;margin-right:4px;padding:1px 5px;border-radius:3px;background:rgba(255,255,255,0.08);cursor:default;"
+							:title="[
+								'PI: ' + eon.pi,
+								eon.ps ? 'PS: ' + eon.ps.trim() : '',
+								'TP: ' + (eon.tp ? 'yes' : 'no') + '  TA: ' + (eon.ta ? 'yes' : 'no'),
+								eon.af && eon.af.length ? 'AF: ' + eon.af.map(f => formatAfFreq(null, f)).join(' · ') : '',
+								eon.mappedFreqs && eon.mappedFreqs.length ? 'Mapped: ' + eon.mappedFreqs.map(p => formatAfFreq(null, p.tuned) + '→' + formatAfFreq(null, p.other)).join(' ') : '',
+								eon.ptyOn !== undefined ? 'PTY: ' + eon.ptyOn : '',
+								eon.pinDay ? 'PIN: day ' + eon.pinDay + ' ' + String(eon.pinHour).padStart(2,'0') + ':' + String(eon.pinMinute).padStart(2,'0') : '',
+								eon.lsn !== undefined ? 'LSN: ' + eon.lsn + (eon.lsIls ? ' ILS' : '') + (eon.lsEg ? ' EG' : '') + (eon.lsLa ? ' LA' : '') : '',
+							].filter(Boolean).join('  |  ')">
+							<span v-if="eon.tp" style="color:#4fc3f7;margin-right:2px;" title="Traffic Programme">TP</span>
+							<span v-if="eon.ta" style="color:#ef9a9a;margin-right:2px;" title="Traffic Announcement active">TA</span>
+							{{ eon.ps ? eon.ps.trim() : eon.pi }}
+						</span>
+					</div>
 				</div>
 			</div>
 			<!-- Right: Live log -->
 			<div class="rds-log-col" ref="rdsBody">
-				<UiEmptyState v-if="rds.log.length === 0" variant="pocsag">
+				<UiEmptyState v-if="rds.log.length === 0" variant="msgcenter">
 					Waiting for RDS data...
 				</UiEmptyState>
-				<div v-for="(entry, i) in rds.log" :key="i" class="pocsag-entry"
+				<div v-for="(entry, i) in rds.log" :key="i" class="msgcenter-entry"
 					:style="entry.vfoIndex != null ? { borderLeftColor: vfoColor(entry.vfoIndex) } : {}">
-					<span class="pocsag-vfo-dot" v-if="entry.vfoIndex != null" :style="{ background: vfoColor(entry.vfoIndex) }" :title="'VFO ' + (entry.vfoIndex + 1)"></span>
-					<span class="pocsag-time">{{ entry.time }}</span>
-					<span class="pocsag-freq" :style="entry.vfoIndex != null ? { color: vfoColor(entry.vfoIndex) } : {}">{{ entry.freq }}</span>
-					<span class="pocsag-type">{{ entry.field }}</span>
-					<span class="pocsag-text">{{ entry.value }}</span>
+					<span class="msgcenter-vfo-dot" v-if="entry.vfoIndex != null" :style="{ background: vfoColor(entry.vfoIndex) }" :title="'VFO ' + (entry.vfoIndex + 1)"></span>
+					<span class="msgcenter-time">{{ entry.time }}</span>
+					<span class="msgcenter-freq" :style="entry.vfoIndex != null ? { color: vfoColor(entry.vfoIndex) } : {}">{{ entry.freq }}</span>
+					<span class="msgcenter-group" v-if="entry.group" style="font-size:10px;opacity:0.5;margin-right:2px;">{{ entry.group }}<template v-if="entry.abFlag != null"> RT:{{ entry.abFlag === 0 ? 'A' : 'B' }}</template></span>
+					<span class="msgcenter-type">{{ entry.field }}</span>
+					<span class="msgcenter-text">{{ entry.value }}</span>
 				</div>
 			</div>
 		</div>

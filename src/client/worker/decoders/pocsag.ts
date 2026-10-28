@@ -1,7 +1,9 @@
-import type { POCSAGMessage, POCSAGStatus, PocsagMode } from './types';
-import { POCSAG_CHAR_CORRECTED, POCSAG_CHAR_OK, POCSAG_CHAR_UNCORRECTABLE } from './types';
+import type { POCSAGMessage, POCSAGStatus, PocsagMode } from './pocsag.types';
+import { POCSAG_CHAR_CORRECTED, POCSAG_CHAR_OK, POCSAG_CHAR_UNCORRECTABLE } from './pocsag.types';
 import type { CharsetKey } from './charsets';
 import { pocsagCodepage, POCSAG_DEFAULT_CHARSET } from './charsets';
+import { FskBitSlicer, BerWindow } from './fsk-frontend';
+
 /*
 Copyright (c) 2026, jLynx <https://github.com/jLynx>
 
@@ -125,25 +127,28 @@ export class _POCSAGSingleBaud {
 	// rate keeps it ~0.
 	static NONCONSEC_MAX_SYNC = 10;
 
-	audioRate: number;
-	spb: number;
 	baudRate: number;
 	onMessage: (msg: POCSAGMessage) => void;
 
-	dcLevel: number;
-	dcAlpha: number;
-	// PLL lock state (drives the dual-rate timing gain).
-	pllLocked: boolean;
-	pllTimeout: number;
-	/** Mid-symbol crossings within the current symbol.
-	 * High on a wrong-baud signal → used to block false sync acquisition. */
-	nonconsec: number;
-	/** Consecutive alternating (1010…) bits seen — preamble quality before sync. */
+	/** Shared NFM/2-FSK bit recovery (DC removal + timing PLL + bit slicing). */
+	slicer: FskBitSlicer;
+	/** nonconsec/pllLocked are owned by the slicer; expose them so the sync
+	 * logic below reads/sets them exactly as before. */
+	get nonconsec(): number {
+		return this.slicer.nonconsec;
+	}
+	set nonconsec(v: number) {
+		this.slicer.nonconsec = v;
+	}
+	get pllLocked(): boolean {
+		return this.slicer.pllLocked;
+	}
+	set pllLocked(v: boolean) {
+		this.slicer.pllLocked = v;
+	}
 	/** Upper 32 bits of the 64-bit RX window (bits above the sync in shiftReg),
 	 * used to measure the alternating preamble that precedes a sync word. */
 	shiftRegHi: number;
-	clockPhase: number;
-	lastSample: number;
 
 	shiftReg: number;
 	inverted: boolean;
@@ -178,13 +183,10 @@ export class _POCSAGSingleBaud {
 	// Per-bit decode status parallel to pageBits: 0=ok, 1=corrected, 2=bad.
 	pageBitStatus: number[];
 
-	// Rolling bit-error stats over the most recent window of decoded codewords.
-	// errBits = count of BCH-corrected bits; totalBits = 31 payload bits per
-	// codeword observed. BER = errBits / totalBits. The window halves itself
-	// once it fills, giving an exponentially-decaying recent average.
-	statErrBits: number;
-	statTotalBits: number;
-	statCodewords: number;
+	// Rolling bit-error rate over the most recent window of decoded codewords
+	// (BCH-corrected bits / payload bits), via the shared decaying-window
+	// accumulator.
+	ber: BerWindow = new BerWindow();
 
 	// Selected codepage key (protocol-implied: pocsag). Decides which glyph
 	// table _decodeAlpha uses. Defaults to generic ASCII.
@@ -197,26 +199,15 @@ export class _POCSAGSingleBaud {
 	showSecondGuess: boolean;
 
 	constructor(audioRate: number, baud: number, onMessage: (msg: POCSAGMessage) => void, charset: CharsetKey = POCSAG_DEFAULT_CHARSET) {
-		this.audioRate = audioRate;
-		this.spb = audioRate / baud; // samples per bit
 		this.baudRate = baud;
 		this.onMessage = onMessage;
 		this.charset = charset;
 		this.mode = 'auto';
 		this.showSecondGuess = false;
 
-		this.dcLevel = 0;
-		// DC-removal time constant fixed in BIT units (~64 bits), not samples,
-		// so it is identical at every baud. A per-sample constant (e.g. 0.001)
-		// is ~10 bits at 512 Bd — fast enough to chase a run of same-value data
-		// bits and corrupt the slice. Scaling by spb keeps it slow at all rates.
-		this.dcAlpha = 1 / (64 * this.spb);
-		this.pllLocked = false;
-		this.pllTimeout = 0;
-		this.nonconsec = 0;
+		// Shared NFM/2-FSK bit recovery (DC removal + timing PLL + bit slicing).
+		this.slicer = new FskBitSlicer(audioRate, baud, (bit) => this._onBit(bit));
 		this.shiftRegHi = 0;
-		this.clockPhase = 0;
-		this.lastSample = 0;
 
 		this.shiftReg = 0;
 		this.inverted = false;
@@ -236,21 +227,12 @@ export class _POCSAGSingleBaud {
 		this.pageFunc = 0;
 		this.pageBits = [];
 		this.pageBitStatus = [];
-
-		this.statErrBits = 0;
-		this.statTotalBits = 0;
-		this.statCodewords = 0;
 	}
 
 	reset(): void {
-		this.dcLevel = 0;
-		this.dcAlpha = 1 / (64 * this.spb); // rate-aware DC TC (~64 bits)
-		this.pllLocked = false;
-		this.pllTimeout = 0;
-		this.nonconsec = 0;
+		this.slicer.reset();
+		this.ber.reset();
 		this.shiftRegHi = 0;
-		this.clockPhase = 0;
-		this.lastSample = 0;
 		this.shiftReg = 0;
 		this.state = 'hunt';
 		this.batchRemain = 0;
@@ -264,70 +246,10 @@ export class _POCSAGSingleBaud {
 		this.pageActive = false;
 		this.pageBits = [];
 		this.pageBitStatus = [];
-		this.statErrBits = 0;
-		this.statTotalBits = 0;
-		this.statCodewords = 0;
-	}
-	/**
-	 * Adaptive DC removal. Tracks the signal DC continuously with an unclamped
-	 * IIR so the zero-crossing slicer stays gain-independent (an absolute clamp
-	 * in signal units caps the correctable offset, so at high gain a real DC
-	 * offset leaks through and biases the slice). The estimate must be allowed
-	 * to converge to the ACTUAL offset even before lock — pulling it toward 0
-	 * on every unlocked sample stops it cancelling a steady offset and blocks
-	 * acquisition of a DC-offset page. The IIR time constant alone keeps a
-	 * transient glitch from parking a large stale offset. Returns the
-	 * DC-removed sample.
-	 */
-	_removeDc(x: number): number {
-		this.dcLevel += this.dcAlpha * (x - this.dcLevel);
-		return x - this.dcLevel;
 	}
 
 	process(samples: Float32Array): void {
-		const spb = this.spb;
-		const spbHalf = spb * 0.5;
-
-		for (let i = 0; i < samples.length; i++) {
-			const s = this._removeDc(samples[i]);
-
-			// Zero-crossing timing PLL: nudge the clock so transitions land at
-			// the symbol midpoint (spbHalf), i.e. bit centres at phase 0/spb.
-			if (this.lastSample < 0 !== s < 0) {
-				let err = this.clockPhase - spbHalf;
-				if (err > spbHalf) err -= spb;
-				if (err < -spbHalf) err += spb;
-				// Crossing-quality (in our phase convention):
-				// a GOOD transition lands near the expected point (spbHalf, small
-				// |err|). A crossing far from it — near the bit CENTRE at 0/spb —
-				// is a mid-symbol transition that shouldn't exist at the correct
-				// baud rate. Count those within a symbol; a wrong-rate signal
-				// produces many, which blocks sync acquisition below.
-				if (Math.abs(err) < spb * 0.25) this.nonconsec = 0;
-				else this.nonconsec++;
-				// Hard-gate: ignore corrections larger than 40% of a bit period.
-				if (Math.abs(err) < spb * 0.4) {
-					const rate = this.pllLocked ? 0.045 : 0.05;
-					this.clockPhase -= err * rate;
-				}
-				this.pllTimeout = 0;
-			}
-			this.lastSample = s;
-
-			// Sample at the bit centre (phase wrap). POCSAG standard: mark ("1")
-			// = negative deviation, so s < 0 → 1. (Majority voting was tried but
-			// regressed timing; the single-centre sample with the improved DC
-			// tracking is the reliable path.)
-			if (++this.clockPhase >= spb) {
-				this.clockPhase -= spb;
-				const bit = s < 0 ? 1 : 0;
-				// PLL timeout: grows each symbol with no crossing; too many in a
-				// row → treat the PLL as unlocked (back to the faster gain).
-				if (++this.pllTimeout > 100) this.pllLocked = false;
-				this.nonconsec = 0;
-				this._onBit(bit);
-			}
-		}
+		this.slicer.process(samples);
 	}
 
 	/**
@@ -424,6 +346,13 @@ export class _POCSAGSingleBaud {
 				// position. Enter between-batch FSC search.
 				this.resyncCountdown = _POCSAGSingleBaud.RESYNC_TIMEOUT_BITS;
 				this.resyncBits = 0;
+				// Clear the shift register so the FSC search starts from a
+				// known-empty window. Without this, any mid-batch bit-slip
+				// (one extra or missing bit anywhere in the 16 codewords) leaves
+				// a slipped bit in shiftReg that acts as the FSC's first bit,
+				// causing resyncBits=31 and misframing the entire next batch.
+				this.shiftReg = 0;
+				this.shiftRegHi = 0;
 			}
 			return;
 		}
@@ -433,35 +362,54 @@ export class _POCSAGSingleBaud {
 	}
 
 	/** Between-batch FSC search (locked). Re-locks on sync, unlocks on timeout
-	 * or on a valid non-sync codeword (signal changed). */
+	 * or on a valid non-sync codeword (signal changed).
+	 *
+	 * A candidate window is accepted as the FSC only when it BCH-corrects to
+	 * EXACTLY the sync word. A bare Hamming-distance check is not sufficient:
+	 * one bit before the true boundary the window [last data bit | 31 FSC bits]
+	 * can sit within Hamming distance 2 yet NOT be a BCH-valid correction to the
+	 * sync word. Accepting it re-locks one bit early, shifting the entire batch
+	 * by one bit and producing phantom codewords that BCH force-corrects into
+	 * garbage messages. */
 	_fscSearch(): void {
 		this.resyncBits++;
 		const w = this.shiftReg >>> 0;
-		const dNorm = _pocsagHamming(w, _POCSAGSingleBaud.SYNC_WORD);
-		const dInv = _pocsagHamming(w, _POCSAGSingleBaud.SYNC_INVERTED);
-		const matchCur = this.inverted ? dInv : dNorm;
-		const matchOther = this.inverted ? dNorm : dInv;
 
-		// Check FSC (current polarity first) BEFORE the timeout, since the FSC
-		// is 32 bits — otherwise we'd time out on its final bit.
-		if (matchCur <= _POCSAGSingleBaud.SYNC_TOLERANCE) {
-			this._onSync();
-			return;
+		// Accept only if BCH correction produces exactly the sync word.
+		const curTarget = this.inverted ? _POCSAGSingleBaud.SYNC_INVERTED : _POCSAGSingleBaud.SYNC_WORD;
+		if (_pocsagHamming(w, curTarget) <= _POCSAGSingleBaud.SYNC_TOLERANCE) {
+			const trial = (this.inverted ? ~w : w) >>> 0;
+			const r = this._eccCorrect(trial);
+			if (r.errors < 3 && r.cw >>> 0 === _POCSAGSingleBaud.SYNC_WORD) {
+				this._onSync();
+				return;
+			}
 		}
-		if (matchOther <= _POCSAGSingleBaud.SYNC_TOLERANCE) {
-			// Inverted FSC at the batch boundary → genuine polarity flip. This
-			// is the ONLY place polarity may change: never mid-batch (POCSAG
-			// polarity is constant within a batch; a new FSC marks the boundary
-			// where a flip can legitimately occur).
-			this.inverted = !this.inverted;
-			this._onSync();
-			return;
+
+		// Opposite-polarity FSC → genuine polarity flip at the batch boundary
+		// (the ONLY place polarity may legitimately change). Same BCH-to-SYNC
+		// gate as above, against the opposite polarity.
+		const othTarget = this.inverted ? _POCSAGSingleBaud.SYNC_WORD : _POCSAGSingleBaud.SYNC_INVERTED;
+		if (_pocsagHamming(w, othTarget) <= _POCSAGSingleBaud.SYNC_TOLERANCE) {
+			const trial = (this.inverted ? w : ~w) >>> 0;
+			const r = this._eccCorrect(trial);
+			if (r.errors < 3 && r.cw >>> 0 === _POCSAGSingleBaud.SYNC_WORD) {
+				this.inverted = !this.inverted;
+				this._onSync();
+				return;
+			}
 		}
 
 		// Frame-level sanity: once a full 32-bit window has passed during the
 		// search, if it BCH-corrects to a VALID non-sync codeword the signal has
 		// changed (new/ended transmission) — unlock rather than emit garbage.
-		if (this.resyncBits >= 32) {
+		// EXCEPTION: while a page is active (a message is mid-assembly), a valid
+		// non-IDLE codeword at the batch boundary is IN-TRANSMISSION CONTENT, not
+		// a signal change. Unlocking here drops lock the instant real message
+		// content follows the address, fragmenting the page across locks so the
+		// text is discarded and never emitted. Only treat a valid codeword as a
+		// changed signal when NO page is open.
+		if (this.resyncBits >= 32 && !this.pageActive) {
 			const trial = this.inverted ? ~w >>> 0 : w;
 			const r = this._eccCorrect(trial);
 			if (r.errors < 3 && r.cw !== _POCSAGSingleBaud.IDLE_CW) {
@@ -483,9 +431,14 @@ export class _POCSAGSingleBaud {
 		this.state = 'hunt';
 		this.batchRemain = 0;
 		this.resyncCountdown = 0;
+		this.resyncBits = 0;
 		this.cwBitCnt = 0;
 		this.currentCw = 0;
+		this.shiftReg = 0;
+		this.shiftRegHi = 0;
 		this.provisional = false;
+		// Reset BER window so hunt state reports null (no stale data from last lock).
+		this.ber.reset();
 	}
 
 	_onSync(provisional = false): void {
@@ -498,6 +451,20 @@ export class _POCSAGSingleBaud {
 		this.cwBitCnt = 0;
 		this.currentCw = 0;
 		this.batchCwIdx = 0;
+		// Clear the shift register so the between-batch FSC search starts from a
+		// known-empty window. Without this the last bit of CW#15 (or the FSC
+		// itself) remains in shiftReg, and the next FSC can match after only 31
+		// bits (the stale bit acts as the FSC's first bit), causing a one-bit
+		// misalignment that shifts the entire following batch.
+		this.shiftReg = 0;
+		this.shiftRegHi = 0;
+		// Re-anchor the bit-recovery clock to this verified FSC boundary so the
+		// new batch's 16-codeword grid is pinned to the sync, not carried on a
+		// possibly-slipped free-running phase from the previous batch. The FSC's
+		// final bit (the bit that just triggered this callback) is a true symbol
+		// boundary, so resetting the slicer phase here keeps framing aligned even
+		// if a one-bit timing slip occurred during the preceding batch.
+		this.slicer.syncPhase();
 		// A provisional lock (corrected sync, no preamble) awaits confirmation
 		// from the first codeword. A batch-boundary resync of an already-open
 		// page is a confirmed lock (we were already decoding valid codewords).
@@ -534,15 +501,8 @@ export class _POCSAGSingleBaud {
 
 		// Accumulate bit-error stats over a decaying window. errors is 0/1/2 for
 		// corrected codewords, 3 for uncorrectable (capped). 31 payload bits per
-		// codeword. Halve the window once it fills so BER tracks the recent past.
-		this.statErrBits += Math.min(errors, 3);
-		this.statTotalBits += 31;
-		this.statCodewords++;
-		if (this.statCodewords >= 64) {
-			this.statErrBits *= 0.5;
-			this.statTotalBits *= 0.5;
-			this.statCodewords = 32;
-		}
+		// codeword.
+		this.ber.add(Math.min(errors, 3), 31);
 
 		if (errors >= 3) {
 			this.consecBad++;
@@ -675,6 +635,7 @@ export class _POCSAGSingleBaud {
 	_decodeAlpha(bits: number[], status: number[]): { text: string; charStatus: number[] } {
 		const cp = pocsagCodepage(this.charset);
 		const chars: string[] = [];
+		const rawCodes: number[] = []; // raw 7-bit code parallel to chars[], for padding detection
 		const charStatus: number[] = [];
 		let c = 0;
 		let cb = 0;
@@ -684,7 +645,8 @@ export class _POCSAGSingleBaud {
 			if (status[i] > worst) worst = status[i];
 			if (++cb === 7) {
 				let ch: string;
-				const glyph = cp[c & 0x7f];
+				const raw = c & 0x7f;
+				const glyph = cp[raw];
 				if (worst === POCSAG_CHAR_UNCORRECTABLE)
 					ch = '\ufffd'; // lost data
 				else if (c === 0)
@@ -693,22 +655,26 @@ export class _POCSAGSingleBaud {
 					ch = glyph; // mapped glyph (incl. \n, \r)
 				else ch = String.fromCharCode(c); // other control/unmapped — keep raw for <0xNN> display
 				chars.push(ch);
+				rawCodes.push(raw);
 				charStatus.push(worst);
 				c = 0;
 				cb = 0;
 				worst = POCSAG_CHAR_OK;
 			}
 		}
-		// Strip trailing fill. Per POCSAG spec the final codeword is padded with
-		// NULL (0x00) or space; a contiguous run of the SAME fill char at the end
-		// is message padding, not content — drop it (prevents a spurious trailing
-		// '?' / space on nearly every message).
+		// Strip trailing fill. Per POCSAG spec §4.2, padding is the last 1 or 2
+		// chars of the last codeword, filled with the same character.
+		// Step 1: NUL (0x00) — always padding, check first unconditionally.
+		// Step 2: if not NUL-padded, check if the last char is non-printable
+		//         (cp[code]===null); if so, strip 1 or 2 of that same code.
 		let end = chars.length;
-		if (end > 0) {
-			const last = chars[end - 1];
-			if (last === '\u0000' || last === ' ') {
-				while (end > 0 && chars[end - 1] === last) end--;
-			}
+		if (end > 0 && rawCodes[end - 1] === 0x00) {
+			end--;
+			if (end > 0 && rawCodes[end - 1] === 0x00) end--;
+		} else if (end > 0 && chars[end - 1] !== '\ufffd' && cp[rawCodes[end - 1]] === null) {
+			const padCode = rawCodes[end - 1];
+			end--;
+			if (end > 0 && rawCodes[end - 1] === padCode) end--;
 		}
 		// Also drop any embedded NULLs (incomplete fill at codeword boundaries).
 		let text = '';
@@ -887,6 +853,7 @@ export class _POCSAGSingleBaud {
 				text: clean,
 				charStatus: outStatus,
 				baud: this.baudRate,
+				inverted: this.inverted,
 				detectDebug: detectScores || undefined,
 				alt: altGuess ? { type: altGuess.type, text: _cleanAltText(altGuess.text) } : undefined,
 			});
@@ -904,8 +871,9 @@ export class _POCSAGSingleBaud {
 			synced,
 			baud: synced ? this.baudRate : null,
 			inverted: this.inverted,
-			ber: this.statTotalBits > 0 ? this.statErrBits / this.statTotalBits : null,
-			codewords: this.statCodewords,
+			ber: this.ber.ber,
+			codewords: this.ber.count,
+			stage: synced ? (this.pageActive ? 'page' : 'batch') : null,
 		};
 	}
 }

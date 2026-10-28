@@ -1,6 +1,6 @@
 import part0 from './shell.html?raw';
 import part1 from './transcription.html?raw';
-import part2 from './pocsag.html?raw';
+import part2 from './pager.html?raw';
 import part3 from './rtl433.html?raw';
 import part4 from './rds.html?raw';
 import part5 from './activity.html?raw';
