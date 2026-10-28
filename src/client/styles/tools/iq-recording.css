@@ -1,0 +1,112 @@
+.iq-recorder-panel {
+	height: auto;
+	min-height: 0;
+	max-height: 55vh;
+}
+.iq-recorder-panel > .msgcenter-header {
+	flex-shrink: 0;
+}
+.iq-recorder-body {
+	min-height: 0;
+	overflow: auto;
+	padding: 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	font-size: 12px;
+	line-height: 1.5;
+}
+.iq-recorder-settings,
+.iq-recorder-duration,
+.iq-recorder-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 8px;
+}
+.iq-recorder-settings {
+	gap: 16px 24px;
+}
+.iq-recorder-actions .btn {
+	width: auto;
+	flex: none;
+}
+.iq-recorder-actions .btn:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+.iq-recorder-settings .form-row {
+	gap: 12px;
+}
+.iq-recorder-settings .form-row label {
+	flex: none;
+}
+.iq-recorder-duration .input-group {
+	width: 96px;
+}
+.iq-recorder-duration select {
+	width: auto;
+}
+.iq-recorder-duration .input-group:focus-within {
+	border-color: var(--accent);
+}
+.iq-recorder-details {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px 24px;
+	font-variant-numeric: tabular-nums;
+}
+.iq-recorder-details dt,
+.iq-recorder-save-mode,
+.iq-recorder-help {
+	color: var(--text-muted);
+}
+.iq-recorder-details dd {
+	color: var(--text-main);
+}
+.iq-recorder-status {
+	padding: 8px 12px;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	background: var(--bg-dark);
+	overflow-wrap: anywhere;
+}
+.iq-recorder-status progress {
+	display: block;
+	width: 100%;
+	height: 8px;
+	margin-top: 8px;
+	accent-color: var(--accent);
+}
+.iq-recorder-help summary {
+	cursor: pointer;
+	color: var(--text-main);
+	width: fit-content;
+}
+.iq-recorder-help p {
+	margin-top: 8px;
+}
+@media (max-width: 768px) {
+	.iq-recorder-panel {
+		max-height: 65vh;
+	}
+	.iq-recorder-settings {
+		align-items: stretch;
+		flex-direction: column;
+		gap: 12px;
+	}
+	.iq-recorder-settings .form-row {
+		justify-content: flex-start;
+	}
+	.iq-recorder-details {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: 8px 12px;
+	}
+	.iq-recorder-details dd {
+		overflow-wrap: anywhere;
+	}
+	.iq-recorder-actions .btn {
+		min-height: 40px;
+	}
+}

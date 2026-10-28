@@ -1,0 +1,75 @@
+<section v-if="receiver.iqRecording.panelOpen" class="adsb-panel iq-recorder-panel" aria-label="IQ Recorder">
+	<UiToolHeader variant="msgcenter" closable close-label="Close IQ Recorder" @close="receiver.iqRecording.panelOpen = false">
+		IQ Recorder <span v-if="active" class="msgcenter-count">Recording</span>
+	</UiToolHeader>
+	<div class="iq-recorder-body">
+		<p class="iq-recorder-intro">Save radio signals to analyse later, explore their modulation, or decode them in other software.</p>
+		<div class="iq-recorder-settings">
+			<UiFormRow label="Duration" :input-id="receiver.receiverId + '-iq-duration'">
+				<div class="iq-recorder-duration">
+					<UiInputGroup>
+						<UiInput
+							:id="receiver.receiverId + '-iq-duration'"
+							v-model.number="duration"
+							type="number"
+							min="0.01"
+							step="any"
+							aria-label="Recording duration"
+							:disabled="active"
+						/>
+					</UiInputGroup>
+					<UiSelect v-model.number="unit" aria-label="Duration unit" :disabled="active">
+						<option :value="1">Seconds</option>
+						<option :value="60">Minutes</option>
+					</UiSelect>
+				</div>
+			</UiFormRow>
+			<dl class="iq-recorder-details">
+				<div>
+					<dt>Estimated size</dt>
+					<dd>{{ size }}</dd>
+				</div>
+				<div>
+					<dt>Centre frequency</dt>
+					<dd>{{ receiver.radio.centerFreq.toFixed(6) }} MHz</dd>
+				</div>
+				<div>
+					<dt>Recorded bandwidth</dt>
+					<dd>{{ (receiver.radio.sampleRate / 1e6).toFixed(2) }} MHz</dd>
+				</div>
+			</dl>
+		</div>
+		<p class="iq-recorder-save-mode">
+			{{ saveToFile ? 'Save directly to a file. Choose its location when you start.' : 'Download your recording when it is ready.' }} A
+			lower sample rate records a narrower band and uses less space.
+		</p>
+		<div class="iq-recorder-actions">
+			<UiButton
+				v-if="!active"
+				variant="primary"
+				:disabled="!!blockedReason"
+				:title="blockedReason || 'Record the full received band'"
+				@click="capture"
+				>Start recording</UiButton
+			>
+			<UiButton v-else variant="stop" @click="cancel">Cancel recording</UiButton>
+			<UiButton v-if="data && !active" variant="secondary" @click="downloadData">Download IQ data</UiButton>
+			<UiButton v-if="metadata && !active" variant="secondary" @click="downloadMetadata">Download metadata</UiButton>
+		</div>
+		<div class="iq-recorder-status" role="status" aria-live="polite">
+			<p>{{ status }}</p>
+			<progress v-if="active" :value="progressPercent" max="100" aria-label="Recording progress"></progress>
+		</div>
+		<p v-if="metadata && !active" class="iq-recorder-help">
+			Keep the IQ data and metadata together with matching file names. Both are needed to open the recording correctly.
+		</p>
+		<details class="iq-recorder-help">
+			<summary>About IQ recordings</summary>
+			<p>
+				IQ files contain the radio samples across the full received band, before audio or decoding. Use compatible signal analysis software
+				to inspect, demodulate, or decode them. Files use SigMF format with signed 8-bit I/Q samples.
+			</p>
+			<p>Keep this tab open. Retuning, changing gains, or stopping reception cancels the recording. Incomplete recordings are discarded.</p>
+		</details>
+	</div>
+</section>
