@@ -16,9 +16,219 @@
 		</template>
 	</UiToolHeader>
 	<div v-if="vfo" class="rtk-body">
-		<div v-if="entries.length" class="rtk-directory">
+		<div class="rtk-details" role="region" aria-label="Selected RTK base station">
+			<div class="rtk-heading">
+				<div>
+					<h3>{{ title }}</h3>
+					<p>{{ vfo.freq.toFixed(3) }} MHz</p>
+					<p
+						v-if="station"
+						class="rtk-pairing"
+						:aria-label="station.address !== undefined ? 'LoRa station address' : 'LoRa number'"
+						:title="station.address !== undefined ? '16-bit address from verified radio frames.' : 'scan.channel.loc.net · The loc field has not been decoded.'"
+					>
+						LoRa <span class="rtk-lora-number">{{ loraNumber(station) }}</span>
+						<span v-if="station.address === undefined" class="rtk-caption">· loc unknown</span>
+					</p>
+				</div>
+				<span class="rtk-state" :class="'rtk-state-' + reception.tone" role="status">{{ reception.label }}</span>
+			</div>
+			<p class="rtk-description">{{ reception.detail }}</p>
+			<div v-if="station" class="rtk-overview">
+				<div class="rtk-summary">
+					<div class="rtk-metrics">
+						<div class="rtk-position" aria-label="Base station position">
+							<span class="rtk-label">Base location</span>
+							<strong v-if="station.reference">{{ referencePosition(station.reference) }}</strong>
+							<span v-else>Waiting for the base to send its position…</span>
+						</div>
+						<div aria-label="Satellite observations">
+							<span class="rtk-label">Satellites</span>
+							<strong class="rtk-number">{{ freshObservations.length ? observedSatellites(station, now) : '—' }}</strong>
+							<span class="rtk-caption">In recent corrections</span>
+						</div>
+						<div>
+							<span class="rtk-label">Antenna altitude</span>
+							<strong class="rtk-altitude">{{ station.reference ? station.reference.heightM.toFixed(2) + ' m' : '—' }}</strong>
+							<span class="rtk-caption">Above the ellipsoid</span>
+						</div>
+						<div class="rtk-band-counts" aria-label="Satellites by frequency group">
+							<div title="GPS L1, GLONASS G1, Galileo E1 and BeiDou B1. A satellite can also appear in L2.">
+								<span class="rtk-label">L1 / primary</span><strong class="rtk-number">{{ gnss.primary ?? '—' }}</strong>
+							</div>
+							<div title="GPS L2, GLONASS G2, Galileo E5b and BeiDou B2. A satellite can also appear in L1.">
+								<span class="rtk-label">L2 / secondary</span><strong class="rtk-number">{{ gnss.secondary ?? '—' }}</strong>
+							</div>
+							<p class="rtk-caption">Unique satellites from corrections · Counts overlap</p>
+							<p class="rtk-caption">Mammotion’s receiver-reported L1/L2 totals are a separate metric.</p>
+						</div>
+					</div>
+					<div v-if="freshObservations.length" class="rtk-constellations" aria-label="Satellites by constellation">
+						<div v-for="observation in freshObservations" :key="observation.constellation">
+							<span>{{ observation.constellation }}</span><strong>{{ observation.satellites.length }}</strong>
+						</div>
+					</div>
+					<div
+						class="rtk-quality"
+						aria-label="GNSS signal quality"
+						title="Indicative mean satellite C/N₀: Good ≥40, Fair ≥30, Weak below 30 dB-Hz. This is separate from the LoRa radio link."
+					>
+						<span>GNSS signal</span>
+						<strong :class="'rtk-quality-' + gnss.tone">{{ gnss.quality }}</strong>
+						<span v-if="gnss.meanCnr !== undefined" class="rtk-caption">{{ gnss.meanCnr.toFixed(1) }} dB-Hz mean</span>
+					</div>
+				</div>
+				<div v-if="mapVisible" class="rtk-map-wrap">
+					<div ref="mapElement" class="rtk-map" role="region" aria-label="Base station location map"></div>
+					<p v-if="mapError" class="rtk-map-error" role="status">{{ mapError }}</p>
+				</div>
+			</div>
+			<div v-else class="rtk-empty">
+				<p v-if="entries.length">Select a base from the list to view its location and observations.</p>
+				<p v-else>Location and satellite data will appear when verified base corrections arrive.</p>
+			</div>
+			<details class="rtk-section">
+				<summary>Decoder settings</summary>
+				<div class="rtk-section-content">
+					<label class="rtk-field"
+						>Signal to decode<select v-model="vfo.rtkProfile" aria-label="RTK signal profile" @change="changeProfile">
+							<option value="rtk1">Mammotion RTK1 · 500 kHz</option>
+							<option value="rtk2">Mammotion RTK2 · 250 kHz</option>
+							<option value="rtk3">Mammotion RTK3 · 250 kHz (experimental)</option>
+						</select></label
+					>
+					<template v-if="presetFrequency !== undefined">
+						<UiButton variant="transcript" @click="receiver.tuneRtkVfo(presetFrequency)"
+							>Tune to {{ presetFrequency.toFixed(3) }} MHz</UiButton
+						>
+						<p class="rtk-caption">Changes the selected VFO to the measured signal frequency.</p>
+					</template>
+					<p v-else-if="vfo.rtkProfile === 'rtk3'" class="rtk-caption">
+						RTK3 support follows the published RBS03 protocol and has not been tested with hardware. Tune the VFO to an active channel in
+						the waterfall. Hopping bases send intermittent bursts on each channel; automatic hop following is not available.
+					</p>
+					<p v-if="vfo.rtkProfile === 'rtk2'" class="rtk-caption">
+						RTK2 can change channel during startup. If this preset is quiet, tune to its active signal in the waterfall.
+					</p>
+					<label class="rtk-field"
+						>Sample timing adjustment (ppm)<input
+							v-model.number="vfo.rtkClockPpm"
+							type="number"
+							min="-200"
+							max="200"
+							step="1"
+							aria-label="RTK sample clock correction"
+							@change="update"
+					/></label>
+					<p class="rtk-caption">Measured presets: 20 for RTK1, 10 for RTK2. RTK3 starts at 0; adjust for your receiver.</p>
+				</div>
+			</details>
+			<details class="rtk-section">
+				<summary>Save data</summary>
+				<div class="rtk-section-content">
+					<label class="rtk-field"
+						>File type<select v-model="exportFormat" aria-label="RTK export format">
+							<option value="report">Station summary (.json)</option>
+							<option value="corrections">Correction stream (.rtcm3)</option>
+						</select></label
+					>
+					<p v-if="exportFormat === 'report'" class="rtk-caption">
+						Saves the selected base’s location and satellite observations, plus this VFO’s reception statistics.
+					</p>
+					<p v-else class="rtk-caption">Saves the selected base’s checksum-verified corrections from this VFO’s last 512 messages.</p>
+					<UiButton variant="transcript" :disabled="!canDownload" @click="exportData">Download file</UiButton>
+					<p v-if="!canDownload" class="rtk-caption">No data of this type has been received on this channel yet.</p>
+				</div>
+			</details>
+			<details class="rtk-section">
+				<summary>Diagnostics</summary>
+				<div class="rtk-section-content">
+					<dl v-if="status" class="rtk-diagnostics">
+						<div>
+							<dt>Verified radio packets</dt>
+							<dd>{{ status.packets }}</dd>
+						</div>
+						<div>
+							<dt>LoRa headers detected</dt>
+							<dd>{{ status.headers }}</dd>
+						</div>
+						<div v-if="vfo.rtkProfile !== 'rtk1'">
+							<dt>Payloads recovered</dt>
+							<dd>{{ status.payloads ?? 0 }}</dd>
+						</div>
+						<div v-if="vfo.rtkProfile !== 'rtk1'">
+							<dt>Coding parity errors</dt>
+							<dd>{{ status.codingErrors ?? 0 }}</dd>
+						</div>
+						<div v-if="vfo.rtkProfile !== 'rtk1' && status.syncSymbols">
+							<dt>Observed LoRa sync symbols</dt>
+							<dd>{{ status.syncSymbols.join(', ') }}</dd>
+						</div>
+						<div>
+							<dt>{{ vfo.rtkProfile === 'rtk3' ? 'Rejected radio frames' : 'Checksum errors' }}</dt>
+							<dd>{{ status.crcErrors }}</dd>
+						</div>
+						<div>
+							<dt>Lost IQ chunks</dt>
+							<dd>{{ status.discontinuities }}</dd>
+						</div>
+						<template v-if="vfo.rtkProfile === 'rtk3' || vfo.rtkProfile === 'rtk2'">
+							<div>
+								<dt>{{ vfo.rtkProfile === 'rtk2' ? 'Verified keepalives' : 'Verified beacons' }}</dt>
+								<dd>{{ status.beacons ?? 0 }}</dd>
+							</div>
+							<div>
+								<dt>Validated containers</dt>
+								<dd>{{ status.containers ?? 0 }}</dd>
+							</div>
+							<div>
+								<dt>{{ vfo.rtkProfile === 'rtk2' ? 'Rejected RTCM frames' : 'Invalid RTCM containers' }}</dt>
+								<dd>{{ status.containerErrors ?? 0 }}</dd>
+							</div>
+							<div>
+								<dt>Container sequence gaps</dt>
+								<dd>{{ status.sequenceGaps ?? 0 }}</dd>
+							</div>
+						</template>
+					</dl>
+					<p v-else class="rtk-caption">No reception statistics yet.</p>
+					<p v-if="status" class="rtk-caption">Radio counters cover this VFO. Correction details below are for the selected base.</p>
+					<p v-if="status && vfo.rtkProfile === 'rtk3'" class="rtk-caption">
+						Radio frames require CRC16/MODBUS; correction containers also require RTCM CRC24Q. Beacons carry no corrections. Sequence gaps
+						are observed counter increments, not a measurement of USB loss.
+					</p>
+					<p v-if="status && vfo.rtkProfile === 'rtk2'" class="rtk-caption">
+						RTK2 packets require CRC8 and container CRC16/MODBUS; corrections also require RTCM CRC24Q. Keepalives carry no corrections.
+					</p>
+					<template v-if="station">
+						<p v-if="station.address !== undefined">
+							{{ station.protocol === 'rtk2' ? 'RTK2' : 'RTK3' }} station address: {{ station.address }}. Other pairing fields are not
+							decoded.
+						</p>
+						<p v-else>Pairing fields: scan {{ station.scan }}, channel {{ station.channel }}, net ID {{ station.netId }}.</p>
+						<p>{{ station.rtcmCount }} verified correction messages · RTCM types {{ Object.keys(station.rtcmTypes).join(', ') }}</p>
+						<p v-if="station.reference">
+							RTCM station ID {{ station.reference.stationId }} · ITRF realization {{ station.reference.itrf }}
+						</p>
+						<p v-if="station.reference && station.reference.antennaHeightM !== undefined">
+							Antenna height above marker: {{ station.reference.antennaHeightM.toFixed(4) }} m
+						</p>
+						<p v-if="station.equipment">Firmware: {{ station.equipment.firmware }} · Antenna: {{ station.equipment.antenna }}</p>
+						<p v-for="observation in observations" :key="observation.constellation">
+							{{ observation.constellation }} IDs: {{ observation.satellites.join(', ') }} · {{ signalStrength(observation) }}
+						</p>
+						<p v-if="Object.keys(gnss.bands).length">
+							Satellites by band: {{ Object.entries(gnss.bands).map(([band, count]) => band + ': ' + count).join(' · ') }}
+						</p>
+					</template>
+				</div>
+			</details>
+		</div>
+		<div class="rtk-directory" role="region" aria-label="Discovered RTK base stations">
+			<h3>Discovered stations</h3>
 			<p class="rtk-caption">{{ entries.length }} base {{ entries.length === 1 ? 'station' : 'stations' }} · All enabled RTK VFOs</p>
-			<div class="rtk-station-scroll">
+			<p v-if="!entries.length" class="rtk-empty">Waiting for RTK base stations. Enable decoding on a VFO tuned to an RTK signal.</p>
+			<div v-else class="rtk-station-scroll">
 				<table class="rtk-station-list" aria-label="RTK base stations">
 					<thead>
 						<tr>
@@ -45,209 +255,5 @@
 				</table>
 			</div>
 		</div>
-		<div class="rtk-heading">
-			<div>
-				<h3>{{ title }}</h3>
-				<p>{{ vfo.freq.toFixed(3) }} MHz</p>
-				<p
-					v-if="station"
-					class="rtk-pairing"
-					:aria-label="station.address !== undefined ? 'LoRa station address' : 'LoRa number'"
-					:title="station.address !== undefined ? '16-bit address from verified radio frames.' : 'scan.channel.loc.net · The loc field has not been decoded.'"
-				>
-					LoRa <span class="rtk-lora-number">{{ loraNumber(station) }}</span>
-					<span v-if="station.address === undefined" class="rtk-caption">· loc unknown</span>
-				</p>
-			</div>
-			<span class="rtk-state" :class="'rtk-state-' + reception.tone" role="status">{{ reception.label }}</span>
-		</div>
-		<p class="rtk-description">{{ reception.detail }}</p>
-		<div v-if="station" class="rtk-overview">
-			<div class="rtk-summary">
-				<div class="rtk-metrics">
-					<div class="rtk-position" aria-label="Base station position">
-						<span class="rtk-label">Base location</span>
-						<strong v-if="station.reference">{{ referencePosition(station.reference) }}</strong>
-						<span v-else>Waiting for the base to send its position…</span>
-					</div>
-					<div aria-label="Satellite observations">
-						<span class="rtk-label">Satellites</span>
-						<strong class="rtk-number">{{ freshObservations.length ? observedSatellites(station, now) : '—' }}</strong>
-						<span class="rtk-caption">In recent corrections</span>
-					</div>
-					<div>
-						<span class="rtk-label">Antenna altitude</span>
-						<strong class="rtk-altitude">{{ station.reference ? station.reference.heightM.toFixed(2) + ' m' : '—' }}</strong>
-						<span class="rtk-caption">Above the ellipsoid</span>
-					</div>
-					<div class="rtk-band-counts" aria-label="Satellites by frequency group">
-						<div title="GPS L1, GLONASS G1, Galileo E1 and BeiDou B1. A satellite can also appear in L2.">
-							<span class="rtk-label">L1 / primary</span><strong class="rtk-number">{{ gnss.primary ?? '—' }}</strong>
-						</div>
-						<div title="GPS L2, GLONASS G2, Galileo E5b and BeiDou B2. A satellite can also appear in L1.">
-							<span class="rtk-label">L2 / secondary</span><strong class="rtk-number">{{ gnss.secondary ?? '—' }}</strong>
-						</div>
-						<p class="rtk-caption">Unique satellites from corrections · Counts overlap</p>
-						<p class="rtk-caption">Mammotion’s receiver-reported L1/L2 totals are a separate metric.</p>
-					</div>
-				</div>
-				<div v-if="freshObservations.length" class="rtk-constellations" aria-label="Satellites by constellation">
-					<div v-for="observation in freshObservations" :key="observation.constellation">
-						<span>{{ observation.constellation }}</span><strong>{{ observation.satellites.length }}</strong>
-					</div>
-				</div>
-				<div
-					class="rtk-quality"
-					aria-label="GNSS signal quality"
-					title="Indicative mean satellite C/N₀: Good ≥40, Fair ≥30, Weak below 30 dB-Hz. This is separate from the LoRa radio link."
-				>
-					<span>GNSS signal</span>
-					<strong :class="'rtk-quality-' + gnss.tone">{{ gnss.quality }}</strong>
-					<span v-if="gnss.meanCnr !== undefined" class="rtk-caption">{{ gnss.meanCnr.toFixed(1) }} dB-Hz mean</span>
-				</div>
-			</div>
-			<div v-if="mapVisible" class="rtk-map-wrap">
-				<div ref="mapElement" class="rtk-map" role="region" aria-label="Base station location map"></div>
-				<p v-if="mapError" class="rtk-map-error" role="status">{{ mapError }}</p>
-			</div>
-		</div>
-		<div v-else class="rtk-empty">
-			<p v-if="entries.length">Select a base from the list to view its location and observations.</p>
-			<p v-else>Location and satellite data will appear when verified base corrections arrive.</p>
-		</div>
-		<details class="rtk-section">
-			<summary>Decoder settings</summary>
-			<div class="rtk-section-content">
-				<label class="rtk-field"
-					>Signal to decode<select v-model="vfo.rtkProfile" aria-label="RTK signal profile" @change="changeProfile">
-						<option value="rtk1">Mammotion RTK1 · 500 kHz</option>
-						<option value="rtk2">Mammotion RTK2 · 250 kHz</option>
-						<option value="rtk3">Mammotion RTK3 · 250 kHz (experimental)</option>
-					</select></label
-				>
-				<template v-if="presetFrequency !== undefined">
-					<UiButton variant="transcript" @click="receiver.tuneRtkVfo(presetFrequency)"
-						>Tune to {{ presetFrequency.toFixed(3) }} MHz</UiButton
-					>
-					<p class="rtk-caption">Changes the selected VFO to the measured signal frequency.</p>
-				</template>
-				<p v-else-if="vfo.rtkProfile === 'rtk3'" class="rtk-caption">
-					RTK3 support follows the published RBS03 protocol and has not been tested with hardware. Tune the VFO to an active channel in the
-					waterfall. Hopping bases send intermittent bursts on each channel; automatic hop following is not available.
-				</p>
-				<p v-if="vfo.rtkProfile === 'rtk2'" class="rtk-caption">
-					RTK2 can change channel during startup. If this preset is quiet, tune to its active signal in the waterfall.
-				</p>
-				<label class="rtk-field"
-					>Sample timing adjustment (ppm)<input
-						v-model.number="vfo.rtkClockPpm"
-						type="number"
-						min="-200"
-						max="200"
-						step="1"
-						aria-label="RTK sample clock correction"
-						@change="update"
-				/></label>
-				<p class="rtk-caption">Measured presets: 20 for RTK1, 10 for RTK2. RTK3 starts at 0; adjust for your receiver.</p>
-			</div>
-		</details>
-		<details class="rtk-section">
-			<summary>Save data</summary>
-			<div class="rtk-section-content">
-				<label class="rtk-field"
-					>File type<select v-model="exportFormat" aria-label="RTK export format">
-						<option value="report">Station summary (.json)</option>
-						<option value="corrections">Correction stream (.rtcm3)</option>
-					</select></label
-				>
-				<p v-if="exportFormat === 'report'" class="rtk-caption">
-					Saves the selected base’s location and satellite observations, plus this VFO’s reception statistics.
-				</p>
-				<p v-else class="rtk-caption">Saves the selected base’s checksum-verified corrections from this VFO’s last 512 messages.</p>
-				<UiButton variant="transcript" :disabled="!canDownload" @click="exportData">Download file</UiButton>
-				<p v-if="!canDownload" class="rtk-caption">No data of this type has been received on this channel yet.</p>
-			</div>
-		</details>
-		<details class="rtk-section">
-			<summary>Diagnostics</summary>
-			<div class="rtk-section-content">
-				<dl v-if="status" class="rtk-diagnostics">
-					<div>
-						<dt>Verified radio packets</dt>
-						<dd>{{ status.packets }}</dd>
-					</div>
-					<div>
-						<dt>LoRa headers detected</dt>
-						<dd>{{ status.headers }}</dd>
-					</div>
-					<div v-if="vfo.rtkProfile !== 'rtk1'">
-						<dt>Payloads recovered</dt>
-						<dd>{{ status.payloads ?? 0 }}</dd>
-					</div>
-					<div v-if="vfo.rtkProfile !== 'rtk1'">
-						<dt>Coding parity errors</dt>
-						<dd>{{ status.codingErrors ?? 0 }}</dd>
-					</div>
-					<div v-if="vfo.rtkProfile !== 'rtk1' && status.syncSymbols">
-						<dt>Observed LoRa sync symbols</dt>
-						<dd>{{ status.syncSymbols.join(', ') }}</dd>
-					</div>
-					<div>
-						<dt>{{ vfo.rtkProfile === 'rtk3' ? 'Rejected radio frames' : 'Checksum errors' }}</dt>
-						<dd>{{ status.crcErrors }}</dd>
-					</div>
-					<div>
-						<dt>Lost IQ chunks</dt>
-						<dd>{{ status.discontinuities }}</dd>
-					</div>
-					<template v-if="vfo.rtkProfile === 'rtk3' || vfo.rtkProfile === 'rtk2'">
-						<div>
-							<dt>{{ vfo.rtkProfile === 'rtk2' ? 'Verified keepalives' : 'Verified beacons' }}</dt>
-							<dd>{{ status.beacons ?? 0 }}</dd>
-						</div>
-						<div>
-							<dt>Validated containers</dt>
-							<dd>{{ status.containers ?? 0 }}</dd>
-						</div>
-						<div>
-							<dt>{{ vfo.rtkProfile === 'rtk2' ? 'Rejected RTCM frames' : 'Invalid RTCM containers' }}</dt>
-							<dd>{{ status.containerErrors ?? 0 }}</dd>
-						</div>
-						<div>
-							<dt>Container sequence gaps</dt>
-							<dd>{{ status.sequenceGaps ?? 0 }}</dd>
-						</div>
-					</template>
-				</dl>
-				<p v-else class="rtk-caption">No reception statistics yet.</p>
-				<p v-if="status" class="rtk-caption">Radio counters cover this VFO. Correction details below are for the selected base.</p>
-				<p v-if="status && vfo.rtkProfile === 'rtk3'" class="rtk-caption">
-					Radio frames require CRC16/MODBUS; correction containers also require RTCM CRC24Q. Beacons carry no corrections. Sequence gaps are
-					observed counter increments, not a measurement of USB loss.
-				</p>
-				<p v-if="status && vfo.rtkProfile === 'rtk2'" class="rtk-caption">
-					RTK2 packets require CRC8 and container CRC16/MODBUS; corrections also require RTCM CRC24Q. Keepalives carry no corrections.
-				</p>
-				<template v-if="station">
-					<p v-if="station.address !== undefined">
-						{{ station.protocol === 'rtk2' ? 'RTK2' : 'RTK3' }} station address: {{ station.address }}. Other pairing fields are not
-						decoded.
-					</p>
-					<p v-else>Pairing fields: scan {{ station.scan }}, channel {{ station.channel }}, net ID {{ station.netId }}.</p>
-					<p>{{ station.rtcmCount }} verified correction messages · RTCM types {{ Object.keys(station.rtcmTypes).join(', ') }}</p>
-					<p v-if="station.reference">RTCM station ID {{ station.reference.stationId }} · ITRF realization {{ station.reference.itrf }}</p>
-					<p v-if="station.reference && station.reference.antennaHeightM !== undefined">
-						Antenna height above marker: {{ station.reference.antennaHeightM.toFixed(4) }} m
-					</p>
-					<p v-if="station.equipment">Firmware: {{ station.equipment.firmware }} · Antenna: {{ station.equipment.antenna }}</p>
-					<p v-for="observation in observations" :key="observation.constellation">
-						{{ observation.constellation }} IDs: {{ observation.satellites.join(', ') }} · {{ signalStrength(observation) }}
-					</p>
-					<p v-if="Object.keys(gnss.bands).length">
-						Satellites by band: {{ Object.entries(gnss.bands).map(([band, count]) => band + ': ' + count).join(' · ') }}
-					</p>
-				</template>
-			</div>
-		</details>
 	</div>
 </section>

@@ -51,6 +51,16 @@ describe('RTCM MSM observation sequences', () => {
 		expect(complete.cnrDbHz).toEqual([42, 42, 35, 42, 42, 42]);
 	});
 
+	it('ages a complete multi-constellation snapshot together rather than expiring its first fragments early', () => {
+		const assembly = new RtkObservations();
+		assembly.process(observation('GPS', [1, 2], true, 1000, 1000));
+		assembly.process(observation('BeiDou', [1, 2], true, 1000, 1500));
+		const complete = assembly.process(observation('BeiDou', [3], false, 1000, 1900));
+		expect(Object.values(complete).map((value) => value.receivedAt)).toEqual([1900, 1900]);
+		// A missed two-second broadcast must not remove GPS before the rest of the snapshot.
+		expect(Object.values(complete).filter((value) => 6100 - value.receivedAt < 5000)).toHaveLength(2);
+	});
+
 	it('discards an unfinished epoch rather than joining it to newer observations', () => {
 		const assembly = new RtkObservations();
 		assembly.process(observation('GPS', [1], true, 1000));

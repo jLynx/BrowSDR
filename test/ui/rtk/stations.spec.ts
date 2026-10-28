@@ -38,6 +38,16 @@ async function setup(frequencies = [923.118, 921.25]) {
 const rows = () => wrapper.findAll('.rtk-station-list tbody tr');
 
 describe('combined RTK station list', () => {
+	it('keeps the discovered-station pane visible before any stations arrive', async () => {
+		await setup();
+		await nextTick();
+		const directory = wrapper.get('[aria-label="Discovered RTK base stations"]');
+		expect(directory.text()).toContain('0 base stations');
+		expect(directory.text()).toContain('Waiting for RTK base stations');
+		expect(wrapper.get('[aria-label="Selected RTK base station"]').find('.rtk-section').exists()).toBe(true);
+		expect(directory.find('.rtk-section').exists()).toBe(false);
+	});
+
 	it('selects same-frequency bases and other VFOs without mixing corrections or moving selection on updates', async () => {
 		await setup();
 		const a = mockStation(),
@@ -51,6 +61,8 @@ describe('combined RTK station list', () => {
 		wrapper.vm._onRtkMessage(1, 921.25, other);
 		await nextTick();
 		expect(rows()).toHaveLength(3);
+		expect(wrapper.get('.rtk-directory').findAll('.rtk-station-list tbody tr')).toHaveLength(3);
+		expect(wrapper.get('.rtk-details').find('.rtk-station-list').exists()).toBe(false);
 		expect(rows().filter((row) => row.text().includes('923.118 MHz'))).toHaveLength(2);
 		const selectB = rows()
 			.find((row) => row.text().includes('2345.7.?.42'))!

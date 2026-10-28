@@ -24,7 +24,8 @@ export class RtkObservations {
 		if (observation.multipleMessage) return;
 		const complete = this.pending;
 		this.pending = {};
-		return complete;
+		// Freshness belongs to the completed sequence, not its earlier radio fragments.
+		return Object.fromEntries(Object.entries(complete).map(([name, value]) => [name, { ...value, receivedAt: observation.receivedAt }]));
 	}
 
 	discontinuity(): void {

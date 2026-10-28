@@ -91,6 +91,17 @@ type Story = StoryObj<typeof meta>;
 export const MultipleBases: Story = {
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
+		const details = canvas.getByRole('region', { name: 'Selected RTK base station' }).getBoundingClientRect();
+		const directory = canvas.getByRole('region', { name: 'Discovered RTK base stations' }).getBoundingClientRect();
+		const panel = canvas.getByLabelText('Live RTK decoder').getBoundingClientRect();
+		if (panel.width > 760) {
+			await expect(directory.left).toBeGreaterThanOrEqual(details.right);
+			await expect(directory.top).toBe(details.top);
+		} else {
+			await expect(directory.top).toBeGreaterThanOrEqual(details.bottom);
+			const detailsElement = canvas.getByRole('region', { name: 'Selected RTK base station' });
+			await expect(detailsElement.scrollHeight).toBeLessThanOrEqual(detailsElement.clientHeight + 1);
+		}
 		const list = within(canvas.getByRole('table', { name: 'RTK base stations' }));
 		await expect(list.getAllByRole('row')).toHaveLength(4);
 		await userEvent.click(list.getByRole('button', { name: /MOCK GNSS B/ }));
@@ -98,4 +109,12 @@ export const MultipleBases: Story = {
 		await userEvent.click(list.getByRole('button', { name: /MOCK GNSS C/ }));
 		await expect(canvas.getByLabelText('LoRa number')).toHaveTextContent('3456.7.?.42');
 	},
+};
+
+export const NarrowLayout: Story = {
+	render: () => ({
+		...meta.render(),
+		template: '<div style="display:flex;flex-direction:column;width:390px;max-width:100%"><RtkPanel /></div>',
+	}),
+	play: MultipleBases.play,
 };

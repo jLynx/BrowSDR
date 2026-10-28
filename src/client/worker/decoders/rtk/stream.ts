@@ -91,7 +91,11 @@ export class RtkStream {
 				profile,
 				ppm,
 				(packet) => this.tracker.process(packet),
-				() => this.tracker.discontinuity(),
+				() => {
+					// RTK2 has a verified per-base sequence counter; a bad header alone
+					// cannot establish loss. Actual IQ discontinuities still reset below.
+					if (name !== 'rtk2') this.tracker.discontinuity();
+				},
 			);
 			this.status.state = 'receiving';
 			this.status.message = `Listening on ${params.freq.toFixed(3)} MHz · ${profileName[name]}`;

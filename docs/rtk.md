@@ -57,9 +57,12 @@ map, satellite observations or correction exports.
 
 Reassembly is isolated by the raw eight-byte network field and 16-bit address,
 bounded to 16 bases and a maximum RTCM frame per partial stream. Duplicate
-container sequences are suppressed. Gaps, counter restarts, corrupt packets,
+container sequences are suppressed. Gaps, counter restarts,
 IQ discontinuities, retunes, profile changes and more than two seconds of
 silence discard incomplete corrections. Keepalives preserve adjacent fragments.
+Rejected radio candidates contribute no bytes and have no trusted identity or
+sequence number. The next verified container determines whether a base's
+pending data can continue or must be discarded for a confirmed sequence gap.
 The UI displays the validated address; the complete pairing-number mapping
 has not been established. No pairing number is required as a decoding key.
 
@@ -379,6 +382,9 @@ and signal cell. Counts update together at the end of the MSM sequence, so an
 individual fragment cannot temporarily replace a complete constellation count.
 Reception gaps discard unfinished sequences while the previous complete
 observations remain visible until they expire.
+All constellations in a completed sequence share its completion timestamp, so
+radio fragments received earlier do not expire separately and reduce the total
+while the next complete set is still arriving.
 Other bands, including L5, E5a and B3, appear in Diagnostics. Unknown signal IDs
 are not assigned a band. These are correction-stream counts; Mammotion's
 base-receiver L1/L2 counting definition has not been established, so matching

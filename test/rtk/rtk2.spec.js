@@ -43,6 +43,16 @@ describe('RTK2 wire and application integrity', () => {
 });
 
 describe('RTK2 correction stream', () => {
+	it('keeps verified partial corrections when a rejected candidate is followed by a contiguous container', () => {
+		const frame = mockRtcmReference();
+		const tracker = new Rtk2Tracker();
+		tracker.process(mockRtk2Packet(frame.slice(0, 12), 100));
+		tracker.process({ ...mockRtk2Packet(frame, 101), codingErrors: 1 });
+		tracker.process(mockRtk2Packet(frame.slice(12), 101));
+		expect(tracker.flush()).toHaveLength(1);
+		expect(tracker.counters).toMatchObject({ crcErrors: 1, sequenceGaps: 0 });
+	});
+
 	it('reassembles maximum-length RTCM across containers and keepalives, with multiple frames per chunk', () => {
 		const header = new Uint8Array(1026);
 		header.set([0xd3, 3, 255, 255, 160, 42]);
@@ -82,7 +92,7 @@ describe('RTK2 correction stream', () => {
 		vi.spyOn(Date, 'now').mockImplementation(() => now);
 		for (const [interrupt, nextSequence] of [
 			[(tracker) => tracker.process(mockRtk2Packet(new Uint8Array(), 102)), 103],
-			[(tracker) => tracker.process({ ...mockRtk2Packet(frame, 101), codingErrors: 1 }), 101],
+			[(tracker) => tracker.process({ ...mockRtk2Packet(frame, 101), codingErrors: 1 }), 102],
 			[(tracker) => tracker.discontinuity(), 101],
 			[
 				() => {

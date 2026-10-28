@@ -7,6 +7,38 @@ import { mockRtcmReference } from '../fixtures/rtk/mock-rtk3';
 afterEach(() => vi.restoreAllMocks());
 
 describe('RTK2 browser worker with synthetic signed IQ', () => {
+	it('uses verified container continuity after a bad LoRa header while still resetting on a real IQ gap', () => {
+		const memory = { buffer: new ArrayBuffer(65536) };
+		const messages = [];
+		const stream = new RtkStream(class {}, memory, (message) => messages.push(message));
+		stream.configure({ freq: 915.191, rtk: true, rtkProfile: 'rtk2' }, 1000000, 915.191);
+		let now = performance.now() + 1000,
+			id = 0;
+		vi.spyOn(performance, 'now').mockImplementation(() => (now += 300));
+		const frame = mockRtcmReference();
+		const invalidHeader = mockRtkIq(mockRtk2Packet(new Uint8Array(), 101).data, mockRtk2Options);
+		// Keep the preamble/sync, erase all eight explicit-header symbols.
+		const headerStart = 2 * (1024 + 20.25 * 512);
+		invalidHeader.fill(0, headerStart, headerStart + 2 * 8 * 512);
+		const feed = (bytes) => {
+			for (let at = 0; at < bytes.length; at += 8190) {
+				const part = bytes.subarray(at, at + 8190);
+				new Uint8Array(memory.buffer).set(part);
+				stream.process(0, part.length, false, ++id);
+			}
+		};
+		feed(mockRtkIq(mockRtk2Packet(frame.slice(0, 12), 100).data, mockRtk2Options));
+		feed(invalidHeader);
+		feed(mockRtkIq(mockRtk2Packet(frame.slice(12), 101).data, mockRtk2Options));
+		expect(messages.flatMap((message) => message.rtcm)).toHaveLength(1);
+		expect(messages.at(-1).status).toMatchObject({ syncs: 3, headers: 2, packets: 2, discontinuities: 0 });
+		feed(mockRtkIq(mockRtk2Packet(frame.slice(0, 12), 102).data, mockRtk2Options));
+		id++;
+		feed(mockRtkIq(mockRtk2Packet(frame.slice(12), 103).data, mockRtk2Options));
+		expect(messages.flatMap((message) => message.rtcm)).toHaveLength(1);
+		expect(messages.at(-1).status.discontinuities).toBe(1);
+	});
+
 	it('decodes corrections through the RTK2 profile and resets on retune and profile change', () => {
 		const memory = { buffer: new ArrayBuffer(65536) };
 		const messages = [];

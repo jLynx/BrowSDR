@@ -14,7 +14,8 @@ export class Rtk2Tracker {
 		const frame = decodeRtk2Frame(packet);
 		if (!frame) {
 			this.counters.crcErrors++;
-			this.discontinuity();
+			// The candidate has no trusted identity/sequence. The next verified container
+			// proves continuity or discards this base's pending data on a sequence gap.
 			return;
 		}
 		this.counters.packets++;

@@ -6,6 +6,7 @@
 	min-height: 260px;
 	border-top: 2px solid var(--accent);
 	background: var(--bg-panel);
+	container-type: inline-size;
 }
 .rtk-panel .pocsag-header {
 	flex-wrap: wrap;
@@ -23,11 +24,19 @@
 	width: auto;
 }
 .rtk-body {
+	flex: 1;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(360px, 45%);
+	min-height: 0;
+	overflow: hidden;
+	font-size: 13px;
+	line-height: 1.5;
+}
+.rtk-details {
+	min-width: 0;
 	min-height: 0;
 	overflow: auto;
 	padding: 16px 20px;
-	font-size: 13px;
-	line-height: 1.5;
 }
 .rtk-heading {
 	display: flex;
@@ -36,14 +45,26 @@
 	gap: 12px;
 }
 .rtk-directory {
-	margin-bottom: 16px;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
+	min-height: 0;
+	padding: 16px 0 0;
+	border-left: 1px solid var(--border);
+}
+.rtk-directory > h3 {
+	font-size: 14px;
+	font-weight: 600;
+}
+.rtk-directory > h3,
+.rtk-directory > p {
+	margin: 0 16px 6px;
 }
 .rtk-station-scroll {
-	max-height: 220px;
+	flex: 1;
+	min-height: 0;
 	overflow: auto;
 	margin-top: 6px;
-	border: 1px solid var(--border);
-	border-radius: 5px;
 }
 .rtk-station-list {
 	width: 100%;
@@ -123,8 +144,8 @@
 .rtk-overview {
 	margin-top: 16px;
 	display: grid;
-	grid-template-columns: minmax(0, 1fr) minmax(240px, 28%);
-	gap: 24px;
+	grid-template-columns: minmax(0, 1fr);
+	gap: 16px;
 	margin-bottom: 16px;
 }
 .rtk-summary {
@@ -152,7 +173,7 @@
 }
 .rtk-metrics {
 	display: grid;
-	grid-template-columns: repeat(4, minmax(90px, 1fr));
+	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 14px 20px;
 }
 .rtk-position {
@@ -279,7 +300,7 @@
 }
 .rtk-diagnostics {
 	display: grid;
-	grid-template-columns: repeat(4, minmax(100px, 1fr));
+	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 12px;
 }
 .rtk-diagnostics dt {
@@ -290,10 +311,21 @@
 	margin-top: 4px;
 	font-size: 16px;
 }
-@media (max-width: 760px) {
-	.rtk-overview {
-		grid-template-columns: minmax(0, 1fr);
-		gap: 16px;
+@container (max-width: 760px) {
+	.rtk-body {
+		display: block;
+		overflow: auto;
+	}
+	.rtk-details {
+		overflow: visible;
+	}
+	.rtk-directory {
+		border-left: 0;
+		border-top: 1px solid var(--border);
+	}
+	.rtk-station-scroll {
+		flex: none;
+		max-height: 260px;
 	}
 	.rtk-map {
 		height: 220px;
@@ -303,7 +335,7 @@
 	.rtk-panel {
 		height: min(560px, 65vh);
 	}
-	.rtk-body {
+	.rtk-details {
 		padding: 12px 16px;
 	}
 	.rtk-metrics {
