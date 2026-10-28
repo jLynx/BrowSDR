@@ -31,9 +31,7 @@ export default defineComponent({
 		const freshObservations = computed(() =>
 			receiver.running && vfo.value?.rtk ? observations.value.filter((value) => now.value - value.receivedAt < 5000) : [],
 		);
-		const title = computed(() =>
-			station.value ? selection.receiverName(station.value) : vfo.value?.rtkProfile === 'lower' ? 'Unidentified signal' : 'RTK channel',
-		);
+		const title = computed(() => (station.value ? selection.receiverName(station.value) : 'RTK channel'));
 		const gnss = computed(() => gnssSummary(freshObservations.value));
 		const position = computed(() => station.value?.reference);
 		const identity = computed(() => `${vfo.value?.freq}:${station.value ? stationKey(station.value) : ''}:${position.value?.stationId}`);
@@ -51,8 +49,8 @@ export default defineComponent({
 		);
 		const presetFrequency = computed(() => {
 			// Frequencies measured on this receiver; bases can select another channel.
-			switch (vfo.value?.rtkProfile ?? 'luba1') {
-				case 'luba1':
+			switch (vfo.value?.rtkProfile ?? 'rtk1') {
+				case 'rtk1':
 					return 923.118;
 				case 'rtk2':
 					return 915.191;
@@ -83,7 +81,7 @@ export default defineComponent({
 			signalStrength,
 			update: () => receiver.updateBackendVfoParams(index.value),
 			changeProfile: () => {
-				vfo.value.rtkClockPpm = vfo.value.rtkProfile === 'rtk3' ? 0 : vfo.value.rtkProfile === 'luba1' ? 20 : 10;
+				vfo.value.rtkClockPpm = vfo.value.rtkProfile === 'rtk3' ? 0 : vfo.value.rtkProfile === 'rtk1' ? 20 : 10;
 				// Profile changes invalidate results even when the frequency stays the same.
 				receiver.rtk.sources[index.value] = [];
 				receiver.rtk.frames[index.value] = [];
@@ -96,7 +94,7 @@ export default defineComponent({
 				else
 					downloadReport({
 						frequency: vfo.value.freq,
-						profile: vfo.value.rtkProfile ?? 'luba1',
+						profile: vfo.value.rtkProfile ?? 'rtk1',
 						status: status.value,
 						stations: station.value ? [station.value] : [],
 					});

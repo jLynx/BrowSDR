@@ -13,14 +13,22 @@ coordinates are included.
 - `mock-iq.js`: SF7/BW500/CR4-6/LDRO, sync [40,36], preamble 32, payload 248,
   CFO 630 Hz and sample skew +20 ppm. Samples are generated offline in memory.
   Configurable synthetic parameters also exercise SF7/BW250/CR4-5 with LDRO
-  off, sync [16,8], preamble 16, +10 ppm and no payload CRC. These bytes are
-  mock input, not a claim that the unidentified lower signal uses the same
-  application wrapper as the verified profile.
+  off, sync [16,8], preamble 16, +10 ppm and no payload CRC for RTK2. PHY-only
+  tests deliberately use arbitrary mock payloads; application tests use
+  the separate RTK2 packet fixture.
 
 Tests compare the entire decoded payload with the mock bytes, verify both
 checksums and assert the exact invented pairing and reference coordinates.
 Keep future fixture changes synthetic and inspectable; do not add RF captures
 or decoded files from a real installation to this folder.
+
+## RTK2 synthetic fixtures
+
+`mock-rtk2.js` builds the DU1021D wire transform, CRC8 outer frame and CRC16
+correction containers with invented address 4242. Its correction stream tests
+exercise fragmentation, keepalives and RTCM CRC24Q verification. The selectable
+profiles are `rtk1`, `rtk2` and `rtk3`; the temporary unidentified profile was
+removed when its protocol was identified as RTK2.
 
 ## RTK3 synthetic fixtures
 

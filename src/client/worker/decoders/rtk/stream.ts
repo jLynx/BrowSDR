@@ -8,16 +8,14 @@ import { Rtk2Tracker } from './rtk2/tracker';
 import { errorMessage } from '@/platform/errors';
 
 export const RTK_RATE = 1000000;
-export const RTK_PROFILES: Record<string, LoraProfile> = {
-	luba1: { bandwidth: 500000, oversample: 2, sync: [40, 36], ldro: true },
-	lower: { bandwidth: 250000, oversample: 4, sync: [16, 8], ldro: false },
+export const RTK_PROFILES: Record<RtkProfile, LoraProfile> = {
+	rtk1: { bandwidth: 500000, oversample: 2, sync: [40, 36], ldro: true },
 	rtk2: { bandwidth: 250000, oversample: 4, sync: [16, 8], ldro: false },
 	// Standard private sync word 0x12 maps to SF7 symbol bins [8, 16].
 	rtk3: { bandwidth: 250000, oversample: 4, sync: [8, 16], ldro: false },
 };
 const profileName: Record<RtkProfile, string> = {
-	luba1: 'Mammotion RTK1 profile',
-	lower: 'unverified lower profile',
+	rtk1: 'Mammotion RTK1 profile',
 	rtk2: 'Mammotion RTK2 profile',
 	rtk3: 'Mammotion RTK3 experimental profile',
 };
@@ -37,7 +35,7 @@ const initialStatus = (): RtkStatus => ({
 export class RtkStream {
 	private key = '';
 	private frequency = 923.118;
-	private profile: RtkProfile = 'luba1';
+	private profile: RtkProfile = 'rtk1';
 	private ddc?: DspProcessor;
 	private direct = false;
 	private scratch = new Float32Array(0);
@@ -60,9 +58,9 @@ export class RtkStream {
 			}
 			return;
 		}
-		const name = params.rtkProfile ?? 'luba1',
+		const name = params.rtkProfile ?? 'rtk1',
 			profile = RTK_PROFILES[name];
-		const ppm = params.rtkClockPpm ?? (name === 'rtk3' ? 0 : name === 'luba1' ? 20 : 10);
+		const ppm = params.rtkClockPpm ?? (name === 'rtk3' ? 0 : name === 'rtk1' ? 20 : 10);
 		const key = JSON.stringify([params.freq, rate, center, name, ppm]);
 		if (this.key === key) return;
 		this.reset();

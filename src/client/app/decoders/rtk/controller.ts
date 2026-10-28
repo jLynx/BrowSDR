@@ -11,7 +11,7 @@ export const rtkMethods = {
 	_onRtkMessage(this: AppInstance, index: number, frequency: number, message: RtkMessage): void {
 		const vfo = this.vfos[index];
 		if (!this.running || !vfo?.rtk || vfo.freq !== frequency || message.freq !== frequency) return;
-		if (message.profile !== undefined && message.profile !== (vfo.rtkProfile ?? 'luba1')) return;
+		if (message.profile !== undefined && message.profile !== (vfo.rtkProfile ?? 'rtk1')) return;
 		if (this.rtk.frequencies[index] !== frequency) this.rtk.frames[index] = [];
 		this.rtk.frequencies[index] = frequency;
 		this.rtk.status[index] = message.status;

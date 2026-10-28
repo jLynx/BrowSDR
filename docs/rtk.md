@@ -5,8 +5,8 @@ streaming path as the other packet decoders. The SDR supplies IQ; TypeScript
 handles LoRa acquisition, coding, station identification and RTCM reassembly.
 Live reception needs no companion script, service or GNU Radio installation.
 The station browser is general RTK UI. Radio decoding currently supports the
-verified Mammotion RTK1 and RTK2 wrappers, an experimental RTK3 / RBS03 decoder,
-and an unidentified experimental LoRa profile. Other RTK radio protocols still need
+verified Mammotion RTK1 and RTK2 wrappers and an experimental RTK3 / RBS03 decoder.
+Other RTK radio protocols still need
 their own decoders.
 
 ## RTK2 / DU1021D support
@@ -130,14 +130,14 @@ These profiles were verified with LimeSDR-USB, RX1_L (RX1 / LNAL).
 
 | Signal | Measured centre                                                                                        | PHY                                                                                         | Identity                                                                    |
 | ------ | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Upper  | approximately 923.118 MHz                                                                              | SF7, BW500 kHz, CR4/6, explicit header, payload CRC, preamble32, sync [40,36], LDRO enabled | Mammotion wrapper and RTCM verified; receiver UNICORE UM960                 |
+| RTK1   | approximately 923.118 MHz                                                                              | SF7, BW500 kHz, CR4/6, explicit header, payload CRC, preamble32, sync [40,36], LDRO enabled | Mammotion wrapper and RTCM verified; receiver UNICORE UM960                 |
 | RTK2   | approximately 915.191 MHz; startup at 924.116 MHz in the long recording, 918.060 MHz in earlier slices | SF7, BW250 kHz, CR4/5, explicit header, no payload CRC, preamble16, sync [16,8]             | DU1021D wrapper and RTCM verified; receiver reports UNICORE without a model |
 
 These are uncalibrated receiver measurements. The antenna label does not
 establish an exact frequency. A Mammotion pairing code describes
 scan/channel/loc/net fields; its first number is not a frequency. The experimental
 signal's full pairing-field mapping has not been identified.
-The bases are not interchangeable, and the Luba 1 wrapper is not assumed to
+The bases are not interchangeable, and the RTK1 wrapper is not assumed to
 apply to Luba 2.
 
 ### FCC and New Zealand frequency references
@@ -200,7 +200,7 @@ The user's screenshots and account of restarting both bases together show:
    its approximately 931.06 MHz receiver image appear.
 
 This strengthens the association between the 915.19 MHz stream and the powered
-RTK equipment. With the 923.118 MHz stream already associated with Luba 1,
+RTK equipment. With the 923.118 MHz stream already associated with RTK1,
 915.19 MHz is the leading Luba 2 candidate. The two side traces represent a
 signal and its receiver image, not two independently identified transmitters.
 The initial change may be channel selection during startup; continuous hopping
@@ -274,7 +274,7 @@ validated outer frame and container checksums before displaying GNSS information
    to see that base's location and map, satellite counts, GNSS signal quality
    and receiver model. **Decoder settings** controls the selected VFO's profile
    and preset tuning: **RTK1** offers **923.118 MHz** and **RTK2** offers
-   **915.191 MHz**, both measured locally. The experimental profiles have no fixed-frequency preset;
+   **915.191 MHz**, both measured locally. RTK3 has no fixed-frequency preset;
    tune its VFO to the active waterfall signal, which can change after a restart.
 5. **Save data** offers a station summary (JSON) or a verified correction
    stream (RTCM3), with explanations of both formats. **Diagnostics** contains
@@ -316,16 +316,16 @@ filenames include the decoded identity. Radio diagnostics remain VFO-wide.
 The centre can differ from the VFO frequency: the existing WASM DDC supplies
 a 1 MSPS channel to the LoRa receiver. For a 10 MSPS view covering the measured
 signals, use a centre near 919.5 MHz and separate VFOs at 923.118 MHz and the
-experimental signal's current frequency (observed at 915.190 and 918.060 MHz).
+RTK2 signal's current frequency (observed at 915.191 and 918.060 MHz).
 Use a wider sample span to investigate the full regional band.
-Select the lower profile on the second VFO. Its valid-header counter is
-diagnostic; unchecked payloads never become verified station or RTCM results.
+Select RTK2 on the second VFO. Its radio frames and reassembled RTCM corrections
+must pass the application checksums before station information is displayed.
 RTK telemetry currently works with a locally connected SDR, not remote
 WebRTC clients.
 
 **Decoder settings** includes a sample timing adjustment in ppm. The measured
-500 kHz signal uses +20 ppm; fresh lower-channel captures recover clean coding
-parity near +10 ppm, which is now that profile's preset. This compensates
+RTK1 signal uses +20 ppm; RTK2 captures recover clean coding parity near +10 ppm,
+which is that profile's preset. This compensates
 sample timing, not carrier frequency calibration. Another SDR may need a
 different value.
 
@@ -348,7 +348,7 @@ other parameters, weak signals, or intermittent/hopping transmissions.
 
 ## Validation and format
 
-Fresh live RF produced CRC-verified Luba 1 packets and valid RTCM types
+Fresh live RF produced CRC-verified RTK1 packets and valid RTCM types
 1006, 1033, 1074 (GPS), 1084 (GLONASS), 1094 (Galileo) and 1124 (BeiDou).
 The panel decodes 1005/1006 antenna-reference ECEF coordinates into latitude,
 longitude and ellipsoid height, 1033 receiver/antenna descriptors, and MSM4–7
@@ -362,8 +362,9 @@ base correction messages.
 The station title comes from the RTCM 1033 receiver descriptor, currently
 **UNICORE UM960**. Other receivers and pairing IDs using the verified wrapper
 can be decoded too; the decoder does not restrict packets to the user's pairing.
-The internal profile key `luba1` remains for compatibility with saved settings;
-its display name is **Mammotion LoRa · 500 kHz**. Receiver model alone does not
+The internal profile keys are `rtk1`, `rtk2` and `rtk3`; the RTK1 display name is
+**Mammotion RTK1 · 500 kHz**. The temporary unidentified LoRa profile has been
+removed after its signal was identified as RTK2. Receiver model alone does not
 define the radio protocol, so this is not a universal UM960 radio decoder.
 
 ### Satellite bands and quality
@@ -396,7 +397,7 @@ fields and an RTCM reference at 0° latitude, 0° longitude. Tests exercise
 streaming across irregular chunk boundaries, clock drift and lost IQ chunks
 without transmitting RF or depending on local captures.
 
-The verified Luba 1 wrapper is:
+The verified RTK1 wrapper is:
 
 ```text
 2C CHANNEL CHECKSUM? CHECKSUM? NET_ID SCAN_HI SCAN_LO BODY_LENGTH <body>
@@ -406,8 +407,8 @@ The two labelled checksum bytes and the loc field remain uninterpreted.
 Bodies use XOR `0x12`; RTCM frames can span radio packets. Both LoRa payload CRC and
 RTCM CRC24Q must pass. Invalid packets and lost IQ chunks clear incomplete
 buffers; alternating station identities retain separate buffers. RTCM reference-station IDs differ from Mammotion pairing
-IDs. The unidentified lower profile has no established application checksum,
-so its payload remains untrusted; this does not establish encryption. RTK3's
+IDs. RTK2 validates its transformed outer wrapper and correction containers.
+RTK3's
 separate profile validates the documented CRC16/MODBUS frame layer instead.
 
 The implementation uses bounded IQ history, throttled UI messages and
@@ -448,7 +449,7 @@ only invented identities and coordinates for visual review without hardware.
 - [New Zealand RSM Short Range Devices GURL](https://www.rsm.govt.nz/licensing/frequencies-for-anyone/short-range-devices-gurl) and [linked Gazette notice 2022-go3100](https://gazette.govt.nz/notice/id/2022-go3100): regional 915–928 MHz band reference.
 - [Community report of July 2024 Luba 2 firmware radio changes](https://www.reddit.com/r/MammotionTechnology/comments/1ea9yzo/rtk_with_new_firmware_july_23rd_2024/): unverified European frequency-hopping observations.
 - [gr-lora_sdr](https://github.com/tapparelj/gr-lora_sdr): PHY reference and independent synthetic waveform generator. Browser decoding uses its own TypeScript implementation.
-- [VE2MRX Mammotion RTK research](https://github.com/Ve2mrx/mammotion-rtk-lora): related RTK3 research; its wrapper and hopping assumptions differ from this verified Luba 1 signal.
+- [VE2MRX Mammotion RTK research](https://github.com/Ve2mrx/mammotion-rtk-lora): related RTK3 research; its wrapper and hopping assumptions differ from this verified RTK1 signal.
 - [PyMammotion](https://github.com/mikey0000/PyMammotion): scan/channel/loc/net pairing fields.
 - [Mammotion positioning information](https://support.mammotion.com/portal/en/kb/articles/about-the-new-positioning-information-and-how-to-troubleshoot-the-related-issues): L1/L2 counts, reference/robot/co-viewing satellites, GNSS quality and positioning status.
 - [RTKLIB MSM signal tables](https://github.com/rtklibexplorer/RTKLIB/blob/demo5/src/rtcm3.c): RTCM signal IDs and GNSS frequency bands. Reserved and tentative extension IDs remain unmapped.

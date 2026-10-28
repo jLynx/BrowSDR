@@ -10,7 +10,7 @@ import { mockRadioPayload } from '../fixtures/rtk/mock-packet';
 const options = { rate: 1, hasCrc: false, ldro: false, oversample: 4, clockPpm: 10, preamble: 16, sync: [16, 8] };
 const profile = { bandwidth: 250000, oversample: 4, sync: [16, 8], ldro: false };
 
-describe('experimental 250 kHz LoRa payload recovery', () => {
+describe('250 kHz LoRa payload recovery for RTK2', () => {
 	it('recovers all 255 mock bytes without claiming checksum verification', () => {
 		const payload = Uint8Array.from({ length: 255 }, (_, i) => (i * 37 + 11) & 255);
 		const symbols = mockSymbols(payload, options);

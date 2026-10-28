@@ -49,7 +49,7 @@ describe('RTK2 browser worker with synthetic signed IQ', () => {
 		expect(messages.flatMap((m) => m.rtcm).map((f) => f.type)).toEqual([1006]);
 		stream.configure({ freq: 915.19, rtk: true, rtkProfile: 'rtk2' }, 1000000, 915.19);
 		expect(messages.at(-1).stations).toEqual([]);
-		stream.configure({ freq: 915.19, rtk: true, rtkProfile: 'lower' }, 1000000, 915.19);
-		expect(messages.at(-1)).toMatchObject({ profile: 'lower', stations: [], status: { packets: 0 } });
+		stream.configure({ freq: 915.19, rtk: true, rtkProfile: 'rtk1' }, 1000000, 915.19);
+		expect(messages.at(-1)).toMatchObject({ profile: 'rtk1', stations: [], status: { packets: 0 } });
 	});
 });

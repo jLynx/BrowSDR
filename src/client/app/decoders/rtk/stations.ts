@@ -30,7 +30,7 @@ export function collectStations(receiver: AppInstance, now: number): RtkStationE
 			let station = received;
 			if (!station.rtcmCount) continue;
 			const source = stationKey(station),
-				key = `${vfo.freq}:${vfo.rtkProfile ?? 'luba1'}:${source}`;
+				key = `${vfo.freq}:${vfo.rtkProfile ?? 'rtk1'}:${source}`;
 			const previous = entries.get(key);
 			const indices = previous ? [...previous.indices, index] : [index];
 			if (previous) station = mergeStation(previous.station, station);

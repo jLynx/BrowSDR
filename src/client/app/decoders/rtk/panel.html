@@ -112,9 +112,6 @@
 		</div>
 		<div v-else class="rtk-empty">
 			<p v-if="entries.length">Select a base from the list to view its location and observations.</p>
-			<p v-else-if="vfo.rtkProfile === 'lower'">
-				This radio profile is experimental. Its payload format and base identities are unverified.
-			</p>
 			<p v-else>Location and satellite data will appear when verified base corrections arrive.</p>
 		</div>
 		<details class="rtk-section">
@@ -122,10 +119,9 @@
 			<div class="rtk-section-content">
 				<label class="rtk-field"
 					>Signal to decode<select v-model="vfo.rtkProfile" aria-label="RTK signal profile" @change="changeProfile">
-						<option value="luba1">Mammotion RTK1 · 500 kHz</option>
+						<option value="rtk1">Mammotion RTK1 · 500 kHz</option>
 						<option value="rtk2">Mammotion RTK2 · 250 kHz</option>
 						<option value="rtk3">Mammotion RTK3 · 250 kHz (experimental)</option>
-						<option value="lower">LoRa · 250 kHz (experimental)</option>
 					</select></label
 				>
 				<template v-if="presetFrequency !== undefined">
@@ -138,7 +134,6 @@
 					RTK3 support follows the published RBS03 protocol and has not been tested with hardware. Tune the VFO to an active channel in the
 					waterfall. Hopping bases send intermittent bursts on each channel; automatic hop following is not available.
 				</p>
-				<p v-else class="rtk-caption">Tune the VFO to the active signal in the waterfall. This experimental signal can change channel.</p>
 				<p v-if="vfo.rtkProfile === 'rtk2'" class="rtk-caption">
 					RTK2 can change channel during startup. If this preset is quiet, tune to its active signal in the waterfall.
 				</p>
@@ -152,9 +147,7 @@
 						aria-label="RTK sample clock correction"
 						@change="update"
 				/></label>
-				<p class="rtk-caption">
-					Measured presets: 20 for RTK1, 10 for RTK2 and the experimental 250 kHz profile. RTK3 starts at 0; adjust for your receiver.
-				</p>
+				<p class="rtk-caption">Measured presets: 20 for RTK1, 10 for RTK2. RTK3 starts at 0; adjust for your receiver.</p>
 			</div>
 		</details>
 		<details class="rtk-section">
@@ -186,15 +179,15 @@
 						<dt>LoRa headers detected</dt>
 						<dd>{{ status.headers }}</dd>
 					</div>
-					<div v-if="vfo.rtkProfile !== 'luba1'">
+					<div v-if="vfo.rtkProfile !== 'rtk1'">
 						<dt>Payloads recovered</dt>
 						<dd>{{ status.payloads ?? 0 }}</dd>
 					</div>
-					<div v-if="vfo.rtkProfile !== 'luba1'">
+					<div v-if="vfo.rtkProfile !== 'rtk1'">
 						<dt>Coding parity errors</dt>
 						<dd>{{ status.codingErrors ?? 0 }}</dd>
 					</div>
-					<div v-if="vfo.rtkProfile !== 'luba1' && status.syncSymbols">
+					<div v-if="vfo.rtkProfile !== 'rtk1' && status.syncSymbols">
 						<dt>Observed LoRa sync symbols</dt>
 						<dd>{{ status.syncSymbols.join(', ') }}</dd>
 					</div>
@@ -227,10 +220,6 @@
 				</dl>
 				<p v-else class="rtk-caption">No reception statistics yet.</p>
 				<p v-if="status" class="rtk-caption">Radio counters cover this VFO. Correction details below are for the selected base.</p>
-				<p v-if="status && vfo.rtkProfile === 'lower'" class="rtk-caption">
-					Recovered payloads without a LoRa checksum remain unverified, even with zero parity errors. The sync symbols describe this VFO's
-					latest valid header.
-				</p>
 				<p v-if="status && vfo.rtkProfile === 'rtk3'" class="rtk-caption">
 					Radio frames require CRC16/MODBUS; correction containers also require RTCM CRC24Q. Beacons carry no corrections. Sequence gaps are
 					observed counter increments, not a measurement of USB loss.

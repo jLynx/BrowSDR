@@ -1,4 +1,4 @@
-export type RtkProfile = 'luba1' | 'lower' | 'rtk2' | 'rtk3';
+export type RtkProfile = 'rtk1' | 'rtk2' | 'rtk3';
 
 export interface LoraProfile {
 	bandwidth: number;

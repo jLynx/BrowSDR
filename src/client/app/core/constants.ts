@@ -37,7 +37,7 @@ export const makeDefaultVfo = (freq = 100.0) => ({
 	ais: false,
 	radiosonde: false,
 	rtk: false,
-	rtkProfile: 'luba1' as RtkProfile,
+	rtkProfile: 'rtk1' as RtkProfile,
 	rtkClockPpm: 20,
 	ble: false,
 	acars: false,

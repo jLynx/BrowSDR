@@ -16,7 +16,7 @@ function setup() {
 		memory,
 		(message) => messages.push(message),
 	);
-	stream.configure({ freq: 923.118, rtk: true, rtkProfile: 'luba1', rtkClockPpm: 20 }, 1000000, 923.118);
+	stream.configure({ freq: 923.118, rtk: true, rtkProfile: 'rtk1', rtkClockPpm: 20 }, 1000000, 923.118);
 	return { stream, memory, messages };
 }
 

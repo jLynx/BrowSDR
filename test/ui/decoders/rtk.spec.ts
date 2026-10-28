@@ -65,7 +65,6 @@ describe('live RTK receiver tools', () => {
 			'Mammotion RTK1 · 500 kHz',
 			'Mammotion RTK2 · 250 kHz',
 			'Mammotion RTK3 · 250 kHz (experimental)',
-			'LoRa · 250 kHz (experimental)',
 		]);
 		await wrapper.get('select[aria-label="RTK VFO"]').setValue(1);
 		await profile.setValue('rtk2');
@@ -74,17 +73,17 @@ describe('live RTK receiver tools', () => {
 			.find((button) => button.text() === 'Tune to 915.191 MHz')!
 			.trigger('click');
 		expect(wrapper.vm.vfos[1]).toMatchObject({ freq: 915.191, rtkProfile: 'rtk2', rtkClockPpm: 10, enabled: false, rtk: false });
-		expect(wrapper.vm.vfos[0]).toMatchObject({ freq: 923.118, rtkProfile: 'luba1', enabled: false });
+		expect(wrapper.vm.vfos[0]).toMatchObject({ freq: 923.118, rtkProfile: 'rtk1', enabled: false });
 		expect(wrapper.vm.backend!.setVfoParams).toHaveBeenLastCalledWith(
 			1,
 			expect.objectContaining({ freq: 915.191, rtkProfile: 'rtk2', rtkClockPpm: 10, enabled: false, rtk: false }),
 		);
-		await profile.setValue('luba1');
+		await profile.setValue('rtk1');
 		await wrapper
 			.findAll('button')
 			.find((button) => button.text() === 'Tune to 923.118 MHz')!
 			.trigger('click');
-		expect(wrapper.vm.vfos[1]).toMatchObject({ freq: 923.118, rtkProfile: 'luba1', rtkClockPpm: 20, enabled: false });
+		expect(wrapper.vm.vfos[1]).toMatchObject({ freq: 923.118, rtkProfile: 'rtk1', rtkClockPpm: 20, enabled: false });
 	});
 
 	it('selects RTK2 with measured timing and exports verified corrections by network and address', async () => {
@@ -124,7 +123,7 @@ describe('live RTK receiver tools', () => {
 		expect(wrapper.find('[aria-label="LoRa number"]').exists()).toBe(false);
 		expect(wrapper.findAll('button').some((button) => button.text().startsWith('Tune to'))).toBe(false);
 		expect(wrapper.text()).toContain('automatic hop following is not available');
-		wrapper.vm._onRtkMessage(0, 923.118, { ...message(), profile: 'luba1' });
+		wrapper.vm._onRtkMessage(0, 923.118, { ...message(), profile: 'rtk1' });
 		expect(wrapper.vm.rtk.sources[0]).toEqual([]);
 		const packet = message();
 		packet.profile = 'rtk3';
@@ -264,17 +263,17 @@ describe('live RTK receiver tools', () => {
 		wrapper.vm.rtk.panelOpen = true;
 		wrapper.vm.vfos[0].rtk = true;
 		wrapper.vm._onRtkMessage(0, 923.118, message());
-		wrapper.vm.vfos.push({ ...makeDefaultVfo(915.19), rtk: true, rtkProfile: 'lower' });
-		const lower = message(915.19);
-		lower.stations = [];
-		lower.rtcm = [];
-		lower.status.packets = 0;
-		wrapper.vm._onRtkMessage(1, 915.19, lower);
+		wrapper.vm.vfos.push({ ...makeDefaultVfo(915.19), rtk: true, rtkProfile: 'rtk2' });
+		const unverified = message(915.19);
+		unverified.stations = [];
+		unverified.rtcm = [];
+		unverified.status.packets = 0;
+		wrapper.vm._onRtkMessage(1, 915.19, unverified);
 		await nextTick();
 		await wrapper.get('select[aria-label="RTK VFO"]').setValue('1');
 		expect(wrapper.get('.rtk-heading .rtk-state').text()).toBe('Payload undecoded');
-		lower.status = { ...lower.status, payloads: 17, codingErrors: 2, syncSymbols: [16, 8] };
-		wrapper.vm._onRtkMessage(1, 915.19, lower);
+		unverified.status = { ...unverified.status, payloads: 17, codingErrors: 2, syncSymbols: [16, 8] };
+		wrapper.vm._onRtkMessage(1, 915.19, unverified);
 		await nextTick();
 		expect(wrapper.get('.rtk-heading .rtk-state').text()).toBe('Payload unverified');
 		const diagnostics = wrapper.get('.rtk-diagnostics').text();
@@ -300,7 +299,7 @@ describe('live RTK receiver tools', () => {
 		await wrapper.get('select[aria-label="RTK export format"]').setValue('report');
 		await download.trigger('click');
 		expect(downloadReport).toHaveBeenCalledWith(
-			expect.objectContaining({ frequency: 923.118, profile: 'luba1', stations: packet.stations }),
+			expect.objectContaining({ frequency: 923.118, profile: 'rtk1', stations: packet.stations }),
 		);
 	});
 
@@ -313,12 +312,12 @@ describe('live RTK receiver tools', () => {
 		await nextTick();
 		expect(wrapper.find('[aria-label="LoRa number"]').exists()).toBe(false);
 		expect(wrapper.get('.rtk-heading .rtk-state').text()).toBe('Listening');
-		const lower = message(915.19);
-		lower.stations = [];
-		lower.rtcm = [];
-		wrapper.vm._onRtkMessage(0, 915.19, lower);
+		const unverified = message(915.19);
+		unverified.stations = [];
+		unverified.rtcm = [];
+		wrapper.vm._onRtkMessage(0, 915.19, unverified);
 		expect(wrapper.vm.rtk.frames[0]).toEqual([]);
-		await wrapper.get('select[aria-label="RTK signal profile"]').setValue('lower');
+		await wrapper.get('select[aria-label="RTK signal profile"]').setValue('rtk2');
 		expect(wrapper.vm.vfos[0].rtkClockPpm).toBe(10);
 	});
 });

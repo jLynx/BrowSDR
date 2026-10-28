@@ -61,8 +61,8 @@ describe('RTK3 browser worker path with synthetic signed IQ', () => {
 		expect(messages.flatMap((message) => message.rtcm)).toHaveLength(1);
 		stream.configure({ freq: 924.6, rtk: true, rtkProfile: 'rtk3' }, 1000000, 924.6);
 		expect(messages.at(-1).stations).toEqual([]);
-		stream.configure({ freq: 924.6, rtk: true, rtkProfile: 'lower', rtkClockPpm: 0 }, 1000000, 924.6);
+		stream.configure({ freq: 924.6, rtk: true, rtkProfile: 'rtk2', rtkClockPpm: 0 }, 1000000, 924.6);
 		feed(mockRtk3Packet(mockRtk3Container()));
-		expect(messages.at(-1)).toMatchObject({ profile: 'lower', stations: [], status: { payloads: 0, packets: 0 } });
+		expect(messages.at(-1)).toMatchObject({ profile: 'rtk2', stations: [], status: { payloads: 0, packets: 0 } });
 	});
 });
