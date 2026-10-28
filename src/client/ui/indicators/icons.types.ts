@@ -8,6 +8,7 @@ export type UiIconName =
 	| 'bluetooth'
 	| 'vessel'
 	| 'message'
+	| 'location'
 	| 'stats'
 	| 'activity'
 	| 'reset';

@@ -2,6 +2,7 @@ import type { BleMessage } from '@/worker/decoders/ble/types';
 import type { AisMessage } from '@/worker/decoders/ais/types';
 import type { RadiosondeMessage } from '@/worker/decoders/radiosonde/types';
 import type { AcarsMessage } from '@/worker/decoders/acars/types';
+import type { AprsMessage } from '@/worker/decoders/aprs/types';
 import type { DataConnection } from 'peerjs';
 import type { DeviceCapabilities } from '@/radio/types';
 import type { RadioState } from '@/app/core/types';
@@ -59,6 +60,7 @@ export type RemoteCommand =
 	| { type: 'ais'; vfoIndex: number; freq: number; msg: AisMessage }
 	| { type: 'radiosonde'; vfoIndex: number; freq: number; msg: RadiosondeMessage }
 	| { type: 'acars'; vfoIndex: number; freq: number; msg: AcarsMessage }
+	| { type: 'aprs'; vfoIndex: number; freq: number; msg: AprsMessage }
 	| { type: 'adsb'; vfoIndex: number; freq: number; msg: AdsbMessage }
 	| { type: 'rtl433'; vfoIndex: number; freq: number; msg: Rtl433Message }
 	| { type: 'pocsag'; vfoIndex: number; freq: number; msg: POCSAGMessage }

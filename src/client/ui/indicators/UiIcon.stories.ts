@@ -18,6 +18,7 @@ export const All: Story = {
 				'bluetooth',
 				'vessel',
 				'message',
+				'location',
 				'stats',
 				'activity',
 				'reset',

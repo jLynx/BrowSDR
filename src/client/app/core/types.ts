@@ -11,6 +11,7 @@ export interface Vfo {
 	radiosonde?: boolean;
 	ble?: boolean;
 	acars?: boolean;
+	aprs?: boolean;
 	rtl433?: boolean;
 	rtl433SampleRate?: number;
 	rtl433Protocols?: string;

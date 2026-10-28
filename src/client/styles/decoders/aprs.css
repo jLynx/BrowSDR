@@ -1,0 +1,85 @@
+.aprs-marker {
+	display: block;
+	width: 24px;
+	height: 24px;
+	color: #9ca3af;
+	filter: drop-shadow(0 1px 2px #000);
+}
+.aprs-marker svg {
+	display: block;
+}
+.aprs-marker.aprs-mobile {
+	color: #4ade80;
+}
+.aprs-marker.aprs-aircraft {
+	color: #f472b6;
+}
+.aprs-marker.aprs-weather {
+	color: #60a5fa;
+}
+.aprs-marker.aprs-infrastructure {
+	color: #fbbf24;
+}
+.aprs-marker.aprs-facility {
+	color: #f87171;
+}
+.aprs-marker.aprs-object {
+	color: #c084fc;
+}
+.aprs-marker.selected {
+	color: #fff;
+	filter: drop-shadow(0 0 3px #fff);
+}
+.aprs-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	margin-bottom: 8px;
+}
+.aprs-toolbar [aria-pressed='true'] {
+	color: #fff;
+	border-color: currentColor;
+}
+.aprs-panel .adsb-table th:first-child {
+	width: 24%;
+}
+.aprs-panel .adsb-table td {
+	overflow-wrap: anywhere;
+}
+.aprs-preview span,
+.aprs-preview small,
+.aprs-preview code {
+	display: block;
+}
+.aprs-preview code,
+.aprs-station-packets code {
+	margin-top: 2px;
+	color: #9ca3af;
+	font-size: 11px;
+	overflow-wrap: anywhere;
+	white-space: normal;
+}
+.aprs-packets tr.aprs-repeat {
+	opacity: 0.6;
+}
+.aprs-station-packets {
+	list-style: none;
+	margin: 6px 0 0;
+	padding: 0;
+	font-size: 12px;
+}
+.aprs-station-packets li {
+	display: grid;
+	gap: 2px;
+	padding: 6px 0;
+	border-bottom: 1px solid #ffffff14;
+}
+.aprs-panel .adsb-footer {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 12px;
+}
+.aprs-panel .adsb-detail-grid dd {
+	overflow-wrap: anywhere;
+}

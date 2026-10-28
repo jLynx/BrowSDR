@@ -7,6 +7,7 @@
 @import './styles/adsb.css';
 @import './styles/decoders/ais.css';
 @import './styles/decoders/radiosonde.css';
+@import './styles/decoders/aprs.css';
 @import './styles/bookmarks.css';
 @import './styles/activity.css';
 @import './styles/audio.css';

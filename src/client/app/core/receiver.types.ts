@@ -5,6 +5,7 @@ import type { AisMessage } from '@/worker/decoders/ais/types';
 import type { RadiosondeMessage } from '@/worker/decoders/radiosonde/types';
 import type { RtkMessage } from '@/worker/decoders/rtk/types';
 import type { AcarsMessage } from '@/worker/decoders/acars/types';
+import type { AprsMessage } from '@/worker/decoders/aprs/types';
 import type { AdsbMessage } from '@/worker/decoders/adsb/types';
 import type { WhisperChunkMeta, WhisperVfoState } from '@/app/decoders/whisper.types';
 import type { WatchOptions, WatchStopHandle } from 'vue';
@@ -275,6 +276,10 @@ export interface ReceiverMethods {
 	aisStatusText(index: number): string;
 	radiosondeStatusText(index: number): string;
 	acarsStatusText(index: number): string;
+	toggleAprsPanel(): void;
+	tuneAprsVfo(frequency: number, index?: number): void;
+	_onAprsMessage(index: number, freq: number, msg: AprsMessage): void;
+	aprsStatusText(index: number): string;
 	toggleAdsbPanel(): void;
 	tuneAdsbVfo(index?: number): void;
 	_onAdsbMessage(index: number, freq: number, msg: AdsbMessage): void;

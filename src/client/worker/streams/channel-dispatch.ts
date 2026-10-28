@@ -196,7 +196,8 @@ function needsIq(params: VfoParams): boolean {
 		params.radiosonde === true ||
 		params.rtk === true ||
 		params.ble === true ||
-		params.acars === true
+		params.acars === true ||
+		params.aprs === true
 	);
 }
 
@@ -215,5 +216,6 @@ function disabledDecoders(params: VfoParams): VfoParams {
 		rtk: false,
 		ble: false,
 		acars: false,
+		aprs: false,
 	};
 }

@@ -19,6 +19,7 @@ export function planSharedBands(sampleRate: number, centerFreq: number, params: 
 				value.rtk ||
 				value.ble ||
 				value.acars ||
+				value.aprs ||
 				value.rtl433 ||
 				(value.rds && value.mode === 'wfm'),
 		);
@@ -67,5 +68,6 @@ function channelWidth(value: VfoParams, sampleRate: number): number {
 		value.rtk ? 1000000 : 0,
 		value.ble ? 2000000 : 0,
 		value.acars ? 48000 : 0,
+		value.aprs ? 48000 : 0,
 	);
 }
