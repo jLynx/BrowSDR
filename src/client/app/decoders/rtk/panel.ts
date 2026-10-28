@@ -49,7 +49,17 @@ export default defineComponent({
 				now: now.value,
 			}),
 		);
-		const presetFrequency = computed(() => ((vfo.value?.rtkProfile ?? 'luba1') === 'luba1' ? 923.118 : undefined));
+		const presetFrequency = computed(() => {
+			// Frequencies measured on this receiver; bases can select another channel.
+			switch (vfo.value?.rtkProfile ?? 'luba1') {
+				case 'luba1':
+					return 923.118;
+				case 'rtk2':
+					return 915.191;
+				default:
+					return undefined;
+			}
+		});
 		const canDownload = computed(() => (exportFormat.value === 'corrections' ? frames.value.length > 0 : !!station.value));
 		return {
 			...mapView,

@@ -122,10 +122,10 @@
 			<div class="rtk-section-content">
 				<label class="rtk-field"
 					>Signal to decode<select v-model="vfo.rtkProfile" aria-label="RTK signal profile" @change="changeProfile">
-						<option value="luba1">Mammotion LoRa · 500 kHz</option>
-						<option value="rtk2">Mammotion RTK2 / DU1021D · 250 kHz</option>
+						<option value="luba1">Mammotion RTK1 · 500 kHz</option>
+						<option value="rtk2">Mammotion RTK2 · 250 kHz</option>
+						<option value="rtk3">Mammotion RTK3 · 250 kHz (experimental)</option>
 						<option value="lower">LoRa · 250 kHz (experimental)</option>
-						<option value="rtk3">Mammotion RTK3 / RBS03 · 250 kHz (experimental)</option>
 					</select></label
 				>
 				<template v-if="presetFrequency !== undefined">
@@ -138,11 +138,10 @@
 					RTK3 support follows the published RBS03 protocol and has not been tested with hardware. Tune the VFO to an active channel in the
 					waterfall. Hopping bases send intermittent bursts on each channel; automatic hop following is not available.
 				</p>
-				<p v-else-if="vfo.rtkProfile === 'rtk2'" class="rtk-caption">
-					Tune the VFO to the active RTK2 signal in the waterfall. The base can change channel during startup; automatic channel following
-					is not available.
-				</p>
 				<p v-else class="rtk-caption">Tune the VFO to the active signal in the waterfall. This experimental signal can change channel.</p>
+				<p v-if="vfo.rtkProfile === 'rtk2'" class="rtk-caption">
+					RTK2 can change channel during startup. If this preset is quiet, tune to its active signal in the waterfall.
+				</p>
 				<label class="rtk-field"
 					>Sample timing adjustment (ppm)<input
 						v-model.number="vfo.rtkClockPpm"
@@ -154,8 +153,7 @@
 						@change="update"
 				/></label>
 				<p class="rtk-caption">
-					Measured presets: 20 for the 500 kHz profile, 10 for RTK2 and the experimental 250 kHz profile. RTK3 starts at 0; adjust for your
-					receiver.
+					Measured presets: 20 for RTK1, 10 for RTK2 and the experimental 250 kHz profile. RTK3 starts at 0; adjust for your receiver.
 				</p>
 			</div>
 		</details>

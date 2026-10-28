@@ -11,12 +11,19 @@ their own decoders.
 
 ## RTK2 / DU1021D support
 
-Select **Decoder settings → Mammotion RTK2 / DU1021D · 250 kHz**. This decoder
+Select **Decoder settings → Mammotion RTK2 · 250 kHz**, then use
+**Tune to 915.191 MHz** for the frequency measured on the tested receiver. The
+base can select another channel during startup; if the preset is quiet, tune
+to its active signal in the waterfall. This decoder
 was validated against a recorded RTK2 power cycle: 619 complete recovered radio
 packets passed CRC8/MAXIM and container CRC16/MODBUS, yielding 270 RTCM frames
 with valid CRC24Q. Independent gr-lora_sdr replay also matched 96 complete radio
-payloads, including 38 maximum-length packets. This is recorded-RF validation;
-fresh live hardware validation of the integrated profile remains outstanding.
+payloads, including 38 maximum-length packets. Live validation in the built-in
+browser with LimeSDR-USB on 28 October 2026 also recovered 479 verified radio
+packets and 376 CRC24Q-valid RTCM corrections at approximately 915.191 MHz,
+with RTK1 decoding simultaneously. Live reception rejected 17 application
+frames and one RTCM frame; lost IQ chunks remained zero. The base reported
+UNICORE and GPS, GLONASS, Galileo and BeiDou observations.
 
 The PHY is SF7, BW250 kHz, CR4/5, explicit header, preamble16, no LoRa payload
 CRC, LDRO off and sync **[16,8]**. Timing starts at +10 ppm for the measured
@@ -63,7 +70,7 @@ position, equipment and GPS/GLONASS/Galileo/BeiDou MSM4 observations.
 
 ## Experimental RTK3 / RBS03 support
 
-Select **Decoder settings → Mammotion RTK3 / RBS03 · 250 kHz (experimental)**
+Select **Decoder settings → Mammotion RTK3 · 250 kHz (experimental)**
 to decode the format documented by
 [Martin Boissonneault (VE2MRX)](https://github.com/Ve2mrx/mammotion-rtk-lora/blob/7cb61c36187c4becd408a99be4f0050d416e65bf/PROTOCOL.md)
 from an RBS03 base with a Luba mini in the US. This implementation was checked
@@ -266,18 +273,24 @@ validated outer frame and container checksums before displaying GNSS information
 4. The list combines verified bases from all enabled RTK VFOs. Select a row
    to see that base's location and map, satellite counts, GNSS signal quality
    and receiver model. **Decoder settings** controls the selected VFO's profile
-   and preset tuning. The experimental profile has no fixed-frequency preset;
+   and preset tuning: **RTK1** offers **923.118 MHz** and **RTK2** offers
+   **915.191 MHz**, both measured locally. The experimental profiles have no fixed-frequency preset;
    tune its VFO to the active waterfall signal, which can change after a restart.
 5. **Save data** offers a station summary (JSON) or a verified correction
    stream (RTCM3), with explanations of both formats. **Diagnostics** contains
    pairing fields, message types, satellite IDs and packet/error counters.
 
 The panel shows a **LoRa number** derived from received packet headers. The
-supported wrapper exposes scan, channel and net ID, but the loc field remains
+RTK1 wrapper exposes scan, channel and net ID, but the loc field remains
 unresolved. For the invented test station it displays `1234.7.?.42` with
 **loc unknown**. The decoder does not require a pairing number as input or use
 it as a decryption key. A supplied number can help associate an already-decoded
 signal with a particular base; it does not enable unsupported payload formats.
+
+RTK2 and RTK3 display the verified 16-bit **LoRa address** instead. RTK2 also
+carries an eight-byte network field, but its mapping to the other pairing-number
+components has not been established. The UI does not infer these fields from
+the tuning frequency or a user-supplied pairing number.
 
 Each VFO retains the latest 512 RTCM messages automatically. Retuning clears
 that VFO's saved corrections when the new stream arrives; restarting reception

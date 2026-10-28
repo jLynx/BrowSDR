@@ -16,10 +16,10 @@ export const RTK_PROFILES: Record<string, LoraProfile> = {
 	rtk3: { bandwidth: 250000, oversample: 4, sync: [8, 16], ldro: false },
 };
 const profileName: Record<RtkProfile, string> = {
-	luba1: 'Mammotion 500 kHz profile',
+	luba1: 'Mammotion RTK1 profile',
 	lower: 'unverified lower profile',
-	rtk2: 'Mammotion RTK2 / DU1021D profile',
-	rtk3: 'RTK3 / RBS03 experimental profile',
+	rtk2: 'Mammotion RTK2 profile',
+	rtk3: 'Mammotion RTK3 experimental profile',
 };
 const initialStatus = (): RtkStatus => ({
 	state: 'off',

@@ -55,6 +55,38 @@ async function setup() {
 }
 
 describe('live RTK receiver tools', () => {
+	it('tunes only the selected muted VFO with the RTK2 preset and retains RTK1 tuning', async () => {
+		await setup();
+		wrapper.vm.vfos.push({ ...makeDefaultVfo(924.116), enabled: false });
+		wrapper.vm.rtk.panelOpen = true;
+		await nextTick();
+		const profile = wrapper.get('select[aria-label="RTK signal profile"]');
+		expect(profile.findAll('option').map((option) => option.text())).toEqual([
+			'Mammotion RTK1 · 500 kHz',
+			'Mammotion RTK2 · 250 kHz',
+			'Mammotion RTK3 · 250 kHz (experimental)',
+			'LoRa · 250 kHz (experimental)',
+		]);
+		await wrapper.get('select[aria-label="RTK VFO"]').setValue(1);
+		await profile.setValue('rtk2');
+		await wrapper
+			.findAll('button')
+			.find((button) => button.text() === 'Tune to 915.191 MHz')!
+			.trigger('click');
+		expect(wrapper.vm.vfos[1]).toMatchObject({ freq: 915.191, rtkProfile: 'rtk2', rtkClockPpm: 10, enabled: false, rtk: false });
+		expect(wrapper.vm.vfos[0]).toMatchObject({ freq: 923.118, rtkProfile: 'luba1', enabled: false });
+		expect(wrapper.vm.backend!.setVfoParams).toHaveBeenLastCalledWith(
+			1,
+			expect.objectContaining({ freq: 915.191, rtkProfile: 'rtk2', rtkClockPpm: 10, enabled: false, rtk: false }),
+		);
+		await profile.setValue('luba1');
+		await wrapper
+			.findAll('button')
+			.find((button) => button.text() === 'Tune to 923.118 MHz')!
+			.trigger('click');
+		expect(wrapper.vm.vfos[1]).toMatchObject({ freq: 923.118, rtkProfile: 'luba1', rtkClockPpm: 20, enabled: false });
+	});
+
 	it('selects RTK2 with measured timing and exports verified corrections by network and address', async () => {
 		await setup();
 		wrapper.vm.rtk.panelOpen = true;
