@@ -3,6 +3,8 @@ import type { BookmarkCategory } from '@/app/workspace/types';
 // Color palette for N VFOs
 import type { PocsagMode } from '@/worker/decoders/types';
 
+export const DISCORD_INVITE_URL = 'https://discord.gg/m8BtU4ebSH';
+
 export const VFO_COLORS = ['#ff4444', '#4488ff', '#44cc44', '#ff44ff', '#ffaa44', '#44cccc', '#cccc44', '#ff8844'];
 
 export const makeDefaultVfo = (freq = 100.0) => ({

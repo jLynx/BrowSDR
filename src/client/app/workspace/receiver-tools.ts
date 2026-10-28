@@ -92,6 +92,14 @@ function utilityGroup(receiver: AppInstance): UiMenuGroup {
 		label: 'Utilities',
 		items: [
 			{
+				id: 'iqRecording',
+				label: 'IQ Recorder',
+				description: 'Save radio signals for later analysis',
+				icon: 'radio',
+				active: receiver.iqRecording.active,
+				open: receiver.iqRecording.panelOpen,
+			},
+			{
 				id: 'discovery',
 				label: 'Signal Discovery',
 				description: 'Find frequencies & estimate signal widths',
@@ -123,6 +131,7 @@ function selectTool(receiver: AppInstance, id: string, openOnly = false): void {
 	if (id === 'stats') receiver.showStats = !receiver.showStats;
 	else if (id === 'activity') receiver.showActivity = !receiver.showActivity;
 	else if (id === 'discovery') receiver.discovery.panelOpen = !receiver.discovery.panelOpen;
+	else if (id === 'iqRecording') receiver.iqRecording.panelOpen = !receiver.iqRecording.panelOpen;
 	else {
 		const panels = {
 			whisper: receiver.whisper,

@@ -44,6 +44,7 @@ import { adsbMethods } from './decoders/adsb';
 import { rtl433Methods } from './decoders/rtl433';
 import HeaderTools from './workspace/receiver-tools';
 import DiscoveryPanel from './discovery/panel';
+import IqCapturePanel from './recording/panel';
 import * as uiComponents from '@/ui';
 import { coreCapabilityIssues } from '@/platform/browser-capabilities';
 
@@ -69,6 +70,7 @@ const Receiver = {
 		AcarsPanel,
 		HeaderTools,
 		DiscoveryPanel,
+		IqCapturePanel,
 	},
 	provide(this: AppInstance) {
 		return { receiver: this };

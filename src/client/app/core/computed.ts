@@ -1,10 +1,13 @@
 import type { Vfo } from './types';
 import type { BookmarkEntry } from '@/app/workspace/types';
 import type { AppInstance } from '@/app/core/receiver.types';
-import { BOOKMARK_CATEGORIES } from './constants';
+import { BOOKMARK_CATEGORIES, DISCORD_INVITE_URL } from './constants';
 import { frequencyView } from '@/display/frequency-view';
 
 export const computedProperties = {
+	discordInviteUrl() {
+		return DISCORD_INVITE_URL;
+	},
 	isDevelopment() {
 		return import.meta.env.DEV;
 	},

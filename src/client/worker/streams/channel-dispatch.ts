@@ -13,6 +13,7 @@ export function dispatchIqChunk(
 	signed: Int8Array<ArrayBufferLike>,
 	chunkCounter: number,
 ) {
+	backend.iqCapture.push(signed);
 	const targets = collectTargets(backend);
 	backend._iqDispatcher!.retain(new Set(targets.map((target) => target.worker)));
 	const plannedParams = targets.map((target) => (target.shared ? target.params : disabledDecoders(target.params)));

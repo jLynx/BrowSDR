@@ -96,6 +96,7 @@ export function createAppData() {
 		autoSquelchActive: [] as boolean[],
 		activityNow: 0,
 		showActivity: false,
+		iqRecording: { panelOpen: false, active: false },
 		discovery: { panelOpen: false, enabled: false, thresholdDb: 10, minWidthHz: 0, excludeDc: true },
 		view: {
 			zoomScale: 1.0,

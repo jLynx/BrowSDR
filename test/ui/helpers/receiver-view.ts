@@ -34,6 +34,7 @@ import { connectionMethods } from '@/app/radio/connection';
 import { remoteMethods } from '@/app/workspace/remote';
 import HeaderTools from '@/app/workspace/receiver-tools';
 import DiscoveryPanel from '@/app/discovery/panel';
+import IqCapturePanel from '@/app/recording/panel';
 
 export const ReceiverView = defineComponent({
 	template,
@@ -50,6 +51,7 @@ export const ReceiverView = defineComponent({
 		AcarsPanel,
 		HeaderTools,
 		DiscoveryPanel,
+		IqCapturePanel,
 	},
 	provide() {
 		return { receiver: this };
