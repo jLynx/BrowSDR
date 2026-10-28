@@ -10,6 +10,15 @@ function renderRecorder(running = true, pending = false) {
 		components: { IqCapturePanel },
 		setup() {
 			let rejectCapture: ((error: Error) => void) | undefined;
+			let resolveCapture: ((value: { data: Int8Array; missingSamples: number }) => void) | undefined;
+			function captureIq(seconds: number | null) {
+				if (pending || seconds === null)
+					return new Promise<{ data: Int8Array; missingSamples: number }>((resolve, reject) => {
+						resolveCapture = resolve;
+						rejectCapture = reject;
+					});
+				return Promise.resolve({ data: new Int8Array(Math.round(seconds * 2e6 * 2)), missingSamples: 0 });
+			}
 			const data = createAppData();
 			const receiver = reactive({
 				...data,
@@ -17,12 +26,10 @@ function renderRecorder(running = true, pending = false) {
 				iqRecording: { panelOpen: true, active: false },
 				radio: { ...data.radio, centerFreq: 100, sampleRate: 2e6 },
 				backend: {
-					captureIq(seconds: number) {
-						if (pending)
-							return new Promise<{ data: Int8Array; missingSamples: number }>((_, reject) => {
-								rejectCapture = reject;
-							});
-						return Promise.resolve({ data: new Int8Array(Math.round(seconds * 2e6 * 2)), missingSamples: 0 });
+					captureIq,
+					stopIqCapture() {
+						resolveCapture?.({ data: new Int8Array([1, -1, 2, -2]), missingSamples: 0 });
+						return Promise.resolve();
 					},
 					getIqCaptureProgress: () => Promise.resolve({ capturedBytes: 8e6, writtenBytes: 8e6, totalBytes: 20e6 }),
 					cancelIqCapture() {
@@ -65,6 +72,7 @@ export const Recording: Story = {
 		const canvas = within(canvasElement);
 		await userEvent.click(canvas.getByRole('button', { name: 'Start recording' }));
 		await expect(canvas.getByRole('button', { name: 'Cancel recording' })).toBeVisible();
+		await expect(canvas.getByRole('button', { name: 'Stop recording' })).toBeEnabled();
 		await expect(canvas.getByLabelText('Recording duration')).toBeDisabled();
 		await expect(canvas.getByRole('progressbar')).toBeVisible();
 	},
@@ -88,5 +96,46 @@ export const CancelRecording: Story = {
 		await userEvent.click(canvas.getByRole('button', { name: 'Cancel recording' }));
 		await expect(await canvas.findByRole('button', { name: 'Start recording' })).toBeEnabled();
 		await expect(canvas.getByRole('status')).toHaveTextContent('Recording cancelled.');
+	},
+};
+
+export const StopRecording: Story = {
+	render: () => renderRecorder(true, true),
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await userEvent.click(canvas.getByRole('button', { name: 'Start recording' }));
+		await userEvent.click(canvas.getByRole('button', { name: 'Stop recording' }));
+		await expect(await canvas.findByRole('button', { name: 'Download IQ data' })).toBeVisible();
+		await expect(canvas.getByRole('button', { name: 'Download metadata' })).toBeVisible();
+	},
+};
+
+export const Manual: Story = {
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await userEvent.selectOptions(canvas.getByLabelText('Recording mode'), 'manual');
+		await expect(canvas.queryByLabelText('Recording duration')).toBeNull();
+		await expect(canvas.getByRole('status')).toHaveTextContent('Ready to record.');
+	},
+};
+
+export const ManualRecording: Story = {
+	beforeEach: () => {
+		const descriptor = Object.getOwnPropertyDescriptor(window, 'showSaveFilePicker');
+		Object.defineProperty(window, 'showSaveFilePicker', { configurable: true, value: undefined });
+		return () => {
+			if (descriptor) Object.defineProperty(window, 'showSaveFilePicker', descriptor);
+			else Reflect.deleteProperty(window, 'showSaveFilePicker');
+		};
+	},
+	render: () => renderRecorder(true, true),
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await userEvent.selectOptions(canvas.getByLabelText('Recording mode'), 'manual');
+		await userEvent.click(canvas.getByRole('button', { name: 'Start recording' }));
+		await expect(canvas.getByRole('button', { name: 'Stop recording' })).toBeEnabled();
+		await expect(canvas.getByLabelText('Recording mode')).toBeDisabled();
+		await expect(canvas.getByRole('progressbar')).not.toHaveAttribute('value');
+		await expect(canvas.getByText(/64 MiB download limit/)).toBeVisible();
 	},
 };

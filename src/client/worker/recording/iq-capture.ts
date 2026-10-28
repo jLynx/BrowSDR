@@ -10,12 +10,14 @@ export class IqCapture {
 		offset: number;
 		resolve: (data: Int8Array<ArrayBuffer>) => void;
 		reject: (error: Error) => void;
-		timer: ReturnType<typeof setTimeout>;
+		timer?: ReturnType<typeof setTimeout>;
 	};
 
-	start(sampleRate: number, seconds: number): Promise<Int8Array<ArrayBuffer>> {
+	/** A null duration records until stopped or the memory limit is reached. */
+	start(sampleRate: number, seconds: number | null): Promise<Int8Array<ArrayBuffer>> {
 		if (this.recording || this.fileCapture) throw new Error('An IQ capture is already running');
-		const length = iqCaptureByteLength(sampleRate, seconds);
+		const requestedLength = iqCaptureByteLength(sampleRate, seconds ?? 1);
+		const length = seconds === null ? IQ_MEMORY_LIMIT : requestedLength;
 		if (length > IQ_MEMORY_LIMIT) throw new Error('Captures above 64 MiB must be saved directly to a file');
 		return new Promise((resolve, reject) => {
 			this.recording = {
@@ -23,14 +25,18 @@ export class IqCapture {
 				offset: 0,
 				resolve,
 				reject,
-				timer: setTimeout(() => this.cancel('IQ capture timed out waiting for samples'), iqCaptureTimeout(seconds)),
+				timer:
+					seconds === null
+						? undefined
+						: setTimeout(() => this.cancel('IQ capture timed out waiting for samples'), iqCaptureTimeout(seconds)),
 			};
 		});
 	}
 
-	startToFile(sampleRate: number, seconds: number, file: FileSystemFileHandle, onInputComplete?: () => void): Promise<number> {
+	startToFile(sampleRate: number, seconds: number | null, file: FileSystemFileHandle, onInputComplete?: () => void): Promise<number> {
 		if (this.recording || this.fileCapture) throw new Error('An IQ capture is already running');
-		const capture = new FileIqCapture(iqCaptureByteLength(sampleRate, seconds), onInputComplete);
+		const requestedLength = iqCaptureByteLength(sampleRate, seconds ?? 1);
+		const capture = new FileIqCapture(seconds === null ? null : requestedLength, onInputComplete);
 		this.fileCapture = capture;
 		return capture.start(file, seconds).finally(() => {
 			this.fileCapture = undefined;
@@ -51,10 +57,21 @@ export class IqCapture {
 		recording.data.set(data.subarray(0, length), recording.offset);
 		recording.offset += length;
 		if (recording.offset === recording.data.length) {
-			clearTimeout(recording.timer);
-			this.recording = undefined;
-			recording.resolve(recording.data);
+			this.stop();
 		}
+	}
+
+	stop(): void {
+		this.fileCapture?.stop();
+		const recording = this.recording;
+		if (!recording) return;
+		if (!recording.offset) {
+			this.cancel('No IQ samples were recorded.');
+			return;
+		}
+		clearTimeout(recording.timer);
+		this.recording = undefined;
+		recording.resolve(recording.offset === recording.data.length ? recording.data : recording.data.slice(0, recording.offset));
 	}
 
 	cancel(message?: string): void {
