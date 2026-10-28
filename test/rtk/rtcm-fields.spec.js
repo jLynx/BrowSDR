@@ -23,6 +23,45 @@ const reference = () =>
 	]);
 
 describe('RTCM correction metadata', () => {
+	it('keeps a complete satellite snapshot while the next split MSM sequence arrives', () => {
+		const tracker = new RtkTracker();
+		function send(type, satellites, multiple, epoch) {
+			const fields = [
+				[type, 12],
+				[42, 12],
+				[epoch, 30],
+				[multiple, 1],
+				[0, 18],
+			];
+			for (let id = 1; id <= 64; id++) fields.push([satellites.includes(id) ? 1 : 0, 1]);
+			for (let id = 1; id <= 32; id++) fields.push([id === 2 ? 1 : 0, 1]);
+			fields.push([2 ** satellites.length - 1, satellites.length], [0, satellites.length * 18], [0, satellites.length * 42]);
+			for (const _satellite of satellites) fields.push([42, 6]);
+			const body = payload(fields),
+				header = Uint8Array.from([0xd3, body.length >> 8, body.length & 255, ...body]);
+			const crc = crc24q(header);
+			const frame = Uint8Array.from([...header, crc >> 16, (crc >> 8) & 255, crc & 255]);
+			tracker.process({
+				data: Uint8Array.from([0x2c, 7, 0, 0, 42, 4, 0xd2, frame.length, ...frame.map((byte) => byte ^ 0x12)]),
+				verified: true,
+				cfoHz: 0,
+			});
+		}
+		send(1074, [1, 2], 1, 1000);
+		send(1124, [1, 2], 1, 1000);
+		expect(tracker.snapshot()[0].observations).toBeUndefined();
+		send(1124, [3], 0, 1000);
+		expect(tracker.snapshot()[0].observations.BeiDou.satellites).toEqual([1, 2, 3]);
+		send(1074, [1, 2, 3], 1, 2000);
+		send(1124, [4, 5], 1, 2000);
+		expect(tracker.snapshot()[0].observations.GPS.satellites).toEqual([1, 2]);
+		expect(tracker.snapshot()[0].observations.BeiDou.satellites).toEqual([1, 2, 3]);
+		send(1124, [6], 0, 2000);
+		expect(tracker.snapshot()[0].observations.GPS.satellites).toEqual([1, 2, 3]);
+		expect(tracker.snapshot()[0].observations.BeiDou.satellites).toEqual([4, 5, 6]);
+		expect(tracker.flush()).toHaveLength(6);
+	});
+
 	it('reads signed 38-bit ECEF coordinates and 1006 antenna height', () => {
 		const result = decodeRtcmFields(reference()).reference;
 		expect(result).toMatchObject({ stationId: 42, itrf: 20, ecef: [-6378137, 0, 0] });

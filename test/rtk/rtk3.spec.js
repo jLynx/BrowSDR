@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { crc16Modbus, decodeRtk3Frame } from '@/worker/decoders/rtk/rtk3/frame';
 import { Rtk3Tracker } from '@/worker/decoders/rtk/rtk3/tracker';
+import { Rtk3Containers } from '@/worker/decoders/rtk/rtk3/containers';
 import { crc24q } from '@/worker/decoders/rtk/rtcm';
 import { mockRtk3Packet, mockRtk3Beacon, mockRtk3Container, mockRtcmReference } from '../fixtures/rtk/mock-rtk3';
 
@@ -47,6 +48,23 @@ describe('RTK3 / RBS03 frame integrity', () => {
 });
 
 describe('RTK3 container streams', () => {
+	it('invalidates pending observations before delivering corrections after loss or corruption', () => {
+		const stream = new Rtk3Containers();
+		const events = [];
+		const receive = (body) =>
+			stream.process(
+				body,
+				(container) => events.push(container.sequence),
+				() => events.push('gap'),
+			);
+		receive(mockRtk3Container(undefined, 1));
+		receive(mockRtk3Container(undefined, 3));
+		const bad = mockRtcmReference();
+		bad[5] ^= 1;
+		receive(Uint8Array.from([...mockRtk3Container(bad, 4), ...mockRtk3Container(undefined, 5)]));
+		expect(events).toEqual([1, 'gap', 3, 'gap', 'gap', 5]);
+	});
+
 	it.each([600, 1023])('reassembles a %i-byte RTCM payload across radio frames and interleaved beacons', (length) => {
 		// Invented, unknown RTCM type 4090 exercises large and maximum-length containers.
 		const bytes = new Uint8Array(length + 3);

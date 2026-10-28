@@ -87,7 +87,8 @@
 						<div title="GPS L2, GLONASS G2, Galileo E5b and BeiDou B2. A satellite can also appear in L1.">
 							<span class="rtk-label">L2 / secondary</span><strong class="rtk-number">{{ gnss.secondary ?? '—' }}</strong>
 						</div>
-						<p class="rtk-caption">Counts overlap · From broadcast corrections</p>
+						<p class="rtk-caption">Unique satellites from corrections · Counts overlap</p>
+						<p class="rtk-caption">Mammotion’s receiver-reported L1/L2 totals are a separate metric.</p>
 					</div>
 				</div>
 				<div v-if="freshObservations.length" class="rtk-constellations" aria-label="Satellites by constellation">

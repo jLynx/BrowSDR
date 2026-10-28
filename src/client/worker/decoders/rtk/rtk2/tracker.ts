@@ -23,7 +23,10 @@ export class Rtk2Tracker {
 		const station = this.stations.observe(identity, packet);
 		const now = Date.now();
 		const base = this.bases.get(key) ?? { partial: new Uint8Array(0), lastSeen: now };
-		if (now - base.lastSeen > 2000) base.partial = new Uint8Array(0);
+		if (now - base.lastSeen > 2000) {
+			base.partial = new Uint8Array(0);
+			this.stations.discontinuity(key);
+		}
 		base.lastSeen = now;
 		this.bases.delete(key);
 		this.bases.set(key, base);
@@ -33,6 +36,7 @@ export class Rtk2Tracker {
 			if (!delta) return;
 			if (delta !== 1) {
 				base.partial = new Uint8Array(0);
+				this.stations.discontinuity(key);
 				if (delta < 32768) this.counters.sequenceGaps += delta - 1;
 			}
 		}
@@ -64,6 +68,7 @@ export class Rtk2Tracker {
 			const frame = data.subarray(offset, offset + length + 6);
 			if (!validRtcmFrame(frame)) {
 				this.counters.containerErrors++;
+				this.stations.discontinuity(stationKey(station));
 				offset++;
 				continue;
 			}
@@ -75,6 +80,7 @@ export class Rtk2Tracker {
 
 	discontinuity(): void {
 		for (const base of this.bases.values()) base.partial = new Uint8Array(0);
+		this.stations.discontinuity();
 	}
 	snapshot(): RtkStation[] {
 		return this.stations.snapshot();

@@ -11,7 +11,7 @@ export class Rtk3Containers {
 	private sequence?: number;
 	readonly counters = { containers: 0, containerErrors: 0, sequenceGaps: 0 };
 
-	process(body: Uint8Array, onContainer: (container: Rtk3Container) => void): void {
+	process(body: Uint8Array, onContainer: (container: Rtk3Container) => void, onDiscontinuity: () => void): void {
 		const data = new Uint8Array(this.partial.length + body.length);
 		data.set(this.partial);
 		data.set(body, this.partial.length);
@@ -36,20 +36,22 @@ export class Rtk3Containers {
 			const payload = data.subarray(offset + HEADER, end);
 			if (type === 1 && !validRtcmFrame(payload)) {
 				this.counters.containerErrors++;
+				onDiscontinuity();
 				offset++;
 				continue;
 			}
 			const sequence = data[offset + 8] | (data[offset + 9] << 8);
-			this.accept({ type, sequence, payload }, onContainer);
+			this.accept({ type, sequence, payload }, onContainer, onDiscontinuity);
 			offset = end;
 		}
 		this.partial = data.slice(offset);
 	}
 
-	private accept(container: Rtk3Container, onContainer: (container: Rtk3Container) => void): void {
+	private accept(container: Rtk3Container, onContainer: (container: Rtk3Container) => void, onDiscontinuity: () => void): void {
 		if (this.sequence !== undefined) {
 			const delta = (container.sequence - this.sequence + 65536) % 65536;
 			if (delta === 0) return;
+			if (delta !== 1) onDiscontinuity();
 			if (delta > 1 && delta < 32768) this.counters.sequenceGaps += delta - 1;
 		}
 		this.sequence = container.sequence;

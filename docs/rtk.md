@@ -374,9 +374,25 @@ positioning information; a satellite may contribute to both counts.
 BrowSDR shows **L1 / primary** (GPS L1, GLONASS G1, Galileo E1, BeiDou B1) and
 **L2 / secondary** (GPS L2, GLONASS G2, Galileo E5b, BeiDou B2). Counts use
 active MSM satellite/signal cells, deduplicated within each frequency group.
+Split MSM messages for the same constellation and epoch are merged by satellite
+and signal cell. Counts update together at the end of the MSM sequence, so an
+individual fragment cannot temporarily replace a complete constellation count.
+Reception gaps discard unfinished sequences while the previous complete
+observations remain visible until they expire.
 Other bands, including L5, E5a and B3, appear in Diagnostics. Unknown signal IDs
 are not assigned a band. These are correction-stream counts; Mammotion's
-receiver filtering and its rover/co-viewing counts can differ.
+base-receiver L1/L2 counting definition has not been established, so matching
+Mammotion's base totals is not guaranteed. Rover/co-viewing counts are separate
+metrics.
+
+Home Assistant's Mammotion integration reads its base L1/L2 values directly
+from `rpt_rtk.dis_status`: bits 16–23 for L1 and 24–31 for L2. PyMammotion
+receives that status through the device's app communication protocol; it does
+not calculate those fields from RTCM. Agreement between Home Assistant and the
+Mammotion app therefore confirms the reported device values, but does not
+establish equivalence with BrowSDR's unique satellite counts. Multiple signals
+from one satellite can appear in the correction stream (for example BeiDou
+B1I and B1C), while BrowSDR counts that satellite once per frequency group.
 
 **GNSS signal** shows the mean positive C/N₀ of recent satellite measurements.
 The indicative labels are Good at ≥40 dB-Hz, Fair at ≥30 dB-Hz, and Weak below

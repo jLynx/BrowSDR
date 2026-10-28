@@ -45,6 +45,7 @@ export class RtkTracker {
 			const frame = data.subarray(offset, offset + length + 6);
 			const checksum = (frame[length + 3] << 16) | (frame[length + 4] << 8) | frame[length + 5];
 			if (crc24q(frame.subarray(0, length + 3)) !== checksum) {
+				this.stations.discontinuity(stationKey(station));
 				offset++;
 				continue;
 			}
@@ -55,6 +56,7 @@ export class RtkTracker {
 	}
 	discontinuity(): void {
 		this.partial.clear();
+		this.stations.discontinuity();
 	}
 	snapshot(): RtkStation[] {
 		return this.stations.snapshot();
