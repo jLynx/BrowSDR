@@ -43,7 +43,7 @@ export class SpectrumStream {
 
 		const frame = this.output.slice();
 		// Copy for remote consumers before Comlink detaches the local frame's buffer.
-		this.backend._remoteHostFftCb?.(frame.slice());
+		if (this.backend._remoteHostFftCb) this.backend._remoteHostFftCb(frame.slice());
 		if (this.callback) this.callback(Comlink.transfer(frame, [frame.buffer]));
 	}
 
