@@ -3,6 +3,20 @@ import { describe, it, expect } from 'vitest';
 import worker from '../../src/server';
 
 describe('BrowSDR worker', () => {
+	it.each([
+		['/', '<title>BrowSDR - Web-Based SDR Receiver</title>'],
+		['/api/geo', '"country":"XX"'],
+		['/api/turn', '"iceServers":[]'],
+	])('serves %s in previews without database bindings or TURN secrets', async (path, body) => {
+		const ctx = createExecutionContext();
+		const response = await worker.fetch(new Request(`http://example.com${path}`), { ASSETS: env.ASSETS }, ctx);
+		await waitOnExecutionContext(ctx);
+		expect(response.status).toBe(200);
+		expect(await response.text()).toContain(body);
+		expect(response.headers.get('Cross-Origin-Opener-Policy')).toBe('same-origin');
+		expect(response.headers.get('Cross-Origin-Embedder-Policy')).toBe('require-corp');
+	});
+
 	it('serves the frontend with cross-origin isolation headers through the handler', async () => {
 		const request = new Request('http://example.com');
 		const ctx = createExecutionContext();
