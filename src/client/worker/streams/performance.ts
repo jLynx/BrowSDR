@@ -87,16 +87,17 @@ export function initializePerformanceReporting(
 function reportRemotePerformance(backend: Backend, perf: PerfCounters, dt: number, sampleRate: number) {
 	for (const [clientId, client] of backend._remoteClients ?? []) {
 		const counters = client.perf;
-		backend._remoteHostStatsCb?.(clientId, {
-			...perf.report,
-			source: 'host',
-			audioFps: Math.round((counters?.audioCalls ?? 0) / dt),
-			audioRate: Math.round((counters?.audioSamplesOut ?? 0) / dt),
-			dspAvgMs: counters?.audioCalls ? (counters.dspTimeSum / counters.audioCalls).toFixed(2) : '0',
-			dspMaxMs: (counters?.dspTimeMax ?? 0).toFixed(2),
-			msgRate: Math.round((counters?.msgsSent ?? 0) / dt),
-			channelization: client.channelization ?? { bands: 0, vfos: 0, sampleRate },
-		});
+		if (backend._remoteHostStatsCb)
+			backend._remoteHostStatsCb(clientId, {
+				...perf.report,
+				source: 'host',
+				audioFps: Math.round((counters?.audioCalls ?? 0) / dt),
+				audioRate: Math.round((counters?.audioSamplesOut ?? 0) / dt),
+				dspAvgMs: counters?.audioCalls ? (counters.dspTimeSum / counters.audioCalls).toFixed(2) : '0',
+				dspMaxMs: (counters?.dspTimeMax ?? 0).toFixed(2),
+				msgRate: Math.round((counters?.msgsSent ?? 0) / dt),
+				channelization: client.channelization ?? { bands: 0, vfos: 0, sampleRate },
+			});
 		if (counters) {
 			counters.audioCalls = 0;
 			counters.audioSamplesOut = 0;

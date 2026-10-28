@@ -197,14 +197,14 @@ function bindRemoteWorker(backend: Backend, clientId: string, state: RemoteClien
 		if (msg.type === 'rtl433_event' || msg.type === 'rtl433_status') {
 			const params = state.params[index];
 			if (params && params.freq === msg.freq && (msg.type === 'rtl433_status' || params.rtl433)) {
-				backend._remoteHostRtl433Cb?.(clientId, index, params.freq, msg);
+				if (backend._remoteHostRtl433Cb) backend._remoteHostRtl433Cb(clientId, index, params.freq, msg);
 			}
 			return;
 		}
 		if (msg.type === 'rds') {
 			const params = state.params[index];
 			if (params?.rds && params.mode === 'wfm') {
-				backend._remoteHostRdsCb?.(clientId, index, params.freq, msg.msg);
+				if (backend._remoteHostRdsCb) backend._remoteHostRdsCb(clientId, index, params.freq, msg.msg);
 			}
 		} else if (msg.type === 'audio') {
 			handleRemoteWorkerAudio(state, msg, backend, index, clientId);
@@ -626,7 +626,9 @@ function forwardAdsb(
 	message: Extract<DspOutput, { type: 'adsb' }>,
 ): void {
 	const params = state.params[index];
-	if (params?.adsb && params.freq === message.freq) backend._remoteHostAdsbCb?.(clientId, index, params.freq, message);
+	if (params?.adsb && params.freq === message.freq) {
+		if (backend._remoteHostAdsbCb) backend._remoteHostAdsbCb(clientId, index, params.freq, message);
+	}
 }
 
 function forwardAis(
@@ -637,7 +639,9 @@ function forwardAis(
 	message: Extract<DspOutput, { type: 'ais' }>,
 ): void {
 	const params = state.params[index];
-	if (params?.ais && params.freq === message.freq) backend._remoteHostAisCb?.(clientId, index, params.freq, message);
+	if (params?.ais && params.freq === message.freq) {
+		if (backend._remoteHostAisCb) backend._remoteHostAisCb(clientId, index, params.freq, message);
+	}
 }
 
 function forwardBle(
@@ -648,7 +652,9 @@ function forwardBle(
 	message: Extract<DspOutput, { type: 'ble' }>,
 ): void {
 	const params = state.params[index];
-	if (params?.ble && params.freq === message.freq) backend._remoteHostBleCb?.(clientId, index, params.freq, message);
+	if (params?.ble && params.freq === message.freq) {
+		if (backend._remoteHostBleCb) backend._remoteHostBleCb(clientId, index, params.freq, message);
+	}
 }
 
 function forwardAcars(
@@ -659,7 +665,9 @@ function forwardAcars(
 	message: Extract<DspOutput, { type: 'acars' }>,
 ): void {
 	const params = state.params[index];
-	if (params?.acars && params.freq === message.freq) backend._remoteHostAcarsCb?.(clientId, index, params.freq, message);
+	if (params?.acars && params.freq === message.freq) {
+		if (backend._remoteHostAcarsCb) backend._remoteHostAcarsCb(clientId, index, params.freq, message);
+	}
 }
 
 function forwardPacketMessage(backend: Backend, clientId: string, state: RemoteClientState, index: number, msg: DspOutput): boolean {
@@ -673,7 +681,9 @@ function forwardPacketMessage(backend: Backend, clientId: string, state: RemoteC
 	}
 	if (msg.type === 'radiosonde') {
 		const params = state.params[index];
-		if (params?.radiosonde && params.freq === msg.freq) backend._remoteHostRadiosondeCb?.(clientId, index, params.freq, msg);
+		if (params?.radiosonde && params.freq === msg.freq) {
+			if (backend._remoteHostRadiosondeCb) backend._remoteHostRadiosondeCb(clientId, index, params.freq, msg);
+		}
 		return true;
 	}
 	if (msg.type === 'ais') {

@@ -136,7 +136,9 @@ function decodeLocalPocsag(
 			state.pocsagDecoder = new POCSAGDecoder(
 				AUDIO_RATE,
 				(pmsg) => {
-					pager.pocsag?.(v, params.freq, pmsg);
+					// Optional method calls compile to .call(pager, ...), which Comlink
+					// sends over the port with the uncloneable callback container.
+					if (pager.pocsag) pager.pocsag(v, params.freq, pmsg);
 				},
 				params.pocsagCharset,
 			);
@@ -180,7 +182,7 @@ function decodeLocalFlex(
 			state.flexDecoder = new FlexDecoder(
 				AUDIO_RATE,
 				(fmsg) => {
-					pager.flex?.(v, params.freq, fmsg);
+					if (pager.flex) pager.flex(v, params.freq, fmsg);
 				},
 				params.flexCharset,
 			);
@@ -218,7 +220,7 @@ function decodeLocalGsc(
 	if (pager.gsc && params.gsc && params.mode === 'nfm' && tag === 'gsc') {
 		if (!state.gscDecoder) {
 			state.gscDecoder = new GSCDecoder(AUDIO_RATE, (gmsg) => {
-				pager.gsc?.(v, params.freq, gmsg);
+				if (pager.gsc) pager.gsc(v, params.freq, gmsg);
 			});
 		}
 		state.gscDecoder.setShowSecondGuess(params.gscSecondGuess ?? false);
