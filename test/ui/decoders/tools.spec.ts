@@ -18,7 +18,19 @@ describe('decoder tools menu', () => {
 		await wrapper.get('.tools-trigger').trigger('click');
 		const groups = wrapper.findAll('.ui-menu-group');
 		expect(groups.map((group) => group.get('.ui-menu-group-label').text())).toEqual(['Decoders', 'Utilities']);
-		expect(groups[0].findAll('button')).toHaveLength(11);
+		expect(groups[0].findAll('button').map((button) => button.attributes('aria-label'))).toEqual([
+			'ACARS',
+			'ADS-B',
+			'AIS',
+			'APRS',
+			'Bluetooth LE',
+			'FM RDS',
+			'Live Transcription',
+			'Pager',
+			'Radiosonde',
+			'RTK',
+			'Wireless Sensors',
+		]);
 		expect(wrapper.get('.ui-menu-list').text()).toContain('Sensor & device data · rtl_433');
 		await wrapper.get('button[aria-label="Wireless Sensors"]').trigger('click');
 		expect(wrapper.vm.rtl433.panelOpen).toBe(true);
@@ -44,7 +56,7 @@ describe('decoder tools menu', () => {
 		wrapper = mount(ReceiverView);
 		const vfo = { ...makeDefaultVfo(433.92), rtl433: true, adsb: true };
 		await wrapper.setData({ vfos: [vfo, { ...vfo, freq: 315 }] });
-		expect(wrapper.findAll('.active-decoder-tool').map((button) => button.text())).toEqual(['Wireless Sensors', 'ADS-B']);
+		expect(wrapper.findAll('.active-decoder-tool').map((button) => button.text())).toEqual(['ADS-B', 'Wireless Sensors']);
 		await wrapper.get('button[aria-label="Open Wireless Sensors decoder"]').trigger('click');
 		await wrapper.get('button[aria-label="Open Wireless Sensors decoder"]').trigger('click');
 		expect(wrapper.vm.rtl433.panelOpen).toBe(true);
