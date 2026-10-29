@@ -403,15 +403,21 @@ observations remain visible until they expire.
 All constellations in a completed sequence share its completion timestamp, so
 radio fragments received earlier do not expire separately and reduce the total
 while the next complete set is still arriving.
+Each group also shows its **signal observations**, counting each constellation,
+satellite and signal combination once. A BeiDou satellite carrying both B1I
+and B1C contributes one primary satellite but two primary signal observations.
 Other bands, including L5, E5a and B3, appear in Diagnostics. Unknown signal IDs
-are not assigned a band. These are correction-stream counts. The supplied
-YUKA H5 controller counts individual GNSS signal observations in its range-data
-handler without deduplicating satellite IDs. That is comparative evidence;
-it does not establish the Luba2 or RTK2 controller's counting rule. Multiple
-signals from one satellite remain a possible explanation for the difference,
-but the relationship to the installed system's observations is unverified.
-Matching Mammotion's totals is not guaranteed. Rover/co-viewing counts are
-separate metrics.
+are not assigned a band. These are correction-stream counts.
+
+The installed Luba2 MCU firmware `5.1.2.1573 (86024ecac)` counts individual
+GNSS RANGE/BASERANGE records without deduplicating satellite IDs. Original-code
+emulation confirms that B1I and B1C records for the same satellite each increase
+L1, and that low or zero C/N₀ does not remove a record from L1/L2. Its MCU
+telemetry forwards those counts independently of the rover satellite count.
+This verifies the mower's counting rule; it does not establish which records
+its GNSS receiver reconstructs from every broadcast correction. Matching
+Mammotion's totals still requires synchronized observations and receiver
+status. Rover/co-viewing counts are separate metrics.
 
 Home Assistant's Mammotion integration reads its base L1/L2 values directly
 from `rpt_rtk.dis_status`: bits 16–23 for L1 and 24–31 for L2. PyMammotion
@@ -425,10 +431,10 @@ Static analysis of Mammotion Android 2.3.20.30 independently confirms those
 bit extractions and that the reference L1/L2 display uses them directly,
 without RTCM parsing or a client-side constellation filter. The base's own
 `sats_num` field and the robot's `gps_stars` field are separate from these two
-reference counts. The supplied YUKA controller classifier accepts Galileo E5b
-in its secondary group; its classification does not determine the Luba2/RTK2
-rule. A numerical match after excluding Galileo is insufficient evidence to
-change the decoder's band counts.
+reference counts. The installed Luba2 classifier accepts Galileo E5b in its
+secondary group. Excluding Galileo to fit a reported total would contradict
+that firmware. The external RTK2 base controller image remains unavailable;
+the mower's `deviceRTK` update package is its onboard GNSS receiver firmware.
 
 **GNSS signal** shows the mean positive C/N₀ of recent satellite measurements.
 The indicative labels are Good at ≥40 dB-Hz, Fair at ≥30 dB-Hz, and Weak below

@@ -252,6 +252,8 @@ describe('live RTK receiver tools', () => {
 		expect(wrapper.get('.rtk-heading h3').text()).toBe('UNICORE UM960');
 		expect(wrapper.get('[aria-label="Satellites by frequency group"]').text()).toContain('L1 / primary2');
 		expect(wrapper.get('[aria-label="Satellites by frequency group"]').text()).toContain('L2 / secondary1');
+		expect(wrapper.get('[aria-label="Primary signal observations"]').text()).toBe('2 signal observations');
+		expect(wrapper.get('[aria-label="Secondary signal observations"]').text()).toBe('1 signal observation');
 		expect(wrapper.get('[aria-label="GNSS signal quality"]').text()).toContain('Good');
 		expect(wrapper.find('[aria-label="Base station location map"]').exists()).toBe(true);
 		expect(wrapper.get('[aria-label="Live RTK decoder"]').text()).toContain('42.0 dB-Hz');

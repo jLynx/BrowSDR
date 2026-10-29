@@ -4,6 +4,8 @@ import type { GnssSummary } from './types';
 export function gnssSummary(observations: RtcmObservation[]): GnssSummary {
 	const primary = new Set<string>(),
 		secondary = new Set<string>(),
+		primarySignals = new Set<string>(),
+		secondarySignals = new Set<string>(),
 		bands = new Map<string, Set<number>>();
 	let mapped = false;
 	for (const observation of observations)
@@ -11,8 +13,14 @@ export function gnssSummary(observations: RtcmObservation[]): GnssSummary {
 			if (!measurement.band) continue;
 			mapped = true;
 			const key = `${observation.constellation}:${measurement.satellite}`;
-			if (measurement.group === 'primary') primary.add(key);
-			if (measurement.group === 'secondary') secondary.add(key);
+			if (measurement.group === 'primary') {
+				primary.add(key);
+				primarySignals.add(`${key}:${measurement.signal}`);
+			}
+			if (measurement.group === 'secondary') {
+				secondary.add(key);
+				secondarySignals.add(`${key}:${measurement.signal}`);
+			}
 			const band = `${observation.constellation} ${measurement.band}`;
 			if (!bands.has(band)) bands.set(band, new Set());
 			bands.get(band)!.add(measurement.satellite);
@@ -23,6 +31,8 @@ export function gnssSummary(observations: RtcmObservation[]): GnssSummary {
 	return {
 		primary: mapped ? primary.size : undefined,
 		secondary: mapped ? secondary.size : undefined,
+		primarySignals: mapped ? primarySignals.size : undefined,
+		secondarySignals: mapped ? secondarySignals.size : undefined,
 		bands: Object.fromEntries([...bands].map(([band, satellites]) => [band, satellites.size])),
 		meanCnr,
 		quality,

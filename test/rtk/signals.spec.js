@@ -26,7 +26,7 @@ describe('GNSS frequency groups and quality', () => {
 				[3, 2, 0],
 			]),
 		]);
-		expect(result).toMatchObject({ primary: 3, secondary: 3, quality: 'Good' });
+		expect(result).toMatchObject({ primary: 3, secondary: 3, primarySignals: 5, secondarySignals: 3, quality: 'Good' });
 		expect(result.bands).toEqual({
 			'GPS L1': 1,
 			'GPS L2': 2,
@@ -35,6 +35,20 @@ describe('GNSS frequency groups and quality', () => {
 			'BeiDou B1C': 1,
 			'BeiDou B2I': 1,
 			'BeiDou B3I': 1,
+		});
+	});
+
+	it('separates B1I/B1C signal counts from satellites without counting repeated correction cells twice', () => {
+		const beidou = observation('BeiDou', [
+			[1, 2, 45],
+			[1, 31, 0],
+			[1, 31, 0],
+		]);
+		expect(gnssSummary([beidou, beidou, observation('Galileo', [[1, 15, 5]])])).toMatchObject({
+			primary: 1,
+			primarySignals: 2,
+			secondary: 1,
+			secondarySignals: 1,
 		});
 	});
 
@@ -57,7 +71,14 @@ describe('GNSS frequency groups and quality', () => {
 	});
 
 	it('shows unavailable rather than zero satellites or a fix when there are no measurements', () => {
-		expect(gnssSummary([])).toMatchObject({ primary: undefined, secondary: undefined, meanCnr: undefined, quality: 'Unavailable' });
+		expect(gnssSummary([])).toMatchObject({
+			primary: undefined,
+			secondary: undefined,
+			primarySignals: undefined,
+			secondarySignals: undefined,
+			meanCnr: undefined,
+			quality: 'Unavailable',
+		});
 		expect(gnssSummary([observation('GPS', [[1, 2, 0]])]).quality).toBe('Unavailable');
 		expect(gnssSummary([observation('GPS', [[1, 2, 0]])]).primary).toBe(1);
 	});

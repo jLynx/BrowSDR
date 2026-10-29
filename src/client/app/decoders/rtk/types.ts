@@ -20,6 +20,8 @@ export interface RtkReception {
 export interface GnssSummary {
 	primary?: number;
 	secondary?: number;
+	primarySignals?: number;
+	secondarySignals?: number;
 	bands: Record<string, number>;
 	meanCnr?: number;
 	quality: 'Good' | 'Fair' | 'Weak' | 'Unavailable';
