@@ -21,14 +21,9 @@
 				<div>
 					<h3>{{ title }}</h3>
 					<p>{{ vfo.freq.toFixed(3) }} MHz</p>
-					<p
-						v-if="station"
-						class="rtk-pairing"
-						:aria-label="station.address !== undefined ? 'LoRa station address' : 'LoRa number'"
-						:title="station.address !== undefined ? '16-bit address from verified radio frames.' : 'scan.channel.loc.net · The loc field has not been decoded.'"
-					>
+					<p v-if="station" class="rtk-pairing" :aria-label="loraPairingDetails(station).label" :title="loraPairingDetails(station).title">
 						LoRa <span class="rtk-lora-number">{{ loraNumber(station) }}</span>
-						<span v-if="station.address === undefined" class="rtk-caption">· loc unknown</span>
+						<span v-if="loraPairingDetails(station).unknown" class="rtk-caption">· {{ loraPairingDetails(station).unknown }}</span>
 					</p>
 				</div>
 				<span class="rtk-state" :class="'rtk-state-' + reception.tone" role="status">{{ reception.label }}</span>
@@ -202,8 +197,11 @@
 					</p>
 					<template v-if="station">
 						<p v-if="station.address !== undefined">
-							{{ station.protocol === 'rtk2' ? 'RTK2' : 'RTK3' }} station address: {{ station.address }}. Other pairing fields are not
-							decoded.
+							{{ station.protocol === 'rtk2' ? 'RTK2' : 'RTK3' }} station address: {{ station.address }}.
+							<template v-if="station.loc !== undefined"
+								>Loc ID: {{ station.loc }}. Scan and channel are not carried in the correction header.</template
+							>
+							<template v-else>Other pairing fields are not decoded.</template>
 						</p>
 						<p v-else>Pairing fields: scan {{ station.scan }}, channel {{ station.channel }}, net ID {{ station.netId }}.</p>
 						<p>{{ station.rtcmCount }} verified correction messages · RTCM types {{ Object.keys(station.rtcmTypes).join(', ') }}</p>

@@ -111,6 +111,25 @@ describe('live RTK receiver tools', () => {
 		expect(downloadCorrections).toHaveBeenCalledWith(packet.rtcm, 923.118, packet.rtcm[0].source);
 	});
 
+	it('shows a verified RTK2 zero loc ID while leaving scan and channel unknown', async () => {
+		await setup();
+		wrapper.vm.rtk.panelOpen = true;
+		wrapper.vm.vfos[0].rtk = true;
+		wrapper.vm.vfos[0].rtkProfile = 'rtk2';
+		const packet = message();
+		packet.profile = 'rtk2';
+		packet.stations = [
+			{ ...packet.stations[0], protocol: 'rtk2', network: '3030303030303030', scan: undefined, channel: undefined, loc: 0, address: 4242 },
+		];
+		wrapper.vm._onRtkMessage(0, 923.118, packet);
+		await nextTick();
+		expect(wrapper.get('[aria-label="LoRa number"]').text()).toContain('?.?.0.4242');
+		expect(wrapper.get('.rtk-heading').text()).toContain('scan/channel unknown');
+		expect(wrapper.get('.rtk-heading').text()).not.toContain('loc unknown');
+		expect(wrapper.get('.rtk-heading [aria-label="LoRa number"]').attributes('title')).toContain('scan and channel are not present');
+		expect(wrapper.text()).toContain('Loc ID: 0');
+	});
+
 	it('selects RTK3 without a guessed frequency, clears prior-profile results and exports by address', async () => {
 		await setup();
 		wrapper.vm.rtk.panelOpen = true;

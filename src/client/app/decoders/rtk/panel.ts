@@ -2,7 +2,7 @@ import { computed, defineComponent, inject, onBeforeUnmount, ref } from 'vue';
 import type { AppInstance } from '@/app/core/receiver.types';
 import * as components from '@/ui';
 import template from './panel.html?raw';
-import { referencePosition, observedSatellites, signalStrength, loraNumber } from './station-details';
+import { referencePosition, observedSatellites, signalStrength, loraNumber, loraPairingDetails } from './station-details';
 import { downloadCorrections, downloadReport } from './downloads';
 import { receptionState } from './reception';
 import { gnssSummary } from './signal-summary';
@@ -77,6 +77,7 @@ export default defineComponent({
 			canDownload,
 			referencePosition,
 			loraNumber,
+			loraPairingDetails,
 			observedSatellites,
 			signalStrength,
 			update: () => receiver.updateBackendVfoParams(index.value),

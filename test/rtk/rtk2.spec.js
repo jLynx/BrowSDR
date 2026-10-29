@@ -5,11 +5,49 @@ import { Rtk2Tracker } from '@/worker/decoders/rtk/rtk2/tracker';
 import { crc24q } from '@/worker/decoders/rtk/rtcm-frame';
 import { mockRtk2Packet, mockRtk2Plain, mockRtk2Wire, mockRtk2Checks } from '../fixtures/rtk/mock-rtk2';
 import { mockRtcmReference } from '../fixtures/rtk/mock-rtk3';
+import firmwareVectors from '../fixtures/rtk/du1021d-vectors.json';
+import firmwareFrames from '../fixtures/rtk/du1021d-frames.json';
 
 afterEach(() => vi.restoreAllMocks());
 const source = 'rtk2-544553544e455431-4242';
 
 describe('RTK2 wire and application integrity', () => {
+	it.each(firmwareFrames)('decodes the original radio header/CRC/wire routines for loc $loc, $payload.length hex digits', (frame) => {
+		const bytes = (hex) => Uint8Array.from(hex.match(/../g) ?? [], (value) => parseInt(value, 16));
+		const wire = bytes(frame.wire);
+		expect(decodeRtk2Bytes(wire)).toEqual(bytes(frame.plain));
+		expect(decodeRtk2Frame({ ...mockRtk2Packet(new Uint8Array()), data: wire })).toEqual({
+			network: Array.from(new TextEncoder().encode(String(frame.loc).padStart(8, '0')), (byte) => byte.toString(16).padStart(2, '0')).join(
+				'',
+			),
+			loc: frame.loc,
+			address: frame.net,
+			sequence: frame.sequence,
+			body: bytes(frame.payload),
+		});
+	});
+	it.each(firmwareVectors)('matches the emulated DU1021D routine for $input', ({ input, output }) => {
+		const bytes = (hex) => Uint8Array.from(hex.match(/../g) ?? [], (value) => parseInt(value, 16));
+		expect(decodeRtk2Bytes(bytes(input))).toEqual(bytes(output));
+	});
+	it.each([
+		['00000000', 0],
+		['00000042', 42],
+		['00065535', 65535],
+		['00065536', undefined],
+		['TESTNET1', undefined],
+		['0000000:', undefined],
+		['-0000001', undefined],
+	])('interprets only a decimal 16-bit loc ID in network %s', (network, loc) => {
+		const tracker = new Rtk2Tracker();
+		tracker.process(mockRtk2Packet(mockRtcmReference(), 100, 4242, network));
+		const station = tracker.snapshot()[0];
+		expect(station.loc).toBe(loc);
+		expect(station.network).toBe(Array.from(new TextEncoder().encode(network), (byte) => byte.toString(16).padStart(2, '0')).join(''));
+		expect(station.address).toBe(4242);
+		expect(station.scan).toBeUndefined();
+		expect(station.channel).toBeUndefined();
+	});
 	it('matches a firmware-derived synthetic known vector and standard CRC8/MAXIM', () => {
 		const wire = Uint8Array.from('320f811de4f3bdde0d1e723de4f3bdde320f811d103ab9618a1acada8b1b'.match(/../g), (v) => parseInt(v, 16));
 		expect(decodeRtk2Bytes(wire)).toEqual(Uint8Array.from({ length: 30 }, (_, i) => i));

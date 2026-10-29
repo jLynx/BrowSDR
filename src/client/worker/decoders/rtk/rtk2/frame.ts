@@ -11,6 +11,16 @@ export function crc8Maxim(data: Uint8Array): number {
 	return crc;
 }
 
+/** Mammotion writes its 16-bit loc ID as eight zero-padded decimal ASCII bytes. */
+function decimalLoc(bytes: Uint8Array): number | undefined {
+	let value = 0;
+	for (const byte of bytes) {
+		if (byte < 48 || byte > 57) return;
+		value = value * 10 + byte - 48;
+	}
+	return value <= 65535 ? value : undefined;
+}
+
 /** Validated DU1021D outer frame containing one checksummed correction-stream chunk. */
 export function decodeRtk2Frame(packet: LoraPacket) {
 	if (packet.hasCrc || packet.codingRate !== 1 || packet.codingErrors || packet.data.length < 30 || packet.data.length > 255) return;
@@ -28,6 +38,7 @@ export function decodeRtk2Frame(packet: LoraPacket) {
 		return;
 	return {
 		network: Array.from(data.subarray(2, 10), (byte) => byte.toString(16).padStart(2, '0')).join(''),
+		loc: decimalLoc(data.subarray(2, 10)),
 		address: data[10] | (data[11] << 8),
 		sequence: body[8] | (body[9] << 8),
 		body: body.slice(10, -2),

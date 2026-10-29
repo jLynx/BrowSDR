@@ -25,6 +25,17 @@ with RTK1 decoding simultaneously. Live reception rejected 17 application
 frames and one RTCM frame; lost IQ chunks remained zero. The base reported
 UNICORE and GPS, GLONASS, Galileo and BeiDou observations.
 
+The original DU1021D decode routine was also emulated against 289 synthetic
+inputs, including every length from 0 through 255 and additional boundary
+patterns. All matched the production TypeScript transform. Eighteen synthetic
+vectors provide independent regression coverage. Four complete synthetic frames
+also match the original radio's header builder, CRC8 and transmit/receive
+transforms, including a maximum-length packet and loc/net boundary values. A separate
+PyRTCM audit of a fresh 512-frame live export matched 478 MSM frames and 12,597
+signal cells, including masks, satellite IDs, signal bands, continuation flags
+and C/N₀. These checks validate the radio transform and correction parsing;
+they do not reproduce the base controller's private telemetry.
+
 The PHY is SF7, BW250 kHz, CR4/5, explicit header, preamble16, no LoRa payload
 CRC, LDRO off and sync **[16,8]**. Timing starts at +10 ppm for the measured
 receiver. Tune to the active signal in the waterfall: the recording shows
@@ -63,8 +74,14 @@ silence discard incomplete corrections. Keepalives preserve adjacent fragments.
 Rejected radio candidates contribute no bytes and have no trusted identity or
 sequence number. The next verified container determines whether a base's
 pending data can continue or must be discarded for a confirmed sequence gap.
-The UI displays the validated address; the complete pairing-number mapping
-has not been established. No pairing number is required as a decoding key.
+For Mammotion configurations, the network bytes encode the 16-bit loc ID as
+eight zero-padded decimal ASCII characters. This was traced through the supplied
+YUKA H5 controller's loc configuration and the supplied DU1021D radio image. The decoder accepts
+only decimal values up to 65535 and retains the raw network bytes as part of
+the station identity. The address is the pairing number's net ID. Scan and
+channel are not present in this correction header, so the complete pairing
+number remains unavailable from these frames. No pairing number is required
+as a decoding key.
 
 The recorded base reports **UNICORE** in RTCM1033, without a receiver model or
 firmware descriptor. This does not establish whether that base uses UM960.
@@ -290,10 +307,11 @@ unresolved. For the invented test station it displays `1234.7.?.42` with
 it as a decryption key. A supplied number can help associate an already-decoded
 signal with a particular base; it does not enable unsupported payload formats.
 
-RTK2 and RTK3 display the verified 16-bit **LoRa address** instead. RTK2 also
-carries an eight-byte network field, but its mapping to the other pairing-number
-components has not been established. The UI does not infer these fields from
-the tuning frequency or a user-supplied pairing number.
+RTK2 displays the verified loc and net IDs as a partial **LoRa number**. For
+an invented station with loc 42 and address 4242, it shows `?.?.42.4242` with
+**scan/channel unknown**. Non-decimal RTK2 network fields and RTK3 retain the
+16-bit **LoRa address** display. The UI does not infer missing fields from the
+tuning frequency or a user-supplied pairing number.
 
 Each VFO retains the latest 512 RTCM messages automatically. Retuning clears
 that VFO's saved corrections when the new stream arrives; restarting reception
@@ -386,10 +404,14 @@ All constellations in a completed sequence share its completion timestamp, so
 radio fragments received earlier do not expire separately and reduce the total
 while the next complete set is still arriving.
 Other bands, including L5, E5a and B3, appear in Diagnostics. Unknown signal IDs
-are not assigned a band. These are correction-stream counts; Mammotion's
-base-receiver L1/L2 counting definition has not been established, so matching
-Mammotion's base totals is not guaranteed. Rover/co-viewing counts are separate
-metrics.
+are not assigned a band. These are correction-stream counts. The supplied
+YUKA H5 controller counts individual GNSS signal observations in its range-data
+handler without deduplicating satellite IDs. That is comparative evidence;
+it does not establish the Luba2 or RTK2 controller's counting rule. Multiple
+signals from one satellite remain a possible explanation for the difference,
+but the relationship to the installed system's observations is unverified.
+Matching Mammotion's totals is not guaranteed. Rover/co-viewing counts are
+separate metrics.
 
 Home Assistant's Mammotion integration reads its base L1/L2 values directly
 from `rpt_rtk.dis_status`: bits 16–23 for L1 and 24–31 for L2. PyMammotion
@@ -399,6 +421,14 @@ Mammotion app therefore confirms the reported device values, but does not
 establish equivalence with BrowSDR's unique satellite counts. Multiple signals
 from one satellite can appear in the correction stream (for example BeiDou
 B1I and B1C), while BrowSDR counts that satellite once per frequency group.
+Static analysis of Mammotion Android 2.3.20.30 independently confirms those
+bit extractions and that the reference L1/L2 display uses them directly,
+without RTCM parsing or a client-side constellation filter. The base's own
+`sats_num` field and the robot's `gps_stars` field are separate from these two
+reference counts. The supplied YUKA controller classifier accepts Galileo E5b
+in its secondary group; its classification does not determine the Luba2/RTK2
+rule. A numerical match after excluding Galileo is insufficient evidence to
+change the decoder's band counts.
 
 **GNSS signal** shows the mean positive C/N₀ of recent satellite measurements.
 The indicative labels are Good at ≥40 dB-Hz, Fair at ≥30 dB-Hz, and Weak below

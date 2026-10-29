@@ -15,9 +15,22 @@ export function referencePosition(reference: RtcmReference): string {
 }
 
 export function loraNumber(station: RtkStation): string {
+	if (station.protocol === 'rtk2' && station.loc !== undefined) return `?.?.${station.loc}.${station.address}`;
 	if (station.address !== undefined) return `address ${station.address}`;
 	// The supported radio wrapper exposes three of the four Mammotion pairing fields.
 	return `${station.scan}.${station.channel}.?.${station.netId}`;
+}
+
+export function loraPairingDetails(station: RtkStation): { label: string; title: string; unknown?: string } {
+	if (station.protocol === 'rtk2' && station.loc !== undefined)
+		return {
+			label: 'LoRa number',
+			title: 'scan.channel.loc.net · Loc and net are verified; scan and channel are not present in the correction header.',
+			unknown: 'scan/channel unknown',
+		};
+	return station.address !== undefined
+		? { label: 'LoRa station address', title: '16-bit address from verified radio frames.' }
+		: { label: 'LoRa number', title: 'scan.channel.loc.net · The loc field has not been decoded.', unknown: 'loc unknown' };
 }
 
 export function observedSatellites(station: RtkStation, now: number): number {

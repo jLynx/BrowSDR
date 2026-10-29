@@ -46,6 +46,7 @@ export interface RtkIdentity {
 	network?: string;
 	scan?: number;
 	channel?: number;
+	loc?: number;
 	netId: number;
 	address?: number;
 }

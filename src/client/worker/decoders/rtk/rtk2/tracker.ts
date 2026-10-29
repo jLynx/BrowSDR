@@ -19,7 +19,7 @@ export class Rtk2Tracker {
 			return;
 		}
 		this.counters.packets++;
-		const identity = { protocol: 'rtk2' as const, network: frame.network, address: frame.address, netId: frame.address };
+		const identity = { protocol: 'rtk2' as const, network: frame.network, loc: frame.loc, address: frame.address, netId: frame.address };
 		const key = stationKey(identity);
 		const station = this.stations.observe(identity, packet);
 		const now = Date.now();

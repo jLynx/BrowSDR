@@ -30,6 +30,25 @@ exercise fragmentation, keepalives and RTCM CRC24Q verification. The selectable
 profiles are `rtk1`, `rtk2` and `rtk3`; the temporary unidentified profile was
 removed when its protocol was identified as RTK2.
 
+`du1021d-vectors.json` contains invented inputs and expected outputs obtained
+by emulating the original DU1021D ARM Thumb routine at loaded address `0xc36c`
+(image offset `0x9b6c`, load base `0x2800`). The radio OTA has SHA256
+`cee55312e1ac72310fa74583f4776a6c80d821aa501ba600646b06af3957441b`.
+These vectors exercise every short-tail size, complete blocks, mixed blocks,
+and the 255-byte radio limit independently of the JavaScript mock transform.
+They contain no live payloads, station data, or vendor executable code.
+
+`du1021d-frames.json` adds four complete invented frames. The original radio's
+header builder (`0xa908`), CRC8 routine (`0xa274`) and transmit transform
+(`0xc4c0`) were emulated with synthetic RAM configuration and a synthetic
+correction container. The original receive transform (`0xc36c`) round-tripped
+each frame. These addresses use the same `0x2800` load base. The decoded image
+has SHA256 `cc83258ff862a8eccd96fdf6176cab41ca78108cb08ac163c597c7e282216c38`.
+Unrelated configuration bytes were varied twice per frame without changing
+the result. Cases cover zero/maximum loc IDs, maximum net ID, 30/31/37/255-byte
+frames and radio sequence 255. The inner container and its CRC16 are synthetic;
+this is radio framing coverage, not emulation of the base's GNSS telemetry.
+
 ## RTK3 synthetic fixtures
 
 `mock-rtk3.js` models the published RBS03 protocol with invented address 4242

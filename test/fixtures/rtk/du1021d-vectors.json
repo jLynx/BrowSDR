@@ -1,0 +1,74 @@
+[
+	{
+		"input": "dd",
+		"output": "0f"
+	},
+	{
+		"input": "0f59",
+		"output": "35db"
+	},
+	{
+		"input": "13865f",
+		"output": "410097"
+	},
+	{
+		"input": "86cbefd8",
+		"output": "001eb64b"
+	},
+	{
+		"input": "7a7f5f85de",
+		"output": "b8b4970413"
+	},
+	{
+		"input": "3e2890740dde",
+		"output": "90e97ce42d13"
+	},
+	{
+		"input": "084dfdef3c1397",
+		"output": "698dafb6884170"
+	},
+	{
+		"input": "e756f152b14dd44f",
+		"output": "32614e02a0260d37"
+	},
+	{
+		"input": "aa8873cd6813265ca7",
+		"output": "739169972212ccdd72"
+	},
+	{
+		"input": "7b87c016571579f49361",
+		"output": "f56070114d67966860ce"
+	},
+	{
+		"input": "03dae64bbc61546ee0bb05",
+		"output": "080413623bff67c0fe3f25"
+	},
+	{
+		"input": "66de1633aeccc3b5cb83c4ad",
+		"output": "73d1e19ce2349f6e1e40462e"
+	},
+	{
+		"input": "79d5ce151f5bb6f31d47e47580",
+		"output": "9964bcda74cca7460dd1e6a45c"
+	},
+	{
+		"input": "88ca0ca44a495e96bde4c744b7b4",
+		"output": "11217c8d9e3a01f12fe652c57367"
+	},
+	{
+		"input": "2ae8dda1fbb688ea368c96a2be6ff1",
+		"output": "572bb48ca785d2c6800820763396ef"
+	},
+	{
+		"input": "a999078e253fa752d498dbd4a6f05013",
+		"output": "d1ddceb1e06ab38a69284c806ef2713d"
+	},
+	{
+		"input": "9b6e73e1df2c0a94647cd8a81ec2199ef8a0d06bf488171dae9e22a82aef",
+		"output": "ba3b7e825e44ea9c9b476c632ee25ca0d003e281083b662a3230f56ab9b6"
+	},
+	{
+		"input": "628a9f5584688cf1fc8ffe67744eb8b69730eb1e96255090402a2481bfba4ea050a8ffc12be1d5811731e7ea40f687713afc078439a55dd70c7fdf13b55ac4a6b0d55a14e022780a8875e215abb9f87a765ecf183178a66bac2d92711e2c4220772d09f24de4ce0abc08c9a556184bf0a6d7d8f0eb037560abc7e0ca48b655e628663daa86d85df9dc74a9970b6151c291553f8aac2129b880bfa6a7ce911f5e78b0521092a3cc4fbd54f001e3f188c90702441f7e706c9427fe001c2dfb6e82cdeee935aa9e11587f60ba208457950fdc9b969a4fe10e7481d09d4e8762b180d9224795f3e326a1f50dd9779af02446f253c31196357eb2bd24795aca6e95",
+		"output": "5a5ebf32cbfb076e51028790306329d2ff9d3ff0a32ef47a667d417bff8ac733fe6c07ee4a5c75af335a3b23b8be754332cab4c1a9c5e5125d734506ffded64add4c200a23372bd3900590b7c4ae423b019b33c522822bc4135de94716e76178d758ca184d14882d04942b2acfa73caed3698409a3bd8463ebe1cdfb211eaed0ffcece3a7b148f269db23f60ce59b10745a2d315088820f90f9f50e31bec25eebd2bea51966110b4c7c20ba6c3d37d637243ae5f77a31e55668f214e760f54a9b64f8b50e788f8294e7853bc4460ecb5401675f9cd1afa90f4eb33599001d2b9f9111bf0dca55d9f147fb92f79020a0b7716def8a56406fb2fe5f89b1a9224"
+	}
+]
