@@ -14,6 +14,7 @@ import type {
 	AdsbCallback,
 	AisCallback,
 	RadiosondeCallback,
+	RtkCallback,
 	BleCallback,
 	AcarsCallback,
 	DsdCallback,
@@ -97,7 +98,7 @@ import { IqCapture } from '@/worker/recording/iq-capture';
 export class Backend {
 	readonly iqCapture = new IqCapture();
 
-	async captureIq(seconds: number) {
+	async captureIq(seconds: number | null) {
 		if (!this.device || !this._perfInterval || this._retuning || !this._sampleRate)
 			throw new Error('Start local reception before capturing IQ');
 		const before = this.device.getRxStreamStats?.();
@@ -111,7 +112,11 @@ export class Backend {
 		this.iqCapture.cancel();
 	}
 
-	async captureIqToFile(seconds: number, file: FileSystemFileHandle) {
+	stopIqCapture(): void {
+		this.iqCapture.stop();
+	}
+
+	async captureIqToFile(seconds: number | null, file: FileSystemFileHandle) {
 		if (!this.device || !this._perfInterval || this._retuning || !this._sampleRate)
 			throw new Error('Start local reception before capturing IQ');
 		const device = this.device;
@@ -300,6 +305,7 @@ export class Backend {
 		bleCallback: BleCallback | null = null,
 		acarsCallback: AcarsCallback | null = null,
 		radiosondeCallback: RadiosondeCallback | null = null,
+		rtkCallback: RtkCallback | null = null,
 	): Promise<void> {
 		this.iqCapture.cancel('Reception restarted during IQ capture');
 		return startRxStream(
@@ -325,6 +331,7 @@ export class Backend {
 			bleCallback,
 			acarsCallback,
 			radiosondeCallback,
+			rtkCallback,
 		);
 	}
 

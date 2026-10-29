@@ -194,6 +194,7 @@ function needsIq(params: VfoParams): boolean {
 		params.adsb === true ||
 		params.ais === true ||
 		params.radiosonde === true ||
+		params.rtk === true ||
 		params.ble === true ||
 		params.acars === true
 	);
@@ -211,6 +212,7 @@ function disabledDecoders(params: VfoParams): VfoParams {
 		adsb: false,
 		ais: false,
 		radiosonde: false,
+		rtk: false,
 		ble: false,
 		acars: false,
 	};

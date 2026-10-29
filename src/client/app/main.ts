@@ -1,3 +1,5 @@
+import RtkPanel from '@/app/decoders/rtk/panel';
+import { rtkMethods } from '@/app/decoders/rtk/controller';
 import BlePanel from '@/app/decoders/ble/panel';
 import { bleMethods } from '@/app/decoders/ble/controller';
 import AcarsPanel from '@/app/decoders/acars/panel';
@@ -66,6 +68,7 @@ const Receiver = {
 		AdsbPanel,
 		AisPanel,
 		RadiosondePanel,
+		RtkPanel,
 		BlePanel,
 		AcarsPanel,
 		HeaderTools,
@@ -102,6 +105,7 @@ const Receiver = {
 		...adsbMethods,
 		...aisMethods,
 		...radiosondeMethods,
+		...rtkMethods,
 		...bleMethods,
 		...acarsMethods,
 	},

@@ -18,7 +18,7 @@ describe('decoder tools menu', () => {
 		await wrapper.get('.tools-trigger').trigger('click');
 		const groups = wrapper.findAll('.ui-menu-group');
 		expect(groups.map((group) => group.get('.ui-menu-group-label').text())).toEqual(['Decoders', 'Utilities']);
-		expect(groups[0].findAll('button')).toHaveLength(9);
+		expect(groups[0].findAll('button')).toHaveLength(10);
 		expect(wrapper.get('.ui-menu-list').text()).toContain('Sensor & device data · rtl_433');
 		await wrapper.get('button[aria-label="Wireless Sensors"]').trigger('click');
 		expect(wrapper.vm.rtl433.panelOpen).toBe(true);

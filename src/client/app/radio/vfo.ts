@@ -99,6 +99,9 @@ export const vfoMethods = {
 				adsb: vfo.adsb && inBandwidth,
 				ais: vfo.ais && inBandwidth,
 				radiosonde: vfo.radiosonde && inBandwidth,
+				rtk: vfo.rtk && inBandwidth,
+				rtkProfile: vfo.rtkProfile,
+				rtkClockPpm: vfo.rtkClockPpm,
 				ble: vfo.ble && inBandwidth,
 				acars: vfo.acars && inBandwidth,
 				rtl433: vfo.rtl433 && inBandwidth,
@@ -341,6 +344,10 @@ export const vfoMethods = {
 		this.ble?.status.splice(index, 1);
 		this.ais?.status.splice(index, 1);
 		this.radiosonde?.status.splice(index, 1);
+		this.rtk.status.splice(index, 1);
+		this.rtk.sources.splice(index, 1);
+		this.rtk.frames.splice(index, 1);
+		this.rtk.frequencies.splice(index, 1);
 		this.acars?.status.splice(index, 1);
 		this.ais?.sources.splice(index, 1);
 		this.radiosonde?.sources.splice(index, 1);

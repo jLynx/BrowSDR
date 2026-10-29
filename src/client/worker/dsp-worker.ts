@@ -1,6 +1,7 @@
 import { BleStream } from './decoders/ble/stream';
 import { AisStream } from './decoders/ais';
 import { RadiosondeStream } from './decoders/radiosonde';
+import { RtkStream } from './decoders/rtk/stream';
 import { AcarsStream } from './decoders/acars';
 import { SharedBandPool } from './streams/shared-band-pool';
 import { errorMessage } from '@/platform/errors';
@@ -76,6 +77,7 @@ let rtl433: Rtl433Stream;
 let adsb: AdsbStream;
 let ais: AisStream;
 let radiosonde: RadiosondeStream;
+let rtk: RtkStream;
 let ble: BleStream;
 let acars: AcarsStream;
 
@@ -102,6 +104,7 @@ async function startup(): Promise<void> {
 				ble = new BleStream(DspProcessor, _wasm.memory, (message) => self.postMessage(message));
 				ais = new AisStream(DspProcessor, _wasm.memory, (message) => self.postMessage(message));
 				radiosonde = new RadiosondeStream(DspProcessor, _wasm.memory, (message) => self.postMessage(message));
+				rtk = new RtkStream(DspProcessor, _wasm.memory, (message) => self.postMessage(message));
 				acars = new AcarsStream(DspProcessor, _wasm.memory, (message) => self.postMessage(message));
 				set_panic_hook();
 				pagerLegs = new PagerLegs(DspProcessor, IF_RATES.nfm, {
@@ -442,12 +445,7 @@ function handleDspChannelize(msg: Extract<DspInput, { type: 'channelize' }>) {
 }
 
 function handleDspInit(msg: Extract<DspInput, { type: 'init' }>) {
-	rtl433.reset();
-	adsb.reset();
-	ais.reset();
-	radiosonde.reset();
-	ble.reset();
-	acars.reset();
+	for (const decoder of [rtl433, adsb, ais, radiosonde, rtk, ble, acars]) decoder.reset();
 	inputIsFloat = false;
 	dsdStatus.reset();
 	dsdStream?.reset();
@@ -504,11 +502,8 @@ function handleDspProcess(msg: Extract<DspInput, { type: 'process' }>) {
 		const processStart = performance.now();
 		rtl433.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat);
 		const sequence = msg.sequence ?? msg.chunkId;
-		adsb.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat, sequence);
-		ais.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat, sequence);
-		radiosonde.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat, sequence);
-		ble.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat, sequence);
-		acars.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat, sequence);
+		for (const decoder of [adsb, ais, radiosonde, rtk, ble, acars])
+			decoder.process(inputIsFloat ? sharedFloatPtr : sharedIqPtr, msg.chunkLen, inputIsFloat, sequence);
 		const audioOut = decodeVfoAudio(msg.chunkLen, msg.params);
 		// Complete decoder work before acknowledging the input. Otherwise replies
 		// let the sender queue more input while RDS is still using this worker.
@@ -616,12 +611,12 @@ function needsVfoInput(params: VfoParams): boolean {
 		params.flex === true ||
 		(params.rds && params.mode === 'wfm') ||
 		params.rtl433 === true ||
-		[params.adsb, params.ais, params.radiosonde, params.ble, params.acars].some((enabled) => enabled === true)
+		[params.adsb, params.ais, params.radiosonde, params.rtk, params.ble, params.acars].some((enabled) => enabled === true)
 	);
 }
 
 function configurePacketDecoders(params: VfoParams, center: number): void {
-	for (const decoder of [rtl433, adsb, ais, radiosonde, ble, acars]) decoder.configure(params, systemSampleRate, center);
+	for (const decoder of [rtl433, adsb, ais, radiosonde, rtk, ble, acars]) decoder.configure(params, systemSampleRate, center);
 }
 
 function decodeVfoAudio(length: number, params: VfoParams): Float32Array | null {

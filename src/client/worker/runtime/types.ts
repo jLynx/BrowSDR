@@ -7,6 +7,7 @@ import type { PocsagMode } from '@/worker/decoders/types';
 import type { RationalResampler } from '@/worker/streams/dsp-pipeline';
 import type { DSDDecoder } from '@/worker/decoders/dsd/dsd-decoder';
 import type { RxStreamStats } from '@/radio/types';
+import type { RtkProfile } from '@/worker/decoders/rtk/types';
 /*
 Copyright (c) 2026, jLynx <https://github.com/jLynx>
 
@@ -28,6 +29,9 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 */
 
 export interface VfoParams {
+	rtk?: boolean;
+	rtkProfile?: RtkProfile;
+	rtkClockPpm?: number;
 	stereo?: boolean;
 	adsb?: boolean;
 	ais?: boolean;

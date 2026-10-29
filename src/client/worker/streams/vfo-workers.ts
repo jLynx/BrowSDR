@@ -6,6 +6,7 @@ import type {
 	AdsbCallback,
 	AisCallback,
 	RadiosondeCallback,
+	RtkCallback,
 	BleCallback,
 	AcarsCallback,
 } from '@/worker/runtime/callbacks.types';
@@ -27,6 +28,7 @@ export function initializeVfoWorkers(
 	bleCallback: BleCallback | null = null,
 	acarsCallback: AcarsCallback | null = null,
 	radiosondeCallback: RadiosondeCallback | null = null,
+	rtkCallback: RtkCallback | null = null,
 ) {
 	const initialBandwidth = 150000;
 
@@ -103,6 +105,7 @@ export function initializeVfoWorkers(
 				bleCallback,
 				acarsCallback,
 				radiosondeCallback,
+				rtkCallback,
 			);
 		worker.postMessage({
 			type: 'init',
@@ -135,8 +138,11 @@ export function routeLocalWorkerMessage(
 	bleCallback: BleCallback | null = null,
 	acarsCallback: AcarsCallback | null = null,
 	radiosondeCallback: RadiosondeCallback | null = null,
+	rtkCallback: RtkCallback | null = null,
 ) {
-	if (routePacketMessage(backend, worker, msg, bleCallback, aisCallback, adsbCallback, acarsCallback, radiosondeCallback)) return;
+	if (routePacketMessage(backend, worker, msg, bleCallback, aisCallback, adsbCallback, acarsCallback, radiosondeCallback, rtkCallback))
+		return;
+
 	if (msg.type === 'rtl433_event' || msg.type === 'rtl433_status') {
 		routeSensorMessage(backend, worker, msg, rtl433Callback);
 		return;
@@ -152,12 +158,7 @@ export function routeLocalWorkerMessage(
 		const currentIndex = backend.dspWorkers!.indexOf(worker);
 		if (currentIndex === -1) return;
 		if (dsdStatusCallback) dsdStatusCallback(currentIndex, msg.status);
-	} else if (msg.type === 'dsp_debug_log') {
-		logWorkerMessage(backend, worker, msg);
-	} else if (msg.type === 'error') {
-		const currentIndex = backend.dspWorkers!.indexOf(worker);
-		console.error(`[DSP Worker ${currentIndex}] Error:`, msg.error);
-	}
+	} else routeWorkerDiagnostics(backend, worker, msg);
 }
 
 function routeRdsMessages(
@@ -237,7 +238,12 @@ function routePacketMessage(
 	adsbCallback: AdsbCallback | null,
 	acarsCallback: AcarsCallback | null,
 	radiosondeCallback: RadiosondeCallback | null,
+	rtkCallback: RtkCallback | null,
 ): boolean {
+	if (msg.type === 'rtk') {
+		routeRtkMessage(backend, worker, msg, rtkCallback);
+		return true;
+	}
 	if (msg.type === 'radiosonde') {
 		const index = backend.dspWorkers!.indexOf(worker);
 		const params = backend.vfoParams?.[index];
@@ -263,7 +269,18 @@ function routePacketMessage(
 	return true;
 }
 
-function logWorkerMessage(backend: Backend, worker: Worker, msg: Extract<DspOutput, { type: 'dsp_debug_log' }>): void {
+function routeRtkMessage(backend: Backend, worker: Worker, msg: Extract<DspOutput, { type: 'rtk' }>, callback: RtkCallback | null): void {
+	const index = backend.dspWorkers!.indexOf(worker);
+	const params = backend.vfoParams?.[index];
+	if (params?.rtk && params.freq === msg.freq) callback?.(index, params.freq, msg);
+}
+
+function routeWorkerDiagnostics(backend: Backend, worker: Worker, msg: DspOutput): void {
+	if (msg.type === 'error') {
+		console.error(`[DSP Worker ${backend.dspWorkers!.indexOf(worker)}] Error:`, msg.error);
+		return;
+	}
+	if (msg.type !== 'dsp_debug_log') return;
 	if (!import.meta.env.DEV) return;
 	const currentIndex = backend.dspWorkers!.indexOf(worker);
 	if (currentIndex !== -1) console[msg.level](`[DSP VFO ${currentIndex + 1}] ${msg.message}`);

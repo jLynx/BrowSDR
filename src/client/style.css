@@ -16,5 +16,6 @@
 @import './styles/about.css';
 @import './styles/decoders/ble.css';
 @import './styles/decoders/acars.css';
+@import './styles/decoders/rtk.css';
 @import './styles/tools/discovery.css';
 @import './styles/tools/iq-recording.css';

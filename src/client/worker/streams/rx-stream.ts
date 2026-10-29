@@ -2,7 +2,7 @@ import { installWorkerAudioHandler, createAudioBatchers } from './local-audio';
 import { initializePerformanceReporting } from './performance';
 import { dispatchIqChunk } from './channel-dispatch';
 import { initializeVfoWorkers } from './vfo-workers';
-import { configureReceiveGains, startUsbOnlyStream } from './usb-diagnostic';
+import { configureReceiveGains, startUsbOnlyStream, isUsbOnlyReceive } from './usb-diagnostic';
 import type {
 	SamplesCallback,
 	AudioCallback,
@@ -14,6 +14,7 @@ import type {
 	AdsbCallback,
 	AisCallback,
 	RadiosondeCallback,
+	RtkCallback,
 	BleCallback,
 	AcarsCallback,
 	DsdCallback,
@@ -63,6 +64,7 @@ export async function startRxStream(
 	bleCallback: BleCallback | null = null,
 	acarsCallback: AcarsCallback | null = null,
 	radiosondeCallback: RadiosondeCallback | null = null,
+	rtkCallback: RtkCallback | null = null,
 ): Promise<void> {
 	if (_streamStarting) return;
 	_streamStarting = true;
@@ -77,7 +79,7 @@ export async function startRxStream(
 		await device.setSampleRate(sampleRate);
 		await device.setFrequency(displayToDeviceFrequencyHz(centerFreq, frequencyShift));
 		await configureReceiveGains(device, gains);
-		if (import.meta.env.DEV && device.deviceType === 'limesdr' && gains?.['Receive Mode'] === 1) {
+		if (isUsbOnlyReceive(device, gains)) {
 			return await startUsbOnlyStream(backend, sampleRate);
 		}
 
@@ -109,6 +111,7 @@ export async function startRxStream(
 			bleCallback,
 			acarsCallback,
 			radiosondeCallback,
+			rtkCallback,
 		});
 
 		// ── DSP Performance Counters ──────────────────────────────────
@@ -176,6 +179,7 @@ function initializeWorkers(
 		bleCallback: BleCallback | null;
 		acarsCallback: AcarsCallback | null;
 		radiosondeCallback: RadiosondeCallback | null;
+		rtkCallback: RtkCallback | null;
 	},
 ): void {
 	initializeVfoWorkers(
@@ -191,6 +195,7 @@ function initializeWorkers(
 		callbacks.bleCallback,
 		callbacks.acarsCallback,
 		callbacks.radiosondeCallback,
+		callbacks.rtkCallback,
 	);
 }
 

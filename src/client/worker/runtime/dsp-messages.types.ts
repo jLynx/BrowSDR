@@ -1,6 +1,7 @@
 import type { BleMessage } from '@/worker/decoders/ble/types';
 import type { AisMessage } from '@/worker/decoders/ais/types';
 import type { RadiosondeMessage } from '@/worker/decoders/radiosonde/types';
+import type { RtkMessage } from '@/worker/decoders/rtk/types';
 import type { AcarsMessage } from '@/worker/decoders/acars/types';
 import type { AdsbMessage } from '@/worker/decoders/adsb/types';
 import type { VfoParams } from './types';
@@ -20,6 +21,7 @@ export type DspOutput =
 	| AdsbMessage
 	| AisMessage
 	| RadiosondeMessage
+	| RtkMessage
 	| BleMessage
 	| AcarsMessage
 	| { type: 'rds'; msg: RDSMessage }

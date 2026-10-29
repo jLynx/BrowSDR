@@ -5,7 +5,13 @@
 	<div class="iq-recorder-body">
 		<p class="iq-recorder-intro">Save radio signals to analyse later, explore their modulation, or decode them in other software.</p>
 		<div class="iq-recorder-settings">
-			<UiFormRow label="Duration" :input-id="receiver.receiverId + '-iq-duration'">
+			<UiFormRow label="Record for" :input-id="receiver.receiverId + '-iq-mode'">
+				<UiSelect :id="receiver.receiverId + '-iq-mode'" v-model="mode" aria-label="Recording mode" :disabled="active">
+					<option value="timed">Set duration</option>
+					<option value="manual">Until stopped</option>
+				</UiSelect>
+			</UiFormRow>
+			<UiFormRow v-if="mode === 'timed'" label="Duration" :input-id="receiver.receiverId + '-iq-duration'">
 				<div class="iq-recorder-duration">
 					<UiInputGroup>
 						<UiInput
@@ -26,7 +32,7 @@
 			</UiFormRow>
 			<dl class="iq-recorder-details">
 				<div>
-					<dt>Estimated size</dt>
+					<dt>{{ mode === 'manual' ? 'Recording size' : 'Estimated size' }}</dt>
 					<dd>{{ size }}</dd>
 				</div>
 				<div>
@@ -43,6 +49,10 @@
 			{{ saveToFile ? 'Save directly to a file. Choose its location when you start.' : 'Download your recording when it is ready.' }} A
 			lower sample rate records a narrower band and uses less space.
 		</p>
+		<p v-if="mode === 'manual' && !saveToFile" class="iq-recorder-save-mode">
+			Recording stops automatically at the 64 MiB download limit (about {{ (64 * 1024 * 1024 / receiver.radio.sampleRate / 2).toFixed(1) }}
+			seconds). Use Chrome or Edge to save longer recordings directly to a file.
+		</p>
 		<div class="iq-recorder-actions">
 			<UiButton
 				v-if="!active"
@@ -52,7 +62,10 @@
 				@click="capture"
 				>Start recording</UiButton
 			>
-			<UiButton v-else variant="stop" @click="cancel">Cancel recording</UiButton>
+			<template v-else>
+				<UiButton variant="stop" :disabled="!backendCaptureStarted || stopping" @click="stop">Stop recording</UiButton>
+				<UiButton variant="secondary" @click="cancel">Cancel recording</UiButton>
+			</template>
 			<UiButton v-if="data && !active" variant="secondary" @click="downloadData">Download IQ data</UiButton>
 			<UiButton v-if="metadata && !active" variant="secondary" @click="downloadMetadata">Download metadata</UiButton>
 		</div>
@@ -69,7 +82,10 @@
 				IQ files contain the radio samples across the full received band, before audio or decoding. Use compatible signal analysis software
 				to inspect, demodulate, or decode them. Files use SigMF format with signed 8-bit I/Q samples.
 			</p>
-			<p>Keep this tab open. Retuning, changing gains, or stopping reception cancels the recording. Incomplete recordings are discarded.</p>
+			<p>
+				Stop recording saves the samples captured so far. Cancel recording discards them. Keep this tab open. Retuning, changing gains, or
+				stopping reception cancels the recording.
+			</p>
 		</details>
 	</div>
 </section>
