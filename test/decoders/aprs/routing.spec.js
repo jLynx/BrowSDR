@@ -76,6 +76,10 @@ describe('APRS local and remote routing', () => {
 		expect(isReceiverCommand({ ...command, msg: { ...message, packets: Array(201).fill(packet) } })).toBe(false);
 		const object = { ...station, id: 'AID #2', type: 'item', owner: 'N0CALL' };
 		expect(isReceiverCommand({ ...command, msg: { ...message, stations: [object] } })).toBe(true);
+		const telemetryDefinition = { names: ['Battery'], namesTime: 1000, equations: [[0, 0.1, 0]], equationsTime: 900 };
+		expect(isReceiverCommand({ ...command, msg: { ...message, stations: [{ ...station, telemetryDefinition }] } })).toBe(true);
+		const late = { ...telemetryDefinition, namesTime: 'later' };
+		expect(isReceiverCommand({ ...command, msg: { ...message, stations: [{ ...station, telemetryDefinition: late }] } })).toBe(false);
 	});
 	it('keeps muted APRS channels in the shared channel plan', () => {
 		const plan = planSharedBands(10000000, 144.6, [params, { ...params, freq: 144.8 }, { ...params, freq: 145.175 }], true);

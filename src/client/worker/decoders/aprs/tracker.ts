@@ -1,5 +1,5 @@
 import { decodeAx25 } from './ax25';
-import { decodePacket, telemetryDefinition } from './packets';
+import { decodePacket, repeatKey, telemetryDefinition } from './packets';
 import {
 	APRS_PACKET_LIMIT,
 	APRS_STATION_LIMIT,
@@ -13,6 +13,8 @@ import {
 
 // Digipeaters retransmit the same packet within seconds; APRS-IS uses the same 30 s duplicate window.
 const DUPLICATE_WINDOW = 30000;
+// Each definition message sets one part; its time decides between parts heard on different VFOs.
+const DEFINITION_TIMES = { PARM: 'namesTime', UNIT: 'unitsTime', EQNS: 'equationsTime', BITS: 'bitsTime' } as const;
 
 export class AprsTracker {
 	frames = 0;
@@ -28,8 +30,7 @@ export class AprsTracker {
 		if (!ax25) return false;
 		this.frames++;
 		const decoded = decodePacket(ax25);
-		// Mic-E encodes latitude in the destination call; its SSID, like the digipeater path, only routes the packet.
-		const key = `${decoded.source}>${decoded.destination.split('-')[0]}:${decoded.info}`;
+		const key = repeatKey(ax25);
 		const duplicate = now - (this.recent.get(key) ?? -Infinity) < DUPLICATE_WINDOW;
 		if (!duplicate) this.remember(key, now);
 		const packet: AprsPacket = { ...decoded, id: ++this.sequence, receivedAt: now, ...(duplicate ? { duplicate } : {}) };
@@ -51,7 +52,7 @@ export class AprsTracker {
 		station.packets++;
 		station.destination = packet.destination;
 		station.path = packet.path.join(',');
-		if (packet.message?.kind === 'telemetry-definition') this.define(packet.message.addressee, packet.message.text);
+		if (packet.message?.kind === 'telemetry-definition') this.define(packet.message.addressee, packet.message.text, now);
 		if (packet.kind === 'object' || packet.kind === 'item') {
 			const target = this.station(packet.name!, packet.kind, now);
 			target.owner = packet.source;
@@ -76,10 +77,11 @@ export class AprsTracker {
 		return station;
 	}
 
-	private define(addressee: string, text: string): void {
+	private define(addressee: string, text: string, now: number): void {
 		const definition = telemetryDefinition(text);
 		if (!definition) return;
-		this.definitions.set(addressee, { ...this.definitions.get(addressee), ...definition });
+		const time = DEFINITION_TIMES[text.slice(0, 4) as keyof typeof DEFINITION_TIMES];
+		this.definitions.set(addressee, { ...this.definitions.get(addressee), ...definition, [time]: now });
 		if (this.definitions.size > APRS_STATION_LIMIT) this.definitions.delete(this.definitions.keys().next().value!);
 	}
 

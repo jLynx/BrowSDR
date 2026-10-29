@@ -37,6 +37,18 @@ describe('APRS station tracking', () => {
 		expect(packets[1].latitude).not.toBe(packets[0].latitude);
 		expect(station(tracker, 'N0CALL-9', 12000)).toMatchObject({ latitude: packets[1].latitude, positionTime: 11000, packets: 2 });
 	});
+	it('recognizes gateway copies of a direct packet as repeats', () => {
+		const tracker = new AprsTracker();
+		tracker.process(ax25Frame('N0CALL', 'APRS', ['WIDE1-1'], '!4903.50N/07201.75W-P1'), 1000);
+		tracker.process(ax25Frame('N0CALL', 'APRS', ['WIDE1-1'], '!4904.50N/07201.75W-P2'), 2000);
+		tracker.process(ax25Frame('N0IGT', 'APRS', ['WIDE2-1'], '}N0CALL>APRS,TCPIP,N0IGT*:!4903.50N/07201.75W-P1'), 3000);
+		// Another inner path, a routing SSID and a trailing line end added by the gateway do not make a new report.
+		tracker.process(ax25Frame('N0IGT', 'APRS', [], '}N0CALL>APRS-1,WIDE1-1,N0IGT*:!4904.50N/07201.75W-P2\r'), 4000);
+		const { packets } = tracker.snapshot(4000);
+		expect(packets.map((packet) => packet.duplicate ?? false)).toEqual([false, false, true, true]);
+		expect(packets[2]).toMatchObject({ source: 'N0CALL', relay: 'N0IGT', info: '}N0CALL>APRS,TCPIP,N0IGT*:!4903.50N/07201.75W-P1' });
+		expect(station(tracker, 'N0CALL', 4000)).toMatchObject({ latitude: 49.075, positionTime: 2000, packets: 2 });
+	});
 	it('keeps objects separate from their owner and marks killed objects', () => {
 		const tracker = new AprsTracker();
 		tracker.process(ax25Frame('N0CALL', 'APRS', [], ';LEADER   *092345z4903.50N/07201.75W>'), 1000);

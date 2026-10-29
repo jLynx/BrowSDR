@@ -19,3 +19,6 @@ export interface AprsLogEntry extends AprsPacket {
 }
 
 export type AprsView = 'stations' | 'packets';
+
+/** Timestamp fields, each paired with the fields that one kind of report sets together. */
+export type AprsTimedGroups<T> = Array<[keyof T, Array<keyof T>]>;

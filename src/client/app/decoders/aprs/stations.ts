@@ -4,10 +4,12 @@ import {
 	APRS_TRAIL_LIMIT,
 	type AprsPacket,
 	type AprsStation,
+	type AprsTelemetryDefinition,
 	type AprsTrailPoint,
 	type AprsWeather,
 } from '@/worker/decoders/aprs/types';
 import { symbolInfo } from './symbols';
+import type { AprsTimedGroups } from './types';
 
 export const stationKey = (station: Pick<AprsStation, 'type' | 'id'>) => `${station.type}:${station.id}`;
 
@@ -22,12 +24,37 @@ export function hasLiveStationPosition(station: AprsStation, now: number): boole
 }
 
 // Fields a report sets together, kept from whichever VFO heard that kind of report last.
-const TIMED_FIELDS: Array<[keyof AprsStation, Array<keyof AprsStation>]> = [
+const STATION_GROUPS: AprsTimedGroups<AprsStation> = [
 	['positionTime', ['latitude', 'longitude', 'ambiguity', 'course', 'speed', 'altitude']],
 	['statusTime', ['status']],
 	['weatherTime', ['weather']],
 	['telemetryTime', ['telemetry']],
 ];
+// Separate PARM, UNIT, EQNS and BITS messages each define one part of a station's telemetry.
+const DEFINITION_GROUPS: AprsTimedGroups<AprsTelemetryDefinition> = [
+	['namesTime', ['names']],
+	['unitsTime', ['units']],
+	['equationsTime', ['equations']],
+	['bitsTime', ['bits', 'project']],
+];
+
+/** Each group of fields, with its timestamp, from whichever record updated that group last. */
+function newerGroups<T extends object>(groups: AprsTimedGroups<T>, first: T, second: T): Partial<T> {
+	const time = (record: T, key: keyof T) => {
+		const value = record[key];
+		return typeof value === 'number' ? value : -Infinity;
+	};
+	return Object.fromEntries(
+		groups.flatMap(([key, fields]) => {
+			const source = time(second, key) >= time(first, key) ? second : first;
+			return [key, ...fields].map((field) => [field, source[field]]);
+		}),
+	) as Partial<T>;
+}
+
+function mergeDefinitions(first?: AprsTelemetryDefinition, second?: AprsTelemetryDefinition): AprsTelemetryDefinition | undefined {
+	return first && second ? newerGroups(DEFINITION_GROUPS, first, second) : (first ?? second);
+}
 
 function mergeTrails(first: AprsTrailPoint[], second: AprsTrailPoint[]): AprsTrailPoint[] {
 	const points = [...first, ...second].sort((a, b) => a.time - b.time);
@@ -39,17 +66,20 @@ function mergeTrails(first: AprsTrailPoint[], second: AprsTrailPoint[]): AprsTra
 function mergeStation(old: AprsStation, station: AprsStation): AprsStation {
 	const [latest, earlier] = station.lastSeen >= old.lastSeen ? [station, old] : [old, station];
 	const defined = Object.fromEntries(Object.entries(latest).filter(([, value]) => value !== undefined));
-	const merged = { ...earlier, ...defined, packets: old.packets + station.packets, trail: mergeTrails(old.trail, station.trail) };
-	for (const [time, fields] of TIMED_FIELDS) {
-		const source = (station[time] ?? -Infinity) >= (old[time] ?? -Infinity) ? station : old;
-		Object.assign(merged, Object.fromEntries([time, ...fields].map((field) => [field, source[field]])));
-	}
-	return merged;
+	return {
+		...earlier,
+		...defined,
+		...newerGroups(STATION_GROUPS, old, station),
+		packets: old.packets + station.packets,
+		trail: mergeTrails(old.trail, station.trail),
+		telemetryDefinition: mergeDefinitions(old.telemetryDefinition, station.telemetryDefinition),
+	};
 }
 
 /**
- * One entry per station across VFOs. Position, status, weather and telemetry each come from the VFO that heard
- * that report last; other fields come from the latest report, with older reports filling fields it omits.
+ * One entry per station across VFOs. Position, status, weather, telemetry and each telemetry definition part
+ * come from the VFO that heard them last; other fields come from the latest report, with older reports filling
+ * fields it omits.
  */
 export function visibleStations(sources: AprsStation[][], now: number): AprsStation[] {
 	const merged = new Map<string, AprsStation>();

@@ -48,6 +48,11 @@ export interface AprsTelemetryDefinition {
 	equations?: number[][];
 	bits?: string;
 	project?: string;
+	/** When the PARM, UNIT, EQNS and BITS messages were heard; each sets its part independently. */
+	namesTime?: number;
+	unitsTime?: number;
+	equationsTime?: number;
+	bitsTime?: number;
 }
 
 /** Power in W, antenna height above average terrain in m, gain in dBi; directivity 0 is omnidirectional. */

@@ -6,6 +6,7 @@ const FORMATS = ['uncompressed', 'compressed', 'mic-e', 'nmea'];
 const MESSAGE_KINDS = ['message', 'ack', 'reject', 'bulletin', 'telemetry-definition'];
 const REPORT_NUMBERS = ['latitude', 'longitude', 'ambiguity', 'course', 'speed', 'altitude', 'range'];
 const STATION_TIMES = ['positionTime', 'statusTime', 'weatherTime', 'telemetryTime'];
+const DEFINITION_TIMES = ['namesTime', 'unitsTime', 'equationsTime', 'bitsTime'];
 
 const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
 const text = (value: unknown, length: number) => typeof value === 'string' && value.length <= length;
@@ -71,6 +72,7 @@ function validTelemetry(value: unknown): boolean {
 function validDefinition(value: unknown): boolean {
 	return (
 		isRecord(value) &&
+		numbers(value, DEFINITION_TIMES) &&
 		(value.names === undefined || strings(value.names, 13, 64)) &&
 		(value.units === undefined || strings(value.units, 13, 64)) &&
 		(value.equations === undefined ||

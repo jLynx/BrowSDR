@@ -132,6 +132,18 @@ function thirdParty(text: string): { source: string; destination: string; path: 
 	return { source: match[1], destination: match[2], path: match[3] ? match[3].slice(1).split(',') : [], info: match[4] };
 }
 
+/**
+ * Identity of a report for repeat detection: originating station, destination call and information field.
+ * Third-party copies are unwrapped. Routing paths, the destination SSID (which also routes) and the trailing
+ * spaces or line ends that gateways may strip are ignored. Mic-E keeps its latitude in the destination call.
+ */
+export function repeatKey(frame: Ax25Frame): string {
+	const raw = latin1(frame.info);
+	const inner = isAprsFrame(frame) && raw.startsWith('}') ? thirdParty(raw.slice(1)) : undefined;
+	const { source, destination, info } = inner ?? { source: frame.source, destination: frame.destination, info: raw };
+	return `${source}>${destination.split('-')[0]}:${info.replace(/[\r\n ]+$/, '')}`;
+}
+
 export function decodePacket(frame: Ax25Frame): Omit<AprsPacket, 'id' | 'receivedAt'> {
 	const raw = latin1(frame.info);
 	const header = { source: frame.source, destination: frame.destination, path: frame.path, info: printable(raw) };
