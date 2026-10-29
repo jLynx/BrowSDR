@@ -1,11 +1,21 @@
 import type { AppInstance } from '@/app/core/receiver.types';
 import type { RtkStationEntry } from './types';
+import type { RtkProfile } from '@/worker/decoders/rtk/types';
 import { stationKey } from '@/worker/decoders/rtk/station-key';
 import { receptionState } from './reception';
 import { observedSatellites } from './station-details';
 
 export function receiverName(entry: RtkStationEntry['station']): string {
-	return entry.equipment?.receiver.trim() || entry.name || 'RTK base station';
+	const name = entry.equipment?.receiver.trim() || entry.name.trim();
+	return name && name !== 'RTK base station' ? name : 'Receiver model not reported';
+}
+
+export function generationName(profile: RtkProfile): string {
+	return `Mammotion ${profile.toUpperCase()}`;
+}
+
+export function stationTitle(entry: RtkStationEntry): string {
+	return `${generationName(entry.profile)} · ${receiverName(entry.station)}`;
 }
 
 function mergeStation(a: RtkStationEntry['station'], b: RtkStationEntry['station']) {
@@ -39,6 +49,7 @@ export function collectStations(receiver: AppInstance, now: number): RtkStationE
 				key,
 				source,
 				frequency: vfo.freq,
+				profile: vfo.rtkProfile ?? 'rtk1',
 				indices,
 				station,
 				satellites: fresh ? observedSatellites(station, now) : undefined,

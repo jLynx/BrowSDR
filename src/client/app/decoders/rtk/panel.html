@@ -19,11 +19,25 @@
 		<div class="rtk-details" role="region" aria-label="Selected RTK base station">
 			<div class="rtk-heading">
 				<div>
-					<h3>{{ title }}</h3>
+					<h3>{{ entry ? generationName(entry.profile) : 'RTK channel' }}</h3>
+					<p v-if="station" aria-label="GNSS receiver">GNSS receiver: {{ receiverName(station) }}</p>
 					<p>{{ vfo.freq.toFixed(3) }} MHz</p>
 					<p v-if="station" class="rtk-pairing" :aria-label="loraPairingDetails(station).label" :title="loraPairingDetails(station).title">
-						LoRa <span class="rtk-lora-number">{{ loraNumber(station) }}</span>
-						<span v-if="loraPairingDetails(station).unknown" class="rtk-caption">· {{ loraPairingDetails(station).unknown }}</span>
+						LoRa
+						<span v-if="pairingParts(station).length" class="rtk-lora-number"
+							><template v-for="(part, i) in pairingParts(station)" :key="part.field"
+								>{{ i ? '.' : '' }}<span
+									:class="{ 'rtk-estimate': part.estimated }"
+									:title="part.estimated ? part.label + ': entered estimate; not decoded from radio' : undefined"
+									>{{ part.value }}</span
+								></template
+							></span
+						><span v-else class="rtk-lora-number">{{ loraNumber(station) }}</span>
+						<span v-if="hasPairingEstimates(station)" class="rtk-caption rtk-estimate">· amber = estimate</span>
+						<span v-else-if="loraPairingDetails(station).unknown" class="rtk-caption">· {{ loraPairingDetails(station).unknown }}</span>
+					</p>
+					<p v-if="station && loraPairingDetails(station).label === 'LoRa number'" class="rtk-caption">
+						Scan · channel · local ID · network ID
 					</p>
 				</div>
 				<span class="rtk-state" :class="'rtk-state-' + reception.tone" role="status">{{ reception.label }}</span>
@@ -124,6 +138,23 @@
 							@change="update"
 					/></label>
 					<p class="rtk-caption">Measured presets: 20 for RTK1, 10 for RTK2. RTK3 starts at 0; adjust for your receiver.</p>
+					<div v-if="estimatedFields.length" class="rtk-pairing-estimates">
+						<p>Pairing estimates for this base</p>
+						<p class="rtk-caption">
+							Fill missing parts from the app or your observations. Amber numbers are estimates, not radio-decoded values. Leave blank for
+							unknown.
+						</p>
+						<label v-for="part in estimatedFields" :key="part.field" class="rtk-field"
+							>Estimated {{ part.label }}<UiInput
+								:model-value="part.estimated ? part.value : ''"
+								type="number"
+								min="0"
+								:max="part.max"
+								step="1"
+								:aria-label="'Estimated ' + part.label"
+								@change="setPairingEstimate(part.field, $event)"
+						/></label>
+					</div>
 				</div>
 			</details>
 			<details class="rtk-section">
@@ -248,7 +279,21 @@
 						<tr v-for="item in entries" :key="item.key" :class="{ 'rtk-station-selected': entry?.key === item.key }">
 							<td>
 								<button type="button" class="rtk-station-select" :aria-pressed="entry?.key === item.key" @click="selectStation(item)">
-									<strong>{{ receiverName(item.station) }}</strong><span class="rtk-caption">LoRa {{ loraNumber(item.station) }}</span>
+									<strong>{{ generationName(item.profile) }}</strong>
+									<span class="rtk-caption">{{ receiverName(item.station) }}</span>
+									<span class="rtk-caption"
+										>LoRa
+										<template v-if="pairingParts(item.station).length"
+											><template v-for="(part, i) in pairingParts(item.station)" :key="part.field"
+												>{{ i ? '.' : '' }}<span
+													:class="{ 'rtk-estimate': part.estimated }"
+													:title="part.estimated ? part.label + ': entered estimate; not decoded from radio' : undefined"
+													>{{ part.value }}</span
+												></template
+											></template
+										><template v-else>{{ loraNumber(item.station) }}</template></span
+									>
+									<span v-if="hasPairingEstimates(item.station)" class="rtk-caption rtk-estimate">Amber = estimate</span>
 								</button>
 							</td>
 							<td>

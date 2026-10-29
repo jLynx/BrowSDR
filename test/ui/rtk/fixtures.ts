@@ -1,5 +1,14 @@
 import type { RtkMessage, RtkStation } from '@/worker/decoders/rtk/types';
 
+export function mockPairingStorage() {
+	const values = new Map<string, string>();
+	return {
+		getItem: (key: string) => values.get(key) ?? null,
+		setItem: (key: string, value: string) => values.set(key, value),
+		removeItem: (key: string) => values.delete(key),
+	};
+}
+
 export function mockStation(scan = 1234, longitude = 0): RtkStation {
 	return {
 		name: 'MOCK GNSS',

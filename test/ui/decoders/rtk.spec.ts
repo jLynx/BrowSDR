@@ -125,6 +125,7 @@ describe('live RTK receiver tools', () => {
 		await nextTick();
 		expect(wrapper.get('[aria-label="LoRa number"]').text()).toContain('?.?.0.4242');
 		expect(wrapper.get('.rtk-heading').text()).toContain('scan/channel unknown');
+		expect(wrapper.get('.rtk-heading').text()).toContain('Scan · channel · local ID · network ID');
 		expect(wrapper.get('.rtk-heading').text()).not.toContain('loc unknown');
 		expect(wrapper.get('.rtk-heading [aria-label="LoRa number"]').attributes('title')).toContain('scan and channel are not present');
 		expect(wrapper.text()).toContain('Loc ID: 0');
@@ -155,6 +156,7 @@ describe('live RTK receiver tools', () => {
 		expect(wrapper.get('[aria-label="LoRa station address"]').text()).toContain('address 4242');
 		expect(wrapper.get('.rtk-heading').text()).not.toContain('loc unknown');
 		expect(wrapper.get('.rtk-diagnostics').text()).toContain('Verified beacons1');
+		expect(wrapper.get('.rtk-heading').text()).not.toContain('Scan · channel · local ID · network ID');
 		await wrapper.get('select[aria-label="RTK export format"]').setValue('corrections');
 		await wrapper
 			.findAll('.rtk-section button')
@@ -249,7 +251,8 @@ describe('live RTK receiver tools', () => {
 		expect(wrapper.get('[aria-label="Base station position"]').text()).toContain('0.0000000°, 0.0000000°');
 		expect(wrapper.get('[aria-label="Satellite observations"] strong').text()).toBe('3');
 		expect(wrapper.get('[aria-label="Satellites by constellation"]').text()).toContain('GPS3');
-		expect(wrapper.get('.rtk-heading h3').text()).toBe('UNICORE UM960');
+		expect(wrapper.get('.rtk-heading h3').text()).toBe('Mammotion RTK1');
+		expect(wrapper.get('[aria-label="GNSS receiver"]').text()).toBe('GNSS receiver: UNICORE UM960');
 		expect(wrapper.get('[aria-label="Satellites by frequency group"]').text()).toContain('L1 / primary2');
 		expect(wrapper.get('[aria-label="Satellites by frequency group"]').text()).toContain('L2 / secondary1');
 		expect(wrapper.get('[aria-label="Primary signal observations"]').text()).toBe('2 signal observations');

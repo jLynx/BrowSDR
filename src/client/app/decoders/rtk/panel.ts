@@ -8,6 +8,7 @@ import { receptionState } from './reception';
 import { gnssSummary } from './signal-summary';
 import { useBaseMap } from './map-view';
 import { useStationSelection } from './station-selection';
+import { usePairingEstimates } from './pairing-estimates';
 import { stationKey } from '@/worker/decoders/rtk/station-key';
 
 export default defineComponent({
@@ -27,11 +28,12 @@ export default defineComponent({
 		const status = computed(() => (matching.value ? (receiver.rtk.status[index.value] ?? undefined) : undefined));
 		const selection = useStationSelection(receiver, now);
 		const { station, frames, entry } = selection;
+		const pairing = usePairingEstimates(station);
 		const observations = computed(() => Object.values(station.value?.observations ?? {}));
 		const freshObservations = computed(() =>
 			receiver.running && vfo.value?.rtk ? observations.value.filter((value) => now.value - value.receivedAt < 5000) : [],
 		);
-		const title = computed(() => (station.value ? selection.receiverName(station.value) : 'RTK channel'));
+		const title = computed(() => (entry.value ? selection.stationTitle(entry.value) : 'RTK channel'));
 		const gnss = computed(() => gnssSummary(freshObservations.value));
 		const position = computed(() => station.value?.reference);
 		const identity = computed(() => `${vfo.value?.freq}:${station.value ? stationKey(station.value) : ''}:${position.value?.stationId}`);
@@ -62,6 +64,7 @@ export default defineComponent({
 		return {
 			...mapView,
 			...selection,
+			...pairing,
 			mapElement,
 			gnss,
 			receiver,

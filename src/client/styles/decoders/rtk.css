@@ -207,6 +207,14 @@
 .rtk-caption {
 	font-size: 12px;
 }
+.rtk-estimate {
+	color: #f1c982;
+}
+.rtk-pairing-estimates {
+	margin-top: 14px;
+	border-top: 1px solid var(--border);
+	padding-top: 8px;
+}
 .rtk-constellations {
 	display: flex;
 	flex-wrap: wrap;
@@ -236,6 +244,9 @@
 }
 .rtk-band-counts p {
 	grid-column: 1 / -1;
+}
+.rtk-band-counts > div > .rtk-caption {
+	display: block;
 }
 .rtk-quality {
 	display: flex;

@@ -2,7 +2,7 @@ import { computed, ref } from 'vue';
 import type { AppInstance } from '@/app/core/receiver.types';
 import type { RtkStationEntry } from './types';
 import type { Ref } from 'vue';
-import { collectStations, selectedCorrections, receiverName } from './stations';
+import { collectStations, selectedCorrections, receiverName, generationName, stationTitle } from './stations';
 
 export function useStationSelection(receiver: AppInstance, now: Ref<number>) {
 	const selected = ref('');
@@ -20,6 +20,8 @@ export function useStationSelection(receiver: AppInstance, now: Ref<number>) {
 		entry,
 		selectStation,
 		receiverName,
+		generationName,
+		stationTitle,
 		station: computed(() => entry.value?.station),
 		frames: computed(() => selectedCorrections(receiver, receiver.activeVfoIndex, entry.value)),
 	};
