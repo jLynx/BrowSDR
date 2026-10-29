@@ -44,9 +44,20 @@ describe('Bell 202 AFSK demodulation', () => {
 		['pre-emphasized space tone', { twist: 2 }],
 		['de-emphasized space tone', { twist: 0.5, audioPhase: 1.3 }],
 		['wide deviation', { deviation: 4500 }],
+		// Click limiting must not clip a strong, over-deviated signal from an off-frequency transmitter.
+		['over-deviation off frequency', { deviation: 5500, offset: -3000, twist: 2, noise: 0.3 }],
 	])('decodes FM IQ with %s across arbitrary chunks', (_, options) => {
 		const frames = demodulate(packetSignal('N0CALL-9', 'APRS', ['WIDE1-1*', 'WIDE2-1'], INFO, options), 734);
 		expect(frames).toEqual([frame()]);
+	});
+	it('decodes most packets near the FM threshold', () => {
+		// About 8 dB C/N in a 16 kHz channel, where the previous demodulator decoded 2 of these 16 packets.
+		let decoded = 0;
+		for (let k = 0; k < 16; k++) {
+			const options = { noise: 1.1, offset: -1500 + 200 * k, audioPhase: k * 0.7, twist: [0.7, 1, 1.4][k % 3] };
+			decoded += demodulate(packetSignal('N0CALL-9', 'APRS', ['WIDE1-1*', 'WIDE2-1'], INFO, options), 734).length;
+		}
+		expect(decoded).toBeGreaterThanOrEqual(10);
 	});
 	it('tolerates transmitter baud error', () => {
 		expect(demodulate(packetSignal('N0CALL-9', 'APRS', ['WIDE1-1*', 'WIDE2-1'], INFO, { baud: 1212 }))).toEqual([frame()]);

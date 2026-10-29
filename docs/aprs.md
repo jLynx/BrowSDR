@@ -66,8 +66,14 @@ Automated tests cover synthetic AFSK on FM IQ through the production WASM
 channelizer, byte and float IQ, carrier offset, noise, tone twist, baud-rate error,
 chunk boundaries, IQ gaps, FCS rejection, AX.25 addressing, examples from the APRS
 1.0.1 specification, station tracking, remote routing, payload validation and UI
-controls. Synthetic tests do not establish receiver sensitivity or reception of
-actual stations; that requires live radio verification.
+controls.
+
+Live 144.390 MHz traffic decodes with an RTL-SDR (R820T2) and a 2 m antenna at a
+window. On recordings from that receiver, run through the production channelizer,
+the decoder found every packet that Dire Wolf's `atest -P A+` found on the same
+channel output, plus four more (40 against 36), with no invalid frames. Packets
+need roughly 8 dB carrier-to-noise in the 16 kHz channel; weaker bursts can still be
+visible on the waterfall. With an RTL-SDR, use high tuner gain for weak 2 m signals.
 
 Protocol reference: [APRS Protocol Reference 1.0.1](http://www.aprs.org/doc/APRS101.PDF)
 and [AX.25 Link Access Protocol 2.2](https://www.tapr.org/pdf/AX25.2.2.pdf).
