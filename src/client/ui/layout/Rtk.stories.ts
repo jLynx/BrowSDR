@@ -94,11 +94,19 @@ export const MultipleBases: Story = {
 		const details = canvas.getByRole('region', { name: 'Selected RTK base station' }).getBoundingClientRect();
 		const directory = canvas.getByRole('region', { name: 'Discovered RTK base stations' }).getBoundingClientRect();
 		const panel = canvas.getByLabelText('Live RTK decoder').getBoundingClientRect();
+		const map = canvas.getByRole('region', { name: 'Base station location map' }).getBoundingClientRect();
+		await expect(directory.height).toBeLessThanOrEqual(164);
+		await expect(map.width).toBeGreaterThan(240);
+		const panelElement = canvas.getByLabelText('Live RTK decoder');
+		await expect(panelElement.scrollWidth).toBeLessThanOrEqual(panelElement.clientWidth);
 		if (panel.width > 760) {
-			await expect(directory.left).toBeGreaterThanOrEqual(details.right);
-			await expect(directory.top).toBe(details.top);
+			await expect(directory.bottom).toBeLessThanOrEqual(details.top);
+			await expect(map.top).toBeLessThanOrEqual(details.top + 16);
+			await expect(map.bottom).toBeLessThanOrEqual(details.bottom);
 		} else {
 			await expect(directory.top).toBeGreaterThanOrEqual(details.bottom);
+			const metrics = canvas.getByLabelText('Base station position').getBoundingClientRect();
+			await expect(map.bottom).toBeLessThanOrEqual(metrics.top);
 			const detailsElement = canvas.getByRole('region', { name: 'Selected RTK base station' });
 			await expect(detailsElement.scrollHeight).toBeLessThanOrEqual(detailsElement.clientHeight + 1);
 		}
@@ -115,6 +123,22 @@ export const NarrowLayout: Story = {
 	render: () => ({
 		...meta.render(),
 		template: '<div style="display:flex;flex-direction:column;width:390px;max-width:100%"><RtkPanel /></div>',
+	}),
+	play: MultipleBases.play,
+};
+
+export const ShortPanel: Story = {
+	render: () => ({
+		...meta.render(),
+		template: '<div style="width:1000px;max-width:100%"><RtkPanel style="height:420px" /></div>',
+	}),
+	play: MultipleBases.play,
+};
+
+export const SmallPhone: Story = {
+	render: () => ({
+		...meta.render(),
+		template: '<div style="width:320px;max-width:100%"><RtkPanel /></div>',
 	}),
 	play: MultipleBases.play,
 };

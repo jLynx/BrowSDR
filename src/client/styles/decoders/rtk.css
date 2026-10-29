@@ -2,11 +2,11 @@
 	flex-shrink: 0;
 	display: flex;
 	flex-direction: column;
-	height: min(640px, 70vh);
+	height: min(560px, 70vh);
 	min-height: 260px;
 	border-top: 2px solid var(--accent);
 	background: var(--bg-panel);
-	container-type: inline-size;
+	container: rtk-panel / size;
 }
 .rtk-panel .pocsag-header {
 	flex-wrap: wrap;
@@ -25,18 +25,33 @@
 }
 .rtk-body {
 	flex: 1;
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) minmax(360px, 45%);
+	display: flex;
+	flex-direction: column;
 	min-height: 0;
 	overflow: hidden;
 	font-size: 13px;
 	line-height: 1.5;
 }
 .rtk-details {
+	container-type: size;
+	flex: 1;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(260px, 32%);
+	column-gap: 24px;
+	align-content: start;
 	min-width: 0;
 	min-height: 0;
 	overflow: auto;
-	padding: 16px 20px;
+	padding: 12px 20px;
+}
+.rtk-heading,
+.rtk-description,
+.rtk-summary,
+.rtk-details > .rtk-empty {
+	grid-column: 1;
+}
+.rtk-details > .rtk-section {
+	grid-column: 1 / -1;
 }
 .rtk-heading {
 	display: flex;
@@ -44,13 +59,24 @@
 	justify-content: space-between;
 	gap: 12px;
 }
+.rtk-heading [aria-label='GNSS receiver'],
+.rtk-heading [aria-label='GNSS receiver'] + p {
+	display: inline;
+}
+.rtk-heading [aria-label='GNSS receiver'] + p::before {
+	content: ' · ';
+}
 .rtk-directory {
-	display: flex;
-	flex-direction: column;
+	order: -1;
+	flex-shrink: 0;
+	display: grid;
+	grid-template-columns: auto minmax(0, 1fr);
+	grid-template-rows: auto minmax(0, 1fr);
 	min-width: 0;
 	min-height: 0;
-	padding: 16px 0 0;
-	border-left: 1px solid var(--border);
+	max-height: min(164px, 32cqh);
+	padding: 8px 0 0;
+	border-bottom: 1px solid var(--border);
 }
 .rtk-directory > h3 {
 	font-size: 14px;
@@ -60,10 +86,18 @@
 .rtk-directory > p {
 	margin: 0 16px 6px;
 }
+.rtk-directory > .rtk-caption {
+	margin-left: 0;
+}
+.rtk-directory > .rtk-empty {
+	grid-column: 1 / -1;
+	padding: 8px 0;
+}
 .rtk-station-scroll {
-	flex: 1;
+	grid-column: 1 / -1;
 	min-height: 0;
 	overflow: auto;
+	scroll-padding-top: 36px;
 	margin-top: 6px;
 }
 .rtk-station-list {
@@ -94,12 +128,23 @@
 	background: #203049;
 }
 .rtk-station-select {
+	scroll-margin-top: 36px;
+	display: grid;
+	grid-template-columns: auto auto;
+	column-gap: 8px;
+	align-items: baseline;
 	border: 0;
 	background: transparent;
 	padding: 0;
 	text-align: left;
 	color: var(--text-main);
 	cursor: pointer;
+}
+.rtk-station-select > span {
+	grid-column: 1 / -1;
+}
+.rtk-station-select > span:first-of-type {
+	grid-column: 2;
 }
 .rtk-station-select:hover strong {
 	text-decoration: underline;
@@ -142,21 +187,22 @@
 	color: #bcbcbc;
 }
 .rtk-overview {
-	margin-top: 16px;
-	display: grid;
-	grid-template-columns: minmax(0, 1fr);
-	gap: 16px;
-	margin-bottom: 16px;
+	display: contents;
 }
 .rtk-summary {
 	min-width: 0;
+	margin: 12px 0;
 }
 .rtk-map-wrap {
-	position: relative;
+	grid-column: 2;
+	grid-row: 1 / span 3;
+	align-self: start;
+	position: sticky;
+	top: 0;
 	min-width: 0;
 }
 .rtk-map {
-	height: 240px;
+	height: clamp(100px, 100cqh, 260px);
 	border: 1px solid var(--border);
 	border-radius: 6px;
 	z-index: 0;
@@ -173,8 +219,8 @@
 }
 .rtk-metrics {
 	display: grid;
-	grid-template-columns: repeat(2, minmax(0, 1fr));
-	gap: 14px 20px;
+	grid-template-columns: repeat(4, minmax(0, 1fr));
+	gap: 10px 20px;
 }
 .rtk-position {
 	grid-column: 1 / -1;
@@ -186,7 +232,7 @@
 .rtk-label {
 	display: block;
 	font-size: 12px;
-	margin-bottom: 6px;
+	margin-bottom: 4px;
 }
 .rtk-position strong {
 	font-size: 17px;
@@ -211,7 +257,7 @@
 	color: #f1c982;
 }
 .rtk-pairing-estimates {
-	margin-top: 14px;
+	margin-top: 10px;
 	border-top: 1px solid var(--border);
 	padding-top: 8px;
 }
@@ -219,7 +265,7 @@
 	display: flex;
 	flex-wrap: wrap;
 	gap: 8px;
-	margin-top: 14px;
+	margin-top: 10px;
 }
 .rtk-constellations > div {
 	display: flex;
@@ -242,9 +288,6 @@
 	grid-template-columns: repeat(2, minmax(0, 1fr));
 	gap: 4px 20px;
 }
-.rtk-band-counts p {
-	grid-column: 1 / -1;
-}
 .rtk-band-counts > div > .rtk-caption {
 	display: block;
 }
@@ -253,7 +296,7 @@
 	flex-wrap: wrap;
 	align-items: center;
 	gap: 8px;
-	margin-top: 14px;
+	margin-top: 10px;
 }
 .rtk-quality strong {
 	padding: 2px 8px;
@@ -322,24 +365,60 @@
 	margin-top: 4px;
 	font-size: 16px;
 }
-@container (max-width: 760px) {
+@container rtk-panel (max-width: 760px) {
 	.rtk-body {
 		display: block;
 		overflow: auto;
 	}
 	.rtk-details {
+		container-type: normal;
+		display: block;
 		overflow: visible;
 	}
 	.rtk-directory {
-		border-left: 0;
-		border-top: 1px solid var(--border);
+		max-height: min(164px, 32cqh);
 	}
 	.rtk-station-scroll {
-		flex: none;
-		max-height: 260px;
+		max-height: 120px;
+	}
+	.rtk-overview {
+		display: flex;
+		flex-direction: column;
+	}
+	.rtk-map-wrap {
+		order: -1;
+		align-self: stretch;
+		position: relative;
+		margin-top: 16px;
+	}
+	.rtk-metrics {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
 	.rtk-map {
 		height: 220px;
+	}
+}
+@container rtk-panel (max-width: 480px) {
+	.rtk-heading {
+		flex-wrap: wrap;
+		gap: 6px;
+	}
+	.rtk-heading > div {
+		flex-basis: 100%;
+		min-width: 0;
+		overflow-wrap: anywhere;
+	}
+	.rtk-directory {
+		grid-template-columns: minmax(0, 1fr);
+		grid-template-rows: auto auto minmax(0, 1fr);
+	}
+	.rtk-directory > .rtk-caption {
+		margin-left: 16px;
+	}
+	.rtk-panel .msgcenter-header,
+	.rtk-panel .msgcenter-controls {
+		flex-wrap: wrap;
+		gap: 6px;
 	}
 }
 @media (max-width: 620px) {
@@ -351,7 +430,7 @@
 	}
 	.rtk-metrics {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
-		gap: 14px;
+		gap: 10px 14px;
 	}
 	.rtk-position {
 		grid-column: 1 / -1;

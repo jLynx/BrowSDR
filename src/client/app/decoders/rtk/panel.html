@@ -42,7 +42,7 @@
 				</div>
 				<span class="rtk-state" :class="'rtk-state-' + reception.tone" role="status">{{ reception.label }}</span>
 			</div>
-			<p class="rtk-description">{{ reception.detail }}</p>
+			<p v-if="reception.tone !== 'live'" class="rtk-description">{{ reception.detail }}</p>
 			<div v-if="station" class="rtk-overview">
 				<div class="rtk-summary">
 					<div class="rtk-metrics">
@@ -74,10 +74,6 @@
 									>{{ gnss.secondarySignals ?? '—' }} signal {{ gnss.secondarySignals === 1 ? 'observation' : 'observations' }}</span
 								>
 							</div>
-							<p class="rtk-caption">Unique satellites from corrections · Counts overlap</p>
-							<p class="rtk-caption">
-								Luba2 counts signal observations; multiple signals can come from one satellite. Receiver totals can differ from corrections.
-							</p>
 						</div>
 					</div>
 					<div v-if="freshObservations.length" class="rtk-constellations" aria-label="Satellites by constellation">
