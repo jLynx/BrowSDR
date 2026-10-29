@@ -30,21 +30,66 @@
 	color: #fff;
 	filter: drop-shadow(0 0 3px #fff);
 }
+/* Map and list keep the panel's 12px margins, with a gutter between them and one left edge for list controls. */
+.aprs-panel .adsb-content {
+	gap: 12px;
+	padding: 4px 12px 8px;
+}
+.aprs-panel .adsb-map-wrap {
+	overflow: hidden;
+	border-radius: 4px;
+}
+.aprs-panel .adsb-list {
+	gap: 8px;
+}
+.aprs-panel .adsb-search {
+	width: 100%;
+	margin: 0;
+}
+.aprs-panel .adsb-details {
+	padding: 0;
+}
+.aprs-panel .msgcenter-empty {
+	padding: 4px 0;
+}
 .aprs-toolbar {
 	display: flex;
 	flex-wrap: wrap;
 	align-items: center;
 	gap: 6px;
-	margin-bottom: 8px;
 }
 .aprs-toolbar [aria-pressed='true'] {
 	color: #fff;
 	border-color: currentColor;
 }
-.aprs-panel .adsb-table th:first-child {
-	width: 24%;
+/* Column widths follow content: the report and raw packet columns take the most room. */
+.aprs-panel .adsb-table th:nth-child(1) {
+	width: 26%;
 }
+.aprs-panel .adsb-table th:nth-child(2) {
+	width: 40%;
+}
+.aprs-panel .adsb-table th:nth-child(3) {
+	width: 20%;
+}
+.aprs-panel .adsb-table th:nth-child(4) {
+	width: 14%;
+}
+.aprs-panel .aprs-packets th:nth-child(1) {
+	width: 22%;
+}
+.aprs-panel .aprs-packets th:nth-child(2) {
+	width: 14%;
+}
+.aprs-panel .aprs-packets th:nth-child(3) {
+	width: 22%;
+}
+.aprs-panel .aprs-packets th:nth-child(4) {
+	width: 42%;
+}
+/* Reports and comments wrap inside their column instead of running into the next. */
 .aprs-panel .adsb-table td {
+	white-space: normal;
 	overflow-wrap: anywhere;
 }
 .aprs-preview span,
