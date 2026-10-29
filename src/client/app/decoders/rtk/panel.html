@@ -16,6 +16,57 @@
 		</template>
 	</UiToolHeader>
 	<div v-if="vfo" class="rtk-body">
+		<div class="rtk-directory" role="region" aria-label="Discovered RTK base stations">
+			<h3>Discovered stations</h3>
+			<p class="rtk-caption">{{ entries.length }} base {{ entries.length === 1 ? 'station' : 'stations' }} · All enabled RTK VFOs</p>
+			<p v-if="!entries.length" class="rtk-empty">Waiting for RTK base stations. Enable decoding on a VFO tuned to an RTK signal.</p>
+			<div v-else class="rtk-station-scroll">
+				<table class="rtk-station-list" aria-label="RTK base stations">
+					<thead>
+						<tr>
+							<th scope="col">Station</th>
+							<th scope="col">Frequency / VFO</th>
+							<th scope="col">Satellites</th>
+							<th scope="col">Reception</th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr v-for="item in entries" :key="item.key" :class="{ 'rtk-station-selected': entry?.key === item.key }">
+							<td>
+								<button type="button" class="rtk-station-select" :aria-pressed="entry?.key === item.key" @click="selectStation(item)">
+									<strong>{{ generationName(item.profile) }}</strong>
+									<span class="rtk-caption">{{ receiverName(item.station) }}</span>
+									<span class="rtk-caption"
+										>LoRa
+										<template v-if="pairingParts(item.station).length"
+											><template v-for="(part, i) in pairingParts(item.station)" :key="part.field"
+												>{{ i ? '.' : '' }}<span
+													:class="{ 'rtk-estimate': part.estimated }"
+													:title="part.estimated ? part.label + ': entered estimate; not decoded from radio' : undefined"
+													>{{ part.value }}</span
+												></template
+											></template
+										><template v-else>{{ loraNumber(item.station) }}</template></span
+									>
+									<span v-if="hasPairingEstimates(item.station)" class="rtk-caption rtk-estimate">Amber = estimate</span>
+								</button>
+							</td>
+							<td>
+								{{ item.frequency.toFixed(3) }} MHz<span class="rtk-caption">VFO {{ item.indices.map((i) => i + 1).join(', ') }}</span>
+							</td>
+							<td>{{ item.satellites ?? '—' }}<span class="rtk-station-satellite-label"> satellites</span></td>
+							<td>
+								<span class="rtk-state" :class="'rtk-state-' + item.reception.tone"
+									>{{ item.reception.tone === 'live' && item.satellites === undefined ? 'Corrections received' : item.reception.label
+									}}</span
+								>
+								<span class="rtk-caption rtk-update-age">Last correction: {{ correctionAge(item.station.lastCorrection, now) }}</span>
+							</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
 		<div class="rtk-details" role="region" aria-label="Selected RTK base station">
 			<div class="rtk-heading">
 				<div>
@@ -40,11 +91,35 @@
 						Scan · channel · local ID · network ID
 					</p>
 				</div>
-				<span class="rtk-state" :class="'rtk-state-' + reception.tone" role="status">{{ reception.label }}</span>
+				<div class="rtk-reception">
+					<span class="rtk-state" :class="'rtk-state-' + reception.tone" role="status"
+						>{{ reception.tone === 'live' && !freshObservations.length ? 'Corrections received' : reception.label }}</span
+					>
+					<span
+						class="rtk-caption rtk-update-age"
+						aria-label="Time since last RTK update"
+						title="Time since the selected base last sent a checksum-verified RTCM correction. Keepalives do not reset this counter."
+					>
+						Last correction: {{ correctionAge(station?.lastCorrection, now) }}
+					</span>
+				</div>
 			</div>
 			<p v-if="reception.tone !== 'live'" class="rtk-description">{{ reception.detail }}</p>
 			<div v-if="station" class="rtk-overview">
 				<div class="rtk-summary">
+					<p
+						class="rtk-caption rtk-satellite-freshness"
+						:class="{ 'rtk-estimate': !freshObservations.length }"
+						aria-label="Satellite data freshness"
+					>
+						<template v-if="lastObservation !== undefined"
+							>Satellite update: {{ correctionAge(lastObservation, now) }} · {{ satelliteFreshness }}</template
+						>
+						<template v-else
+							>Waiting for a complete satellite observation sequence. Position and equipment corrections do not contain satellite
+							counts.</template
+						>
+					</p>
 					<div class="rtk-metrics">
 						<div class="rtk-position" aria-label="Base station position">
 							<span class="rtk-label">Base location</span>
@@ -53,8 +128,8 @@
 						</div>
 						<div aria-label="Satellite observations">
 							<span class="rtk-label">Satellites</span>
-							<strong class="rtk-number">{{ freshObservations.length ? observedSatellites(station, now) : '—' }}</strong>
-							<span class="rtk-caption">In recent corrections</span>
+							<strong class="rtk-number">{{ satelliteCount ?? '—' }}</strong>
+							<span class="rtk-caption">{{ freshObservations.length ? 'In recent corrections' : 'Last received observations' }}</span>
 						</div>
 						<div>
 							<span class="rtk-label">Antenna altitude</span>
@@ -76,8 +151,8 @@
 							</div>
 						</div>
 					</div>
-					<div v-if="freshObservations.length" class="rtk-constellations" aria-label="Satellites by constellation">
-						<div v-for="observation in freshObservations" :key="observation.constellation">
+					<div v-if="displayedObservations.length" class="rtk-constellations" aria-label="Satellites by constellation">
+						<div v-for="observation in displayedObservations" :key="observation.constellation">
 							<span>{{ observation.constellation }}</span><strong>{{ observation.satellites.length }}</strong>
 						</div>
 					</div>
@@ -86,8 +161,8 @@
 						aria-label="GNSS signal quality"
 						title="Indicative mean satellite C/N₀: Good ≥40, Fair ≥30, Weak below 30 dB-Hz. This is separate from the LoRa radio link."
 					>
-						<span>GNSS signal</span>
-						<strong :class="'rtk-quality-' + gnss.tone">{{ gnss.quality }}</strong>
+						<span>GNSS signal<template v-if="displayedObservations.length && !freshObservations.length"> (last received)</template></span>
+						<strong :class="'rtk-quality-' + (freshObservations.length ? gnss.tone : 'idle')">{{ gnss.quality }}</strong>
 						<span v-if="gnss.meanCnr !== undefined" class="rtk-caption">{{ gnss.meanCnr.toFixed(1) }} dB-Hz mean</span>
 					</div>
 				</div>
@@ -134,6 +209,10 @@
 							@change="update"
 					/></label>
 					<p class="rtk-caption">Measured presets: 20 for RTK1, 10 for RTK2. RTK3 starts at 0; adjust for your receiver.</p>
+					<p class="rtk-caption">
+						A strong waterfall signal can still lose packets through interference or sample timing mismatch. Timing presets are not
+						calibrated for every SDR; GNSS signal quality describes the satellites at the base, not this radio link.
+					</p>
 					<div v-if="estimatedFields.length" class="rtk-pairing-estimates">
 						<p>Pairing estimates for this base</p>
 						<p class="rtk-caption">
@@ -174,6 +253,10 @@
 				<summary>Diagnostics</summary>
 				<div class="rtk-section-content">
 					<dl v-if="status" class="rtk-diagnostics">
+						<div>
+							<dt>LoRa synchronizations</dt>
+							<dd>{{ status.syncs }}</dd>
+						</div>
 						<div>
 							<dt>Verified radio packets</dt>
 							<dd>{{ status.packets }}</dd>
@@ -229,6 +312,8 @@
 					</p>
 					<p v-if="status && vfo.rtkProfile === 'rtk2'" class="rtk-caption">
 						RTK2 packets require CRC8 and container CRC16/MODBUS; corrections also require RTCM CRC24Q. Keepalives carry no corrections.
+						Sequence gaps count skipped base packet numbers, not USB loss. Packets missed before header detection do not increase checksum
+						errors; missing fragments can delay complete corrections.
 					</p>
 					<template v-if="station">
 						<p v-if="station.address !== undefined">
@@ -256,51 +341,6 @@
 					</template>
 				</div>
 			</details>
-		</div>
-		<div class="rtk-directory" role="region" aria-label="Discovered RTK base stations">
-			<h3>Discovered stations</h3>
-			<p class="rtk-caption">{{ entries.length }} base {{ entries.length === 1 ? 'station' : 'stations' }} · All enabled RTK VFOs</p>
-			<p v-if="!entries.length" class="rtk-empty">Waiting for RTK base stations. Enable decoding on a VFO tuned to an RTK signal.</p>
-			<div v-else class="rtk-station-scroll">
-				<table class="rtk-station-list" aria-label="RTK base stations">
-					<thead>
-						<tr>
-							<th scope="col">Station</th>
-							<th scope="col">Frequency / VFO</th>
-							<th scope="col">Satellites</th>
-							<th scope="col">Reception</th>
-						</tr>
-					</thead>
-					<tbody>
-						<tr v-for="item in entries" :key="item.key" :class="{ 'rtk-station-selected': entry?.key === item.key }">
-							<td>
-								<button type="button" class="rtk-station-select" :aria-pressed="entry?.key === item.key" @click="selectStation(item)">
-									<strong>{{ generationName(item.profile) }}</strong>
-									<span class="rtk-caption">{{ receiverName(item.station) }}</span>
-									<span class="rtk-caption"
-										>LoRa
-										<template v-if="pairingParts(item.station).length"
-											><template v-for="(part, i) in pairingParts(item.station)" :key="part.field"
-												>{{ i ? '.' : '' }}<span
-													:class="{ 'rtk-estimate': part.estimated }"
-													:title="part.estimated ? part.label + ': entered estimate; not decoded from radio' : undefined"
-													>{{ part.value }}</span
-												></template
-											></template
-										><template v-else>{{ loraNumber(item.station) }}</template></span
-									>
-									<span v-if="hasPairingEstimates(item.station)" class="rtk-caption rtk-estimate">Amber = estimate</span>
-								</button>
-							</td>
-							<td>
-								{{ item.frequency.toFixed(3) }} MHz<span class="rtk-caption">VFO {{ item.indices.map((i) => i + 1).join(', ') }}</span>
-							</td>
-							<td>{{ item.satellites ?? '—' }}</td>
-							<td><span class="rtk-state" :class="'rtk-state-' + item.reception.tone">{{ item.reception.label }}</span></td>
-						</tr>
-					</tbody>
-				</table>
-			</div>
 		</div>
 	</div>
 </section>

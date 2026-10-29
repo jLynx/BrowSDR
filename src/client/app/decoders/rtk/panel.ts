@@ -2,10 +2,10 @@ import { computed, defineComponent, inject, onBeforeUnmount, ref } from 'vue';
 import type { AppInstance } from '@/app/core/receiver.types';
 import * as components from '@/ui';
 import template from './panel.html?raw';
-import { referencePosition, observedSatellites, signalStrength, loraNumber, loraPairingDetails } from './station-details';
+import { referencePosition, signalStrength, loraNumber, loraPairingDetails } from './station-details';
 import { downloadCorrections, downloadReport } from './downloads';
-import { receptionState } from './reception';
-import { gnssSummary } from './signal-summary';
+import { correctionAge, receptionState } from './reception';
+import { useSatelliteObservations } from './signal-summary';
 import { useBaseMap } from './map-view';
 import { useStationSelection } from './station-selection';
 import { usePairingEstimates } from './pairing-estimates';
@@ -29,12 +29,8 @@ export default defineComponent({
 		const selection = useStationSelection(receiver, now);
 		const { station, frames, entry } = selection;
 		const pairing = usePairingEstimates(station);
-		const observations = computed(() => Object.values(station.value?.observations ?? {}));
-		const freshObservations = computed(() =>
-			receiver.running && vfo.value?.rtk ? observations.value.filter((value) => now.value - value.receivedAt < 5000) : [],
-		);
+		const satellites = useSatelliteObservations(station, now, () => receiver.running && !!vfo.value?.rtk);
 		const title = computed(() => (entry.value ? selection.stationTitle(entry.value) : 'RTK channel'));
-		const gnss = computed(() => gnssSummary(freshObservations.value));
 		const position = computed(() => station.value?.reference);
 		const identity = computed(() => `${vfo.value?.freq}:${station.value ? stationKey(station.value) : ''}:${position.value?.stationId}`);
 		const mapView = useBaseMap(() => receiver.rtk.panelOpen, mapElement, position, identity, title);
@@ -65,15 +61,14 @@ export default defineComponent({
 			...mapView,
 			...selection,
 			...pairing,
+			...satellites,
 			mapElement,
-			gnss,
 			receiver,
 			vfo,
 			status,
-			observations,
-			freshObservations,
 			title,
 			reception,
+			correctionAge,
 			now,
 			presetFrequency,
 			exportFormat,
@@ -81,7 +76,6 @@ export default defineComponent({
 			referencePosition,
 			loraNumber,
 			loraPairingDetails,
-			observedSatellites,
 			signalStrength,
 			update: () => receiver.updateBackendVfoParams(index.value),
 			changeProfile: () => {

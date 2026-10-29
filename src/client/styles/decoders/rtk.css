@@ -1,4 +1,5 @@
 .rtk-panel {
+	--rtk-station-row-height: 96px;
 	flex-shrink: 0;
 	display: flex;
 	flex-direction: column;
@@ -25,23 +26,21 @@
 }
 .rtk-body {
 	flex: 1;
-	display: flex;
-	flex-direction: column;
+	display: block;
 	min-height: 0;
-	overflow: hidden;
+	overflow: auto;
 	font-size: 13px;
 	line-height: 1.5;
 }
 .rtk-details {
-	container-type: size;
-	flex: 1;
+	container-type: normal;
 	display: grid;
 	grid-template-columns: minmax(0, 1fr) minmax(260px, 32%);
 	column-gap: 24px;
 	align-content: start;
 	min-width: 0;
 	min-height: 0;
-	overflow: auto;
+	overflow: visible;
 	padding: 12px 20px;
 }
 .rtk-heading,
@@ -59,6 +58,15 @@
 	justify-content: space-between;
 	gap: 12px;
 }
+.rtk-reception {
+	display: flex;
+	flex-direction: column;
+	align-items: flex-end;
+	gap: 4px;
+}
+.rtk-update-age {
+	font-variant-numeric: tabular-nums;
+}
 .rtk-heading [aria-label='GNSS receiver'],
 .rtk-heading [aria-label='GNSS receiver'] + p {
 	display: inline;
@@ -67,14 +75,12 @@
 	content: ' · ';
 }
 .rtk-directory {
-	order: -1;
 	flex-shrink: 0;
 	display: grid;
 	grid-template-columns: auto minmax(0, 1fr);
 	grid-template-rows: auto minmax(0, 1fr);
 	min-width: 0;
 	min-height: 0;
-	max-height: min(164px, 32cqh);
 	padding: 8px 0 0;
 	border-bottom: 1px solid var(--border);
 }
@@ -96,7 +102,7 @@
 .rtk-station-scroll {
 	grid-column: 1 / -1;
 	min-height: 0;
-	overflow: auto;
+	overflow: visible;
 	scroll-padding-top: 36px;
 	margin-top: 6px;
 }
@@ -104,6 +110,9 @@
 	width: 100%;
 	border-collapse: collapse;
 	text-align: left;
+}
+.rtk-station-satellite-label {
+	display: none;
 }
 .rtk-station-list th {
 	position: sticky;
@@ -192,6 +201,9 @@
 .rtk-summary {
 	min-width: 0;
 	margin: 12px 0;
+}
+.rtk-satellite-freshness {
+	margin-bottom: 8px;
 }
 .rtk-map-wrap {
 	grid-column: 2;
@@ -366,20 +378,81 @@
 	font-size: 16px;
 }
 @container rtk-panel (max-width: 760px) {
-	.rtk-body {
-		display: block;
-		overflow: auto;
-	}
 	.rtk-details {
-		container-type: normal;
 		display: block;
-		overflow: visible;
-	}
-	.rtk-directory {
-		max-height: min(164px, 32cqh);
 	}
 	.rtk-station-scroll {
-		max-height: 120px;
+		scroll-padding-top: 0;
+	}
+	.rtk-station-list,
+	.rtk-station-list tbody {
+		display: block;
+	}
+	.rtk-station-list thead {
+		display: none;
+	}
+	.rtk-station-list tbody tr {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		grid-template-rows: minmax(0, 1fr) auto;
+		gap: 4px 12px;
+		height: var(--rtk-station-row-height);
+		padding: 8px 12px;
+		border-bottom: 1px solid var(--border);
+	}
+	.rtk-station-list td {
+		min-width: 0;
+		padding: 0;
+		border: 0;
+	}
+	.rtk-station-list td:nth-child(2) {
+		grid-column: 1;
+		grid-row: 2;
+		font-size: 12px;
+	}
+	.rtk-station-list td:nth-child(2) > .rtk-caption {
+		display: inline;
+		margin-left: 6px;
+	}
+	.rtk-station-list td:nth-child(3) {
+		grid-column: 2;
+		grid-row: 2;
+		text-align: right;
+		font-size: 12px;
+	}
+	.rtk-station-list td:nth-child(4) {
+		grid-column: 2;
+		grid-row: 1;
+		text-align: right;
+	}
+	.rtk-station-list .rtk-state {
+		display: inline-block;
+		max-width: 100%;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
+	}
+	.rtk-station-list .rtk-update-age {
+		white-space: normal;
+		line-height: 1.25;
+	}
+	.rtk-station-select {
+		display: block;
+		max-width: 100%;
+		scroll-margin-top: 0;
+	}
+	.rtk-station-select strong,
+	.rtk-station-select > span {
+		display: block;
+		overflow: hidden;
+		text-overflow: ellipsis;
+	}
+	.rtk-station-select > span:first-of-type,
+	.rtk-station-select > .rtk-estimate {
+		display: none;
+	}
+	.rtk-station-satellite-label {
+		display: inline;
 	}
 	.rtk-overview {
 		display: flex;
@@ -421,10 +494,12 @@
 		gap: 6px;
 	}
 }
-@media (max-width: 620px) {
+@media (max-width: 760px) {
 	.rtk-panel {
-		height: min(560px, 65vh);
+		height: min(calc(3 * var(--rtk-station-row-height) + 144px), 65vh);
 	}
+}
+@media (max-width: 620px) {
 	.rtk-details {
 		padding: 12px 16px;
 	}

@@ -1,5 +1,16 @@
 import type { RtkReception } from './types';
 
+export function correctionAge(lastCorrection: number | undefined, now: number): string {
+	if (lastCorrection === undefined || !Number.isFinite(lastCorrection)) return 'No verified corrections yet';
+	const seconds = Math.max(0, Math.floor((now - lastCorrection) / 1000));
+	if (seconds < 60) return `${seconds} s ago`;
+	const minutes = Math.floor(seconds / 60);
+	if (minutes < 60) return `${minutes} m ${seconds % 60} s ago`;
+	const hours = Math.floor(minutes / 60);
+	if (hours < 24) return `${hours} h ${minutes % 60} m ago`;
+	return `${Math.floor(hours / 24)} d ${hours % 24} h ago`;
+}
+
 export function receptionState(value: RtkReception): { label: string; detail: string; tone: string } {
 	if (!value.local) return { label: 'Local SDR required', detail: 'Connect an SDR to this browser to decode RTK signals.', tone: 'idle' };
 	if (!value.running) return { label: 'Reception stopped', detail: 'Connect the SDR and start radio reception.', tone: 'idle' };

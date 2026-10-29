@@ -193,7 +193,7 @@ describe('live RTK receiver tools', () => {
 		expect(wrapper.vm.backend!.setVfoParams).toHaveBeenLastCalledWith(0, expect.objectContaining({ rtk: true, enabled: false }));
 		wrapper.vm._onRtkMessage(0, 923.118, message());
 		await nextTick();
-		expect(wrapper.get('.rtk-heading .rtk-state').text()).toBe('Live corrections');
+		expect(wrapper.get('.rtk-heading .rtk-state').text()).toBe('Corrections received');
 		expect(wrapper.findAll('.rtk-section').every((section) => !(section.element as HTMLDetailsElement).open)).toBe(true);
 		expect(wrapper.get('[aria-label="LoRa number"]').text()).toContain('1234.7.?.42');
 		expect(wrapper.get('[aria-label="LoRa number"]').text()).toContain('loc unknown');

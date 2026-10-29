@@ -22,6 +22,7 @@ afterEach(() => {
 	wrapper?.unmount();
 	vi.clearAllMocks();
 	vi.unstubAllGlobals();
+	vi.useRealTimers();
 });
 
 async function setup(frequencies = [923.118, 921.25]) {
@@ -40,6 +41,53 @@ async function setup(frequencies = [923.118, 921.25]) {
 const rows = () => wrapper.findAll('.rtk-station-list tbody tr');
 
 describe('combined RTK station list', () => {
+	it('ages verified corrections per station without treating keepalives or status updates as corrections', async () => {
+		vi.useFakeTimers();
+		vi.setSystemTime(new Date('2026-10-30T00:00:00Z'));
+		await setup([923.118]);
+		await nextTick();
+		const age = () => wrapper.get('[aria-label="Time since last RTK update"]').text();
+		expect(age()).toBe('Last correction: No verified corrections yet');
+		const a = mockStation(),
+			b = mockStation(2345);
+		b.lastCorrection = Date.now() - 65000;
+		const send = () => wrapper.vm._onRtkMessage(0, 923.118, mockStationMessage(923.118, [a, b]));
+		send();
+		await nextTick();
+		expect(age()).toBe('Last correction: 0 s ago');
+		expect(
+			rows()
+				.find((row) => row.text().includes('2345.7.?.42'))!
+				.text(),
+		).toContain('Last correction: 1 m 5 s ago');
+		await vi.advanceTimersByTimeAsync(6000);
+		a.lastSeen = Date.now();
+		const keepalive = mockStationMessage(923.118, [a, b]);
+		keepalive.rtcm = [];
+		keepalive.status.beacons = 1;
+		wrapper.vm._onRtkMessage(0, 923.118, keepalive);
+		await nextTick();
+		expect(age()).toBe('Last correction: 6 s ago');
+		expect(wrapper.get('.rtk-heading .rtk-state').text()).toBe('Waiting for corrections');
+		await rows()
+			.find((row) => row.text().includes('2345.7.?.42'))!
+			.get('button')
+			.trigger('click');
+		expect(age()).toBe('Last correction: 1 m 11 s ago');
+		b.lastCorrection = Date.now();
+		send();
+		await nextTick();
+		expect(age()).toBe('Last correction: 0 s ago');
+		wrapper.vm.running = false;
+		await vi.advanceTimersByTimeAsync(2000);
+		expect(age()).toBe('Last correction: 2 s ago');
+		expect(wrapper.get('.rtk-heading .rtk-state').text()).toBe('Reception stopped');
+		wrapper.vm.vfos[0].freq = 925;
+		await nextTick();
+		expect(age()).toBe('Last correction: No verified corrections yet');
+		expect(wrapper.vm.backend!.setVfoParams).not.toHaveBeenCalled();
+	});
+
 	it('shows entered estimates in amber in both views without changing decoded reports or receiver settings', async () => {
 		await setup([923.118]);
 		wrapper.vm.vfos[0].rtkProfile = 'rtk2';
