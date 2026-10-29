@@ -28,7 +28,8 @@ export class AprsTracker {
 		if (!ax25) return false;
 		this.frames++;
 		const decoded = decodePacket(ax25);
-		const key = `${decoded.source}>${decoded.info}`;
+		// Mic-E encodes latitude in the destination call; its SSID, like the digipeater path, only routes the packet.
+		const key = `${decoded.source}>${decoded.destination.split('-')[0]}:${decoded.info}`;
 		const duplicate = now - (this.recent.get(key) ?? -Infinity) < DUPLICATE_WINDOW;
 		if (!duplicate) this.remember(key, now);
 		const packet: AprsPacket = { ...decoded, id: ++this.sequence, receivedAt: now, ...(duplicate ? { duplicate } : {}) };

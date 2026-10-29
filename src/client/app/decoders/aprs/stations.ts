@@ -1,4 +1,12 @@
-import { APRS_STATION_LIMIT, APRS_STATION_TTL, type AprsPacket, type AprsStation, type AprsWeather } from '@/worker/decoders/aprs/types';
+import {
+	APRS_STATION_LIMIT,
+	APRS_STATION_TTL,
+	APRS_TRAIL_LIMIT,
+	type AprsPacket,
+	type AprsStation,
+	type AprsTrailPoint,
+	type AprsWeather,
+} from '@/worker/decoders/aprs/types';
 import { symbolInfo } from './symbols';
 
 export const stationKey = (station: Pick<AprsStation, 'type' | 'id'>) => `${station.type}:${station.id}`;
@@ -13,20 +21,43 @@ export function hasLiveStationPosition(station: AprsStation, now: number): boole
 	);
 }
 
-/** One entry per station across VFOs: the latest report wins, older reports fill fields it omits. */
+// Fields a report sets together, kept from whichever VFO heard that kind of report last.
+const TIMED_FIELDS: Array<[keyof AprsStation, Array<keyof AprsStation>]> = [
+	['positionTime', ['latitude', 'longitude', 'ambiguity', 'course', 'speed', 'altitude']],
+	['statusTime', ['status']],
+	['weatherTime', ['weather']],
+	['telemetryTime', ['telemetry']],
+];
+
+function mergeTrails(first: AprsTrailPoint[], second: AprsTrailPoint[]): AprsTrailPoint[] {
+	const points = [...first, ...second].sort((a, b) => a.time - b.time);
+	return points
+		.filter((point, index) => !index || point.latitude !== points[index - 1].latitude || point.longitude !== points[index - 1].longitude)
+		.slice(-APRS_TRAIL_LIMIT);
+}
+
+function mergeStation(old: AprsStation, station: AprsStation): AprsStation {
+	const [latest, earlier] = station.lastSeen >= old.lastSeen ? [station, old] : [old, station];
+	const defined = Object.fromEntries(Object.entries(latest).filter(([, value]) => value !== undefined));
+	const merged = { ...earlier, ...defined, packets: old.packets + station.packets, trail: mergeTrails(old.trail, station.trail) };
+	for (const [time, fields] of TIMED_FIELDS) {
+		const source = (station[time] ?? -Infinity) >= (old[time] ?? -Infinity) ? station : old;
+		Object.assign(merged, Object.fromEntries([time, ...fields].map((field) => [field, source[field]])));
+	}
+	return merged;
+}
+
+/**
+ * One entry per station across VFOs. Position, status, weather and telemetry each come from the VFO that heard
+ * that report last; other fields come from the latest report, with older reports filling fields it omits.
+ */
 export function visibleStations(sources: AprsStation[][], now: number): AprsStation[] {
 	const merged = new Map<string, AprsStation>();
 	for (const station of sources.flat()) {
 		if (now - station.lastSeen > APRS_STATION_TTL) continue;
 		const key = stationKey(station);
 		const old = merged.get(key);
-		if (!old) {
-			merged.set(key, station);
-			continue;
-		}
-		const [latest, earlier] = station.lastSeen >= old.lastSeen ? [station, old] : [old, station];
-		const defined = Object.fromEntries(Object.entries(latest).filter(([, value]) => value !== undefined));
-		merged.set(key, { ...earlier, ...defined, packets: old.packets + station.packets });
+		merged.set(key, old ? mergeStation(old, station) : station);
 	}
 	return [...merged.values()].sort((a, b) => b.lastSeen - a.lastSeen).slice(0, APRS_STATION_LIMIT);
 }

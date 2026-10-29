@@ -26,6 +26,17 @@ describe('APRS station tracking', () => {
 		expect(station(tracker, 'N0CALL-9', 40000).trail).toHaveLength(2);
 		expect(tracker.frames).toBe(3);
 	});
+	it('treats a Mic-E destination change as a new report but ignores its routing SSID', () => {
+		const tracker = new AprsTracker();
+		const info = '`(_f\x1e\x1eO>/';
+		tracker.process(ax25Frame('N0CALL-9', 'S3RUVT', [], info), 1000);
+		tracker.process(ax25Frame('N0CALL-9', 'S3RUVU', [], info), 11000);
+		tracker.process(ax25Frame('N0CALL-9', 'S3RUVU-2', ['DIGI*'], info), 12000);
+		const { packets } = tracker.snapshot(12000);
+		expect(packets.map((packet) => packet.duplicate ?? false)).toEqual([false, false, true]);
+		expect(packets[1].latitude).not.toBe(packets[0].latitude);
+		expect(station(tracker, 'N0CALL-9', 12000)).toMatchObject({ latitude: packets[1].latitude, positionTime: 11000, packets: 2 });
+	});
 	it('keeps objects separate from their owner and marks killed objects', () => {
 		const tracker = new AprsTracker();
 		tracker.process(ax25Frame('N0CALL', 'APRS', [], ';LEADER   *092345z4903.50N/07201.75W>'), 1000);
