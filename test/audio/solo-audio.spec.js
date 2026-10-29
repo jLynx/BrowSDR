@@ -9,6 +9,7 @@ function receiver() {
 		soloAudioVfo: null,
 		running: true,
 		vfoSquelchOpen: [],
+		rtk: { status: [], sources: [], frames: [], frequencies: [] },
 		backend: { setVfoParams: vi.fn(), removeVfo: vi.fn() },
 		isFreqInBandwidth: () => true,
 		_initAudioCtx: vi.fn(),

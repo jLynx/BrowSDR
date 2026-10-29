@@ -8,6 +8,7 @@ const receiver = () => ({
 	vfos: Array.from({ length: 4 }, () => makeDefaultVfo()),
 	radio: { centerFreq: 100 },
 	view: { locked: false, autoLockDisabled: false },
+	rtk: { status: [], sources: [], frames: [], frequencies: [] },
 	showMsg: vi.fn(),
 });
 
