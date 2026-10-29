@@ -8,6 +8,8 @@ import AisPanel from '@/app/decoders/ais/panel';
 import RadiosondePanel from '@/app/decoders/radiosonde/panel';
 import { aisMethods } from '@/app/decoders/ais';
 import { radiosondeMethods } from '@/app/decoders/radiosonde/controller';
+import AprsPanel from '@/app/decoders/aprs/panel';
+import { aprsMethods } from '@/app/decoders/aprs/controller';
 import { isRecord } from '@/platform/data';
 import type { AppInstance } from '@/app/core/receiver.types';
 import type { Backend as BackendInstance } from '@/worker/runtime/backend';
@@ -71,6 +73,7 @@ const Receiver = {
 		RtkPanel,
 		BlePanel,
 		AcarsPanel,
+		AprsPanel,
 		HeaderTools,
 		DiscoveryPanel,
 		IqCapturePanel,
@@ -108,6 +111,7 @@ const Receiver = {
 		...rtkMethods,
 		...bleMethods,
 		...acarsMethods,
+		...aprsMethods,
 	},
 	created: async function (this: AppInstance) {
 		this._cleanup = [];

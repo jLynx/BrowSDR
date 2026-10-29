@@ -9,6 +9,7 @@ import type {
 	RtkCallback,
 	BleCallback,
 	AcarsCallback,
+	AprsCallback,
 } from '@/worker/runtime/callbacks.types';
 import type { DspOutput } from '@/worker/runtime/dsp-messages.types';
 import type { VfoParams, VfoState } from '@/worker/runtime/types';
@@ -29,9 +30,8 @@ export function initializeVfoWorkers(
 	acarsCallback: AcarsCallback | null = null,
 	radiosondeCallback: RadiosondeCallback | null = null,
 	rtkCallback: RtkCallback | null = null,
+	aprsCallback: AprsCallback | null = null,
 ) {
-	const initialBandwidth = 150000;
-
 	// Free any existing DDCs and timers
 	if (backend.ddcs)
 		backend.ddcs.forEach((d) => {
@@ -56,7 +56,7 @@ export function initializeVfoWorkers(
 		squelchLevel: -100.0,
 		lowPass: true,
 		highPass: false,
-		bandwidth: initialBandwidth,
+		bandwidth: 150000,
 		volume: 50,
 		pocsag: false,
 		rds: false,
@@ -106,6 +106,7 @@ export function initializeVfoWorkers(
 				acarsCallback,
 				radiosondeCallback,
 				rtkCallback,
+				aprsCallback,
 			);
 		worker.postMessage({
 			type: 'init',
@@ -139,10 +140,23 @@ export function routeLocalWorkerMessage(
 	acarsCallback: AcarsCallback | null = null,
 	radiosondeCallback: RadiosondeCallback | null = null,
 	rtkCallback: RtkCallback | null = null,
+	aprsCallback: AprsCallback | null = null,
 ) {
-	if (routePacketMessage(backend, worker, msg, bleCallback, aisCallback, adsbCallback, acarsCallback, radiosondeCallback, rtkCallback))
+	if (
+		routePacketMessage(
+			backend,
+			worker,
+			msg,
+			bleCallback,
+			aisCallback,
+			adsbCallback,
+			acarsCallback,
+			radiosondeCallback,
+			rtkCallback,
+			aprsCallback,
+		)
+	)
 		return;
-
 	if (msg.type === 'rtl433_event' || msg.type === 'rtl433_status') {
 		routeSensorMessage(backend, worker, msg, rtl433Callback);
 		return;
@@ -239,17 +253,11 @@ function routePacketMessage(
 	acarsCallback: AcarsCallback | null,
 	radiosondeCallback: RadiosondeCallback | null,
 	rtkCallback: RtkCallback | null,
+	aprsCallback: AprsCallback | null,
 ): boolean {
-	if (msg.type === 'rtk') {
-		routeRtkMessage(backend, worker, msg, rtkCallback);
-		return true;
-	}
-	if (msg.type === 'radiosonde') {
-		const index = backend.dspWorkers!.indexOf(worker);
-		const params = backend.vfoParams?.[index];
-		if (params?.radiosonde && params.freq === msg.freq) radiosondeCallback?.(index, params.freq, msg);
-		return true;
-	}
+	if (msg.type === 'rtk') return routeToVfo(backend, worker, msg, 'rtk', rtkCallback);
+	if (msg.type === 'aprs') return routeToVfo(backend, worker, msg, 'aprs', aprsCallback);
+	if (msg.type === 'radiosonde') return routeToVfo(backend, worker, msg, 'radiosonde', radiosondeCallback);
 	if (msg.type === 'acars') {
 		routeAcarsMessage(backend, worker, msg, acarsCallback);
 		return true;
@@ -263,16 +271,21 @@ function routePacketMessage(
 		return true;
 	}
 	if (msg.type !== 'ble') return false;
-	const index = backend.dspWorkers!.indexOf(worker);
-	const params = backend.vfoParams?.[index];
-	if (params?.ble && params.freq === msg.freq) callback?.(index, params.freq, msg);
-	return true;
+	return routeToVfo(backend, worker, msg, 'ble', callback);
 }
 
-function routeRtkMessage(backend: Backend, worker: Worker, msg: Extract<DspOutput, { type: 'rtk' }>, callback: RtkCallback | null): void {
+/** Deliver telemetry only while the worker still serves a VFO decoding the reported frequency. */
+function routeToVfo<T extends { freq: number }>(
+	backend: Backend,
+	worker: Worker,
+	msg: T,
+	decoder: 'aprs' | 'radiosonde' | 'rtk' | 'ble',
+	callback: ((index: number, freq: number, msg: T) => void) | null,
+): true {
 	const index = backend.dspWorkers!.indexOf(worker);
 	const params = backend.vfoParams?.[index];
-	if (params?.rtk && params.freq === msg.freq) callback?.(index, params.freq, msg);
+	if (params?.[decoder] && params.freq === msg.freq) callback?.(index, params.freq, msg);
+	return true;
 }
 
 function routeWorkerDiagnostics(backend: Backend, worker: Worker, msg: DspOutput): void {

@@ -17,6 +17,7 @@ import type {
 	RtkCallback,
 	BleCallback,
 	AcarsCallback,
+	AprsCallback,
 	DsdCallback,
 } from '@/worker/runtime/callbacks.types';
 
@@ -65,6 +66,7 @@ export async function startRxStream(
 	acarsCallback: AcarsCallback | null = null,
 	radiosondeCallback: RadiosondeCallback | null = null,
 	rtkCallback: RtkCallback | null = null,
+	aprsCallback: AprsCallback | null = null,
 ): Promise<void> {
 	if (_streamStarting) return;
 	_streamStarting = true;
@@ -112,6 +114,7 @@ export async function startRxStream(
 			acarsCallback,
 			radiosondeCallback,
 			rtkCallback,
+			aprsCallback,
 		});
 
 		// ── DSP Performance Counters ──────────────────────────────────
@@ -180,6 +183,7 @@ function initializeWorkers(
 		acarsCallback: AcarsCallback | null;
 		radiosondeCallback: RadiosondeCallback | null;
 		rtkCallback: RtkCallback | null;
+		aprsCallback?: AprsCallback | null;
 	},
 ): void {
 	initializeVfoWorkers(
@@ -196,6 +200,7 @@ function initializeWorkers(
 		callbacks.acarsCallback,
 		callbacks.radiosondeCallback,
 		callbacks.rtkCallback,
+		callbacks.aprsCallback,
 	);
 }
 

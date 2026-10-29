@@ -353,6 +353,7 @@ export const connectionMethods = {
 				Comlink.proxy(this._onAcarsMessage.bind(this)),
 				Comlink.proxy(this._onRadiosondeMessage.bind(this)),
 				Comlink.proxy(this._onRtkMessage.bind(this)),
+				Comlink.proxy(this._onAprsMessage.bind(this)),
 			);
 		} catch (e) {
 			console.error('Error starting RX stream:', e);
@@ -515,4 +516,6 @@ function clearDecoderSources(receiver: AppInstance): void {
 	receiver.ble.status = [];
 	receiver.acars.status = [];
 	receiver.acars.sources = [];
+	receiver.aprs.status = [];
+	receiver.aprs.sources = [];
 }

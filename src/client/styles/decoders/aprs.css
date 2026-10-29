@@ -1,0 +1,130 @@
+.aprs-marker {
+	display: block;
+	width: 24px;
+	height: 24px;
+	color: #9ca3af;
+	filter: drop-shadow(0 1px 2px #000);
+}
+.aprs-marker svg {
+	display: block;
+}
+.aprs-marker.aprs-mobile {
+	color: #4ade80;
+}
+.aprs-marker.aprs-aircraft {
+	color: #f472b6;
+}
+.aprs-marker.aprs-weather {
+	color: #60a5fa;
+}
+.aprs-marker.aprs-infrastructure {
+	color: #fbbf24;
+}
+.aprs-marker.aprs-facility {
+	color: #f87171;
+}
+.aprs-marker.aprs-object {
+	color: #c084fc;
+}
+.aprs-marker.selected {
+	color: #fff;
+	filter: drop-shadow(0 0 3px #fff);
+}
+/* Map and list keep the panel's 12px margins, with a gutter between them and one left edge for list controls. */
+.aprs-panel .adsb-content {
+	gap: 12px;
+	padding: 4px 12px 8px;
+}
+.aprs-panel .adsb-map-wrap {
+	overflow: hidden;
+	border-radius: 4px;
+}
+.aprs-panel .adsb-list {
+	gap: 8px;
+}
+.aprs-panel .adsb-search {
+	width: 100%;
+	margin: 0;
+}
+.aprs-panel .adsb-details {
+	padding: 0;
+}
+.aprs-panel .msgcenter-empty {
+	padding: 4px 0;
+}
+.aprs-toolbar {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+}
+.aprs-toolbar [aria-pressed='true'] {
+	color: #fff;
+	border-color: currentColor;
+}
+/* Column widths follow content: the report and raw packet columns take the most room. */
+.aprs-panel .adsb-table th:nth-child(1) {
+	width: 26%;
+}
+.aprs-panel .adsb-table th:nth-child(2) {
+	width: 40%;
+}
+.aprs-panel .adsb-table th:nth-child(3) {
+	width: 20%;
+}
+.aprs-panel .adsb-table th:nth-child(4) {
+	width: 14%;
+}
+.aprs-panel .aprs-packets th:nth-child(1) {
+	width: 22%;
+}
+.aprs-panel .aprs-packets th:nth-child(2) {
+	width: 14%;
+}
+.aprs-panel .aprs-packets th:nth-child(3) {
+	width: 22%;
+}
+.aprs-panel .aprs-packets th:nth-child(4) {
+	width: 42%;
+}
+/* Reports and comments wrap inside their column instead of running into the next. */
+.aprs-panel .adsb-table td {
+	white-space: normal;
+	overflow-wrap: anywhere;
+}
+.aprs-preview span,
+.aprs-preview small,
+.aprs-preview code {
+	display: block;
+}
+.aprs-preview code,
+.aprs-station-packets code {
+	margin-top: 2px;
+	color: #9ca3af;
+	font-size: 11px;
+	overflow-wrap: anywhere;
+	white-space: normal;
+}
+.aprs-packets tr.aprs-repeat {
+	opacity: 0.6;
+}
+.aprs-station-packets {
+	list-style: none;
+	margin: 6px 0 0;
+	padding: 0;
+	font-size: 12px;
+}
+.aprs-station-packets li {
+	display: grid;
+	gap: 2px;
+	padding: 6px 0;
+	border-bottom: 1px solid #ffffff14;
+}
+.aprs-panel .adsb-footer {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 4px 12px;
+}
+.aprs-panel .adsb-detail-grid dd {
+	overflow-wrap: anywhere;
+}

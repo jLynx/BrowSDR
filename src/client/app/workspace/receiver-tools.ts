@@ -89,6 +89,14 @@ function toolGroups(receiver: AppInstance): UiMenuGroup[] {
 					active: vfos.some((vfo) => vfo.acars),
 					open: receiver.acars.panelOpen,
 				},
+				{
+					id: 'aprs',
+					label: 'APRS',
+					description: 'Amateur stations, messages & weather',
+					icon: 'location',
+					active: vfos.some((vfo) => vfo.aprs),
+					open: receiver.aprs.panelOpen,
+				},
 			],
 		},
 		utilityGroup(receiver),
@@ -152,6 +160,7 @@ function selectTool(receiver: AppInstance, id: string, openOnly = false): void {
 			radiosonde: receiver.radiosonde,
 			rtk: receiver.rtk,
 			acars: receiver.acars,
+			aprs: receiver.aprs,
 		};
 		const panel = panels[id as keyof typeof panels];
 		if (panel) panel.panelOpen = openOnly || !panel.panelOpen;

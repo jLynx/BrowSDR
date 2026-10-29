@@ -3,6 +3,7 @@ import type { AisMessage } from '@/worker/decoders/ais/types';
 import type { RadiosondeMessage } from '@/worker/decoders/radiosonde/types';
 import type { RtkMessage } from '@/worker/decoders/rtk/types';
 import type { AcarsMessage } from '@/worker/decoders/acars/types';
+import type { AprsMessage } from '@/worker/decoders/aprs/types';
 import type { AdsbMessage } from '@/worker/decoders/adsb/types';
 import type { VfoParams } from './types';
 import type { RDSMessage, RdsStatus, Rtl433Message } from '@/worker/decoders/types';
@@ -24,6 +25,7 @@ export type DspOutput =
 	| RtkMessage
 	| BleMessage
 	| AcarsMessage
+	| AprsMessage
 	| { type: 'rds'; msg: RDSMessage }
 	| { type: 'rds_status'; status: RdsStatus }
 	| { type: 'dsd_status'; status: DSDStatus }

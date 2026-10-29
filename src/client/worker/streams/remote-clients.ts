@@ -14,6 +14,7 @@ import type {
 	RadiosondeCallback,
 	BleCallback,
 	AcarsCallback,
+	AprsCallback,
 	HostCallback,
 	HostStats,
 } from '@/worker/runtime/callbacks.types';
@@ -118,6 +119,10 @@ export function setRemoteHostRadiosondeCallback(this: Backend, callback: HostCal
 
 export function setRemoteHostAcarsCallback(this: Backend, callback: HostCallback<Parameters<AcarsCallback>>): void {
 	this._remoteHostAcarsCb = callback;
+}
+
+export function setRemoteHostAprsCallback(this: Backend, callback: HostCallback<Parameters<AprsCallback>>): void {
+	this._remoteHostAprsCb = callback;
 }
 
 export function setRemoteHostAdsbCallback(this: Backend, callback: HostCallback<Parameters<AdsbCallback>>): void {
@@ -677,6 +682,11 @@ function forwardPacketMessage(backend: Backend, clientId: string, state: RemoteC
 	}
 	if (msg.type === 'acars') {
 		forwardAcars(backend, clientId, state, index, msg);
+		return true;
+	}
+	if (msg.type === 'aprs') {
+		const params = state.params[index];
+		if (params?.aprs && params.freq === msg.freq) backend._remoteHostAprsCb?.(clientId, index, params.freq, msg);
 		return true;
 	}
 	if (msg.type === 'radiosonde') {

@@ -409,6 +409,11 @@ async function installHostStreamCallbacks(this: AppInstance) {
 			this._webrtc?.sendCommandTo(clientId, { type: 'acars', vfoIndex: index, freq, msg });
 		}),
 	);
+	await this.backend.setRemoteHostAprsCallback(
+		Comlink.proxy((clientId: string, index: number, freq: number, msg: Parameters<AppInstance['_onAprsMessage']>[2]) => {
+			this._webrtc?.sendCommandTo(clientId, { type: 'aprs', vfoIndex: index, freq, msg });
+		}),
+	);
 	await this.backend.setRemoteHostAdsbCallback(
 		Comlink.proxy((clientId: string, index: number, freq: number, msg: Parameters<AppInstance['_onAdsbMessage']>[2]) => {
 			this._webrtc?.sendCommandTo(clientId, { type: 'adsb', vfoIndex: index, freq, msg });
@@ -647,30 +652,16 @@ function validRemoteGain(app: AppInstance, property: string, value: number): boo
 	return Number.isFinite(steps) && Math.abs(steps - Math.round(steps)) <= 1e-9;
 }
 
-function handleAis(this: AppInstance, cmd: Extract<ReceiverCommand, { type: 'ais' }>): void {
-	if (this.remoteMode === 'client') this._onAisMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
-}
-
+/** Decoder snapshots forwarded by a host; only clients apply them. */
 function handlePacketTelemetry(this: AppInstance, cmd: ReceiverCommand): boolean {
-	if (cmd.type === 'radiosonde') {
-		if (this.remoteMode === 'client') this._onRadiosondeMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
-		return true;
-	}
-	if (cmd.type === 'ais') {
-		handleAis.call(this, cmd);
-		return true;
-	}
-	if (cmd.type === 'acars') {
-		handleAcars.call(this, cmd);
-		return true;
-	}
-	if (cmd.type !== 'ble') return false;
-	if (this.remoteMode === 'client') this._onBleMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
+	if (!['radiosonde', 'aprs', 'ais', 'acars', 'ble'].includes(cmd.type)) return false;
+	if (this.remoteMode !== 'client') return true;
+	if (cmd.type === 'radiosonde') this._onRadiosondeMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
+	else if (cmd.type === 'aprs') this._onAprsMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
+	else if (cmd.type === 'ais') this._onAisMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
+	else if (cmd.type === 'acars') this._onAcarsMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
+	else if (cmd.type === 'ble') this._onBleMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
 	return true;
-}
-
-function handleAcars(this: AppInstance, cmd: Extract<ReceiverCommand, { type: 'acars' }>): void {
-	if (this.remoteMode === 'client') this._onAcarsMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
 }
 
 function handleAdsb(this: AppInstance, cmd: Extract<ReceiverCommand, { type: 'adsb' }>): void {

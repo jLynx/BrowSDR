@@ -3,6 +3,7 @@ import type { AisMessage } from '@/worker/decoders/ais/types';
 import type { RadiosondeMessage } from '@/worker/decoders/radiosonde/types';
 import type { RtkMessage } from '@/worker/decoders/rtk/types';
 import type { AcarsMessage } from '@/worker/decoders/acars/types';
+import type { AprsMessage } from '@/worker/decoders/aprs/types';
 import type { AdsbMessage } from '@/worker/decoders/adsb/types';
 import type { DSDStatus } from '@/worker/decoders/dsd/types';
 import type {
@@ -45,6 +46,7 @@ export type AisCallback = DecoderCallback<AisMessage>;
 export type RadiosondeCallback = DecoderCallback<RadiosondeMessage>;
 export type RtkCallback = DecoderCallback<RtkMessage>;
 export type AcarsCallback = DecoderCallback<AcarsMessage>;
+export type AprsCallback = DecoderCallback<AprsMessage>;
 export type AdsbCallback = DecoderCallback<AdsbMessage>;
 export type Rtl433Callback = DecoderCallback<Rtl433Message>;
 export type DsdCallback = (index: number, status: DSDStatus) => void;

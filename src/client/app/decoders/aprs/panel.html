@@ -1,0 +1,175 @@
+<section v-if="receiver.aprs.panelOpen" class="adsb-panel aprs-panel" :class="{ 'adsb-fullscreen': fullscreen }" aria-label="APRS stations">
+	<UiToolHeader variant="msgcenter" closable close-label="Close APRS panel" @close="receiver.toggleAprsPanel">
+		APRS
+		<span class="msgcenter-count">{{ stations.length }} stations · {{ positioned.length }} located · {{ packets.length }} packets</span>
+		<template #actions>
+			<UiSelect v-model.number="receiver.activeVfoIndex" aria-label="APRS VFO" class="decoder-vfo-select">
+				<option v-for="(vfo, i) in receiver.vfos" :key="i" :value="i">VFO {{ i + 1 }} · {{ vfo.freq.toFixed(3) }} MHz</option>
+			</UiSelect>
+			<UiCheckbox
+				v-if="selectedVfo"
+				class="adsb-decode-control"
+				v-model="selectedVfo.aprs"
+				:label="'Decode VFO ' + (receiver.activeVfoIndex + 1)"
+				:input-label="'APRS decoding for VFO ' + (receiver.activeVfoIndex + 1)"
+				:disabled="!isAprsFrequency(selectedVfo.freq) && !selectedVfo.aprs"
+				@change="receiver.updateBackendVfoParams(receiver.activeVfoIndex)"
+			/>
+			<UiSelect v-model.number="channel" aria-label="APRS channel">
+				<option v-for="item in channels" :key="item.frequency" :value="item.frequency">
+					{{ item.frequency.toFixed(3) }} MHz · {{ item.region }}
+				</option>
+			</UiSelect>
+			<UiButton variant="transcript" @click="receiver.tuneAprsVfo(channel)">Tune APRS channel</UiButton>
+			<UiButton variant="transcript" @click="showMap = !showMap" :aria-expanded="showMap">{{ showMap ? 'Hide map' : 'Show map' }}</UiButton>
+			<UiButton variant="transcript" @click="setFullscreen(!fullscreen)" :aria-pressed="fullscreen"
+				>{{ fullscreen ? 'Exit fullscreen' : 'Fullscreen map' }}</UiButton
+			>
+			<UiButton variant="transcript" @click="fit" :disabled="!showMap || !positioned.length">Fit stations</UiButton>
+		</template>
+	</UiToolHeader>
+	<div class="adsb-summary">
+		<span v-if="!receiver.running">Reception stopped</span>
+		<template v-for="(vfo, i) in receiver.vfos" :key="i"
+			><span v-if="vfo.aprs" :class="{ 'rtl433-error': receiver.aprs.status[i]?.state === 'error' }"
+				>VFO {{ i + 1 }} · {{ receiver.aprsStatusText(i) }}</span
+			></template
+		>
+		<span v-if="!active">Tune a VFO to your region's APRS channel, then enable decoding here. Audio can stay muted.</span>
+	</div>
+	<div class="adsb-content" :class="{ 'adsb-list-only': !showMap }">
+		<div v-if="showMap" class="adsb-map-wrap">
+			<div ref="mapElement" class="adsb-map" aria-label="Live APRS stations map"></div>
+			<div v-if="!positioned.length" class="adsb-map-message">Waiting for APRS position reports…</div>
+			<div v-if="error" class="adsb-map-error" role="status">{{ error }}</div>
+		</div>
+		<div class="adsb-list">
+			<div v-if="selectedStation" class="adsb-details" aria-label="APRS station details">
+				<div class="adsb-details-heading">
+					<strong>{{ selectedStation.id }} · {{ symbolName(selectedStation.symbol) }}</strong
+					><UiButton variant="transcript" @click="selected = ''">Back to stations</UiButton>
+				</div>
+				<dl class="adsb-detail-grid">
+					<div v-for="field in details" :key="field.label">
+						<dt>{{ field.label }}</dt>
+						<dd>{{ field.value }}</dd>
+					</div>
+				</dl>
+				<template v-if="weather.length">
+					<strong>Weather · {{ heard(selectedStation.weatherTime) }} ago</strong>
+					<dl class="adsb-detail-grid" aria-label="APRS weather">
+						<div v-for="field in weather" :key="field.label">
+							<dt>{{ field.label }}</dt>
+							<dd>{{ field.value }}</dd>
+						</div>
+					</dl>
+				</template>
+				<template v-if="telemetry.length">
+					<strong>Telemetry · {{ heard(selectedStation.telemetryTime) }} ago</strong>
+					<dl class="adsb-detail-grid" aria-label="APRS telemetry">
+						<div v-for="(field, index) in telemetry" :key="index">
+							<dt>{{ field.label }}</dt>
+							<dd>{{ field.value }}</dd>
+						</div>
+					</dl>
+				</template>
+				<strong>Recent packets</strong>
+				<ul class="aprs-station-packets">
+					<li v-for="packet in stationPackets" :key="packet.key">
+						<small>{{ time(packet.receivedAt) }} · {{ kindLabel(packet) }}{{ packet.duplicate ? ' · repeat' : '' }}</small>
+						<span>{{ packetSummary(packet) }}</span>
+						<code>{{ packet.source }}&gt;{{ [packet.destination, ...packet.path].join(',') }}:{{ packet.info }}</code>
+					</li>
+				</ul>
+			</div>
+			<template v-else>
+				<div class="aprs-toolbar">
+					<UiButton variant="transcript" :aria-pressed="view === 'stations'" @click="view = 'stations'">Stations</UiButton>
+					<UiButton variant="transcript" :aria-pressed="view === 'packets'" @click="view = 'packets'">Packets</UiButton>
+					<UiSelect v-if="view === 'packets'" v-model="kind" aria-label="APRS packet type">
+						<option value="all">All types</option>
+						<option value="position">Positions & objects</option>
+						<option value="message">Messages</option>
+						<option value="weather">Weather</option>
+						<option value="telemetry">Telemetry</option>
+						<option value="status">Status</option>
+						<option value="other">Other</option>
+					</UiSelect>
+				</div>
+				<UiInputGroup class="adsb-search"
+					><UiInput
+						v-model="query"
+						:aria-label="view === 'stations' ? 'Search APRS stations' : 'Search APRS packets'"
+						:placeholder="view === 'stations' ? 'Callsign, object, comment or symbol' : 'Callsign, path, message or raw packet'"
+				/></UiInputGroup>
+				<template v-if="view === 'stations'">
+					<UiEmptyState v-if="!stations.length" variant="msgcenter"
+						>Waiting for APRS packets. Use a 2 m antenna and tune to your region's APRS channel.</UiEmptyState
+					>
+					<UiEmptyState v-else-if="!filteredStations.length" variant="msgcenter">No stations match your search.</UiEmptyState>
+					<div v-else class="adsb-table-wrap">
+						<table class="adsb-table">
+							<thead>
+								<tr>
+									<th>Station</th>
+									<th>Latest report</th>
+									<th>Motion</th>
+									<th>Heard</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr v-for="item in filteredStations" :key="stationKey(item)" :class="{ selected: selected === stationKey(item) }">
+									<td>
+										<UiButton variant="transcript" @click="select(stationKey(item))">{{ item.id }}</UiButton
+										><small
+											>{{ symbolName(item.symbol) }}{{ item.owner ? ' · by ' + item.owner : '' }} · {{ hasLiveStationPosition(item, now) ?
+											'Located' : 'No position' }}</small
+										>
+									</td>
+									<td class="aprs-preview">{{ item.status || item.comment || '—' }}</td>
+									<td>{{ motionText(item) || '—' }}</td>
+									<td>{{ heard(item.lastSeen) }}</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+				</template>
+				<template v-else>
+					<UiEmptyState v-if="!packets.length" variant="msgcenter">Waiting for valid AX.25 frames…</UiEmptyState>
+					<UiEmptyState v-else-if="!filteredPackets.length" variant="msgcenter">No packets match your filter.</UiEmptyState>
+					<div v-else class="adsb-table-wrap">
+						<table class="adsb-table aprs-packets">
+							<thead>
+								<tr>
+									<th>From</th>
+									<th>Type</th>
+									<th>Received / channel</th>
+									<th>Packet</th>
+								</tr>
+							</thead>
+							<tbody>
+								<tr v-for="packet in filteredPackets" :key="packet.key" :class="{ 'aprs-repeat': packet.duplicate }">
+									<td>
+										<UiButton variant="transcript" @click="showStation('station:' + packet.source)">{{ packet.source }}</UiButton
+										><small v-if="packet.relay">via {{ packet.relay }}</small>
+									</td>
+									<td>{{ kindLabel(packet) }}<small v-if="packet.duplicate">Repeat</small></td>
+									<td>{{ time(packet.receivedAt) }}<small>VFO {{ packet.vfoIndex + 1 }} · {{ packet.frequency.toFixed(3) }} MHz</small></td>
+									<td class="aprs-preview">
+										<span>{{ packetSummary(packet) }}</span>
+										<small v-if="packet.timestamp">Sent {{ timestampText(packet.timestamp) }}</small>
+										<code>{{ [packet.destination, ...packet.path].join(',') }}:{{ packet.info }}</code>
+									</td>
+								</tr>
+							</tbody>
+						</table>
+					</div>
+				</template>
+			</template>
+		</div>
+	</div>
+	<div class="adsb-footer">
+		<span>AFSK 1200 · AX.25 frames FCS-checked · latest {{ packets.length }} of up to 200 packets per VFO</span>
+		<span>Stations expire after 60 min. Repeats within 30 s are marked, not recounted. Map tiles need internet.</span>
+	</div>
+</section>

@@ -8,6 +8,8 @@ import AisPanel from '@/app/decoders/ais/panel';
 import RadiosondePanel from '@/app/decoders/radiosonde/panel';
 import { radiosondeMethods } from '@/app/decoders/radiosonde/controller';
 import { aisMethods } from '@/app/decoders/ais';
+import AprsPanel from '@/app/decoders/aprs/panel';
+import { aprsMethods } from '@/app/decoders/aprs/controller';
 import { defineComponent } from 'vue';
 import template from '@/app/templates/receiver';
 import VfoPanel from '@/app/radio/vfo-panel';
@@ -52,6 +54,7 @@ export const ReceiverView = defineComponent({
 		RtkPanel,
 		BlePanel,
 		AcarsPanel,
+		AprsPanel,
 		HeaderTools,
 		DiscoveryPanel,
 		IqCapturePanel,
@@ -75,6 +78,7 @@ export const ReceiverView = defineComponent({
 		...rtkMethods,
 		...bleMethods,
 		...acarsMethods,
+		...aprsMethods,
 		...bookmarkMethods,
 		...zoomMethods,
 		...audioMethods,

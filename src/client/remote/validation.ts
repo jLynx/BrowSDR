@@ -2,6 +2,7 @@ import { validBleMessage } from '@/worker/decoders/ble/validation';
 import { validAisMessage } from '@/worker/decoders/ais/validation';
 import { validRadiosondeMessage } from '@/worker/decoders/radiosonde/validation';
 import { validAcarsMessage } from '@/worker/decoders/acars/validation';
+import { validAprsMessage } from '@/worker/decoders/aprs/validation';
 import { validAdsbMessage } from '@/worker/decoders/adsb/validation';
 import { isRecord, primitiveMap } from '@/platform/data';
 import type { ReceiverCommand } from './types';
@@ -53,6 +54,7 @@ const validators: Record<string, (value: Record<string, unknown>) => boolean> = 
 	radiosonde: (value: Record<string, unknown>) =>
 		validIndex(value.vfoIndex) && numbers(value, ['freq']) && validRadiosondeMessage(value.msg),
 	acars: (value: Record<string, unknown>) => validIndex(value.vfoIndex) && numbers(value, ['freq']) && validAcarsMessage(value.msg),
+	aprs: (value: Record<string, unknown>) => validIndex(value.vfoIndex) && numbers(value, ['freq']) && validAprsMessage(value.msg),
 	adsb: (value: Record<string, unknown>) => validIndex(value.vfoIndex) && numbers(value, ['freq']) && validAdsbMessage(value.msg),
 	rtl433: (value: Record<string, unknown>) => numbers(value, ['vfoIndex', 'freq']) && validSensorMessage(value.msg),
 	pocsag: (value: Record<string, unknown>) =>
@@ -147,7 +149,7 @@ function validVfoParams(value: unknown): boolean {
 		isRecord(value) &&
 		typedFields(value, ['mode', 'deEmphasis', 'rdsRegion'], 'string') &&
 		typedFields(value, ['enabled', 'squelchEnabled', 'lowPass', 'highPass', 'pocsag', 'rds'], 'boolean') &&
-		optionalFields(value, ['rtl433', 'audioMuted', 'adsb', 'ais', 'radiosonde', 'ble', 'acars', 'gsc', 'flex'], 'boolean') &&
+		optionalFields(value, ['rtl433', 'audioMuted', 'adsb', 'ais', 'radiosonde', 'ble', 'acars', 'aprs', 'gsc', 'flex'], 'boolean') &&
 		optionalFields(value, ['rtl433SampleRate'], 'number') &&
 		optionalFields(value, ['rtl433Protocols'], 'string') &&
 		(value.pocsagCharset === undefined ||

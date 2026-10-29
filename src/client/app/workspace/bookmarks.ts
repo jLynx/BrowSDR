@@ -51,6 +51,7 @@ export const bookmarkMethods = {
 				ais: vfo.ais,
 				radiosonde: vfo.radiosonde,
 				acars: vfo.acars,
+				aprs: vfo.aprs,
 				rtl433: vfo.rtl433,
 				rtl433SampleRate: vfo.rtl433SampleRate,
 				rtl433Protocols: vfo.rtl433Protocols,
@@ -311,5 +312,11 @@ function bookmarkSelection(index: number | undefined, count: number): number {
 }
 
 function bookmarkPacketDecoders(bm: Bookmark) {
-	return { adsb: bm.adsb ?? false, ais: bm.ais ?? false, radiosonde: bm.radiosonde ?? false, acars: bm.acars ?? false };
+	return {
+		adsb: bm.adsb ?? false,
+		ais: bm.ais ?? false,
+		radiosonde: bm.radiosonde ?? false,
+		acars: bm.acars ?? false,
+		aprs: bm.aprs ?? false,
+	};
 }

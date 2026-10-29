@@ -38,6 +38,10 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
 - **✉️ ACARS Aircraft Messages**
   Decode VHF aircraft operational messages with registration, flight, label and
   searchable text.
+- **📍 APRS Stations and Live Map**
+  Decode amateur radio position reports, messages, weather and telemetry on
+  1200-baud packet channels, with a live station map. See the
+  [reception guide](docs/aprs.md).
 - **📊 Frequency Activity**
   Visually spot active signals and quickly jump to transmissions using the dynamic frequency activity scanner and interactive waterfall display.
 - **🔖 Advanced Bookmarking System**
@@ -61,8 +65,8 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
 
 ## 🗓️ Planned Features
 
-See the [feature roadmap](docs/roadmap.md) for requested APRS and additional
-radiosonde support, alongside completed ACARS, AIS, ADS-B and initial BLE features.
+See the [feature roadmap](docs/roadmap.md) for requested additional radiosonde
+support, alongside completed APRS, ACARS, AIS, ADS-B and initial BLE features.
 
 ---
 

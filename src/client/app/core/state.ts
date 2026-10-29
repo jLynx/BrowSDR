@@ -3,6 +3,7 @@ import type { AisStatus, Vessel } from '@/worker/decoders/ais/types';
 import type { RadiosondeStatus, Radiosonde } from '@/worker/decoders/radiosonde/types';
 import type { RtkStatus, RtkStation, RtkMessage } from '@/worker/decoders/rtk/types';
 import type { AcarsStatus, AcarsRecord } from '@/worker/decoders/acars/types';
+import type { AprsPacket, AprsStation, AprsStatus } from '@/worker/decoders/aprs/types';
 import type { AdsbStatus, Aircraft } from '@/worker/decoders/adsb/types';
 import type { POCSAGStatus } from '@/worker/decoders/types';
 import type { RdsStatus } from '@/worker/decoders/types';
@@ -179,6 +180,11 @@ function createDecoderAndBookmarkState() {
 			panelOpen: false,
 			status: [] as Array<AcarsStatus | null>,
 			sources: [] as Array<{ freq: number; messages: AcarsRecord[] } | null>,
+		},
+		aprs: {
+			panelOpen: false,
+			status: [] as Array<AprsStatus | null>,
+			sources: [] as Array<{ freq: number; stations: AprsStation[]; packets: AprsPacket[] } | null>,
 		},
 		ais: { panelOpen: false, status: [] as Array<AisStatus | null>, sources: [] as Vessel[][] },
 		radiosonde: { panelOpen: false, status: [] as Array<RadiosondeStatus | null>, sources: [] as Radiosonde[][] },

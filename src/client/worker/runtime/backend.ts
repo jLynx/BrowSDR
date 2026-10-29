@@ -17,6 +17,7 @@ import type {
 	RtkCallback,
 	BleCallback,
 	AcarsCallback,
+	AprsCallback,
 	DsdCallback,
 	HostCallback,
 	HostStats,
@@ -73,6 +74,7 @@ import {
 	setRemoteHostRadiosondeCallback,
 	setRemoteHostBleCallback,
 	setRemoteHostAcarsCallback,
+	setRemoteHostAprsCallback,
 	setRemoteHostSquelchCallback,
 	_ensureRemoteClients,
 	_getOrCreateClientState,
@@ -187,6 +189,7 @@ export class Backend {
 	_remoteHostAisCb?: HostCallback<Parameters<AisCallback>>;
 	_remoteHostRadiosondeCb?: HostCallback<Parameters<RadiosondeCallback>>;
 	_remoteHostAcarsCb?: HostCallback<Parameters<AcarsCallback>>;
+	_remoteHostAprsCb?: HostCallback<Parameters<AprsCallback>>;
 	_remoteHostAdsbCb?: HostCallback<Parameters<AdsbCallback>>;
 	_remoteHostRtl433Cb?: HostCallback<Parameters<Rtl433Callback>>;
 	_remoteHostSquelchCb?: HostCallback<[boolean[]]>;
@@ -268,6 +271,7 @@ export class Backend {
 	setRemoteHostAisCallback = setRemoteHostAisCallback.bind(this);
 	setRemoteHostRadiosondeCallback = setRemoteHostRadiosondeCallback.bind(this);
 	setRemoteHostAcarsCallback = setRemoteHostAcarsCallback.bind(this);
+	setRemoteHostAprsCallback = setRemoteHostAprsCallback.bind(this);
 	setRemoteHostAdsbCallback = setRemoteHostAdsbCallback.bind(this);
 	setRemoteHostRtl433Callback = setRemoteHostRtl433Callback.bind(this);
 	setRemoteHostSquelchCallback = setRemoteHostSquelchCallback.bind(this);
@@ -306,6 +310,7 @@ export class Backend {
 		acarsCallback: AcarsCallback | null = null,
 		radiosondeCallback: RadiosondeCallback | null = null,
 		rtkCallback: RtkCallback | null = null,
+		aprsCallback: AprsCallback | null = null,
 	): Promise<void> {
 		this.iqCapture.cancel('Reception restarted during IQ capture');
 		return startRxStream(
@@ -332,6 +337,7 @@ export class Backend {
 			acarsCallback,
 			radiosondeCallback,
 			rtkCallback,
+			aprsCallback,
 		);
 	}
 

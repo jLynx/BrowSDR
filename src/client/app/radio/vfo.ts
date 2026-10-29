@@ -104,6 +104,7 @@ export const vfoMethods = {
 				rtkClockPpm: vfo.rtkClockPpm,
 				ble: vfo.ble && inBandwidth,
 				acars: vfo.acars && inBandwidth,
+				aprs: vfo.aprs && inBandwidth,
 				rtl433: vfo.rtl433 && inBandwidth,
 				rtl433SampleRate: vfo.rtl433SampleRate,
 				rtl433Protocols: vfo.rtl433Protocols,
@@ -338,20 +339,7 @@ export const vfoMethods = {
 		const removedSolo = this.soloAudioVfo === this.vfos[index];
 		if (removedSolo) this.soloAudioVfo = null;
 		this.vfos.splice(index, 1);
-		this.rtl433?.status.splice(index, 1);
-		this.adsb?.status.splice(index, 1);
-		this.adsb?.sources.splice(index, 1);
-		this.ble?.status.splice(index, 1);
-		this.ais?.status.splice(index, 1);
-		this.radiosonde?.status.splice(index, 1);
-		this.rtk.status.splice(index, 1);
-		this.rtk.sources.splice(index, 1);
-		this.rtk.frames.splice(index, 1);
-		this.rtk.frequencies.splice(index, 1);
-		this.acars?.status.splice(index, 1);
-		this.ais?.sources.splice(index, 1);
-		this.radiosonde?.sources.splice(index, 1);
-		this.acars?.sources.splice(index, 1);
+		removeDecoderState(this, index);
 		if (this.backend && this.running) {
 			if (this.remoteMode === 'client' && this._webrtc) {
 				this._webrtc.sendCommand({ type: 'removeRemoteVfo', index });
@@ -365,3 +353,15 @@ export const vfoMethods = {
 		if (removedSolo) this.updateAllBackendVfoParams();
 	},
 };
+
+/** Per-VFO decoder telemetry is index-aligned with `vfos`. */
+function removeDecoderState(receiver: AppInstance, index: number): void {
+	receiver.rtl433?.status.splice(index, 1);
+	receiver.ble?.status.splice(index, 1);
+	receiver.rtk.frames.splice(index, 1);
+	receiver.rtk.frequencies.splice(index, 1);
+	for (const decoder of [receiver.adsb, receiver.ais, receiver.radiosonde, receiver.rtk, receiver.acars, receiver.aprs]) {
+		decoder?.status.splice(index, 1);
+		decoder?.sources.splice(index, 1);
+	}
+}
