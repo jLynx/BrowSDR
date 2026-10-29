@@ -2,7 +2,100 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HackRF } from '@/devices/hackrf/usb';
 import { HackRFDevice } from '@/devices/hackrf/device';
 
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+	vi.useRealTimers();
+	vi.restoreAllMocks();
+});
+
+function receiveHarness() {
+	const receiver = new HackRF();
+	const pending = [];
+	receiver.device = {
+		deviceVersionMajor: 1,
+		deviceVersionMinor: 0,
+		deviceVersionSubminor: 13,
+		controlTransferOut: vi.fn(async () => ({ status: 'ok' })),
+		transferIn: vi.fn((endpoint, length) => new Promise((resolve, reject) => pending.push({ endpoint, length, resolve, reject }))),
+	};
+	return {
+		receiver,
+		pending,
+		async stop(result = { status: 'ok', data: new DataView(new ArrayBuffer(8)) }) {
+			const stopping = receiver.stopRx();
+			pending.splice(0).forEach(({ resolve }) => resolve(result));
+			await stopping;
+		},
+	};
+}
+
+async function flushTransfers() {
+	for (let i = 0; i < 20; i++) await Promise.resolve();
+}
+
+describe.each(['startRx', 'startRxSweep'])('HackRF %s USB error handling', (start) => {
+	it.each([2000000, 20000000])('keeps all eight readers after repeated babble errors at %i Sa/s', async (rate) => {
+		const { receiver, pending, stop } = receiveHarness();
+		vi.spyOn(console, 'warn').mockImplementation(() => {});
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		await receiver.setSampleRateManual(rate, 1);
+		const callback = vi.fn();
+		await receiver[start](callback);
+		const readSize = pending[0].length;
+		for (let round = 0; round < 3; round++) {
+			const reads = pending.splice(0);
+			expect(reads).toHaveLength(8);
+			reads.forEach(({ resolve }) => resolve({ status: 'babble', data: new DataView(Uint8Array.of(99, 99).buffer) }));
+			await flushTransfers();
+			expect(callback).not.toHaveBeenCalled();
+			expect(pending).toHaveLength(8);
+			expect(pending.every(({ endpoint, length }) => endpoint === 1 && length === readSize)).toBe(true);
+		}
+		const samples = Uint8Array.of(99, 99, 20, 30, 40, 50, 99, 99);
+		pending.splice(0).forEach(({ resolve }) => resolve({ status: 'ok', data: new DataView(samples.buffer, 2, 4) }));
+		await flushTransfers();
+		expect(callback).toHaveBeenCalledTimes(8);
+		expect([...callback.mock.lastCall[0]]).toEqual([20, 30, 40, 50]);
+		expect(pending).toHaveLength(8);
+		await stop();
+		expect(callback).toHaveBeenCalledTimes(8);
+		expect(pending).toHaveLength(0);
+	});
+	it('ignores babble completions after stopping and can start fresh readers', async () => {
+		const { receiver, pending, stop } = receiveHarness();
+		const warning = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const callback = vi.fn();
+		await receiver[start](callback);
+		await stop({ status: 'babble' });
+		expect(pending).toHaveLength(0);
+		expect(callback).not.toHaveBeenCalled();
+		expect(warning).not.toHaveBeenCalled();
+		expect(error).not.toHaveBeenCalled();
+		await receiver[start](callback);
+		expect(pending).toHaveLength(8);
+		pending.shift().resolve({ status: 'ok', data: new DataView(Uint8Array.of(20, 30).buffer) });
+		await flushTransfers();
+		expect(callback).toHaveBeenCalledOnce();
+		await stop();
+	});
+	it.each(['stall', 'disconnect'])('does not retry %s failures', async (failure) => {
+		const { receiver, pending, stop } = receiveHarness();
+		const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const callback = vi.fn();
+		await receiver[start](callback);
+		const reads = pending.splice(0);
+		for (const read of reads) {
+			if (failure === 'stall') read.resolve({ status: 'stall' });
+			else read.reject(new DOMException('The device was disconnected.', 'NetworkError'));
+		}
+		await flushTransfers();
+		expect(pending).toHaveLength(0);
+		expect(receiver.device.transferIn).toHaveBeenCalledTimes(8);
+		expect(callback).not.toHaveBeenCalled();
+		expect(error).toHaveBeenCalledTimes(8);
+		await stop();
+	});
+});
 
 describe('HackRF receiver lifecycle', () => {
 	it('returns firmware, IDs, API and supported hardware revision for device details', async () => {

@@ -437,6 +437,12 @@ class HackRF {
 				try {
 					const result = await this.device.transferIn(1, transferSize);
 					if (this.rxRunning !== session) break;
+					if (result.status === 'babble') {
+						// Discard overflowed IQ, but keep this reader queued. Otherwise each
+						// intermittent USB error removes a reader until reception freezes.
+						console.warn('startRx: USB babble; discarding transfer and continuing reception');
+						continue;
+					}
 					if (result.status !== 'ok') {
 						console.error('startRx: transfer status not ok:', result.status);
 						break;
@@ -471,6 +477,10 @@ class HackRF {
 				try {
 					const result = await this.device.transferIn(1, HackRF.TRANSFER_BUFFER_SIZE);
 					if (this.rxRunning !== session) break;
+					if (result.status === 'babble') {
+						console.warn('startRxSweep: USB babble; discarding transfer and continuing reception');
+						continue;
+					}
 					if (result.status !== 'ok') {
 						console.error('startRxSweep: transfer status not ok:', result.status);
 						break;
