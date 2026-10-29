@@ -61,7 +61,10 @@ const meta = {
 			receiver.vfos = [923.118, 921.25].map((frequency) => ({ ...makeDefaultVfo(frequency), rtk: true, enabled: false }));
 			receiver.rtk.panelOpen = true;
 			receiver.rtk.frequencies = [923.118, 921.25];
-			receiver.rtk.sources = [[mockBase(1234, 'MOCK GNSS A', 0), mockBase(2345, 'MOCK GNSS B', 90)], [mockBase(3456, 'MOCK GNSS C', 0)]];
+			receiver.rtk.sources = [
+				[mockBase(1234, 'MOCK GNSS A', 0), mockBase(2345, 'MOCK GNSS B', 90)],
+				[mockBase(3456, 'MOCK GNSS C', 0), mockBase(4567, 'MOCK GNSS D', 45), mockBase(5678, 'MOCK GNSS E', -45)],
+			];
 			receiver.rtk.status = [0, 1].map(() => ({
 				state: 'receiving',
 				message: 'Synthetic display fixture',
@@ -91,31 +94,50 @@ type Story = StoryObj<typeof meta>;
 export const MultipleBases: Story = {
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
-		const details = canvas.getByRole('region', { name: 'Selected RTK base station' }).getBoundingClientRect();
-		const directory = canvas.getByRole('region', { name: 'Discovered RTK base stations' }).getBoundingClientRect();
-		const panel = canvas.getByLabelText('Live RTK decoder').getBoundingClientRect();
-		const map = canvas.getByRole('region', { name: 'Base station location map' }).getBoundingClientRect();
-		await expect(directory.height).toBeLessThanOrEqual(164);
-		await expect(map.width).toBeGreaterThan(240);
 		const panelElement = canvas.getByLabelText('Live RTK decoder');
+		const body = panelElement.querySelector<HTMLElement>('.rtk-body')!;
+		const detailsElement = canvas.getByRole('region', { name: 'Selected RTK base station' });
+		const directoryElement = canvas.getByRole('region', { name: 'Discovered RTK base stations' });
+		body.scrollTop = 0;
+		const details = detailsElement.getBoundingClientRect();
+		const directory = directoryElement.getBoundingClientRect();
+		const panel = panelElement.getBoundingClientRect();
+		const map = canvas.getByRole('region', { name: 'Base station location map' }).getBoundingClientRect();
+		await expect(body.firstElementChild).toBe(directoryElement);
+		await expect(directory.bottom).toBeLessThanOrEqual(details.top + 1);
+		await expect(directory.top).toBeGreaterThanOrEqual(body.getBoundingClientRect().top);
+		await expect(getComputedStyle(body).overflowY).toBe('auto');
+		await expect(body.scrollHeight).toBeGreaterThan(body.clientHeight);
+		// The whole panel scrolls through the directory and details together.
+		for (const element of panelElement.querySelectorAll<HTMLElement>('.rtk-directory, .rtk-station-scroll, .rtk-details')) {
+			await expect(getComputedStyle(element).overflowY).toBe('visible');
+			await expect(element.scrollHeight).toBeLessThanOrEqual(element.clientHeight + 1);
+		}
+		await expect(map.width).toBeGreaterThan(240);
 		await expect(panelElement.scrollWidth).toBeLessThanOrEqual(panelElement.clientWidth);
 		if (panel.width > 760) {
-			await expect(directory.bottom).toBeLessThanOrEqual(details.top);
 			await expect(map.top).toBeLessThanOrEqual(details.top + 16);
 			await expect(map.bottom).toBeLessThanOrEqual(details.bottom);
 		} else {
-			await expect(directory.top).toBeGreaterThanOrEqual(details.bottom);
 			const metrics = canvas.getByLabelText('Base station position').getBoundingClientRect();
 			await expect(map.bottom).toBeLessThanOrEqual(metrics.top);
-			const detailsElement = canvas.getByRole('region', { name: 'Selected RTK base station' });
-			await expect(detailsElement.scrollHeight).toBeLessThanOrEqual(detailsElement.clientHeight + 1);
 		}
-		const list = within(canvas.getByRole('table', { name: 'RTK base stations' }));
-		await expect(list.getAllByRole('row')).toHaveLength(4);
-		await userEvent.click(list.getByRole('button', { name: /MOCK GNSS B/ }));
+		body.scrollTop = details.top - body.getBoundingClientRect().top;
+		await expect(body.scrollTop).toBeGreaterThan(0);
+		await expect(directoryElement.getBoundingClientRect().top).toBeCloseTo(directory.top - body.scrollTop, 0);
+		await expect(detailsElement.getBoundingClientRect().top).toBeLessThan(body.getBoundingClientRect().bottom);
+		body.scrollTop = 0;
+		const table = canvas.getByRole('table', { name: 'RTK base stations' });
+		const list = within(table);
+		await expect(table.querySelectorAll('tbody tr')).toHaveLength(5);
+		const selectB = list.getByRole('button', { name: /LoRa 2345\.7\.\?\.42/ });
+		selectB.scrollIntoView({ block: 'nearest' });
+		await userEvent.click(selectB);
 		await expect(canvas.getByLabelText('LoRa number')).toHaveTextContent('2345.7.?.42');
-		await userEvent.click(list.getByRole('button', { name: /MOCK GNSS C/ }));
+		await userEvent.click(list.getByRole('button', { name: /LoRa 3456\.7\.\?\.42/ }));
 		await expect(canvas.getByLabelText('LoRa number')).toHaveTextContent('3456.7.?.42');
+		await userEvent.click(list.getByRole('button', { name: /LoRa 5678\.7\.\?\.42/ }));
+		await expect(canvas.getByLabelText('LoRa number')).toHaveTextContent('5678.7.?.42');
 	},
 };
 
