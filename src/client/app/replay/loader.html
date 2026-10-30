@@ -1,0 +1,72 @@
+<UiDialog
+	:open="receiver.showIqReplayLoader"
+	:title="receiver.iqReplayReplace ? 'Change IQ recording' : 'Load IQ recording'"
+	dialog-class="iq-replay-loader"
+	body-class="iq-replay-loader-body"
+	@close="receiver.showIqReplayLoader = false"
+>
+	<div class="iq-replay-files">
+		<UiFormRow label="Recording files" :input-id="receiver.receiverId + '-iq-replay-files'">
+			<input
+				:id="receiver.receiverId + '-iq-replay-files'"
+				type="file"
+				multiple
+				accept=".sigmf-data,.sigmf-meta,.json,.iq"
+				aria-label="IQ recording files"
+				:disabled="busy"
+				@change="select"
+			/>
+		</UiFormRow>
+		<p class="iq-replay-hint">Select the IQ data and matching metadata together.</p>
+	</div>
+	<div v-if="recording" class="iq-replay-recording">
+		<div class="iq-replay-file-summary">
+			<span>{{ recording.file.name }}</span>
+			<small>{{ duration.toFixed(1) }} s</small>
+		</div>
+		<p v-if="!metadataLoaded" class="iq-replay-hint">No metadata selected. Enter the original recording settings.</p>
+		<UiFormRow label="Sample rate"
+			><UiInputGroup unit="MSPS"
+				><UiInput
+					type="number"
+					v-model.number="rate"
+					:disabled="metadataLoaded || busy"
+					min="0.001"
+					max="61.44"
+					step="0.001"
+					aria-label="Recorded sample rate" /></UiInputGroup
+		></UiFormRow>
+		<UiFormRow label="SDR centre"
+			><UiInputGroup unit="MHz"
+				><UiInput
+					type="number"
+					v-model.number="center"
+					:disabled="metadataLoaded || busy"
+					min="0"
+					step="0.001"
+					aria-label="Recorded centre frequency" /></UiInputGroup
+		></UiFormRow>
+		<UiFormRow label="Frequency shift"
+			><UiInputGroup unit="MHz"
+				><UiInput
+					type="number"
+					v-model.number="shift"
+					:disabled="metadataLoaded || busy"
+					step="0.001"
+					aria-label="Recorded frequency shift" /></UiInputGroup
+		></UiFormRow>
+	</div>
+	<p v-if="error" class="iq-replay-error" role="alert">{{ error }}</p>
+	<div v-if="receiver.iqReplayReplace" class="iq-replay-note"><span>Starts paused</span><span>VFO &amp; decoder settings kept</span></div>
+	<details class="iq-replay-help">
+		<summary>Supported files &amp; playback</summary>
+		<p>Use <code>.sigmf-data</code> with matching <code>.sigmf-meta</code> or <code>.sigmf-meta.json</code> metadata.</p>
+		<p>For raw <code>.iq</code> files, enter the recording settings. Data must be signed 8-bit I/Q, I first.</p>
+		<p>Files stay on your computer. Replay starts paused and plays at the original sample rate.</p>
+	</details>
+	<template #footer
+		><UiButton variant="primary" :disabled="!recording || busy" @click="load"
+			>{{ receiver.iqReplayReplace ? 'Replace recording' : 'Load recording' }}</UiButton
+		><UiButton :disabled="busy" @click="receiver.showIqReplayLoader = false">Cancel</UiButton></template
+	>
+</UiDialog>

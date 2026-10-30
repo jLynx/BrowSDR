@@ -6,6 +6,7 @@ export interface Vfo {
 	rtk?: boolean;
 	rtkProfile?: RtkProfile;
 	rtkClockPpm?: number;
+	rtkFollowHops?: boolean;
 	adsb?: boolean;
 	ais?: boolean;
 	radiosonde?: boolean;

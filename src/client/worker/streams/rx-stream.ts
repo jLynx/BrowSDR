@@ -99,6 +99,7 @@ export async function startRxStream(
 			perf: { calls: 0, sum: 0, max: 0 },
 		};
 		installChannelCleanup(backend, channel);
+		backend._replayPending = () => channel.pending > 0;
 
 		// ── Audio DDC setup ───────────────────────────────────────────
 		// Full SDR++ pipeline in Rust: NCO → polyphase resampler (→50kHz)

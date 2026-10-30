@@ -19,7 +19,7 @@
 					<svg v-if="!view.locked" viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M12 17c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm6-9h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zM8.9 6c0-1.71 1.39-3.1 3.1-3.1s3.1 1.39 3.1 3.1v2H8.9V6zM18 20H6V10h12v10z"/></svg>
 					<svg v-else viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6-5c1.66 0 3 1.34 3 3v2H9V6c0-1.66 1.34-3 3-3zm0 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/></svg>
 			</UiButton>
-			<UiButton variant="icon" @click="togglePlay" :class="{ active: running }" :disabled="!connected" :aria-label="running ? 'Stop reception' : 'Start reception'" :title="running ? 'Stop reception' : 'Start reception'">
+			<UiButton variant="icon" @click="togglePlay" :class="{ active: running }" :disabled="!connected || iqReplayReplacing" :aria-label="running ? 'Stop reception' : 'Start reception'" :title="running ? 'Stop reception' : 'Start reception'">
 					<svg v-if="!running" viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
 					<svg v-else viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
 			</UiButton>
@@ -50,6 +50,7 @@
 					<UiFormRow class="info-row" v-if="connected && remoteMode !== 'client'">
 						<small>{{ info.boardName }}</small>
 					</UiFormRow>
+					<IqReplayPanel v-if="isDevelopment" />
 					<UiPanel label="Device info" class="radio-advanced device-info" v-if="connected && remoteMode !== 'client' && info.device" v-model:collapsed="deviceInfoCollapsed">
 						<UiFormRow v-if="info.device.manufacturer" label="Manufacturer"><small>{{ info.device.manufacturer }}</small></UiFormRow>
 						<UiFormRow v-if="info.device.product" label="Product"><small>{{ info.device.product }}</small></UiFormRow>
@@ -92,17 +93,17 @@
 				<UiPanel label="Radio" :disabled="!connected" v-model:collapsed="collapsedPanels['radio']">
 					<UiFormRow label="Center">
 						<UiInputGroup unit="MHz">
-							<UiInput type="number" v-model.number="radio.centerFreq" min="0" step="0.1" title="Center Frequency (MHz)" :disabled="autoGain.active || (remoteMode === 'client' && locks.centerFreq)"></UiInput>
+							<UiInput type="number" v-model.number="radio.centerFreq" min="0" step="0.1" title="Center Frequency (MHz)" :disabled="!!iqReplay || autoGain.active || (remoteMode === 'client' && locks.centerFreq)"></UiInput>
 						</UiInputGroup>
 						<UiLock v-if="remoteMode === 'host' || (remoteMode === 'client' && locks.centerFreq)" :locked="locks.centerFreq" :host="remoteMode === 'host'" @toggle="locks.centerFreq = !locks.centerFreq"></UiLock>
 					</UiFormRow>
 					<UiFormRow label="Freq Shift">
 						<UiInputGroup unit="MHz">
-							<UiInput type="number" v-model.number="radio.frequencyShift" step="0.001" title="Displayed frequency = SDR frequency + shift. Use -125 MHz for a typical 125 MHz upconverter." :disabled="autoGain.active || remoteMode === 'client'"></UiInput>
+							<UiInput type="number" v-model.number="radio.frequencyShift" step="0.001" title="Displayed frequency = SDR frequency + shift. Use -125 MHz for a typical 125 MHz upconverter." :disabled="!!iqReplay || autoGain.active || remoteMode === 'client'"></UiInput>
 						</UiInputGroup>
 					</UiFormRow>
 					<UiFormRow label="Sample Rate">
-						<UiSelect v-model.number="radio.sampleRate" :disabled="autoGain.active || (remoteMode === 'client' && locks.sampleRate)">
+						<UiSelect v-model.number="radio.sampleRate" :disabled="!!iqReplay || autoGain.active || (remoteMode === 'client' && locks.sampleRate)">
 							<template v-if="deviceCapabilities">
 								<option v-for="rate in deviceCapabilities.sampleRates" :key="rate" :value="rate">{{ rate>= 1000000 ? (rate / 1000000) + ' MSPS' : (rate / 1000) + ' kSPS' }}</option>
 							</template>

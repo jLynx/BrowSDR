@@ -24,6 +24,14 @@ export function watchRadioTuning(receiver: AppInstance): void {
 		() => [receiver.radio.centerFreq, receiver.radio.frequencyShift],
 		([centerFreq, frequencyShift], [previousCenter]) => {
 			if (timer) clearTimeout(timer);
+			if (receiver.iqReplay) {
+				const recording = receiver.iqReplay.recording;
+				Object.assign(receiver.radio, {
+					centerFreq: (recording.centerHz + recording.frequencyShiftHz) / 1e6,
+					frequencyShift: recording.frequencyShiftHz / 1e6,
+				});
+				return;
+			}
 			if (centerFreq !== previousCenter) {
 				if (receiver.ble.tuning) return;
 				if (receiver.ble.scanning) receiver.stopBleScan();
@@ -42,7 +50,7 @@ export function watchRadioTuning(receiver: AppInstance): void {
 			timer = setTimeout(() => {
 				timer = null;
 				pending = pending.then(async () => {
-					if (disposed || !current(centerFreq, frequencyShift)) return;
+					if (disposed || receiver.iqReplay || !current(centerFreq, frequencyShift)) return;
 					try {
 						if (!Number.isFinite(frequencyShift) || !isValidDisplayFrequencyMhz(centerFreq, frequencyShift)) {
 							throw new RangeError('RF and SDR frequencies must be finite and non-negative');

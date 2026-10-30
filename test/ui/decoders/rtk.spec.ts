@@ -142,7 +142,10 @@ describe('live RTK receiver tools', () => {
 		expect(wrapper.vm.rtk.frames[0]).toEqual([]);
 		expect(wrapper.find('[aria-label="LoRa number"]').exists()).toBe(false);
 		expect(wrapper.findAll('button').some((button) => button.text().startsWith('Tune to'))).toBe(false);
-		expect(wrapper.text()).toContain('automatic hop following is not available');
+		expect(wrapper.text()).toContain('Follow recorded NZ RTK3 hops');
+		await wrapper.get('[aria-label="Follow recorded NZ RTK3 hops"]').setValue(true);
+		expect(wrapper.vm.vfos[0].rtkFollowHops).toBe(true);
+		expect(wrapper.vm.backend!.setVfoParams).toHaveBeenLastCalledWith(0, expect.objectContaining({ rtkFollowHops: true }));
 		wrapper.vm._onRtkMessage(0, 923.118, { ...message(), profile: 'rtk1' });
 		expect(wrapper.vm.rtk.sources[0]).toEqual([]);
 		const packet = message();

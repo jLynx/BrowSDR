@@ -39,6 +39,9 @@ import { remoteMethods } from '@/app/workspace/remote';
 import HeaderTools from '@/app/workspace/receiver-tools';
 import DiscoveryPanel from '@/app/discovery/panel';
 import IqCapturePanel from '@/app/recording/panel';
+import IqReplayLoader from '@/app/replay/loader';
+import IqReplayPanel from '@/app/replay/panel';
+import { replayMethods } from '@/app/replay/connection';
 
 export const ReceiverView = defineComponent({
 	template,
@@ -58,6 +61,8 @@ export const ReceiverView = defineComponent({
 		HeaderTools,
 		DiscoveryPanel,
 		IqCapturePanel,
+		IqReplayLoader,
+		IqReplayPanel,
 	},
 	provide() {
 		return { receiver: this };
@@ -89,6 +94,7 @@ export const ReceiverView = defineComponent({
 		...flexMethods,
 		...vfoMethods,
 		...connectionMethods,
+		...replayMethods,
 		...remoteMethods,
 		isFreqInBandwidth: () => true,
 	},

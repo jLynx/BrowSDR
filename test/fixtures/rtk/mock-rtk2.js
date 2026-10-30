@@ -81,3 +81,41 @@ export function mockRtk2Packet(payload, sequence, address, network) {
 }
 
 export const mockRtk2Options = { rate: 1, hasCrc: false, ldro: false, oversample: 4, clockPpm: 10, preamble: 16, sync: [16, 8] };
+
+export function mockRtk2Compact(payload, field = 9, address = 4242, network = 'TESTNET1') {
+	const bytes = Uint8Array.from([
+		0x5d,
+		0xa6,
+		...new TextEncoder().encode(network),
+		address & 255,
+		address >> 8,
+		field,
+		payload.length,
+		...payload,
+	]);
+	return {
+		...mockRtk2Packet(new Uint8Array()),
+		data: mockRtk2Wire(Uint8Array.from([...bytes, mockRtk2Checks(bytes, 8)])),
+	};
+}
+
+export function mockRtk2Beacon(slot = 9, seconds = 100, address = 4242, network = 'TESTNET1') {
+	const bytes = Uint8Array.from([
+		0x5d,
+		0xa6,
+		...new TextEncoder().encode(network),
+		address & 255,
+		address >> 8,
+		slot,
+		0,
+		30,
+		0,
+		seconds & 255,
+		(seconds >> 8) & 255,
+		(seconds >> 16) & 255,
+		(seconds >>> 24) & 255,
+		0,
+		0,
+	]);
+	return { ...mockRtk2Packet(new Uint8Array()), data: mockRtk2Wire(Uint8Array.from([...bytes, mockRtk2Checks(bytes, 8)])) };
+}

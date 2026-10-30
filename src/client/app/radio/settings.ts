@@ -9,6 +9,7 @@ import { formatFrequencyMhz } from '@/display/frequency-format';
 
 export const settingsMethods = {
 	saveSetting(this: AppInstance) {
+		if (this.iqReplay) return;
 		const obj = {
 			spectrumRangeVersion: SPECTRUM_RANGE_VERSION,
 			radio: this.radio,

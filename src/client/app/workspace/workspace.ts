@@ -32,6 +32,8 @@ import { WorkspaceMediaSession } from '@/app/audio/media-session';
 import { UiButton, UiNotice } from '@/ui';
 import { remoteConnectionIssue } from '@/platform/browser-capabilities';
 import type { CapabilityIssue } from '@/platform/types';
+import { connectIqReplay } from '@/app/replay/workspace';
+import type { IqRecording } from '@/radio/iq-replay/types';
 
 export async function syncReceiverAvailability(app: AppInstance, running: boolean): Promise<void> {
 	// Inventory changes preserve a client's own pause choice. Only resume
@@ -104,6 +106,9 @@ export function createWorkspace(Receiver: ReceiverComponent) {
 			},
 			connectDevice(this: WorkspaceInstance, source: AppInstance, device: USBDevice | 'mock') {
 				return connectDevice.call(this, runtime, source, device);
+			},
+			connectIqReplay(this: WorkspaceInstance, source: AppInstance, recording: IqRecording) {
+				return connectIqReplay(this, source, recording);
 			},
 			removeReceiver(this: WorkspaceInstance, id: string) {
 				return removeReceiver.call(this, runtime, id);

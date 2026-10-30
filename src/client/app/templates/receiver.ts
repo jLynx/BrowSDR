@@ -22,6 +22,7 @@ export default [
 	part6,
 	part7,
 	part8,
+	'<IqReplayLoader v-if="isDevelopment" />',
 	part9,
 	part10,
 	part11,

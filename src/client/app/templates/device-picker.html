@@ -14,6 +14,10 @@
 				<span class="device-picker-name">Mock SDR</span>
 				<span class="device-picker-meta">Simulated receiver for testing</span>
 			</UiButton>
+			<UiButton v-if="isDevelopment" variant="device" @click="devicePicker.show = false; iqReplayReplace = false; showIqReplayLoader = true">
+				<span class="device-picker-name">IQ File Replay</span>
+				<span class="device-picker-meta">Load a recorded signal and replay it at its original sample rate</span>
+			</UiButton>
 		</div>
 
 		<template #footer>
