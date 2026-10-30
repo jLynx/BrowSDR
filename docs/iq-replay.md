@@ -2,7 +2,8 @@
 
 Choose **Add SDR → IQ File Replay**. Select one `.sigmf-data` file and its matching
 `.sigmf-meta` or `.sigmf-meta.json` file together, then **Load recording**. This
-works in normal builds and requires no USB device. The receiver starts paused so
+is available during local development (`npm run dev`), alongside Mock SDR, and
+requires no USB device. It is hidden and disabled in production. The receiver starts paused so
 you can configure VFOs and decoders before pressing **Play replay**.
 
 Replay reads the file locally in chunks of at most 256 KiB and delivers its signed
@@ -20,6 +21,14 @@ fragments. At end of file, queued DSP deliveries finish before reception stops;
 press Play again to replay from the beginning. Disconnect releases the recording
 and restores the previous radio/VFO/gain/view settings. Replay changes do not
 overwrite saved hardware settings.
+
+Use **Change recording** in the Source panel to replace the file in the same
+receiver. Select the replacement data and matching metadata, then **Replace
+recording**. Cancel keeps the current file and playback unchanged. Loading a valid
+replacement stops playback, clears results from the old recording and starts the
+new file paused at sample zero. Your VFO frequencies and decoder settings remain;
+VFOs outside the new recording's bandwidth need retuning. Disconnect still restores
+the hardware settings from before the first file was loaded.
 
 The centre frequency, sample rate and display frequency shift are fixed by the
 recording. VFOs can tune within the recorded bandwidth. Changing gain, selecting

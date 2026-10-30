@@ -5,6 +5,7 @@ import { errorMessage, errorName } from '@/platform/errors';
 import type { AppInstance } from '@/app/core/receiver.types';
 import * as Comlink from 'comlink';
 import { restoreReplaySettings } from '@/app/replay/connection';
+import { clearDecoderSources } from '@/app/core/decoder-state';
 
 /** The six pager-decoder callbacks (POCSAG msg/status, GSC msg/status, FLEX
  * msg/status) as a tuple of individually Comlink-proxied functions, to be
@@ -71,6 +72,11 @@ export const connectionMethods = {
 		}
 
 		this.devicePicker.devices = sdrDevices;
+		// Keep development receivers reachable without opening a USB prompt first.
+		// A slow getDevices() can expire activation; retain the explicit pairing button then.
+		if (!import.meta.env.DEV && !sdrDevices.length && navigator.userActivation?.isActive !== false) {
+			return this.pairNewDevice();
+		}
 		this.devicePicker.show = true;
 	},
 
@@ -504,22 +510,4 @@ function updateReceiverActivity(this: AppInstance, now: number) {
 	}
 	// Bump reactive tick so sortedVfoActivity recomputes
 	this.activityNow = now;
-}
-
-function clearDecoderSources(receiver: AppInstance): void {
-	receiver.adsb.sources = [];
-	receiver.adsb.status = [];
-	receiver.ais.sources = [];
-	receiver.radiosonde.sources = [];
-	receiver.ais.status = [];
-	receiver.radiosonde.status = [];
-	receiver.rtk.status = [];
-	receiver.rtk.sources = [];
-	receiver.rtk.frames = [];
-	receiver.rtk.frequencies = [];
-	receiver.ble.status = [];
-	receiver.acars.status = [];
-	receiver.acars.sources = [];
-	receiver.aprs.status = [];
-	receiver.aprs.sources = [];
 }

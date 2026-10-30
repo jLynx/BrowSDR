@@ -123,6 +123,7 @@ export interface ReceiverMethods {
 	connectIqReplay(recording: IqRecording): Promise<void>;
 	_connectIqReplay(recording: IqRecording): Promise<void>;
 	restartIqReplay(): Promise<void>;
+	replaceIqReplay(recording: IqRecording): Promise<void>;
 	disconnect(): Promise<void>;
 	_disconnectReceiver(): Promise<void>;
 	_releaseWakeLock(): void;

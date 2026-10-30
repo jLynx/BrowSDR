@@ -57,7 +57,8 @@ export default defineComponent({
 					frequencyShiftHz: shift.value * 1e6,
 				};
 				validateIqRecording(value);
-				await receiver.connectIqReplay(value);
+				if (receiver.iqReplayReplace) await receiver.replaceIqReplay(value);
+				else await receiver.connectIqReplay(value);
 				recording.value = null;
 			} catch (cause) {
 				error.value = errorMessage(cause);

@@ -9,7 +9,7 @@ import type { IqReplayProgress } from '@/radio/iq-replay/types';
 
 function renderReplay(state: IqReplayProgress['state'] = 'ready', mobile = false) {
 	return {
-		components: { IqReplayPanel },
+		components: { IqReplayPanel, IqReplayLoader },
 		setup() {
 			const progress = reactive<IqReplayProgress>({ state, seconds: state === 'ready' ? 0 : 25, duration: 60, delaySeconds: 0 });
 			const receiver = reactive({
@@ -42,7 +42,7 @@ function renderReplay(state: IqReplayProgress['state'] = 'ready', mobile = false
 			});
 			provide('receiver', receiver as unknown as AppInstance);
 		},
-		template: `<div style="max-width:${mobile ? '280px' : '360px'};padding:12px"><IqReplayPanel /></div>`,
+		template: `<div style="max-width:${mobile ? '280px' : '360px'};padding:12px"><IqReplayPanel /><IqReplayLoader /></div>`,
 	};
 }
 
@@ -69,6 +69,19 @@ export const Playing: Story = {
 	},
 };
 export const Mobile: Story = { render: () => renderReplay('paused', true) };
+export const ChangeRecording: Story = {
+	render: () => renderReplay('paused'),
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await userEvent.click(canvas.getByRole('button', { name: 'Change recording' }));
+		const dialog = canvas.getByRole('dialog', { name: 'Change IQ recording' });
+		await expect(dialog).toHaveTextContent('VFO & decoder settings kept');
+		await expect(within(dialog).getByRole('button', { name: 'Replace recording' })).toBeDisabled();
+		await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+		await expect(dialog).not.toBeInTheDocument();
+		await expect(canvas.getByRole('status')).toHaveTextContent('25.0 / 60.0');
+	},
+};
 export const Loader: Story = {
 	render: () => ({
 		components: { IqReplayLoader },
@@ -77,4 +90,10 @@ export const Loader: Story = {
 		},
 		template: '<IqReplayLoader />',
 	}),
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await expect(canvas.getByLabelText('IQ recording files')).toBeVisible();
+		await userEvent.click(canvas.getByText('Supported files & playback', { exact: true }));
+		await expect(canvas.getByText(/signed 8-bit I\/Q/)).toBeVisible();
+	},
 };

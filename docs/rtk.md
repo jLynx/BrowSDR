@@ -572,7 +572,7 @@ and sequence gaps reset acquisition. No new application dependency is needed.
 
 ## Capture files and fixtures
 
-Use **Add SDR → IQ File Replay** to load a BrowSDR recording and its matching
+During local development, use **Add SDR → IQ File Replay** to load a BrowSDR recording and its matching
 SigMF metadata. Configure the RTK VFOs while paused, then replay through the normal
 receive pipeline at 1×. See the [IQ replay guide](iq-replay.md) for the recorded
 RTK frequencies and the limits of replay testing.

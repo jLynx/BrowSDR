@@ -6,9 +6,12 @@
 		receiver.iqReplay.progress.duration.toFixed(1) }} s · 1×
 	</p>
 	<div class="iq-replay-actions">
-		<UiButton variant="primary" :disabled="busy" @click="receiver.togglePlay()"
+		<UiButton variant="primary" :disabled="busy || receiver.iqReplayReplacing" @click="receiver.togglePlay()"
 			>{{ receiver.running ? 'Pause replay' : 'Play replay' }}</UiButton
-		><UiButton :disabled="busy" @click="restart">Restart</UiButton>
+		><UiButton :disabled="busy || receiver.iqReplayReplacing" @click="restart">Restart</UiButton>
+		<UiButton :disabled="busy || receiver.iqReplayReplacing" @click="receiver.iqReplayReplace = true; receiver.showIqReplayLoader = true"
+			>Change recording</UiButton
+		>
 	</div>
 	<p v-if="receiver.iqReplay.progress.error" role="alert">{{ receiver.iqReplay.progress.error }}</p>
 	<p v-if="receiver.iqReplay.progress.delaySeconds > 0.1">

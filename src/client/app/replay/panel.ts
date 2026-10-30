@@ -14,8 +14,9 @@ export default defineComponent({
 		let generation = 0;
 		const poll = async (id: number) => {
 			try {
+				if (receiver.iqReplayReplacing) return;
 				const progress = await receiver.backend.getIqReplayProgress();
-				if (id !== generation || !receiver.iqReplay) return;
+				if (id !== generation || !receiver.iqReplay || receiver.iqReplayReplacing) return;
 				if (progress) receiver.iqReplay.progress = progress;
 				if (progress && ['ended', 'error'].includes(progress.state) && receiver.running && !busy.value && !receiver._playChanging)
 					await receiver.togglePlay();

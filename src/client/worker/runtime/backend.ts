@@ -96,10 +96,11 @@ import { displayToDeviceFrequencyHz } from '@/radio/frequency-shift';
 import { selectUsbDevice } from '@/radio/usb-device-selection';
 import { transfer } from 'comlink';
 import { IqCapture } from '@/worker/recording/iq-capture';
-import { openIqReplay, getIqReplayProgress, rewindIqReplay } from '@/worker/recording/replay';
+import { openIqReplay, replaceIqReplay, getIqReplayProgress, rewindIqReplay } from '@/worker/recording/replay';
 
 export class Backend {
 	openIqReplay = openIqReplay.bind(this);
+	replaceIqReplay = replaceIqReplay.bind(this);
 	getIqReplayProgress = getIqReplayProgress.bind(this);
 	rewindIqReplay = rewindIqReplay.bind(this);
 	_replayPending?: () => boolean;

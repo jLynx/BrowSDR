@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flushPromises, mount } from '@vue/test-utils';
 import { reactive, markRaw } from 'vue';
 import { File as NodeFile } from 'node:buffer';
@@ -9,6 +9,8 @@ import { createAppData } from '@/app/core/state';
 import { settingsMethods } from '@/app/radio/settings';
 import { ReceiverView } from '../helpers/receiver-view';
 import type { AppInstance } from '@/app/core/receiver.types';
+
+beforeEach(() => vi.stubEnv('DEV', true));
 
 afterEach(() => {
 	vi.useRealTimers();
@@ -32,13 +34,30 @@ function files() {
 }
 
 describe('IQ replay UI', () => {
-	it('offers file replay in production even without WebUSB', async () => {
+	it('hides replay and prevents replay connections in production', async () => {
 		vi.stubEnv('DEV', false);
 		vi.stubGlobal('navigator', { onLine: true });
 		const wrapper = mount(ReceiverView);
 		await wrapper.vm.connect();
-		const button = wrapper.findAll('button').find((item) => item.text().includes('IQ File Replay'))!;
-		await button.trigger('click');
+		expect(wrapper.findAll('button').some((item) => item.text().includes('IQ File Replay'))).toBe(false);
+		await wrapper.setData({ showIqReplayLoader: true, backend: { openIqReplay: vi.fn(), replaceIqReplay: vi.fn() } });
+		expect(wrapper.find('[aria-label="IQ recording files"]').exists()).toBe(false);
+		const recording = { file: files().data, sampleRate: 20000000, centerHz: 923118000, frequencyShiftHz: 0 };
+		await wrapper.vm.connectIqReplay(recording);
+		await wrapper.vm._connectIqReplay(recording);
+		await wrapper.vm.replaceIqReplay(recording);
+		expect(wrapper.vm.backend.openIqReplay).not.toHaveBeenCalled();
+		expect(wrapper.vm.backend.replaceIqReplay).not.toHaveBeenCalled();
+		wrapper.unmount();
+	});
+	it('keeps IQ replay available in development when WebUSB is unavailable', async () => {
+		vi.stubGlobal('navigator', { onLine: true });
+		const wrapper = mount(ReceiverView);
+		await wrapper.vm.connect();
+		await wrapper
+			.findAll('button')
+			.find((button) => button.text().includes('IQ File Replay'))!
+			.trigger('click');
 		expect(wrapper.vm.showIqReplayLoader).toBe(true);
 		expect(wrapper.get('[aria-label="IQ recording files"]').exists()).toBe(true);
 		wrapper.unmount();
@@ -104,6 +123,93 @@ describe('IQ replay UI', () => {
 		restoreReplaySettings(receiver);
 		expect(receiver.radio).toEqual(original);
 		expect(receiver.vfos[0].freq).toBe(100);
+	});
+	it('replaces a playing file in place, keeps VFO settings and clears old results without replacing the hardware snapshot', async () => {
+		const startup = createAppData();
+		const current = { file: files().data, sampleRate: 20000000, centerHz: 923118000, frequencyShiftHz: 0 };
+		const replacement = {
+			...current,
+			file: new NodeFile([new Uint8Array(8000)], 'replacement.iq') as unknown as File,
+			sampleRate: 2000000,
+			centerHz: 100000000,
+		};
+		const previous = {
+			radio: { ...startup.radio },
+			gains: { LNA: 16 },
+			gainDeviceType: 'hackrf',
+			vfos: startup.vfos.map((vfo) => ({ ...vfo })),
+			view: { ...startup.view },
+		};
+		const receiver = reactive({
+			...startup,
+			connected: true,
+			running: true,
+			showIqReplayLoader: true,
+			iqReplayReplace: true,
+			iqReplay: { recording: markRaw(current), progress: { state: 'playing', seconds: 12, duration: 60, delaySeconds: 0 } },
+			_replayPrevious: previous,
+			_togglePlay: vi.fn(async () => {}),
+			showMsg: vi.fn(),
+			backend: {
+				replaceIqReplay: vi.fn(async () => {}),
+				getDeviceCapabilities: vi.fn(async () => ({
+					deviceType: 'iq-replay',
+					sampleRates: [2000000],
+					gainControls: [],
+					sampleFormat: 'int8',
+				})),
+				info: vi.fn(async () => ({ name: 'IQ File Replay', product: 'replacement.iq' })),
+			},
+		}) as unknown as AppInstance;
+		(receiver._togglePlay as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+			receiver.running = false;
+		});
+		receiver.vfos[0].freq = 921.791;
+		receiver.vfos[0].rtk = true;
+		receiver.vfos[0].rtkProfile = 'rtk2';
+		receiver.vfos[0].rtkFollowHops = true;
+		receiver.rtk.frames = [[]];
+		const snapshot = receiver._replayPrevious;
+		await replayMethods.replaceIqReplay.call(receiver, replacement);
+		expect(receiver._togglePlay).toHaveBeenCalledOnce();
+		expect(receiver.backend.replaceIqReplay).toHaveBeenCalledWith(replacement);
+		expect(receiver.connected).toBe(true);
+		expect(receiver.running).toBe(false);
+		expect(receiver.iqReplay?.progress).toMatchObject({ state: 'ready', seconds: 0, duration: 0.002 });
+		expect(receiver.vfos[0]).toMatchObject({ freq: 921.791, rtk: true, rtkProfile: 'rtk2', rtkFollowHops: true });
+		expect(receiver.rtk.frames).toEqual([]);
+		expect(receiver.radio).toMatchObject({ centerFreq: 100, sampleRate: 2000000 });
+		expect(receiver._replayPrevious).toBe(snapshot);
+		expect(receiver.showIqReplayLoader).toBe(false);
+		expect(receiver._playChanging).toBe(false);
+		restoreReplaySettings(receiver);
+		expect(receiver.gains).toEqual({ LNA: 16 });
+		expect(receiver.vfos[0].freq).toBe(100);
+	});
+	it('opens replacement in the existing panel and cancelling keeps the current recording', async () => {
+		const receiver = reactive({
+			...createAppData(),
+			connected: true,
+			iqReplay: {
+				recording: markRaw({ file: files().data, sampleRate: 20000000, centerHz: 923118000, frequencyShiftHz: 0 }),
+				progress: { state: 'paused', seconds: 12, duration: 60, delaySeconds: 0 },
+			},
+		});
+		const panel = mount(Panel, { global: { provide: { receiver } } });
+		const loader = mount(Loader, { global: { provide: { receiver } } });
+		await panel
+			.findAll('button')
+			.find((button) => button.text() === 'Change recording')!
+			.trigger('click');
+		expect(loader.get('[role=dialog]').attributes('aria-label')).toBe('Change IQ recording');
+		await loader
+			.findAll('button')
+			.find((button) => button.text() === 'Cancel')!
+			.trigger('click');
+		expect(receiver.iqReplay.progress.seconds).toBe(12);
+		expect(receiver.iqReplay.recording.file.name).toBe('test.sigmf-data');
+		panel.unmount();
+		loader.unmount();
 	});
 	it('waits for DSP draining before stopping at EOF and cancels polling on unmount', async () => {
 		vi.useFakeTimers();
