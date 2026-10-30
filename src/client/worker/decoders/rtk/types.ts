@@ -4,6 +4,7 @@ export interface LoraProfile {
 	bandwidth: number;
 	oversample: number;
 	sync: [number, number];
+	alternateSync?: [number, number];
 	ldro: boolean;
 }
 
@@ -21,6 +22,7 @@ export interface LoraPacket {
 	codingRate: number;
 	cfoHz: number;
 	codingErrors?: number;
+	startSample?: number;
 }
 
 export interface RtkStatus {
@@ -37,6 +39,9 @@ export interface RtkStatus {
 	syncSymbols?: [number, number];
 	beacons?: number;
 	containers?: number;
+	compactPackets?: number;
+	hopFrequencyMHz?: number;
+	hopTracking?: boolean;
 	containerErrors?: number;
 	sequenceGaps?: number;
 }

@@ -1,6 +1,7 @@
 import type { LoraPacket } from '@/worker/decoders/rtk/types';
 import { crc16Modbus } from '@/worker/decoders/rtk/rtk3/frame';
 import { decodeRtk2Bytes } from './transform';
+import type { Rtk2Frame } from './types';
 
 export function crc8Maxim(data: Uint8Array): number {
 	let crc = 0;
@@ -21,10 +22,43 @@ function decimalLoc(bytes: Uint8Array): number | undefined {
 	return value <= 65535 ? value : undefined;
 }
 
+function identity(data: Uint8Array) {
+	return {
+		network: Array.from(data.subarray(2, 10), (byte) => byte.toString(16).padStart(2, '0')).join(''),
+		loc: decimalLoc(data.subarray(2, 10)),
+		address: data[10] | (data[11] << 8),
+	};
+}
+
+/** Captured hopping variant: a 14-byte header, raw stream bytes and CRC8, without CR/LF. */
+function compactFrame(data: Uint8Array): Rtk2Frame | undefined {
+	if (data[13] > 240 || data[13] !== data.length - 15 || crc8Maxim(data.subarray(0, -1)) !== data[data.length - 1]) return;
+	// Byte 12 matches the radio slot in verified control beacons; it is not a packet sequence.
+	return { format: 'compact', ...identity(data), loc: undefined, hopSlot: data[12], body: data.slice(14, -1) };
+}
+
+function compactBeacon(data: Uint8Array): Rtk2Frame | undefined {
+	if (data.length !== 23 || data[12] > 17 || data[13] !== 0 || data[14] !== 30 || data[15] !== 0 || data[20] !== 0 || data[21] !== 0)
+		return;
+	if (crc8Maxim(data.subarray(0, -1)) !== data[22]) return;
+	return {
+		format: 'compact',
+		...identity(data),
+		loc: undefined,
+		hopSlot: data[12],
+		beaconSeconds: new DataView(data.buffer, data.byteOffset, data.byteLength).getUint32(16, true),
+		body: new Uint8Array(0),
+	};
+}
+
 /** Validated DU1021D outer frame containing one checksummed correction-stream chunk. */
-export function decodeRtk2Frame(packet: LoraPacket) {
-	if (packet.hasCrc || packet.codingRate !== 1 || packet.codingErrors || packet.data.length < 30 || packet.data.length > 255) return;
+export function decodeRtk2Frame(packet: LoraPacket): Rtk2Frame | undefined {
+	if (packet.hasCrc || packet.codingRate !== 1 || packet.codingErrors || packet.data.length < 15 || packet.data.length > 255) return;
 	const data = decodeRtk2Bytes(packet.data);
+	if (data[0] !== 0x5d || data[1] !== 0xa6) return;
+	if (data[13] === data.length - 15) return compactFrame(data);
+	if (data.length === 23) return compactBeacon(data);
+	if (data.length < 30) return;
 	const end = data.length - 3;
 	if (data[0] !== 0x5d || data[1] !== 0xa6 || data[end + 1] !== 13 || data[end + 2] !== 10) return;
 	if ((data[12] | (data[13] << 8)) !== data.length - 18 || crc8Maxim(data.subarray(0, end)) !== data[end]) return;
@@ -37,9 +71,8 @@ export function decodeRtk2Frame(packet: LoraPacket) {
 	)
 		return;
 	return {
-		network: Array.from(data.subarray(2, 10), (byte) => byte.toString(16).padStart(2, '0')).join(''),
-		loc: decimalLoc(data.subarray(2, 10)),
-		address: data[10] | (data[11] << 8),
+		format: 'container',
+		...identity(data),
 		sequence: body[8] | (body[9] << 8),
 		body: body.slice(10, -2),
 	};

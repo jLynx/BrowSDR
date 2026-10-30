@@ -3,6 +3,7 @@ import type { Component, WatchOptions, WatchStopHandle } from 'vue';
 import type { AppInstance } from '@/app/core/receiver.types';
 import type { CapabilityIssue } from '@/platform/types';
 import type { ReceiverInventory } from '@/remote/types';
+import type { IqRecording } from '@/radio/iq-replay/types';
 
 export interface ReceiverEntry {
 	id: string;
@@ -35,6 +36,7 @@ export interface WorkspaceInstance extends WorkspaceData {
 	addDevice(): Promise<void>;
 	isDeviceConnected(device: USBDevice): boolean;
 	connectDevice(source: AppInstance, device: USBDevice | 'mock'): Promise<void>;
+	connectIqReplay(source: AppInstance, recording: IqRecording): Promise<void>;
 	removeReceiver(id: string): Promise<void>;
 	broadcastReceivers(clientId?: string): void;
 	attachHostReceiver(app: AppInstance): Promise<void>;

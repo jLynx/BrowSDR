@@ -102,6 +102,7 @@ export const vfoMethods = {
 				rtk: vfo.rtk && inBandwidth,
 				rtkProfile: vfo.rtkProfile,
 				rtkClockPpm: vfo.rtkClockPpm,
+				rtkFollowHops: vfo.rtkFollowHops,
 				ble: vfo.ble && inBandwidth,
 				acars: vfo.acars && inBandwidth,
 				aprs: vfo.aprs && inBandwidth,

@@ -39,6 +39,7 @@ export const makeDefaultVfo = (freq = 100.0) => ({
 	rtk: false,
 	rtkProfile: 'rtk1' as RtkProfile,
 	rtkClockPpm: 20,
+	rtkFollowHops: false,
 	ble: false,
 	acars: false,
 	aprs: false,

@@ -1,0 +1,61 @@
+<UiDialog
+	:open="receiver.showIqReplayLoader"
+	title="Load IQ recording"
+	dialog-class="iq-replay-loader"
+	@close="receiver.showIqReplayLoader = false"
+>
+	<p>Select the recording's .sigmf-data and matching .sigmf-meta or .sigmf-meta.json files together.</p>
+	<UiFormRow label="Recording files">
+		<input
+			type="file"
+			multiple
+			accept=".sigmf-data,.sigmf-meta,.json,.iq"
+			aria-label="IQ recording files"
+			:disabled="busy"
+			@change="select"
+		/>
+	</UiFormRow>
+	<template v-if="recording">
+		<p>{{ recording.file.name }} · {{ duration.toFixed(1) }} seconds</p>
+		<p v-if="!metadataLoaded">No metadata selected. Enter the original recording settings. Raw data must be signed 8-bit I/Q, I first.</p>
+		<UiFormRow label="Sample rate"
+			><UiInputGroup unit="MSPS"
+				><UiInput
+					type="number"
+					v-model.number="rate"
+					:disabled="metadataLoaded || busy"
+					min="0.001"
+					max="61.44"
+					step="0.001"
+					aria-label="Recorded sample rate" /></UiInputGroup
+		></UiFormRow>
+		<UiFormRow label="SDR centre"
+			><UiInputGroup unit="MHz"
+				><UiInput
+					type="number"
+					v-model.number="center"
+					:disabled="metadataLoaded || busy"
+					min="0"
+					step="0.001"
+					aria-label="Recorded centre frequency" /></UiInputGroup
+		></UiFormRow>
+		<UiFormRow label="Frequency shift"
+			><UiInputGroup unit="MHz"
+				><UiInput
+					type="number"
+					v-model.number="shift"
+					:disabled="metadataLoaded || busy"
+					step="0.001"
+					aria-label="Recorded frequency shift" /></UiInputGroup
+		></UiFormRow>
+	</template>
+	<p v-if="error" role="alert">{{ error }}</p>
+	<p>
+		Files stay on this computer and are read in chunks. Playback runs at the recorded sample rate through the normal spectrum, audio and
+		decoder pipeline.
+	</p>
+	<template #footer
+		><UiButton variant="primary" :disabled="!recording || busy" @click="load">Load recording</UiButton
+		><UiButton :disabled="busy" @click="receiver.showIqReplayLoader = false">Cancel</UiButton></template
+	>
+</UiDialog>

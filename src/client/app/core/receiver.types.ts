@@ -28,6 +28,7 @@ import type { PagerLogEntry } from '@/app/decoders/types';
 import type { PagerProtocol } from '@/worker/decoders/charsets';
 import type { DSDStatus } from '@/worker/decoders/dsd/types';
 import type { ReceiverCommand } from '@/remote/types';
+import type { IqRecording } from '@/radio/iq-replay/types';
 
 export interface ReceiverInternals {
 	receiverId: string;
@@ -88,6 +89,7 @@ export interface ReceiverInternals {
 	_resumeAfterHostPause?: boolean;
 	_confirmedTuning?: { centerFreq: number; frequencyShift: number };
 	_pendingImportFile: File | null;
+	_replayPrevious?: Pick<ReturnType<typeof createAppData>, 'radio' | 'gains' | 'gainDeviceType' | 'vfos' | 'view'>;
 }
 
 export type AppInstance = Omit<ReturnType<typeof createAppData>, 'backend'> & ReceiverInternals & ReceiverMethods;
@@ -118,6 +120,9 @@ export interface ReceiverMethods {
 	_connectToDevice(device: USBDevice, deviceIndex?: number): Promise<void>;
 	connectMock(): Promise<void>;
 	_connectMock(): Promise<void>;
+	connectIqReplay(recording: IqRecording): Promise<void>;
+	_connectIqReplay(recording: IqRecording): Promise<void>;
+	restartIqReplay(): Promise<void>;
 	disconnect(): Promise<void>;
 	_disconnectReceiver(): Promise<void>;
 	_releaseWakeLock(): void;

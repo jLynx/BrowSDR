@@ -40,8 +40,7 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
   searchable text.
 - **📍 APRS Stations and Live Map**
   Decode amateur radio position reports, messages, weather and telemetry on
-  1200-baud packet channels, with a live station map. See the
-  [reception guide](docs/aprs.md).
+  1200-baud packet channels, with a live station map.
 - **📊 Frequency Activity**
   Visually spot active signals and quickly jump to transmissions using the dynamic frequency activity scanner and interactive waterfall display.
 - **🔖 Advanced Bookmarking System**

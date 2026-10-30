@@ -79,6 +79,7 @@ export default defineComponent({
 			signalStrength,
 			update: () => receiver.updateBackendVfoParams(index.value),
 			changeProfile: () => {
+				vfo.value.rtkFollowHops = false;
 				vfo.value.rtkClockPpm = vfo.value.rtkProfile === 'rtk3' ? 0 : vfo.value.rtkProfile === 'rtk1' ? 20 : 10;
 				// Profile changes invalidate results even when the frequency stays the same.
 				receiver.rtk.sources[index.value] = [];

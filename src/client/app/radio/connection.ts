@@ -4,6 +4,7 @@ import type { PairedSdr } from './types';
 import { errorMessage, errorName } from '@/platform/errors';
 import type { AppInstance } from '@/app/core/receiver.types';
 import * as Comlink from 'comlink';
+import { restoreReplaySettings } from '@/app/replay/connection';
 
 /** The six pager-decoder callbacks (POCSAG msg/status, GSC msg/status, FLEX
  * msg/status) as a tuple of individually Comlink-proxied functions, to be
@@ -195,6 +196,7 @@ export const connectionMethods = {
 			this.remoteMode = 'none';
 			if (this.running) await this.togglePlay();
 			await this.backend.close();
+			restoreReplaySettings(this);
 			this.connected = false;
 			return;
 		}
@@ -222,6 +224,7 @@ export const connectionMethods = {
 
 		if (this.running) await this.togglePlay();
 		await this.backend.close();
+		restoreReplaySettings(this);
 		this.connected = false;
 		this.deviceCapabilities = null;
 		this.showMsg('Disconnected');
@@ -255,6 +258,7 @@ export const connectionMethods = {
 			if (this.autoGain.active) this.cancelAutoGain();
 			this.stopBleScan();
 			await this.backend.stopRx();
+			if (this.iqReplay) this.iqReplay.progress = (await this.backend.getIqReplayProgress()) ?? this.iqReplay.progress;
 			this.running = false;
 			if (this._statsTimer) {
 				clearInterval(this._statsTimer);

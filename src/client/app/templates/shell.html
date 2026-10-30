@@ -50,6 +50,7 @@
 					<UiFormRow class="info-row" v-if="connected && remoteMode !== 'client'">
 						<small>{{ info.boardName }}</small>
 					</UiFormRow>
+					<IqReplayPanel />
 					<UiPanel label="Device info" class="radio-advanced device-info" v-if="connected && remoteMode !== 'client' && info.device" v-model:collapsed="deviceInfoCollapsed">
 						<UiFormRow v-if="info.device.manufacturer" label="Manufacturer"><small>{{ info.device.manufacturer }}</small></UiFormRow>
 						<UiFormRow v-if="info.device.product" label="Product"><small>{{ info.device.product }}</small></UiFormRow>
@@ -92,17 +93,17 @@
 				<UiPanel label="Radio" :disabled="!connected" v-model:collapsed="collapsedPanels['radio']">
 					<UiFormRow label="Center">
 						<UiInputGroup unit="MHz">
-							<UiInput type="number" v-model.number="radio.centerFreq" min="0" step="0.1" title="Center Frequency (MHz)" :disabled="autoGain.active || (remoteMode === 'client' && locks.centerFreq)"></UiInput>
+							<UiInput type="number" v-model.number="radio.centerFreq" min="0" step="0.1" title="Center Frequency (MHz)" :disabled="!!iqReplay || autoGain.active || (remoteMode === 'client' && locks.centerFreq)"></UiInput>
 						</UiInputGroup>
 						<UiLock v-if="remoteMode === 'host' || (remoteMode === 'client' && locks.centerFreq)" :locked="locks.centerFreq" :host="remoteMode === 'host'" @toggle="locks.centerFreq = !locks.centerFreq"></UiLock>
 					</UiFormRow>
 					<UiFormRow label="Freq Shift">
 						<UiInputGroup unit="MHz">
-							<UiInput type="number" v-model.number="radio.frequencyShift" step="0.001" title="Displayed frequency = SDR frequency + shift. Use -125 MHz for a typical 125 MHz upconverter." :disabled="autoGain.active || remoteMode === 'client'"></UiInput>
+							<UiInput type="number" v-model.number="radio.frequencyShift" step="0.001" title="Displayed frequency = SDR frequency + shift. Use -125 MHz for a typical 125 MHz upconverter." :disabled="!!iqReplay || autoGain.active || remoteMode === 'client'"></UiInput>
 						</UiInputGroup>
 					</UiFormRow>
 					<UiFormRow label="Sample Rate">
-						<UiSelect v-model.number="radio.sampleRate" :disabled="autoGain.active || (remoteMode === 'client' && locks.sampleRate)">
+						<UiSelect v-model.number="radio.sampleRate" :disabled="!!iqReplay || autoGain.active || (remoteMode === 'client' && locks.sampleRate)">
 							<template v-if="deviceCapabilities">
 								<option v-for="rate in deviceCapabilities.sampleRates" :key="rate" :value="rate">{{ rate>= 1000000 ? (rate / 1000000) + ' MSPS' : (rate / 1000) + ' kSPS' }}</option>
 							</template>

@@ -32,6 +32,7 @@ export interface VfoParams {
 	rtk?: boolean;
 	rtkProfile?: RtkProfile;
 	rtkClockPpm?: number;
+	rtkFollowHops?: boolean;
 	stereo?: boolean;
 	adsb?: boolean;
 	ais?: boolean;

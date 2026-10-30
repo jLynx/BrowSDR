@@ -16,6 +16,9 @@ export class IqDispatcher {
 	constructor(private views: Int8Array[]) {
 		this.leases = views.map(() => new Set());
 	}
+	get busy(): boolean {
+		return [...this.pending.values()].some((requests) => requests.size > 0);
+	}
 
 	canSend(worker: Worker, floatIq = false): boolean {
 		return !this.failed.has(worker) && (this.pending.get(worker)?.size ?? 0) < (floatIq ? MAX_PENDING_BANDS : MAX_PENDING_CHUNKS);

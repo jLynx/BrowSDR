@@ -8,31 +8,41 @@ import type { BaseStream } from './types';
 export class Rtk2Tracker {
 	private bases = new Map<string, BaseStream>();
 	private stations = new RtkStations();
-	readonly counters = { packets: 0, crcErrors: 0, beacons: 0, containers: 0, containerErrors: 0, sequenceGaps: 0 };
+	readonly counters = { packets: 0, crcErrors: 0, beacons: 0, compactPackets: 0, containers: 0, containerErrors: 0, sequenceGaps: 0 };
 
 	process(packet: LoraPacket): void {
 		const frame = decodeRtk2Frame(packet);
 		if (!frame) {
 			this.counters.crcErrors++;
+			this.rejectCandidate();
 			// The candidate has no trusted identity/sequence. The next verified container
 			// proves continuity or discards this base's pending data on a sequence gap.
 			return;
 		}
 		this.counters.packets++;
+		if (frame.format === 'compact') this.counters.compactPackets++;
 		const identity = { protocol: 'rtk2' as const, network: frame.network, loc: frame.loc, address: frame.address, netId: frame.address };
 		const key = stationKey(identity);
 		const station = this.stations.observe(identity, packet);
 		const now = Date.now();
 		const base = this.bases.get(key) ?? { partial: new Uint8Array(0), lastSeen: now };
-		if (now - base.lastSeen > 2000) {
+		const formatChanged = base.format !== undefined && base.format !== frame.format;
+		if (
+			now - base.lastSeen > 2000 ||
+			formatChanged ||
+			(frame.beaconSeconds !== undefined && base.beaconSeconds !== undefined && frame.beaconSeconds < base.beaconSeconds)
+		) {
 			base.partial = new Uint8Array(0);
+			if (formatChanged) base.sequence = undefined;
 			this.stations.discontinuity(key);
 		}
 		base.lastSeen = now;
+		base.format = frame.format;
+		if (frame.beaconSeconds !== undefined) base.beaconSeconds = frame.beaconSeconds;
 		this.bases.delete(key);
 		this.bases.set(key, base);
 		if (this.bases.size > 16) this.bases.delete(this.bases.keys().next().value!);
-		if (base.sequence !== undefined) {
+		if (frame.sequence !== undefined && base.sequence !== undefined) {
 			const delta = (frame.sequence - base.sequence + 65536) % 65536;
 			if (!delta) return;
 			if (delta !== 1) {
@@ -42,12 +52,21 @@ export class Rtk2Tracker {
 			}
 		}
 		base.sequence = frame.sequence;
-		this.counters.containers++;
+		if (frame.format === 'container') this.counters.containers++;
 		if (!frame.body.length) {
 			this.counters.beacons++;
 			return;
 		}
 		this.parse(frame.body, base, station);
+	}
+
+	/** Unsequenced compact streams cannot prove adjacency after a rejected radio candidate. */
+	rejectCandidate(): void {
+		for (const [key, base] of this.bases) {
+			if (base.format !== 'compact') continue;
+			base.partial = new Uint8Array(0);
+			this.stations.discontinuity(key);
+		}
 	}
 
 	private parse(body: Uint8Array, base: BaseStream, station: RtkStation): void {
