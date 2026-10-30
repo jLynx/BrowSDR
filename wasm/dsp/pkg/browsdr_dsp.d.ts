@@ -118,6 +118,8 @@ export class FFT {
      * Window gain is retained, matching SDR++ (no coherent-gain correction).
      */
     fft(input_: Int8Array, result: Float32Array): void;
+    fft_f32(input: Float32Array, result: Float32Array): void;
+    fft_i16(input: Int16Array, result: Float32Array): void;
     /**
      * Zero-copy FFT: takes a raw pointer to i8 IQ data, returns a raw pointer to f32 output.
      * The returned pointer is valid until the next call to `fft` or `fft_ptr`.
@@ -146,6 +148,8 @@ export class SharedChannelizer {
     output_len(band: number): number;
     output_ptr(band: number): number;
     process(input: Int8Array): void;
+    process_f32(input: Float32Array): void;
+    process_i16(input: Int16Array): void;
     set_batch_samples(count: number): void;
 }
 
@@ -154,6 +158,12 @@ export function alloc_float_buffer(capacity: number): number;
 export function alloc_iq_buffer(capacity: number): number;
 
 export function free_iq_buffer(ptr: number, capacity: number): void;
+
+/**
+ * Normalize full-scale signed int16 IQ into the existing float DSP input buffer.
+ * Callers own both allocations and pass at most their allocated component count.
+ */
+export function normalize_i16_to_f32(input: number, output: number, count: number): void;
 
 export function set_panic_hook(): void;
 
@@ -168,7 +178,6 @@ export interface InitOutput {
     readonly alloc_iq_buffer: (a: number) => number;
     readonly dspprocessor_get_iq_output_len: (a: number) => number;
     readonly dspprocessor_get_output_channels: (a: number) => number;
-    readonly dspprocessor_get_output_len: (a: number) => number;
     readonly dspprocessor_get_squelch_db: (a: number) => number;
     readonly dspprocessor_new: (a: number, b: number, c: number) => number;
     readonly dspprocessor_process: (a: number, b: number, c: number, d: number, e: number, f: any) => number;
@@ -187,16 +196,22 @@ export interface InitOutput {
     readonly dspprocessor_set_stereo: (a: number, b: number) => void;
     readonly dspprocessor_set_wfm_mode: (a: number, b: number) => void;
     readonly fft_fft: (a: number, b: number, c: number, d: number, e: number, f: any) => void;
+    readonly fft_fft_f32: (a: number, b: number, c: number, d: number, e: number, f: any) => void;
+    readonly fft_fft_i16: (a: number, b: number, c: number, d: number, e: number, f: any) => void;
     readonly fft_fft_ptr: (a: number, b: number, c: number) => number;
     readonly fft_new: (a: number, b: number, c: number) => number;
     readonly fft_set_smoothing_speed: (a: number, b: number) => void;
     readonly free_iq_buffer: (a: number, b: number) => void;
-    readonly set_panic_hook: () => void;
+    readonly normalize_i16_to_f32: (a: number, b: number, c: number) => void;
     readonly sharedchannelizer_new: (a: number, b: number, c: number) => number;
     readonly sharedchannelizer_output_len: (a: number, b: number) => number;
     readonly sharedchannelizer_output_ptr: (a: number, b: number) => number;
     readonly sharedchannelizer_process: (a: number, b: number, c: number) => void;
+    readonly sharedchannelizer_process_f32: (a: number, b: number, c: number) => void;
+    readonly sharedchannelizer_process_i16: (a: number, b: number, c: number) => void;
     readonly sharedchannelizer_set_batch_samples: (a: number, b: number) => void;
+    readonly set_panic_hook: () => void;
+    readonly dspprocessor_get_output_len: (a: number) => number;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;
     readonly __wbindgen_realloc: (a: number, b: number, c: number, d: number) => number;

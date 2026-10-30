@@ -15,7 +15,7 @@ export const computedProperties = {
 		const controls = (this.deviceCapabilities?.gainControls || []).filter(
 			(control) => control.name !== 'Receive Mode' || (import.meta.env.DEV && this.remoteMode === 'none'),
 		);
-		const advanced = new Set(['USB Format', 'Receive Mode']);
+		const advanced = new Set(['USB Format', 'Receive Mode', 'IQ Precision']);
 		return [
 			{ name: '', controls: controls.filter((control) => !advanced.has(control.name)) },
 			{ name: 'Advanced', controls: controls.filter((control) => advanced.has(control.name)) },

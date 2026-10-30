@@ -32,6 +32,26 @@ function panel() {
 }
 
 describe('IQ capture panel', () => {
+	it('offers higher precision and smaller recordings only when the radio retains higher precision', async () => {
+		const { receiver, backend, wrapper, button } = panel();
+		expect(wrapper.find('[aria-label="Recording IQ format"]').exists()).toBe(false);
+		receiver.deviceCapabilities = { deviceType: 'limesdr', nativeIqBits: 12, sampleFormat: 'int16', sampleRates: [2e6], gainControls: [] };
+		receiver.gains['IQ Precision'] = 0;
+		await flushPromises();
+		const select = wrapper.get('[aria-label="Recording IQ format"]');
+		await select.setValue('ci16_le');
+		expect(wrapper.text()).toContain('38.1 MiB');
+		await button().trigger('click');
+		await flushPromises();
+		expect(backend.captureIq).toHaveBeenCalledWith(5, 'ci16_le');
+		const metadata = JSON.parse((wrapper.vm as unknown as { metadata: string }).metadata);
+		expect(metadata.global['core:datatype']).toBe('ci16_le');
+		expect(metadata.global['browsdr:iq_precision_bits']).toBe(12);
+		receiver.gains['IQ Precision'] = 1;
+		await flushPromises();
+		expect(wrapper.find('[aria-label="Recording IQ format"]').exists()).toBe(false);
+		wrapper.unmount();
+	});
 	it('explains browser finalization and keeps metadata available after a failed file commit', async () => {
 		vi.useFakeTimers();
 		vi.stubGlobal('showSaveFilePicker', async () => ({ name: 'capture.sigmf-data' }));
@@ -87,7 +107,7 @@ describe('IQ capture panel', () => {
 		expect(wrapper.text()).toContain('64 MiB download limit');
 		await button().trigger('click');
 		await flushPromises();
-		expect(backend.captureIq).toHaveBeenCalledWith(null);
+		expect(backend.captureIq).toHaveBeenCalledWith(null, 'ci8');
 		await vi.advanceTimersByTimeAsync(1000);
 		expect(wrapper.get('[role="status"]').text()).toContain('1.0 s');
 		expect(wrapper.get('[role="status"]').text()).not.toContain(' / ');
@@ -125,7 +145,7 @@ describe('IQ capture panel', () => {
 		const file = { name: 'manual.sigmf-data' };
 		choose(file);
 		await flushPromises();
-		expect(backend.captureIqToFile).toHaveBeenCalledWith(null, file);
+		expect(backend.captureIqToFile).toHaveBeenCalledWith(null, file, 'ci8');
 		expect(wrapper.text()).toContain('Download metadata');
 		wrapper.unmount();
 	});
@@ -154,7 +174,7 @@ describe('IQ capture panel', () => {
 		await flushPromises();
 		expect(picker).toHaveBeenCalledOnce();
 		expect(picker).toHaveBeenCalledWith({ suggestedName: expect.stringMatching(/\.sigmf-data$/) });
-		expect(backend.captureIqToFile).toHaveBeenCalledWith(900, file);
+		expect(backend.captureIqToFile).toHaveBeenCalledWith(900, file, 'ci8');
 		expect(backend.captureIq).not.toHaveBeenCalled();
 		expect(wrapper.text()).toContain('IQ data saved');
 		expect(wrapper.text()).toContain('Download metadata');
@@ -182,7 +202,7 @@ describe('IQ capture panel', () => {
 		const { wrapper, button, backend, receiver } = panel();
 		await button().trigger('click');
 		await flushPromises();
-		expect(backend.captureIq).toHaveBeenCalledWith(5);
+		expect(backend.captureIq).toHaveBeenCalledWith(5, 'ci8');
 		expect(wrapper.text()).toContain('Download IQ');
 		expect(wrapper.text()).toContain('Download metadata');
 		receiver.running = false;

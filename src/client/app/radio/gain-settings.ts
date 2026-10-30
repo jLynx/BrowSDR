@@ -18,7 +18,7 @@ export function restoreDeviceGains(caps: DeviceCapabilities, saved: Record<strin
 }
 
 function isGain(control: GainControl) {
-	return !['Antenna', 'RX Channel', 'USB Format', 'Receive Mode'].includes(control.name);
+	return !['Antenna', 'RX Channel', 'USB Format', 'Receive Mode', 'IQ Precision'].includes(control.name);
 }
 
 export default defineComponent({

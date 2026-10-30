@@ -22,6 +22,7 @@ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABI
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+import { iqPrecisionControl, selectedIqBits } from '@/radio/iq/format';
 import type { SdrDevice, SdrDeviceInfo, GainControl } from '@/radio/types';
 import { registerDriver } from '@/radio/sdr-device';
 
@@ -43,8 +44,13 @@ const TRANSFER_BUFFER_SIZE = 262144;
 
 export class AirspyDevice implements SdrDevice {
 	readonly deviceType = 'airspy';
-	readonly sampleFormat = 'int8' as const;
+	readonly nativeIqBits = 12;
+	private iqBits: 8 | 12 | 16 = 12;
+	get sampleFormat() {
+		return this.iqBits === 8 ? ('int8' as const) : ('int16' as const);
+	}
 	readonly gainControls: GainControl[] = [
+		iqPrecisionControl(12),
 		{ name: 'LNA', min: 0, max: 14, step: 1, default: 7, type: 'slider' },
 		{ name: 'Mixer', min: 0, max: 15, step: 1, default: 7, type: 'slider' },
 		{ name: 'VGA', min: 0, max: 15, step: 1, default: 7, type: 'slider' },
@@ -134,6 +140,10 @@ export class AirspyDevice implements SdrDevice {
 	async setGain(name: string, value: number): Promise<void> {
 		const gain = Math.max(0, Math.min(name === 'LNA' ? 14 : 15, Math.round(value)));
 		switch (name) {
+			case 'IQ Precision':
+				if (this.rxRunning && selectedIqBits(12, value) !== this.iqBits) throw new Error('Stop reception before changing IQ precision');
+				this.iqBits = selectedIqBits(12, value);
+				break;
 			case 'LNA':
 				await this.vendorIn(AIRSPY_SET_LNA_AGC, 0, 0, 1);
 				await this.vendorIn(AIRSPY_SET_LNA_GAIN, 0, gain, 1);
@@ -164,7 +174,7 @@ export class AirspyDevice implements SdrDevice {
 	}
 
 	private async receive(session: Array<Promise<void>>, callback: (data: ArrayBufferView) => void): Promise<void> {
-		const converter = new AirspyIqConverter();
+		const converter = new AirspyIqConverter(this.iqBits);
 		// Each IQ sample comes from two unpacked 16-bit real ADC samples.
 		const transferSize = receiveTransferSize(this.sampleRate, TRANSFER_BUFFER_SIZE, 4);
 		// Submit several reads, but consume in submission order: the converter is stateful.

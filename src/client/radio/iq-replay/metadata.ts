@@ -1,8 +1,10 @@
+import { recordingBytesPerSample } from '@/radio/iq/format';
 import { isRecord } from '@/platform/data';
 import type { IqRecording } from './types';
 
 export function validateIqRecording(recording: IqRecording): void {
-	if (!recording.file.size || recording.file.size % 2) throw new Error('IQ data must contain complete signed 8-bit I/Q pairs.');
+	if (!recording.file.size || recording.file.size % recordingBytesPerSample(recording.format ?? 'ci8'))
+		throw new Error('IQ data must contain complete I/Q pairs.');
 	if (!Number.isFinite(recording.sampleRate) || recording.sampleRate < 1000 || recording.sampleRate > 61440000)
 		throw new Error('Choose a sample rate between 1 kSPS and 61.44 MSPS.');
 	if (
@@ -14,14 +16,16 @@ export function validateIqRecording(recording: IqRecording): void {
 		throw new Error('Recorded and displayed centre frequencies must be finite and non-negative.');
 }
 
-/** BrowSDR records one continuous, uncompressed ci8 SigMF capture. */
+/** BrowSDR records one continuous, uncompressed SigMF capture. */
 export function recordingFromSigmf(file: File, text: string): IqRecording {
 	const meta: unknown = JSON.parse(text);
 	if (!isRecord(meta) || !isRecord(meta.global) || !Array.isArray(meta.captures) || meta.captures.length !== 1)
 		throw new Error('Select SigMF metadata containing one continuous capture.');
 	const global = meta.global,
 		capture: unknown = meta.captures[0];
-	if (global['core:datatype'] !== 'ci8') throw new Error('Replay currently supports ci8: signed 8-bit I first, Q second.');
+	const format = global['core:datatype'];
+	if (format !== 'ci8' && format !== 'ci16_le' && format !== 'cf32_le')
+		throw new Error('Replay supports ci8, ci16_le and cf32_le: I first, Q second.');
 	if (!isRecord(capture) || capture['core:sample_start'] !== 0 || global['core:offset'] || global['core:trailing_bytes'])
 		throw new Error('Capture offsets, multiple tuning segments and trailing bytes are not supported.');
 	const rate = global['core:sample_rate'],
@@ -32,6 +36,8 @@ export function recordingFromSigmf(file: File, text: string): IqRecording {
 	const missing = global['browsdr:missing_samples'];
 	const recording: IqRecording = {
 		file,
+		format,
+		precisionBits: readPrecisionBits(global['browsdr:iq_precision_bits']),
 		sampleRate: rate,
 		centerHz: center,
 		frequencyShiftHz: shift,
@@ -40,4 +46,8 @@ export function recordingFromSigmf(file: File, text: string): IqRecording {
 	};
 	validateIqRecording(recording);
 	return recording;
+}
+
+function readPrecisionBits(value: unknown): number | undefined {
+	return typeof value === 'number' && Number.isInteger(value) && value >= 8 && value <= 32 ? value : undefined;
 }

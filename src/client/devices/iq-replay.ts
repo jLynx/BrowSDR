@@ -1,15 +1,28 @@
+import { iqView, recordingBytesPerSample } from '@/radio/iq/format';
 import type { SdrDevice } from '@/radio/types';
 import type { IqRecording, IqReplayProgress } from '@/radio/iq-replay/types';
 import { validateIqRecording } from '@/radio/iq-replay/metadata';
 import { receiveTransferSize } from '@/radio/receive-transfer';
 import { errorMessage } from '@/platform/errors';
 
-/** Disk-backed ci8 source, paced by sample time through the normal receive stream. */
+/** Disk-backed IQ source, paced by sample time through the normal receive stream. */
 export class IqReplayDevice implements SdrDevice {
 	readonly deviceType = 'iq-replay';
-	readonly sampleFormat = 'int8' as const;
+	get sampleFormat() {
+		return this.recording.format === 'cf32_le'
+			? ('float32' as const)
+			: this.recording.format === 'ci16_le'
+				? ('int16' as const)
+				: ('int8' as const);
+	}
+	get nativeIqBits() {
+		return this.recording.precisionBits ?? (this.sampleFormat === 'int8' ? 8 : 16);
+	}
 	readonly gainControls = [];
 	readonly sampleRates: number[];
+	private get bytesPerSample() {
+		return recordingBytesPerSample(this.recording.format ?? 'ci8');
+	}
 	private offset = 0;
 	private generation = 0;
 	private delaySeconds = 0;
@@ -26,8 +39,8 @@ export class IqReplayDevice implements SdrDevice {
 	get progress(): IqReplayProgress {
 		return {
 			state: this.state,
-			seconds: this.offset / 2 / this.recording.sampleRate,
-			duration: this.recording.file.size / 2 / this.recording.sampleRate,
+			seconds: this.offset / this.bytesPerSample / this.recording.sampleRate,
+			duration: this.recording.file.size / this.bytesPerSample / this.recording.sampleRate,
 			delaySeconds: this.delaySeconds,
 			error: this.error,
 		};
@@ -77,7 +90,7 @@ export class IqReplayDevice implements SdrDevice {
 	}
 	private async play(callback: (data: ArrayBufferView) => void, generation: number): Promise<void> {
 		const { file, sampleRate } = this.recording;
-		const size = receiveTransferSize(sampleRate, 262144, 2, 2);
+		const size = receiveTransferSize(sampleRate, 131072 * this.bytesPerSample, this.bytesPerSample, this.bytesPerSample);
 		const start = this.offset;
 		let epoch = performance.now();
 		while (generation === this.generation && this.offset < file.size) {
@@ -86,7 +99,7 @@ export class IqReplayDevice implements SdrDevice {
 			const bytes = await file.slice(this.offset, end).arrayBuffer();
 			if (generation !== this.generation) return;
 			if (bytes.byteLength !== end - this.offset) throw new Error('The IQ file returned an incomplete read.');
-			const target = epoch + ((this.offset - start) / 2 / sampleRate) * 1000;
+			const target = epoch + ((this.offset - start) / this.bytesPerSample / sampleRate) * 1000;
 			if (target > performance.now()) await this.wait(target - performance.now());
 			if (generation !== this.generation) return;
 			const late = performance.now() - target;
@@ -95,12 +108,12 @@ export class IqReplayDevice implements SdrDevice {
 				epoch += late;
 				this.delaySeconds += late / 1000;
 			}
-			callback(new Int8Array(bytes));
+			callback(iqView(new Uint8Array(bytes), this.sampleFormat));
 			this.offset = end;
 		}
 		if (generation !== this.generation) return;
 		// Include the final chunk's duration before announcing the end of playback.
-		const remaining = epoch + ((this.offset - start) / 2 / sampleRate) * 1000 - performance.now();
+		const remaining = epoch + ((this.offset - start) / this.bytesPerSample / sampleRate) * 1000 - performance.now();
 		if (remaining > 0) await this.wait(remaining);
 		if (generation === this.generation) this.state = 'ended';
 	}

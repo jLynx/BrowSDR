@@ -19,15 +19,21 @@ export function streamTransferSize(packed: boolean, sampleRate: number): number 
 	return receiveTransferSize(sampleRate, maximum, STREAM_PKT_SIZE / streamSamplesPerPacket(packed), STREAM_PKT_SIZE);
 }
 
-/** Convert to the existing int8 DSP format; the USB format adds no extra quantization. */
-export function decodeStreamPcm(data: DataView, output: Int8Array, packed: boolean): number {
+/** Preserve full-scale int16 IQ, or explicitly reduce to int8 for lower memory traffic. */
+export function decodeStreamPcm(data: DataView, output: Int8Array | Int16Array, packed: boolean): number {
 	if (data.byteLength % STREAM_PKT_SIZE) throw new Error('LimeSDR: incomplete FPGA packet in USB transfer');
 	const values = (data.byteLength / STREAM_PKT_SIZE) * streamSamplesPerPacket(packed) * 2;
 	if (values > output.length) throw new Error('LimeSDR: USB samples exceed DSP input capacity');
 	let pos = 0;
+	const highPrecision = output instanceof Int16Array;
 	for (let packet = 0; packet < data.byteLength; packet += STREAM_PKT_SIZE) {
 		const end = packet + STREAM_PKT_SIZE;
-		if (packed) {
+		if (highPrecision) {
+			for (let offset = packet + STREAM_HDR_SIZE; offset < end; offset += packed ? 3 : 4) {
+				output[pos++] = readStreamComponent(data, offset, 0, packed);
+				output[pos++] = readStreamComponent(data, offset, 1, packed);
+			}
+		} else if (packed) {
 			for (let offset = packet + STREAM_HDR_SIZE; offset < end; offset += 3) {
 				// Dropping four low bits equals (unpacked signed12 << 4) >> 8.
 				output[pos++] = (data.getUint8(offset) >> 4) | ((data.getUint8(offset + 1) & 0x0f) << 4);

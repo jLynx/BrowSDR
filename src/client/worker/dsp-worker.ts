@@ -6,7 +6,14 @@ import { AcarsStream } from './decoders/acars';
 import { AprsStream } from './decoders/aprs';
 import { SharedBandPool } from './streams/shared-band-pool';
 import { errorMessage } from '@/platform/errors';
-import init, { DspProcessor, SharedChannelizer, set_panic_hook, alloc_iq_buffer, alloc_float_buffer } from '/wasm/dsp/browsdr_dsp.js';
+import init, {
+	DspProcessor,
+	SharedChannelizer,
+	set_panic_hook,
+	alloc_iq_buffer,
+	alloc_float_buffer,
+	normalize_i16_to_f32,
+} from '/wasm/dsp/browsdr_dsp.js';
 import { RationalResampler } from './streams/dsp-pipeline';
 import { sidebandOffsetHz } from './decoders/ssb';
 import { measureSquelch, demodulateAnalogAudio } from './streams/analog-demod';
@@ -68,6 +75,7 @@ let rdsDecoder: InstanceType<typeof RDSDecoder> | null = null;
 let pagerLegs: PagerLegs | null = null;
 let sharedFloatPtr = 0;
 let inputIsFloat = false;
+let inputUsesBandCenter = false;
 let inputCenterFreq = 100;
 let channelizer: SharedChannelizer | undefined;
 let channelKey = '';
@@ -121,7 +129,7 @@ async function startup(): Promise<void> {
 
 				// Allocate Wasm memory for this sub-module
 				const MAX_USB_SAMPLES = 131072;
-				sharedIqPtr = alloc_iq_buffer(MAX_USB_SAMPLES * 2);
+				sharedIqPtr = alloc_iq_buffer(MAX_USB_SAMPLES * 4);
 				sharedFloatPtr = alloc_float_buffer(MAX_USB_SAMPLES * 2);
 				console.log('DSP Worker: Wasm Initialized. IQ Buffer Ptr:', sharedIqPtr);
 			})
@@ -415,7 +423,9 @@ function handleDspChannelize(msg: Extract<DspInput, { type: 'channelize' }>) {
 		}
 		const discontinuity = channelChunkId !== undefined && msg.chunkId !== channelChunkId + 1;
 		channelChunkId = msg.chunkId;
-		channelizer!.process(new Int8Array(msg.chunk));
+		if (msg.iqFormat === 'float32') channelizer!.process_f32(new Float32Array(msg.chunk));
+		else if (msg.iqFormat === 'int16') channelizer!.process_i16(new Int16Array(msg.chunk));
+		else channelizer!.process(new Int8Array(msg.chunk));
 		const sources = msg.centers
 			.map((centerBin: number, index: number) => {
 				const length = channelizer!.output_len(index);
@@ -450,6 +460,7 @@ function handleDspChannelize(msg: Extract<DspInput, { type: 'channelize' }>) {
 function handleDspInit(msg: Extract<DspInput, { type: 'init' }>) {
 	for (const decoder of [rtl433, adsb, ais, radiosonde, rtk, ble, acars, aprs]) decoder.reset();
 	inputIsFloat = false;
+	inputUsesBandCenter = false;
 	dsdStatus.reset();
 	dsdStream?.reset();
 	systemSampleRate = msg.sampleRate;
@@ -481,7 +492,7 @@ function handleDspInit(msg: Extract<DspInput, { type: 'init' }>) {
 }
 
 function handleDspConfigure(msg: Extract<DspInput, { type: 'configure' }>) {
-	if (!inputIsFloat) inputCenterFreq = msg.centerFreq;
+	if (!inputUsesBandCenter) inputCenterFreq = msg.centerFreq;
 	configureDDC(msg.params, inputCenterFreq);
 	self.postMessage({ type: 'config_done' });
 }
@@ -494,7 +505,8 @@ function handleDspProcess(msg: Extract<DspInput, { type: 'process' }>) {
 
 	configureInputRate(msg);
 	configureInputParams(msg.params);
-	inputIsFloat = msg.floatIq === true;
+	inputIsFloat = msg.floatIq === true || msg.iqFormat === 'int16' || msg.iqFormat === 'float32';
+	inputUsesBandCenter = msg.floatIq === true;
 	configurePacketDecoders(msg.params, inputCenterFreq);
 	// Audio mute does not stop independent RDS or pager decoding.
 	if (!needsVfoInput(msg.params) || !copyInputPayload(msg)) {
@@ -587,18 +599,22 @@ function copyInputPayload(msg: Extract<DspInput, { type: 'process' }>): boolean 
 
 	if (msg.useSab && sharedSabViews && msg.sabIndex !== undefined) {
 		// Zero-copy grab from SAB ring!
-		wasmMemView.set(sharedSabViews[msg.sabIndex].subarray(0, msg.chunkLen), sharedIqPtr);
+		wasmMemView.set(
+			sharedSabViews[msg.sabIndex].subarray(0, msg.chunkLen * (msg.iqFormat === 'float32' ? 4 : msg.iqFormat === 'int16' ? 2 : 1)),
+			msg.iqFormat === 'float32' ? sharedFloatPtr : sharedIqPtr,
+		);
 	} else if (msg.chunk) {
-		if (inputIsFloat) {
+		if (msg.floatIq || msg.iqFormat === 'float32') {
 			// Pooled buffers can be larger than the valid band payload.
 			new Float32Array(_wasm.memory.buffer, sharedFloatPtr, msg.chunkLen).set(new Float32Array(msg.chunk, 0, msg.chunkLen));
 		} else {
-			wasmMemView.set(new Int8Array(msg.chunk, 0, msg.chunkLen), sharedIqPtr);
+			wasmMemView.set(new Int8Array(msg.chunk, 0, msg.chunkLen * (msg.iqFormat === 'int16' ? 2 : 1)), sharedIqPtr);
 		}
 	} else {
 		return false; // Invalid chunk
 	}
 
+	if (msg.iqFormat === 'int16') normalize_i16_to_f32(sharedIqPtr, sharedFloatPtr, msg.chunkLen);
 	return true;
 }
 

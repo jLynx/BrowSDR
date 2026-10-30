@@ -67,6 +67,10 @@ export class LimeSDR extends LimeSDRReceiveTuning {
 	readonly rxLevel = new LimeRxLevel();
 	readonly streamStats = new LimeStreamStats();
 	private packed = false;
+	private iqBits: 8 | 12 | 16 = 12;
+	setIqBits(bits: 8 | 12 | 16): void {
+		this.iqBits = bits;
+	}
 
 	get isStreaming(): boolean {
 		return this.rxRunning !== null;
@@ -344,6 +348,7 @@ export class LimeSDR extends LimeSDRReceiveTuning {
 		if (this.rxRunning) return;
 		this.rxLevel.reset();
 		const packed = this.packed;
+		const IqArray = this.iqBits === 8 ? Int8Array : Int16Array;
 		const transferSize = streamTransferSize(packed, this.currentSampleRate);
 		const samplesPerPacket = streamSamplesPerPacket(packed);
 		this.streamStats.reset(samplesPerPacket, packed ? 12 : 16, transferSize, usbOnly);
@@ -377,7 +382,7 @@ export class LimeSDR extends LimeSDRReceiveTuning {
 		const transfer = async (): Promise<void> => {
 			// Each concurrent transfer gets its own output buffer (avoids race condition)
 			const samplesPerTransfer = (transferSize / STREAM_PKT_SIZE) * samplesPerPacket;
-			const outBuf = new Int8Array(usbOnly ? 0 : samplesPerTransfer * 2);
+			const outBuf = new IqArray(usbOnly ? 0 : samplesPerTransfer * 2);
 
 			await Promise.resolve(); // Yield to event loop
 			let pendingSequence = 0;

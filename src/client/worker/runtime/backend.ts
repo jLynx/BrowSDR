@@ -98,6 +98,8 @@ import { transfer } from 'comlink';
 import { IqCapture } from '@/worker/recording/iq-capture';
 import { openIqReplay, replaceIqReplay, getIqReplayProgress, rewindIqReplay } from '@/worker/recording/replay';
 
+import type { RecordingFormat } from '@/radio/iq/types';
+
 export class Backend {
 	openIqReplay = openIqReplay.bind(this);
 	replaceIqReplay = replaceIqReplay.bind(this);
@@ -106,14 +108,15 @@ export class Backend {
 	_replayPending?: () => boolean;
 	readonly iqCapture = new IqCapture();
 
-	async captureIq(seconds: number | null) {
+	async captureIq(seconds: number | null, format: RecordingFormat = 'ci8') {
 		if (!this.device || !this._perfInterval || this._retuning || !this._sampleRate)
 			throw new Error('Start local reception before capturing IQ');
 		const before = this.device.getRxStreamStats?.();
-		const data = await this.iqCapture.start(this._sampleRate, seconds);
+		this.validateRecordingFormat(format);
+		const data = await this.iqCapture.start(this._sampleRate, seconds, format);
 		const after = this.device.getRxStreamStats?.();
 		const missingSamples = before && after ? after.sourceMissingSamples - before.sourceMissingSamples : null;
-		return transfer({ data, missingSamples }, [data.buffer]);
+		return transfer({ data, missingSamples, format }, [data.buffer]);
 	}
 
 	cancelIqCapture(): void {
@@ -124,17 +127,30 @@ export class Backend {
 		this.iqCapture.stop();
 	}
 
-	async captureIqToFile(seconds: number | null, file: FileSystemFileHandle) {
+	async captureIqToFile(seconds: number | null, file: FileSystemFileHandle, format: RecordingFormat = 'ci8') {
 		if (!this.device || !this._perfInterval || this._retuning || !this._sampleRate)
 			throw new Error('Start local reception before capturing IQ');
+		this.validateRecordingFormat(format);
 		const device = this.device;
 		const before = device.getRxStreamStats?.();
 		let missingSamples: number | null = null;
-		const byteLength = await this.iqCapture.startToFile(this._sampleRate, seconds, file, () => {
-			const after = device.getRxStreamStats?.();
-			missingSamples = before && after ? after.sourceMissingSamples - before.sourceMissingSamples : null;
-		});
-		return { byteLength, missingSamples };
+		const byteLength = await this.iqCapture.startToFile(
+			this._sampleRate,
+			seconds,
+			file,
+			() => {
+				const after = device.getRxStreamStats?.();
+				missingSamples = before && after ? after.sourceMissingSamples - before.sourceMissingSamples : null;
+			},
+			format,
+		);
+		return { byteLength, missingSamples, format };
+	}
+
+	private validateRecordingFormat(format: RecordingFormat): void {
+		if (!['ci8', 'ci16_le', 'cf32_le'].includes(format)) throw new Error('Unsupported IQ recording format');
+		if (format !== 'ci8' && this.device?.sampleFormat === 'int8')
+			throw new Error('Select higher radio IQ precision before recording at higher precision');
 	}
 
 	getIqCaptureProgress() {
@@ -258,6 +274,7 @@ export class Backend {
 			sampleRates: this.device.sampleRates,
 			gainControls: this.device.gainControls,
 			sampleFormat: this.device.sampleFormat,
+			nativeIqBits: this.device.nativeIqBits,
 		};
 	}
 

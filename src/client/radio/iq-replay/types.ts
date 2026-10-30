@@ -1,4 +1,7 @@
+import type { RecordingFormat } from '@/radio/iq/types';
 export interface IqRecording {
+	format?: RecordingFormat;
+	precisionBits?: number;
 	file: File;
 	sampleRate: number;
 	centerHz: number;

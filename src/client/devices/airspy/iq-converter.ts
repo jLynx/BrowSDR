@@ -28,8 +28,9 @@ const HALF_BAND = new Float32Array([
 	-0.017411159379930066, 0.025304817427568772, -0.037225225204559217, 0.057533286997004301, -0.10232746200425935, 0.3170344725089474,
 ]);
 
-function quantize(value: number): number {
-	return Math.max(-128, Math.min(127, Math.round(value * 128)));
+function quantize(value: number, bits: number): number {
+	const scale = bits === 8 ? 128 : 32768;
+	return Math.max(-scale, Math.min(scale - 1, Math.round(value * scale)));
 }
 
 /** Unpacked unsigned 12-bit real ADC at 2× IQ rate → signed interleaved IQ.
@@ -45,8 +46,11 @@ export class AirspyIqConverter {
 	private delayHead = 0;
 	private sign = -1;
 
-	process(data: DataView): Int8Array {
-		const output = new Int8Array(Math.floor((this.tailLength + data.byteLength) / 4) * 2);
+	constructor(private readonly bits: 8 | 12 | 16 = 8) {}
+
+	process(data: DataView): Int8Array | Int16Array {
+		const IqArray = this.bits === 8 ? Int8Array : Int16Array;
+		const output = new IqArray(Math.floor((this.tailLength + data.byteLength) / 4) * 2);
 		let offset = 0;
 		let position = 0;
 		if (this.tailLength) {
@@ -65,7 +69,7 @@ export class AirspyIqConverter {
 		return output;
 	}
 
-	private convertPair(first: number, second: number, output: Int8Array, position: number): void {
+	private convertPair(first: number, second: number, output: Int8Array | Int16Array, position: number): void {
 		// Remove ADC midpoint and residual DC, then translate the Fs/4 IF.
 		const even = Math.fround((first - 2048) / 2048 - this.average);
 		this.average = Math.fround(this.average + Math.fround(0.01 * even));
@@ -77,8 +81,8 @@ export class AirspyIqConverter {
 		for (let tap = 0; tap < 12; tap++) {
 			filtered += HALF_BAND[tap] * (this.history[head + tap] + this.history[head + 23 - tap]);
 		}
-		output[position] = quantize(filtered);
-		output[position + 1] = quantize(this.delay[this.delayHead]);
+		output[position] = quantize(filtered, this.bits);
+		output[position + 1] = quantize(this.delay[this.delayHead], this.bits);
 		this.delay[this.delayHead] = odd * this.sign * 0.5;
 		this.head = head === 0 ? 23 : head - 1;
 		this.delayHead = (this.delayHead + 1) % 12;
