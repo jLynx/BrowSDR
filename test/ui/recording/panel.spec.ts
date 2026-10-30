@@ -5,6 +5,9 @@ import IqCapturePanel from '@/app/recording/panel';
 import { createAppData } from '@/app/core/state';
 import type { AppInstance } from '@/app/core/receiver.types';
 import type { IqCaptureProgress } from '@/worker/recording/types';
+import type { RecordingFormat } from '@/radio/iq/types';
+import { IqCapture } from '@/worker/recording/iq-capture';
+import { recordingFromSigmf } from '@/radio/iq-replay/metadata';
 
 afterEach(() => {
 	vi.unstubAllGlobals();
@@ -32,6 +35,71 @@ function panel() {
 }
 
 describe('IQ capture panel', () => {
+	it.each(['ci16_le', 'cf32_le'] as const)(
+		'keeps %s metadata and duration when radio precision changes during file close',
+		async (format) => {
+			let finishClose!: () => void;
+			const blocks: Int8Array<ArrayBuffer>[] = [];
+			const writer = {
+				write: vi.fn(async (bytes: Int8Array<ArrayBuffer>) => {
+					blocks.push(bytes.slice());
+				}),
+				close: vi.fn(
+					() =>
+						new Promise<void>((resolve) => {
+							finishClose = resolve;
+						}),
+				),
+				abort: vi.fn(async () => {}),
+			};
+			const file = { name: 'capture.sigmf-data', createWritable: async () => writer } as unknown as FileSystemFileHandle;
+			vi.stubGlobal('showSaveFilePicker', async () => file);
+			const { receiver, backend, wrapper, button } = panel();
+			receiver.radio.sampleRate = 1000;
+			receiver.deviceCapabilities = {
+				deviceType: 'limesdr',
+				nativeIqBits: 12,
+				sampleFormat: 'int16',
+				sampleRates: [1000],
+				gainControls: [],
+			};
+			receiver.gains['IQ Precision'] = 0;
+			const capture = new IqCapture();
+			backend.captureIqToFile.mockImplementationOnce(
+				async (seconds: number | null, handle: FileSystemFileHandle, selected: RecordingFormat) => ({
+					byteLength: await capture.startToFile(receiver.radio.sampleRate, seconds, handle, undefined, selected),
+					missingSamples: 0,
+				}),
+			);
+			backend.stopIqCapture.mockImplementationOnce(async () => capture.stop());
+			await flushPromises();
+			await wrapper.get('[aria-label="Recording IQ format"]').setValue(format);
+			await wrapper.get('[aria-label="Recording mode"]').setValue('manual');
+			await button().trigger('click');
+			await flushPromises();
+			capture.push(new Int16Array(20).fill(16));
+			await wrapper
+				.findAll('button')
+				.find((value) => value.text() === 'Stop recording')!
+				.trigger('click');
+			await flushPromises();
+			expect(writer.close).toHaveBeenCalledOnce();
+			expect(capture.progress).toMatchObject({ phase: 'finalizing', format });
+			receiver.running = false;
+			receiver.gains['IQ Precision'] = 1;
+			capture.cancel(); // Stopping reception cancels input while an already-complete file is closing.
+			await flushPromises();
+			expect((wrapper.vm as unknown as { format: string }).format).toBe('ci8');
+			finishClose();
+			await flushPromises();
+			const metadata = (wrapper.vm as unknown as { metadata: string }).metadata;
+			const saved = new File(blocks, 'capture.sigmf-data');
+			expect(recordingFromSigmf(saved, metadata)).toMatchObject({ format, precisionBits: 12, sampleRate: 1000 });
+			expect(saved.size).toBe(format === 'ci16_le' ? 40 : 80);
+			expect(wrapper.get('[role="status"]').text()).toContain('Recorded 0.010 s');
+			wrapper.unmount();
+		},
+	);
 	it('offers higher precision and smaller recordings only when the radio retains higher precision', async () => {
 		const { receiver, backend, wrapper, button } = panel();
 		expect(wrapper.find('[aria-label="Recording IQ format"]').exists()).toBe(false);

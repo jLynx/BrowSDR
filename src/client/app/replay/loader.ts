@@ -2,6 +2,7 @@ import { defineComponent, inject, ref, computed, markRaw } from 'vue';
 import type { AppInstance } from '@/app/core/receiver.types';
 import type { IqRecording } from '@/radio/iq-replay/types';
 import { recordingFromSigmf, validateIqRecording } from '@/radio/iq-replay/metadata';
+import { recordingBytesPerSample } from '@/radio/iq/format';
 import { errorMessage } from '@/platform/errors';
 import { UiDialog, UiButton, UiFormRow, UiInput, UiInputGroup } from '@/ui';
 import template from './loader.html?raw';
@@ -77,7 +78,11 @@ export default defineComponent({
 			metadataLoaded,
 			select,
 			load,
-			duration: computed(() => (recording.value && rate.value > 0 ? recording.value.file.size / 2 / (rate.value * 1e6) : 0)),
+			duration: computed(() =>
+				recording.value && rate.value > 0
+					? recording.value.file.size / recordingBytesPerSample(recording.value.format ?? 'ci8') / (rate.value * 1e6)
+					: 0,
+			),
 		};
 	},
 });

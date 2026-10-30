@@ -15,8 +15,8 @@ export default defineConfig({
 				resolve: { alias: sourceAlias },
 				test: {
 					name: 'client',
-					include: ['test/**/*.spec.js'],
-					exclude: ['test/server/**'],
+					include: ['test/**/*.spec.{js,ts}'],
+					exclude: ['test/server/**', 'test/ui/**'],
 				},
 			},
 			defineWorkersProject({

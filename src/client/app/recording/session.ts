@@ -46,20 +46,22 @@ export function useIqSession(
 			if (blockedReason.value) throw new Error(blockedReason.value);
 			const started = new Date().toISOString();
 			const radio = { ...receiver.radio },
-				gains = { ...receiver.gains };
+				gains = { ...receiver.gains },
+				captureFormat = format.value,
+				capturePrecision = precisionBits.value;
 			data.value = undefined;
 			metadata.value = '';
 			filename.value = file ? file.name.replace(/\.sigmf-data$/, '') : suggestedName;
 			status.value = 'Recording…';
 			backendCaptureStarted.value = true;
-			recoveryMetadata = sigmfMetadata(radio, gains, started, null, format.value, precisionBits.value);
+			recoveryMetadata = sigmfMetadata(radio, gains, started, null, captureFormat, capturePrecision);
 			const result = file
-				? await receiver.backend.captureIqToFile(seconds.value, file, format.value)
-				: await receiver.backend.captureIq(seconds.value, format.value);
+				? await receiver.backend.captureIqToFile(seconds.value, file, captureFormat)
+				: await receiver.backend.captureIq(seconds.value, captureFormat);
 			const length = 'data' in result ? result.data.length : result.byteLength;
 			if ('data' in result) data.value = result.data;
-			metadata.value = sigmfMetadata(radio, gains, started, result.missingSamples, format.value, precisionBits.value);
-			status.value = recordingComplete(length, radio.sampleRate, result.missingSamples, !!file, recordingBytesPerSample(format.value));
+			metadata.value = sigmfMetadata(radio, gains, started, result.missingSamples, captureFormat, capturePrecision);
+			status.value = recordingComplete(length, radio.sampleRate, result.missingSamples, !!file, recordingBytesPerSample(captureFormat));
 		} catch (error) {
 			if (!cancelled && errorName(error) === 'IqFileFinalizeError') metadata.value = recoveryMetadata;
 			status.value = cancelled
