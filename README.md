@@ -5,7 +5,7 @@
 [![WebAssembly](https://img.shields.io/badge/Wasm-Powered-blue?style=for-the-badge&logo=webassembly)](https://webassembly.org/)
 [![Discord](https://img.shields.io/badge/Discord-Join%20the%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/m8BtU4ebSH)
 
-A blazing fast, next-generation browser-based Software Defined Radio (SDR) receiver for HackRF, HackRF Pro, RTL-SDR, Airspy, and LimeSDR devices. Connect a compatible SDR directly to your browser via WebUSB and tune into FM, AM, SSB, CW, and more — **no drivers, no native software, no hassle.**
+A blazing fast, next-generation browser-based Software Defined Radio (SDR) receiver for HackRF, HackRF Pro, RTL-SDR, Airspy, LimeSDR, and PlutoSDR devices. Connect a compatible SDR directly to your browser via WebUSB and tune into FM, AM, SSB, CW, and more — **no drivers, no native software, no hassle.**
 
 ---
 
@@ -94,6 +94,7 @@ BrowSDR includes receive drivers for the following device families. Driver avail
 | **Airspy**     | Airspy One, R2, Mini                                                    | Includes an Airspy receive driver with device-reported sample rates.                                                                                                                                  |
 | **Airspy HF+** | Airspy HF+ family                                                       | Includes a separate HF+ receive driver; individual variants still require hardware verification.                                                                                                      |
 | **LimeSDR**    | LimeSDR-USB                                                             | Uses the LimeSDR WebUSB receive driver with gain and antenna controls. See the Windows setup below.                                                                                                   |
+| **PlutoSDR**   | ADALM-PLUTO and Pluto firmware clones using USB ID `0456:b673`          | Speaks libiio's IIO-over-USB protocol to the firmware's iiod; 2.4–6 MSPS with manual or AGC gain. Not yet hardware-tested. See the PlutoSDR notes below.                                              |
 
 Use a WebUSB-capable browser such as Chrome or Edge, over HTTPS or `localhost`. On Windows, the SDR's USB interface may need **WinUSB** instead of a vendor or DVB-T driver. Close other applications using the device before connecting.
 
@@ -162,6 +163,17 @@ Changing to WinUSB can affect native SDR applications that require CYUSB3; switc
 LimeSDR-USB reception supports sample rates up to **61.44 MSPS**.
 
 Choose **RX1** or **RX2** using **RX Channel** in the Radio panel, then select **LNAH**, **LNAL**, or **LNAW** under **Antenna** to match the H, L, or W connector in that receiver's antenna group. One receiver is streamed at a time; switching briefly restarts reception while retaining the current frequency, gains, and antenna path. The receiver and antenna selections are saved locally.
+
+### PlutoSDR
+
+BrowSDR talks to the PlutoSDR's own **IIO** USB interface, the one libiio uses; the network, storage and serial interfaces stay with the operating system. It controls `ad9361-phy` and streams `cf-ad9361-lpc`, so Pluto firmware clones with the same IIO devices should also work.
+
+- **Sample rates:** 2.4–6 MSPS; each sample takes 4 bytes over USB 2.0, which limits continuous reception to about 6 MSPS. The AD936x's 12-bit samples are narrowed to 8 bits for the DSP pipeline. A programmable FIR left enabled by other software is turned off, since these rates do not need it.
+- **Dropped samples:** IIO buffers carry no sample counters, so BrowSDR compares the received rate with the configured one every 10 seconds. A shortfall is logged as a browser console warning; development builds also log each measurement.
+- **Tuning range:** whatever the firmware reports, typically 325–3800 MHz, or 70–6000 MHz on firmware switched to AD9364 mode.
+- **Gain:** **Gain Mode** selects manual gain or one of the AD936x AGC modes; **RF Gain** applies in manual mode and is limited to the range for the current band.
+- **Linux:** install the [PlutoSDR udev rules](https://github.com/analogdevicesinc/plutosdr-fw/blob/master/scripts/53-adi-plutosdr-usb.rules) so the browser can open the device without root.
+- **Windows:** Chrome needs **WinUSB** on the Pluto's **IIO** interface. If connecting fails with **Access denied**, install WinUSB for that interface only with [Zadig](https://zadig.akeo.ie/) (enable _List All Devices_ and pick the PlutoSDR entry ending in _Interface 5_ or named _IIO_).
 
 ### Automatic receive gains (LimeSDR and HackRF)
 
