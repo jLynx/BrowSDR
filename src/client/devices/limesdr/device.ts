@@ -22,14 +22,20 @@ ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSI
 import { LimeSDR } from './driver';
 import { MAX_SAMPLE_RATE } from './protocol';
 import { registerDriver } from '@/radio/sdr-device';
+import { iqPrecisionControl, selectedIqBits } from '@/radio/iq/format';
 import type { SdrDevice, SdrDeviceInfo, GainControl } from '@/radio/types';
 // ── LimeSDRDevice (SdrDevice wrapper) ───────────────────────────────
 
 export class LimeSDRDevice implements SdrDevice {
 	readonly deviceType = 'limesdr';
 	readonly sampleRates = [1e6, 2e6, 5e6, 10e6, 20e6, 30.72e6, 40e6, 50e6, MAX_SAMPLE_RATE];
-	readonly sampleFormat = 'int8' as const;
+	readonly nativeIqBits = 12;
+	private iqBits: 8 | 12 | 16 = 12;
+	get sampleFormat() {
+		return this.iqBits === 8 ? ('int8' as const) : ('int16' as const);
+	}
 	readonly gainControls: GainControl[] = [
+		iqPrecisionControl(12),
 		{ name: 'RX Channel', min: 0, max: 1, step: 1, default: 0, labels: ['RX1', 'RX2'], type: 'select' },
 		{ name: 'LNA', min: 0, max: 30, step: 1, default: 14, type: 'slider' },
 		{ name: 'TIA', min: 0, max: 2, step: 1, default: 2, labels: ['0 dB', '9 dB', '12 dB'], type: 'select' },
@@ -129,7 +135,8 @@ export class LimeSDRDevice implements SdrDevice {
 
 	private async applyRfGains(gains: Record<string, number>): Promise<void> {
 		for (const [name, value] of Object.entries(gains)) {
-			if (name !== 'RX Channel' && name !== 'USB Format' && name !== 'Receive Mode') await this.applyGain(name, value);
+			if (name !== 'RX Channel' && name !== 'USB Format' && name !== 'Receive Mode' && name !== 'IQ Precision')
+				await this.applyGain(name, value);
 		}
 	}
 
@@ -155,6 +162,8 @@ export class LimeSDRDevice implements SdrDevice {
 			const previous = this.gains;
 			const next = { ...previous, ...gains };
 			const channel = next['RX Channel'];
+			const bits = selectedIqBits(12, next['IQ Precision'] ?? 0);
+			if (this.rxCallback && bits !== this.iqBits) throw new Error('Stop reception before changing IQ precision');
 			this.validateReceiveConfig(next, previous);
 			const switching = channel !== previous['RX Channel'];
 			const changingFormat = next['USB Format'] !== previous['USB Format'];
@@ -166,6 +175,8 @@ export class LimeSDRDevice implements SdrDevice {
 				await this.applyRfGains(switching ? next : gains);
 				if (callback) await this.startReceive(callback, next);
 				this.gains = next;
+				this.iqBits = bits;
+				this.lime.setIqBits(bits);
 			} catch (error) {
 				if (switching || changingFormat) {
 					try {

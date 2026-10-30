@@ -40,6 +40,7 @@ export interface RxLevel {
 export interface SdrDevice {
 	readonly deviceType: string;
 	readonly sampleRates: number[];
+	readonly nativeIqBits?: number;
 	readonly gainControls: GainControl[];
 	readonly sampleFormat: 'int8' | 'uint8' | 'int16' | 'float32';
 
@@ -83,6 +84,7 @@ export interface RxStreamStats {
 }
 
 export interface DeviceCapabilities {
+	nativeIqBits?: number;
 	deviceType: string;
 	sampleRates: number[];
 	gainControls: GainControl[];

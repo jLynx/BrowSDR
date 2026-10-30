@@ -1,3 +1,5 @@
+import { sampleIqFormat } from '@/radio/iq/format';
+import type { IqSamples } from '@/radio/iq/types';
 import type { ChannelState } from './types';
 import type { DspOutput } from '@/worker/runtime/dsp-messages.types';
 import { planSharedBands } from './channel-plan';
@@ -10,10 +12,11 @@ export function dispatchIqChunk(
 	centerFreq: number,
 	channel: ChannelState,
 	perf: PerfCounters,
-	signed: Int8Array<ArrayBufferLike>,
+	signed: IqSamples,
 	chunkCounter: number,
 ) {
 	backend.iqCapture.push(signed);
+	const iqFormat = sampleIqFormat(signed);
 	const targets = collectTargets(backend);
 	backend._iqDispatcher!.retain(new Set(targets.map((target) => target.worker)));
 	const plannedParams = targets.map((target) => (target.shared ? target.params : disabledDecoders(target.params)));
@@ -46,6 +49,7 @@ export function dispatchIqChunk(
 			channel.worker!.postMessage(
 				{
 					type: 'channelize',
+					iqFormat,
 					key: channel.key,
 					ratio: plan.ratio,
 					centers: plan.bands.map((band) => band.centerBin),
@@ -76,6 +80,7 @@ export function dispatchIqChunk(
 				params: params,
 				sampleRate,
 				centerFreq: backend._centerFreq ?? centerFreq,
+				iqFormat,
 				useSab: true,
 				sabIndex: slot,
 				chunkLen: signed.length,
@@ -90,6 +95,7 @@ export function dispatchIqChunk(
 					params: params,
 					sampleRate,
 					centerFreq: backend._centerFreq ?? centerFreq,
+					iqFormat,
 					useSab: false,
 					chunk: cloneBuf,
 					chunkLen: signed.length,

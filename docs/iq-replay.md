@@ -6,8 +6,8 @@ is available during local development (`npm run dev`), alongside Mock SDR, and
 requires no USB device. It is hidden and disabled in production. The receiver starts paused so
 you can configure VFOs and decoders before pressing **Play replay**.
 
-Replay reads the file locally in chunks of at most 256 KiB and delivers its signed
-8-bit complex samples through the same `startRxStream`, spectrum, channelization,
+Replay reads the file locally in chunks of at most 131,072 complex samples and delivers its
+8-bit, 16-bit, or float32 samples through the same `startRxStream`, spectrum, channelization,
 audio and decoder path used by local hardware. A multi-gigabyte file does not need
 to fit in browser memory. File contents are not uploaded. Playback targets 1×
 sample time; disk/browser stalls stretch playback instead of producing an
@@ -37,12 +37,14 @@ that was not captured. The waterfall retains normal zoom and display controls.
 
 ## Supported files
 
-Replay currently supports uncompressed SigMF `ci8`: signed 8-bit I first, Q second,
+Replay supports uncompressed SigMF `ci8`, `ci16_le` and `cf32_le`: I first, Q second,
 one capture beginning at sample zero, without file offsets or trailing bytes.
 Sample rates from 1 kSPS to 61.44 MSPS are accepted. The loader rejects unsupported
 formats, multiple tuning segments, incomplete sample pairs and mismatched file
 names. If metadata is unavailable, select a `.sigmf-data` or `.iq` file and enter
-its original sample rate, SDR centre and display frequency shift manually.
+its original sample rate, SDR centre and display frequency shift manually. Raw
+files without metadata default to signed 8-bit; use matching SigMF metadata for
+16-bit or float32 files.
 
 Capture continuity is reported from BrowSDR metadata where available. An unknown
 missing-sample count remains unknown; replay cannot reconstruct samples omitted

@@ -9,6 +9,8 @@ import { createAppData } from '@/app/core/state';
 import { settingsMethods } from '@/app/radio/settings';
 import { ReceiverView } from '../helpers/receiver-view';
 import type { AppInstance } from '@/app/core/receiver.types';
+import type { RecordingFormat } from '@/radio/iq/types';
+import { recordingBytesPerSample } from '@/radio/iq/format';
 
 beforeEach(() => vi.stubEnv('DEV', true));
 
@@ -19,12 +21,14 @@ afterEach(() => {
 	vi.unstubAllEnvs();
 });
 
-function files() {
-	const data = new NodeFile([new Uint8Array(4000)], 'test.sigmf-data') as unknown as File;
+const formats: RecordingFormat[] = ['ci8', 'ci16_le', 'cf32_le'];
+
+function files(format: RecordingFormat = 'ci8', sampleRate = 20000000, samples = 2000) {
+	const data = new NodeFile([new Uint8Array(samples * recordingBytesPerSample(format))], 'test.sigmf-data') as unknown as File;
 	const meta = new NodeFile(
 		[
 			JSON.stringify({
-				global: { 'core:datatype': 'ci8', 'core:sample_rate': 20000000 },
+				global: { 'core:datatype': format, 'core:sample_rate': sampleRate },
 				captures: [{ 'core:sample_start': 0, 'core:frequency': 923118000 }],
 			}),
 		],
@@ -34,6 +38,30 @@ function files() {
 }
 
 describe('IQ replay UI', () => {
+	it.each(formats)('previews a one-second %s recording with its actual sample width', async (format) => {
+		const receiver = reactive({ ...createAppData(), showIqReplayLoader: true });
+		const wrapper = mount(Loader, { global: { provide: { receiver } } });
+		const { data, meta } = files(format, 1000, 1000);
+		const input = wrapper.get('input[type=file]');
+		Object.defineProperty(input.element, 'files', { value: [data, meta] });
+		await input.trigger('change');
+		await flushPromises();
+		expect(wrapper.get('.iq-replay-file-summary small').text()).toBe('1.0 s');
+		wrapper.unmount();
+	});
+	it('updates raw 8-bit preview duration when its manually entered sample rate changes', async () => {
+		const receiver = reactive({ ...createAppData(), showIqReplayLoader: true });
+		const wrapper = mount(Loader, { global: { provide: { receiver } } });
+		const { data } = files('ci8', 1000, 1000);
+		const input = wrapper.get('input[type=file]');
+		Object.defineProperty(input.element, 'files', { value: [data] });
+		await input.trigger('change');
+		await wrapper.get('[aria-label="Recorded sample rate"]').setValue(0.001);
+		expect(wrapper.get('.iq-replay-file-summary small').text()).toBe('1.0 s');
+		await wrapper.get('[aria-label="Recorded sample rate"]').setValue(0.002);
+		expect(wrapper.get('.iq-replay-file-summary small').text()).toBe('0.5 s');
+		wrapper.unmount();
+	});
 	it('hides replay and prevents replay connections in production', async () => {
 		vi.stubEnv('DEV', false);
 		vi.stubGlobal('navigator', { onLine: true });
@@ -93,27 +121,37 @@ describe('IQ replay UI', () => {
 		expect(wrapper.get('[role=alert]').text()).toContain('filenames must match');
 		wrapper.unmount();
 	});
-	it('keeps hardware settings intact and loads paused with no gain controls', async () => {
-		const recording = { file: files().data, sampleRate: 20000000, centerHz: 923118000, frequencyShiftHz: 0 };
+	it.each(formats)('keeps hardware settings intact and initializes a one-second %s replay paused', async (format) => {
+		const recording = { file: files(format, 1000, 1000).data, format, sampleRate: 1000, centerHz: 923118000, frequencyShiftHz: 0 };
+		let finishOpen!: () => void;
 		const receiver = reactive({
 			...createAppData(),
 			_initAudioCtx: vi.fn(),
 			formatFreq: (freq: number) => freq.toFixed(6),
 			showMsg: vi.fn(),
 			backend: {
-				openIqReplay: vi.fn(async () => {}),
+				openIqReplay: vi.fn(
+					() =>
+						new Promise<void>((resolve) => {
+							finishOpen = resolve;
+						}),
+				),
 				getDeviceCapabilities: vi.fn(async () => ({
 					deviceType: 'iq-replay',
-					sampleRates: [20000000],
+					sampleRates: [1000],
 					gainControls: [],
-					sampleFormat: 'int8',
+					sampleFormat: format === 'ci8' ? 'int8' : format === 'ci16_le' ? 'int16' : 'float32',
 				})),
 				info: vi.fn(async () => ({ name: 'IQ File Replay' })),
 				close: vi.fn(async () => {}),
 			},
 		}) as unknown as AppInstance;
 		const original = { ...receiver.radio };
-		await replayMethods._connectIqReplay.call(receiver, recording);
+		const opening = replayMethods._connectIqReplay.call(receiver, recording);
+		expect(receiver.iqReplay?.progress.duration).toBe(1);
+		finishOpen();
+		await opening;
+		expect(receiver.iqReplay?.progress.duration).toBe(1);
 		expect(receiver.radio.centerFreq).toBe(923.118);
 		expect(receiver.running).toBe(false);
 		expect(receiver.gains).toEqual({});
@@ -124,12 +162,13 @@ describe('IQ replay UI', () => {
 		expect(receiver.radio).toEqual(original);
 		expect(receiver.vfos[0].freq).toBe(100);
 	});
-	it('replaces a playing file in place, keeps VFO settings and clears old results without replacing the hardware snapshot', async () => {
+	it.each(formats)('replaces a playing file with %s, keeping VFO settings and the hardware snapshot', async (format) => {
 		const startup = createAppData();
 		const current = { file: files().data, sampleRate: 20000000, centerHz: 923118000, frequencyShiftHz: 0 };
 		const replacement = {
 			...current,
-			file: new NodeFile([new Uint8Array(8000)], 'replacement.iq') as unknown as File,
+			file: new NodeFile([new Uint8Array(4000 * recordingBytesPerSample(format))], 'replacement.iq') as unknown as File,
+			format,
 			sampleRate: 2000000,
 			centerHz: 100000000,
 		};

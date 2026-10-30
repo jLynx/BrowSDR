@@ -1,3 +1,4 @@
+import type { IqSamples } from '@/radio/iq/types';
 import type { DspInput, DspOutput } from '@/worker/runtime/dsp-messages.types';
 
 // At 61.44 MSPS, 32 full LimeSDR chunks cover about 68ms of scheduling jitter.
@@ -24,11 +25,11 @@ export class IqDispatcher {
 		return !this.failed.has(worker) && (this.pending.get(worker)?.size ?? 0) < (floatIq ? MAX_PENDING_BANDS : MAX_PENDING_CHUNKS);
 	}
 
-	reserve(input: Int8Array): number | undefined {
+	reserve(input: IqSamples): number | undefined {
 		for (let offset = 0; offset < this.views.length; offset++) {
 			const slot = (this.nextSlot + offset) % this.views.length;
 			if (this.leases[slot].size) continue;
-			this.views[slot].set(input);
+			this.views[slot].set(new Int8Array(input.buffer, input.byteOffset, input.byteLength));
 			this.nextSlot = (slot + 1) % this.views.length;
 			return slot;
 		}

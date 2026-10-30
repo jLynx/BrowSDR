@@ -162,6 +162,20 @@ LimeSDR-USB reception supports sample rates up to **61.44 MSPS**.
 
 Choose **RX1** or **RX2** using **RX Channel** in the Radio panel, then select **LNAH**, **LNAL**, or **LNAW** under **Antenna** to match the H, L, or W connector in that receiver's antenna group. One receiver is streamed at a time; switching briefly restarts reception while retaining the current frequency, gains, and antenna path. The receiver and antenna selections are saved locally.
 
+### IQ precision and recording size
+
+Reception retains each driver's native sample precision: HackRF and RTL-SDR use
+8-bit IQ, LimeSDR and Airspy retain their 12-bit sources in 16-bit containers, and
+Airspy HF+ retains its delivered 16-bit samples. Stop reception to select a lower
+**IQ Precision** under **Radio → Advanced** on higher-resolution radios. This
+reduces sample detail and internal memory traffic. LimeSDR's separate **USB Format**
+controls wire packing; reducing IQ precision alone does not reduce USB traffic.
+
+**Tools → IQ Recorder** offers 8-bit, 16-bit, and normalized 32-bit float recording
+on higher-precision reception. 12-bit samples use 16-bit file storage; choosing
+8-bit halves that file size. See [IQ recording](docs/iq-recording.md) and
+[IQ replay](docs/iq-replay.md).
+
 ### Automatic receive gains (LimeSDR and HackRF)
 
 Use **Auto set gains** while receiving to adjust LimeSDR LNA, TIA and PGA, or

@@ -73,13 +73,28 @@ impl FFT {
     /// A bin-centered unit-amplitude tone with a rectangular window is 0 dB.
     /// Window gain is retained, matching SDR++ (no coherent-gain correction).
     pub fn fft(&mut self, input_: &[i8], result: &mut [f32]) {
+        self.fft_values(|index| input_[index] as f32, result);
+    }
+
+    pub fn fft_f32(&mut self, input: &[f32], result: &mut [f32]) {
+        self.fft_values(|index| input[index] * 128.0, result);
+    }
+
+    pub fn fft_i16(&mut self, input: &[i16], result: &mut [f32]) {
+        // Existing scaled window includes 1/128; divide int16 input by 256.
+        self.fft_values(|index| input[index] as f32 / 256.0, result);
+    }
+}
+
+impl FFT {
+    fn fft_values(&mut self, value: impl Fn(usize) -> f32, result: &mut [f32]) {
         let n = self.n;
 
         // Apply pre-computed scaled window (includes (-1)^i shift and 1/(128*n) scaling)
         for i in 0..n {
             self.buffer[i] = Complex {
-                re: input_[i * 2] as f32,
-                im: input_[i * 2 + 1] as f32,
+                re: value(i * 2),
+                im: value(i * 2 + 1),
             } * self.scaled_window[i];
         }
 
@@ -101,6 +116,10 @@ impl FFT {
         }
     }
 
+}
+
+#[wasm_bindgen]
+impl FFT {
     /// Zero-copy FFT: takes a raw pointer to i8 IQ data, returns a raw pointer to f32 output.
     /// The returned pointer is valid until the next call to `fft` or `fft_ptr`.
     pub fn fft_ptr(&mut self, iq_ptr: *const i8, num_iq_bytes: usize) -> *const f32 {

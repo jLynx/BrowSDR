@@ -50,6 +50,7 @@ export type DspInput =
 	| { type: 'release_bands'; batchId: number }
 	| {
 			type: 'channelize';
+			iqFormat?: 'int8' | 'int16' | 'float32';
 			key: string;
 			ratio: number;
 			centers: number[];
@@ -66,6 +67,7 @@ export type DspInput =
 			centerFreq?: number;
 			params: VfoParams;
 			floatIq?: boolean;
+			iqFormat?: 'int8' | 'int16' | 'float32';
 			useSab?: boolean;
 			sabIndex?: number;
 			chunkLen: number;

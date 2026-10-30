@@ -131,11 +131,11 @@
 					<template v-if="deviceCapabilities">
 						<RxLevel />
 						<component v-for="group in gainControlGroups" :key="group.name" :is="group.name ? 'UiPanel' : 'div'" v-bind="group.name ? { label: group.name, collapsed: !radioAdvanced } : {}" @update:collapsed="radioAdvanced = !$event" :class="group.name ? 'radio-advanced' : 'gain-controls'">
-						<p v-if="group.name">Stop reception before changing transport options.</p>
+						<p v-if="group.name">Stop reception before changing these options. Lower IQ precision uses less memory and discards fine sample detail.</p>
 						<UiFormRow v-for="gc in group.controls" :key="gc.name">
 							<template v-if="gc.type === 'select'">
 								<label>{{ gc.name }}</label>
-								<UiSelect v-model.number="gains[gc.name]" :aria-label="gc.name" :disabled="autoGain.active || ((gc.name === 'USB Format' || gc.name === 'Receive Mode') && running) || (gc.name === 'Receive Mode' && remoteMode !== 'none') || (remoteMode === 'client' && locks[gc.name])" style="flex:1; background:#1a1a2e; color:#e0e0e0; border:1px solid #333; border-radius:4px; padding:4px 8px;">
+								<UiSelect v-model.number="gains[gc.name]" :aria-label="gc.name" :disabled="autoGain.active || ((gc.name === 'USB Format' || gc.name === 'Receive Mode' || gc.name === 'IQ Precision') && running) || (gc.name === 'Receive Mode' && remoteMode !== 'none') || (remoteMode === 'client' && locks[gc.name])" style="flex:1; background:#1a1a2e; color:#e0e0e0; border:1px solid #333; border-radius:4px; padding:4px 8px;">
 									<option v-for="(lbl, idx) in gc.labels" :key="idx" :value="idx">{{ lbl }}</option>
 								</UiSelect>
 							</template>
@@ -148,7 +148,7 @@
 							</template>
 							<UiLock v-if="remoteMode === 'host' || (remoteMode === 'client' && locks[gc.name])" :locked="locks[gc.name]" :host="remoteMode === 'host'" @toggle="locks[gc.name] = !locks[gc.name]"></UiLock>
 						</UiFormRow>
-						<p v-if="group.name">Packed 12-bit reduces USB traffic. Use 16-bit unless you need to compare transport performance.</p>
+						<p v-if="group.name && deviceCapabilities.deviceType === 'limesdr'">Packed 12-bit reduces USB traffic. Use 16-bit unless you need to compare transport performance.</p>
 						</component>
 					</template>
 					<p v-if="deviceCapabilities?.deviceType === 'limesdr' && gains['Receive Mode'] === 1" role="status">USB-only diagnostic: source counters remain active; spectrum and audio are disabled.</p>
@@ -311,7 +311,7 @@
 					<div v-if="dspStats.sourceGapWithinTransfer !== undefined" title="Counter jumps inside one returned USB buffer versus between buffers. Largest is missing radio time in one jump. These do not identify the faulty component.">Source gap location: {{ dspStats.sourceGapWithinTransfer }} within / {{ dspStats.sourceGapBetweenTransfers }} between | largest {{ ((dspStats.sourceLargestGapSamples || 0) / radio.sampleRate * 1000).toFixed(2) }}ms</div>
 					<div v-if="dspStats.usbServiceAvgMs !== undefined" title="Synchronous receive-worker processing, including conversion, FFT and dispatch. Average and maximum since reception started; separate from VFO DSP timing.">USB service: {{ dspStats.usbServiceAvgMs.toFixed(2) }}ms avg / {{ (dspStats.usbServiceMaxMs || 0).toFixed(2) }}ms max</div>
 					<div v-if="dspStats.usbArrivalMaxMs !== undefined" title="Longest gap between USB completions observed by JavaScript since reception started. Includes USB and scheduling delays. Reordered counts completions observed behind a later submitted read.">USB arrival: {{ dspStats.usbArrivalMaxMs.toFixed(2) }}ms max | reordered {{ dspStats.usbOutOfOrderTransfers }}</div>
-					<div v-if="dspStats.usbLinkBits !== undefined" title="Wire sample width and USB read size. Packed 12-bit preserves the ADC bits while reducing USB traffic; DSP still receives int8 IQ.">USB link: {{ dspStats.usbLinkBits }}-bit | {{ ((dspStats.usbTransferBytes || 0) / 1024).toFixed(0) }}KiB transfers</div>
+					<div v-if="dspStats.usbLinkBits !== undefined" title="Wire sample width and USB read size. Packed 12-bit preserves the ADC bits while reducing USB traffic; IQ Precision independently selects retained sample precision.">USB link: {{ dspStats.usbLinkBits }}-bit | {{ ((dspStats.usbTransferBytes || 0) / 1024).toFixed(0) }}KiB transfers</div>
 					<div v-if="dspStats.sourceGapCount && dspStats.sourceLastGapArrivalMs !== undefined" title="Completion interval and preceding synchronous processing duration when the latest source-counter gap was observed. Correlation does not prove cause.">Last source gap: {{ dspStats.sourceLastGapArrivalMs.toFixed(2) }}ms arrival / {{ (dspStats.sourceLastGapPreviousServiceMs || 0).toFixed(2) }}ms prior service</div>
 					<div v-if="audioPlaybackEngine === 'worklet' && dspStats.usbDiagnosticMode !== 1" title="Smooth rate correction is limited to ±0.5% to control gradual buffer drift. Discarded PCM frames count separately from source/IQ losses.">Playback rate: {{ (audioPlaybackRate * 100).toFixed(2) }}% | PCM discarded: {{ audioDroppedFrames }} frames</div>
 					<div v-if="dspStats.channelization && dspStats.channelization.bands">Shared: {{ dspStats.channelization.vfos }} VFOs / {{ dspStats.channelization.bands }} bands @ {{ (dspStats.channelization.sampleRate / 1e6).toFixed(2) }} MSPS</div>

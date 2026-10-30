@@ -142,10 +142,10 @@ describe('Airspy adaptive ADC reads', () => {
 
 describe('Airspy HF+ adaptive IQ reads', () => {
 	it.each([
-		[192000, 12288],
-		[768000, 49152],
-		[912000, 58368],
-	])('sizes %i Sa/s for the existing float IQ path (%i bytes)', async (rate, bytes) => {
+		[192000, 6144],
+		[768000, 24576],
+		[912000, 29184],
+	])('sizes %i Sa/s for the signed 16-bit USB IQ path (%i bytes)', async (rate, bytes) => {
 		const fixture = usbStream();
 		const receiver = new AirspyHfDevice();
 		receiver.dev = fixture.usb;
@@ -154,10 +154,10 @@ describe('Airspy HF+ adaptive IQ reads', () => {
 		await receiver.startRx(callback);
 		expect(fixture.pending).toHaveLength(4);
 		expect(fixture.pending.every((read) => read.length === bytes)).toBe(true);
-		const floats = new Float32Array([99, 99, 0.5, -0.5, 2, -2, 99, 99]);
-		fixture.pending.shift().resolve({ status: 'ok', data: new DataView(floats.buffer, 8, 16) });
+		const words = new Int16Array([99, 99, -16384, 16384, -32768, 32767, 99, 99]);
+		fixture.pending.shift().resolve({ status: 'ok', data: new DataView(words.buffer, 4, 8) });
 		await flush();
-		expect([...new Int8Array(callback.mock.lastCall[0].buffer)]).toEqual([64, -63, 127, -128]);
+		expect([...new Int16Array(callback.mock.lastCall[0].buffer)]).toEqual([16384, -16384, 32767, -32768]);
 		expect(fixture.pending.at(-1).length).toBe(bytes);
 		await fixture.stop(receiver);
 		expect(callback).toHaveBeenCalledOnce();

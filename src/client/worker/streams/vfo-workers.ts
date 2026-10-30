@@ -15,7 +15,9 @@ import type { DspOutput } from '@/worker/runtime/dsp-messages.types';
 import type { VfoParams, VfoState } from '@/worker/runtime/types';
 import type { Backend } from '@/worker/runtime/backend';
 import { AUDIO_QUEUE_CAPACITY } from './audio-queue';
+import { deviceIqFormat, iqComponentBytes } from '@/radio/iq/format';
 import { IqDispatcher } from './iq-dispatch';
+const SAB_POOL_SIZE = 64;
 export function initializeVfoWorkers(
 	backend: Backend,
 	centerFreq: number,
@@ -64,19 +66,7 @@ export function initializeVfoWorkers(
 	};
 	backend.vfoParams = [{ ...defaultVfoParams }];
 
-	const MAX_USB_SAMPLES = 131072;
-	const SHARED_IQ_CAPACITY = MAX_USB_SAMPLES * 2;
-	const SAB_POOL_SIZE = 64;
-	backend._iqDispatcher?.dispose();
-
-	backend.sharedIqPools = [];
-	backend.sharedIqViews = [];
-	for (let i = 0; i < SAB_POOL_SIZE; i++) {
-		const pool = typeof SharedArrayBuffer !== 'undefined' ? new SharedArrayBuffer(SHARED_IQ_CAPACITY) : new ArrayBuffer(SHARED_IQ_CAPACITY);
-		backend.sharedIqPools.push(pool);
-		backend.sharedIqViews.push(new Int8Array(pool));
-	}
-	backend._iqDispatcher = new IqDispatcher(backend.sharedIqViews);
+	initializeIqPool(backend);
 
 	const makeVfoState = (): VfoState => ({
 		squelchOpen: false,
@@ -297,4 +287,19 @@ function routeWorkerDiagnostics(backend: Backend, worker: Worker, msg: DspOutput
 	if (!import.meta.env.DEV) return;
 	const currentIndex = backend.dspWorkers!.indexOf(worker);
 	if (currentIndex !== -1) console[msg.level](`[DSP VFO ${currentIndex + 1}] ${msg.message}`);
+}
+
+function initializeIqPool(backend: Backend) {
+	const MAX_USB_SAMPLES = 131072;
+	const SHARED_IQ_CAPACITY = MAX_USB_SAMPLES * 2 * iqComponentBytes(deviceIqFormat(backend.device?.sampleFormat));
+	backend._iqDispatcher?.dispose();
+
+	backend.sharedIqPools = [];
+	backend.sharedIqViews = [];
+	for (let i = 0; i < SAB_POOL_SIZE; i++) {
+		const pool = typeof SharedArrayBuffer !== 'undefined' ? new SharedArrayBuffer(SHARED_IQ_CAPACITY) : new ArrayBuffer(SHARED_IQ_CAPACITY);
+		backend.sharedIqPools.push(pool);
+		backend.sharedIqViews.push(new Int8Array(pool));
+	}
+	backend._iqDispatcher = new IqDispatcher(backend.sharedIqViews);
 }

@@ -6,6 +6,9 @@ mod channelizer;
 #[cfg(test)]
 mod tests;
 
+#[cfg(test)]
+mod precision_tests;
+
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
@@ -40,6 +43,15 @@ pub fn free_iq_buffer(ptr: *mut i8, capacity: usize) {
     unsafe {
         let _ = Vec::from_raw_parts(ptr, capacity, capacity);
     }
+}
+
+/// Normalize full-scale signed int16 IQ into the existing float DSP input buffer.
+/// Callers own both allocations and pass at most their allocated component count.
+#[wasm_bindgen]
+pub fn normalize_i16_to_f32(input: *const i16, output: *mut f32, count: usize) {
+    let input = unsafe { std::slice::from_raw_parts(input, count) };
+    let output = unsafe { std::slice::from_raw_parts_mut(output, count) };
+    for (source, destination) in input.iter().zip(output) { *destination = *source as f32 / 32768.0; }
 }
 
 // Re-export WASM-bound types at crate root so wasm-bindgen finds them

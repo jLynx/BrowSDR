@@ -2,6 +2,7 @@ import { markRaw } from 'vue';
 import type { AppInstance } from '@/app/core/receiver.types';
 import type { IqRecording } from '@/radio/iq-replay/types';
 import { validateIqRecording } from '@/radio/iq-replay/metadata';
+import { recordingBytesPerSample } from '@/radio/iq/format';
 import { errorMessage } from '@/platform/errors';
 import { clearDecoderSources } from '@/app/core/decoder-state';
 
@@ -27,7 +28,12 @@ export const replayMethods = {
 		) as AppInstance['_replayPrevious'];
 		this.iqReplay = {
 			recording: markRaw(recording),
-			progress: { state: 'ready', seconds: 0, duration: recording.file.size / 2 / recording.sampleRate, delaySeconds: 0 },
+			progress: {
+				state: 'ready',
+				seconds: 0,
+				duration: recording.file.size / recordingBytesPerSample(recording.format ?? 'ci8') / recording.sampleRate,
+				delaySeconds: 0,
+			},
 		};
 		try {
 			await this.backend.openIqReplay(recording);
@@ -72,7 +78,12 @@ export const replayMethods = {
 async function applyRecording(receiver: AppInstance, recording: IqRecording, keepVfoTuning = false): Promise<void> {
 	receiver.iqReplay = {
 		recording: markRaw(recording),
-		progress: { state: 'ready', seconds: 0, duration: recording.file.size / 2 / recording.sampleRate, delaySeconds: 0 },
+		progress: {
+			state: 'ready',
+			seconds: 0,
+			duration: recording.file.size / recordingBytesPerSample(recording.format ?? 'ci8') / recording.sampleRate,
+			delaySeconds: 0,
+		},
 	};
 	Object.assign(receiver.radio, {
 		centerFreq: (recording.centerHz + recording.frequencyShiftHz) / 1e6,
