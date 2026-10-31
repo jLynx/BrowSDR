@@ -1,6 +1,11 @@
 import type { AppInstance } from '@/app/core/receiver.types';
+import type { Vfo } from '@/app/core/types';
 import { makeDefaultVfo, MODE_DEFAULTS } from '@/app/core/constants';
 import { isValidDisplayFrequencyMhz, minimumDisplayFrequencyMhz } from '@/radio/frequency-shift';
+
+function rtkEnabled(vfo: Vfo, inBandwidth: boolean): boolean {
+	return !!vfo.rtk && (vfo.rtkProfile === 'scan' || inBandwidth);
+}
 
 export const vfoMethods = {
 	clearInactiveSoloAudio(this: AppInstance) {
@@ -99,10 +104,13 @@ export const vfoMethods = {
 				adsb: vfo.adsb && inBandwidth,
 				ais: vfo.ais && inBandwidth,
 				radiosonde: vfo.radiosonde && inBandwidth,
-				rtk: vfo.rtk && inBandwidth,
+				rtk: rtkEnabled(vfo, inBandwidth),
 				rtkProfile: vfo.rtkProfile,
 				rtkClockPpm: vfo.rtkClockPpm,
 				rtkFollowHops: vfo.rtkFollowHops,
+				rtkFollowSource: vfo.rtkFollowSource,
+				rtkScanStart: vfo.rtkScanStart,
+				rtkScanEnd: vfo.rtkScanEnd,
 				ble: vfo.ble && inBandwidth,
 				acars: vfo.acars && inBandwidth,
 				aprs: vfo.aprs && inBandwidth,

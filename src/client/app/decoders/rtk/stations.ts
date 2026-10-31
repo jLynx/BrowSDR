@@ -14,6 +14,11 @@ export function generationName(profile: RtkProfile): string {
 	return `Mammotion ${profile.toUpperCase()}`;
 }
 
+export function profileForVfo(receiver: AppInstance, index: number): RtkProfile | undefined {
+	const profile = receiver.vfos[index]?.rtkProfile ?? 'rtk1';
+	return profile === 'scan' ? undefined : profile === 'auto' ? receiver.rtk.status[index]?.detectedProfile : profile;
+}
+
 export function stationTitle(entry: RtkStationEntry): string {
 	return `${generationName(entry.profile)} · ${receiverName(entry.station)}`;
 }
@@ -37,10 +42,13 @@ export function collectStations(receiver: AppInstance, now: number): RtkStationE
 	receiver.vfos.forEach((vfo, index) => {
 		if (!vfo.rtk || receiver.rtk.frequencies[index] !== vfo.freq) return;
 		for (const received of receiver.rtk.sources[index] ?? []) {
+			const profile = received.discovery?.profile ?? profileForVfo(receiver, index);
+			if (!profile) continue;
 			let station = received;
-			if (!station.rtcmCount) continue;
+			if (!station.rtcmCount && !station.discovery) continue;
+			const frequency = station.discovery?.frequencyMHz ?? vfo.freq;
 			const source = stationKey(station),
-				key = `${vfo.freq}:${vfo.rtkProfile ?? 'rtk1'}:${source}`;
+				key = `${station.discovery ? 'scan' : frequency}:${profile}:${source}`;
 			const previous = entries.get(key);
 			const indices = previous ? [...previous.indices, index] : [index];
 			if (previous) station = mergeStation(previous.station, station);
@@ -48,8 +56,8 @@ export function collectStations(receiver: AppInstance, now: number): RtkStationE
 			entries.set(key, {
 				key,
 				source,
-				frequency: vfo.freq,
-				profile: vfo.rtkProfile ?? 'rtk1',
+				frequency,
+				profile,
 				indices,
 				station,
 				satellites: fresh ? observedSatellites(station, now) : undefined,
@@ -57,7 +65,7 @@ export function collectStations(receiver: AppInstance, now: number): RtkStationE
 					running: receiver.running,
 					enabled: true,
 					local: receiver.remoteMode !== 'client',
-					inBand: receiver.isFreqInBandwidth(vfo.freq),
+					inBand: receiver.isFreqInBandwidth(frequency),
 					status: receiver.rtk.status[index] ?? undefined,
 					station,
 					now,

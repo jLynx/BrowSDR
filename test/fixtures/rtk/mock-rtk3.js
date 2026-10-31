@@ -34,8 +34,8 @@ export function mockRtk3Container(payload = mockRtcmReference(), sequence = 100,
 	]);
 }
 
-export function mockRtk3Packet(body, address = mockRtk3Address) {
-	const bytes = Uint8Array.from([0, 0, address & 255, address >> 8, ...body]);
+export function mockRtk3Packet(body, address = mockRtk3Address, addressPrefix = 0) {
+	const bytes = Uint8Array.from([addressPrefix & 255, addressPrefix >> 8, address & 255, address >> 8, ...body]);
 	let crc = 0xffff;
 	for (const byte of bytes) {
 		crc ^= byte;
@@ -51,10 +51,10 @@ export function mockRtk3Packet(body, address = mockRtk3Address) {
 	};
 }
 
-export function mockRtk3Beacon(address = mockRtk3Address, ms = 15000) {
+export function mockRtk3Beacon(address = mockRtk3Address, ms = 15000, addressPrefix = 0) {
 	const body = new Uint8Array(15);
 	body.set([0x55, 0x55, 0, 0x40]);
 	new DataView(body.buffer).setUint32(4, ms, true);
 	body.set([0xaa, 0xaa], 13);
-	return mockRtk3Packet(body, address);
+	return mockRtk3Packet(body, address, addressPrefix);
 }

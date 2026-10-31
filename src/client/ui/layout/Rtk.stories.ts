@@ -5,7 +5,7 @@ import RtkPanel from '@/app/decoders/rtk/panel';
 import { createAppData } from '@/app/core/state';
 import { makeDefaultVfo } from '@/app/core/constants';
 import type { AppInstance } from '@/app/core/receiver.types';
-import type { RtkStation } from '@/worker/decoders/rtk/types';
+import type { RtkStation, RtkHopDecision } from '@/worker/decoders/rtk/types';
 
 function mockBase(scan: number, name: string, longitude: number): RtkStation {
 	const now = Date.now();
@@ -42,13 +42,56 @@ function mockBase(scan: number, name: string, longitude: number): RtkStation {
 	};
 }
 
-const meta = {
-	title: 'Receiver/RTK Base Stations',
-	component: RtkPanel,
-	parameters: {
-		docs: { description: { component: 'Invented RTK bases and coordinates for layout review. No RF captures or personal station data.' } },
-	},
-	render: () => ({
+function mockSurvey(receiver: Pick<AppInstance, 'vfos' | 'radio' | 'rtk'>) {
+	receiver.vfos = [{ ...makeDefaultVfo(923.118), rtk: true, rtkProfile: 'scan', enabled: false }];
+	Object.assign(receiver.radio, { centerFreq: 923.118, sampleRate: 20000000 });
+	receiver.rtk.sources = [
+		[
+			{
+				...mockBase(1, 'MOCK GNSS A', 0),
+				address: 4242,
+				addressPrefix: 100,
+				discovery: {
+					profile: 'rtk3',
+					frequencyMHz: 915.401,
+					frequenciesMHz: [915.401, 921.401],
+					hoppingObserved: true,
+					verifiedFrames: 12,
+				},
+			},
+			{
+				...mockBase(2, 'RTK base station', 0),
+				address: 4242,
+				addressPrefix: 101,
+				rtcmCount: 0,
+				reference: undefined,
+				observations: undefined,
+				lastCorrection: undefined,
+				discovery: { profile: 'rtk3', frequencyMHz: 915.401, frequenciesMHz: [915.401, 921.401], hoppingObserved: true, verifiedFrames: 3 },
+			},
+			{
+				...mockBase(3, 'MOCK GNSS C', 45),
+				protocol: 'rtk2',
+				network: '0102030405060708',
+				address: 4243,
+				discovery: { profile: 'rtk2', frequencyMHz: 921.791, frequenciesMHz: [921.791], hoppingObserved: false, verifiedFrames: 8 },
+			},
+		],
+	];
+	receiver.rtk.status[0]!.scan = {
+		startMHz: 915,
+		endMHz: 928,
+		frequencyMHz: 921.401,
+		channel: 3,
+		channels: 265,
+		pass: 1,
+		remainingSeconds: 360,
+	};
+	receiver.rtk.status[0]!.message = 'Discovering RTK bases · 3 verified identities';
+}
+
+function mockPanel(followHops = false, automatic?: RtkHopDecision | 'detecting', survey = false) {
+	return {
 		components: { RtkPanel },
 		setup() {
 			const receiver = reactive({
@@ -65,6 +108,14 @@ const meta = {
 				[mockBase(1234, 'MOCK GNSS A', 0), mockBase(2345, 'MOCK GNSS B', 90)],
 				[mockBase(3456, 'MOCK GNSS C', 0), mockBase(4567, 'MOCK GNSS D', 45), mockBase(5678, 'MOCK GNSS E', -45)],
 			];
+			if (followHops) {
+				Object.assign(receiver.vfos[0], { rtkProfile: 'rtk3', rtkFollowHops: true, rtkFollowSource: 'rtk3-100-4242' });
+				receiver.rtk.sources[0] = [0, 100, 101].map((addressPrefix, i) => ({
+					...mockBase(i, `MOCK GNSS ${i + 1}`, i * 45),
+					address: 4242,
+					addressPrefix,
+				}));
+			}
 			receiver.rtk.status = [0, 1].map(() => ({
 				state: 'receiving',
 				message: 'Synthetic display fixture',
@@ -74,10 +125,28 @@ const meta = {
 				syncs: 12,
 				crcErrors: 0,
 				discontinuities: 0,
+				...(followHops ? { hopFrequencyMHz: 921.401, hopTracking: true } : {}),
 			}));
+			if (automatic) {
+				Object.assign(receiver.vfos[0], { rtkProfile: 'auto', rtkFollowHops: false });
+				if (automatic === 'detecting') {
+					receiver.rtk.sources[0] = [];
+					receiver.rtk.status[0]!.message = 'Auto: waiting for a verified RTK beacon or two data frames';
+				} else
+					Object.assign(receiver.rtk.status[0]!, {
+						detectedProfile: 'rtk3',
+						hopDecision: automatic,
+						message:
+							automatic === 'following'
+								? 'RTK3 detected · Verified NZ hop following'
+								: 'RTK3 detected · Receive the whole NZ plan to check hopping',
+					});
+			}
+			if (survey) mockSurvey(receiver);
 			const timer = setInterval(() => {
 				for (const station of receiver.rtk.sources.flat()) {
-					station.lastCorrection = station.lastSeen = Date.now();
+					station.lastSeen = Date.now();
+					if (station.rtcmCount) station.lastCorrection = Date.now();
 					for (const observation of Object.values(station.observations ?? {})) observation.receivedAt = Date.now();
 				}
 			}, 1000);
@@ -86,7 +155,16 @@ const meta = {
 		},
 		template:
 			'<div style="display:flex;flex-direction:column;min-height:640px"><p style="padding:12px">Mock RTK stations · No live radio or personal coordinates</p><RtkPanel /></div>',
-	}),
+	};
+}
+
+const meta = {
+	title: 'Receiver/RTK Base Stations',
+	component: RtkPanel,
+	parameters: {
+		docs: { description: { component: 'Invented RTK bases and coordinates for layout review. No RF captures or personal station data.' } },
+	},
+	render: () => mockPanel(),
 } satisfies Meta<typeof RtkPanel>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -139,6 +217,87 @@ export const MultipleBases: Story = {
 		await userEvent.click(list.getByRole('button', { name: /LoRa 5678\.7\.\?\.42/ }));
 		await expect(canvas.getByLabelText('LoRa number')).toHaveTextContent('5678.7.?.42');
 	},
+};
+
+export const ChooseHopBase: Story = {
+	render: () => mockPanel(true),
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await userEvent.click(canvas.getByText('Decoder settings', { selector: 'summary' }));
+		const select = canvas.getByRole('combobox', { name: 'RTK base to follow' });
+		await expect(select).toHaveValue('rtk3-100-4242');
+		await expect(select.querySelectorAll('option')).toHaveLength(4);
+		await userEvent.selectOptions(select, 'rtk3-101-4242');
+		await expect(canvas.getByLabelText('LoRa station address')).toHaveTextContent('101:4242');
+		await expect(canvas.getByText('Following 921.401 MHz.')).toBeVisible();
+		await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth);
+	},
+};
+
+export const ChooseHopBaseNarrow: Story = {
+	render: () => ({ ...mockPanel(true), template: '<div style="width:320px;max-width:100%"><RtkPanel /></div>' }),
+	play: ChooseHopBase.play,
+};
+
+export const AutoFollowing: Story = {
+	render: () => mockPanel(true, 'following'),
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await userEvent.click(canvas.getByText('Decoder settings', { selector: 'summary' }));
+		await expect(canvas.getByRole('combobox', { name: 'RTK signal profile' })).toHaveValue('auto');
+		await expect(canvas.getByLabelText('RTK automatic detection')).toHaveTextContent('RTK3 detected');
+		await userEvent.selectOptions(canvas.getByRole('combobox', { name: 'RTK base to follow' }), 'rtk3-101-4242');
+		await expect(canvas.getByLabelText('LoRa station address')).toHaveTextContent('101:4242');
+		await expect(canvas.queryByRole('spinbutton', { name: 'RTK sample clock correction' })).toBeNull();
+		await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth);
+	},
+};
+
+export const AutoFollowingNarrow: Story = {
+	render: () => ({ ...mockPanel(true, 'following'), template: '<div style="width:320px;max-width:100%"><RtkPanel /></div>' }),
+	play: AutoFollowing.play,
+};
+
+export const AutoDetecting: Story = {
+	render: () => mockPanel(false, 'detecting'),
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await userEvent.click(canvas.getByText('Decoder settings', { selector: 'summary' }));
+		await expect(canvas.getByLabelText('RTK automatic detection')).toHaveTextContent('waiting for a verified RTK beacon');
+	},
+};
+
+export const AutoLimitedBandwidth: Story = {
+	render: () => mockPanel(true, 'band-limited'),
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await userEvent.click(canvas.getByText('Decoder settings', { selector: 'summary' }));
+		await expect(canvas.getByLabelText('RTK automatic detection')).toHaveTextContent('Receive the whole NZ plan');
+	},
+};
+
+export const RangeDiscovery: Story = {
+	render: () => mockPanel(false, undefined, true),
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await expect(canvas.getByLabelText('RTK range discovery')).toHaveTextContent('3 verified identities');
+		const table = canvas.getByRole('table', { name: 'RTK base stations' });
+		await expect(table.querySelectorAll('tbody tr')).toHaveLength(3);
+		await expect(table).toHaveTextContent('Mammotion RTK2');
+		await expect(table).toHaveTextContent('Hops observed');
+		await userEvent.click(within(table).getByRole('button', { name: /LoRa header 101:4242/ }));
+		await expect(canvas.getByLabelText('Base station position')).toHaveTextContent('Waiting for the base');
+		await userEvent.click(canvas.getByText('Decoder settings', { selector: 'summary' }));
+		await expect(canvas.getByRole('combobox', { name: 'RTK signal profile' })).toHaveValue('scan');
+		await expect(canvas.getByRole('spinbutton', { name: 'RTK discovery start MHz' })).toHaveValue(915);
+		await expect(canvas.queryByRole('spinbutton', { name: 'RTK sample clock correction' })).toBeNull();
+		await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth);
+	},
+};
+
+export const RangeDiscoveryNarrow: Story = {
+	render: () => ({ ...mockPanel(false, undefined, true), template: '<div style="width:320px;max-width:100%"><RtkPanel /></div>' }),
+	play: RangeDiscovery.play,
 };
 
 export const NarrowLayout: Story = {

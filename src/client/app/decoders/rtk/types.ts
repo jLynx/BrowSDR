@@ -1,11 +1,11 @@
-import type { RtkProfile, RtkStation, RtkStatus } from '@/worker/decoders/rtk/types';
+import type { RtkProfile, RtkProfileMode, RtkStation, RtkStatus } from '@/worker/decoders/rtk/types';
 
 export type PairingField = 'scan' | 'channel' | 'loc' | 'netId';
 export type PairingEstimates = Partial<Record<PairingField, number>>;
 
 export interface RtkReport {
 	frequency: number;
-	profile: RtkProfile;
+	profile: RtkProfileMode;
 	status?: RtkStatus;
 	stations: RtkStation[];
 }

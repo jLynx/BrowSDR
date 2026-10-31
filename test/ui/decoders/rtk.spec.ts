@@ -55,6 +55,131 @@ async function setup() {
 }
 
 describe('live RTK receiver tools', () => {
+	it('discovers a received range, keeps mixed and beacon-only bases, and follows a selected identity', async () => {
+		await setup();
+		wrapper.vm.radio.centerFreq = 923.118;
+		wrapper.vm.radio.sampleRate = 20000000;
+		wrapper.vm.rtk.panelOpen = true;
+		await nextTick();
+		await wrapper.get('select[aria-label="RTK signal profile"]').setValue('scan');
+		expect(wrapper.find('[aria-label="RTK sample clock correction"]').exists()).toBe(false);
+		await wrapper.get('[aria-label="RTK discovery start MHz"]').setValue('915');
+		await wrapper.get('[aria-label="RTK discovery end MHz"]').setValue('928');
+		await wrapper
+			.findAll('button')
+			.find((button) => button.text() === 'Apply discovery range')!
+			.trigger('click');
+		expect(wrapper.vm.backend!.setVfoParams).toHaveBeenLastCalledWith(
+			0,
+			expect.objectContaining({ rtkProfile: 'scan', rtk: true, rtkScanStart: 915, rtkScanEnd: 928 }),
+		);
+		const packet = message();
+		packet.status.scan = { startMHz: 915, endMHz: 928, frequencyMHz: 921.401, channel: 3, channels: 265, pass: 1, remainingSeconds: 360 };
+		packet.stations = [
+			{
+				...packet.stations[0],
+				rtcmCount: 0,
+				address: 4242,
+				addressPrefix: 100,
+				discovery: { profile: 'rtk3', frequencyMHz: 915.401, frequenciesMHz: [915.401, 921.401], hoppingObserved: true, verifiedFrames: 3 },
+			},
+			{
+				...packet.stations[0],
+				discovery: { profile: 'rtk1', frequencyMHz: 923.118, frequenciesMHz: [923.118], hoppingObserved: false, verifiedFrames: 2 },
+			},
+		];
+		wrapper.vm._onRtkMessage(0, packet.freq, packet);
+		await nextTick();
+		expect(wrapper.get('[aria-label="RTK base stations"]').text()).toContain('Mammotion RTK3');
+		expect(wrapper.get('[aria-label="RTK base stations"]').text()).toContain('Mammotion RTK1');
+		expect(wrapper.get('[aria-label="RTK range discovery"]').text()).toContain('921.401 MHz');
+		expect(wrapper.get('[aria-label="RTK base stations"]').text()).toContain('Hops observed');
+		await wrapper
+			.findAll('button')
+			.find((button) => button.text() === 'Follow this base on this VFO')!
+			.trigger('click');
+		expect(wrapper.vm.vfos[0]).toMatchObject({ rtkProfile: 'auto', rtkFollowSource: 'rtk3-100-4242', freq: 915.401 });
+		expect(wrapper.vm.backend!.setVfoParams).toHaveBeenLastCalledWith(
+			0,
+			expect.objectContaining({ rtkProfile: 'auto', rtkFollowSource: 'rtk3-100-4242' }),
+		);
+	});
+	it('validates ranges against capture bandwidth and can use the current received band', async () => {
+		await setup();
+		wrapper.vm.radio.centerFreq = 923.118;
+		wrapper.vm.radio.sampleRate = 2000000;
+		wrapper.vm.rtk.panelOpen = true;
+		await nextTick();
+		await wrapper.get('select[aria-label="RTK signal profile"]').setValue('scan');
+		await wrapper
+			.findAll('button')
+			.find((button) => button.text() === 'Apply discovery range')!
+			.trigger('click');
+		expect(wrapper.get('[role="alert"]').text()).toContain('entire discovery range');
+		await wrapper
+			.findAll('button')
+			.find((button) => button.text() === 'Use received band')!
+			.trigger('click');
+		expect(wrapper.vm.vfos[0]).toMatchObject({ rtkScanStart: 922.418, rtkScanEnd: 923.818, rtk: true });
+		expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+	});
+	it('keeps Auto selected while showing the detected generation and permits a manual override', async () => {
+		await setup();
+		wrapper.vm.rtk.panelOpen = true;
+		wrapper.vm.vfos[0].rtk = true;
+		await nextTick();
+		const profile = wrapper.get('select[aria-label="RTK signal profile"]');
+		wrapper.vm.vfos[0].rtkFollowSource = 'rtk3-4242';
+		await profile.setValue('auto');
+		expect(wrapper.vm.vfos[0].rtkFollowSource).toBe('rtk3-4242');
+		expect(wrapper.vm.backend!.setVfoParams).toHaveBeenLastCalledWith(
+			0,
+			expect.objectContaining({ rtkProfile: 'auto', rtkFollowHops: false }),
+		);
+		expect(wrapper.find('[aria-label="RTK sample clock correction"]').exists()).toBe(false);
+		const packet = message();
+		packet.profile = 'rtk3';
+		packet.status.detectedProfile = 'rtk3';
+		packet.status.hopDecision = 'following';
+		packet.status.message = 'RTK3 detected · Verified NZ hop following';
+		packet.stations[0].address = 4242;
+		packet.rtcm[0].source = 'rtk3-4242';
+		wrapper.vm._onRtkMessage(0, packet.freq, packet);
+		await nextTick();
+		expect(profile.element.value).toBe('auto');
+		expect(wrapper.get('[aria-label="RTK automatic detection"]').text()).toContain('RTK3 detected');
+		expect(wrapper.get('[aria-label="RTK base stations"]').text()).toContain('Mammotion RTK3');
+		expect(wrapper.get('select[aria-label="RTK base to follow"]').findAll('option')).toHaveLength(2);
+		await profile.setValue('rtk1');
+		expect(wrapper.vm.rtk.sources[0]).toEqual([]);
+		expect(wrapper.find('[aria-label="RTK automatic detection"]').exists()).toBe(false);
+	});
+	it('selects a specific hop base without changing another VFO and retains the choice during acquisition', async () => {
+		await setup();
+		wrapper.vm.rtk.panelOpen = true;
+		Object.assign(wrapper.vm.vfos[0], { rtk: true, rtkProfile: 'rtk3', rtkFollowHops: true });
+		wrapper.vm.vfos.push({ ...makeDefaultVfo(921.25), rtk: true, rtkProfile: 'rtk3', rtkFollowSource: 'rtk3-200-4242' });
+		wrapper.vm.rtk.frequencies = [923.118, 921.25];
+		wrapper.vm.rtk.sources = [[100, 101].map((addressPrefix) => ({ ...message().stations[0], address: 4242, addressPrefix }))];
+		wrapper.vm.rtk.sources[0].push({ ...message().stations[0], address: 4242, addressPrefix: 102, rtcmCount: 0 });
+		await nextTick();
+		const select = wrapper.get('select[aria-label="RTK base to follow"]');
+		expect(select.findAll('option').map((option) => option.attributes('value'))).toEqual([
+			'',
+			'rtk3-100-4242',
+			'rtk3-101-4242',
+			'rtk3-102-4242',
+		]);
+		await select.setValue('rtk3-101-4242');
+		expect(wrapper.vm.backend!.setVfoParams).toHaveBeenLastCalledWith(0, expect.objectContaining({ rtkFollowSource: 'rtk3-101-4242' }));
+		expect(wrapper.get('[aria-label="LoRa station address"]').text()).toContain('101:4242');
+		expect(wrapper.vm.vfos[1].rtkFollowSource).toBe('rtk3-200-4242');
+		wrapper.vm.rtk.sources = [];
+		await nextTick();
+		expect(select.element.value).toBe('rtk3-101-4242');
+		await wrapper.get('select[aria-label="RTK signal profile"]').setValue('rtk2');
+		expect(wrapper.vm.vfos[0].rtkFollowSource).toBe('');
+	});
 	it('tunes only the selected muted VFO with the RTK2 preset and retains RTK1 tuning', async () => {
 		await setup();
 		wrapper.vm.vfos.push({ ...makeDefaultVfo(924.116), enabled: false });
@@ -62,6 +187,8 @@ describe('live RTK receiver tools', () => {
 		await nextTick();
 		const profile = wrapper.get('select[aria-label="RTK signal profile"]');
 		expect(profile.findAll('option').map((option) => option.text())).toEqual([
+			'Auto · detect type and hopping',
+			'Auto · discover a frequency range',
 			'Mammotion RTK1 · 500 kHz',
 			'Mammotion RTK2 · 250 kHz',
 			'Mammotion RTK3 · 250 kHz (experimental)',

@@ -9,10 +9,107 @@ verified Mammotion RTK1 and RTK2 wrappers and an experimental RTK3 / RBS03 decod
 Other RTK radio protocols still need
 their own decoders.
 
+## Automatic and manual reception
+
+Choose **Decoder settings → Auto · detect type and hopping** and tune the VFO to
+an active RTK signal. Auto checks a complete verified control beacon, or two
+verified data frames from the same source, before selecting RTK1, RTK2-compatible
+or RTK3. It uses the matching sample-timing
+preset and shares acquisition filtering and the 250 kHz PHY search. Unused
+acquisition paths stop after identification. The selected option stays **Auto**;
+the station list and status show the detected generation.
+
+RTK1 and legacy RTK2 container traffic remain on the tuned channel. A compact
+RTK2 or RTK3 beacon on a supported NZ frequency triggers a short hop check when
+the entire plan fits the received bandwidth. Following is confirmed only when
+the same source sends another verified beacon at the expected frequency and
+sample time. If that check fails, Auto returns to the tuned channel and reports
+that hopping is unconfirmed. It can retry after a lap. An IQ gap cancels pending
+evidence rather than establishing hopping.
+
+With a narrow sample rate, Auto still identifies and decodes the tuned signal,
+but reports that the full plan is needed to check hopping. It never retunes the
+SDR or changes the top VFO frequency. This is detection at the tuned VFO, not a
+scan of the entire spectrum, and it currently checks only the measured NZ plans.
+
+Choose a specific Mammotion profile to force the decoder and control its timing
+and NZ following checkbox manually. Existing saved manual profiles are retained.
+**Base to follow** also works in Auto, allowing separate VFOs to choose different
+detected bases; the source preference applies during type acquisition too.
+Switching a known base to Auto preserves its source preference. Switching back
+to the detected manual generation also retains it; choosing another generation
+clears it.
+
+## Discover a frequency range
+
+Choose **Decoder settings → Auto · discover a frequency range**, enter **From**
+and **To** in MHz, and select **Apply discovery range**. **Use received band**
+fills the limits from the SDR or recording. The entire range must fit the
+current IQ bandwidth, with 300 kHz of filter margin at either edge, at 1 MSPS
+or higher. Discovery shifts a decoder inside those samples; it does not retune
+the SDR. A recording cannot supply frequencies outside its captured band.
+
+Discovery keeps checking both supported LoRa bandwidths and all three known
+wrappers after finding its first base. Complete verified beacons can enter the
+directory before corrections arrive; data frames require two verified frames
+from the same source. The inventory retains up to 64 identities across channel
+visits. RTK2 network/address and both RTK3 address words keep overlapping bases
+separate. A base appears once within discovery as its observed channels grow.
+**Hops observed** means that the same verified identity was received on multiple
+distinct channels. **Hopping not yet observed** does not establish a fixed base.
+
+The initial NZ visits cover full RTK3 and RTK2 laps on measured acquisition
+channels. The subsequent sweep uses at most 50 kHz between channel centres and
+about 1.37 seconds per visit. Broad ranges can take several minutes per pass;
+the panel shows the channel and remaining time. Scanning continues until
+decoding or reception stops. The short evening recording ends before a whole
+915–928 MHz sweep finishes, but its initial visits identify the three targeted
+RTK3 bases and the compact RTK2-compatible source.
+
+Select a discovered base and choose **Follow this base on this VFO** to switch
+that VFO to Auto with its source preference retained. Continuous following
+usually recovers more corrections than a survey's intermittent channel visits.
+The first survey of the evening recording identified all four targeted sources
+but recovered only a few corrections and no positions. The existing followers
+recover the RTK3 positions. This is recorded-IQ verification, not new live RF.
+
+Discovery searches the supported RTK1/2/3 protocols. Weak signals, simultaneous
+collisions, intermittent transmissions, other spreading factors and unknown
+wrappers can be missed. An empty or completed sweep cannot prove there are no
+other bases. It does not automatically identify a new hardware generation or
+discover an arbitrary hop plan for continuous following.
+
+## Mammotion hardware names and radio profiles
+
+Public regulatory listings document the original **RTK**, **RTK0002** (Luba 2
+AWD RTK reference station), and **RBS03**, with at least **RTK300** and **RTK310**
+model designations under RBS03. These are at least three named hardware families,
+with multiple model variants; they are not a complete firmware/protocol count.
+Mammotion's current AU store also lists separate reference-station products for
+LUBA 3 AWD / LUBA 2 AWD X and for LUBA mini / YUKA mini.
+
+BrowSDR's RTK1, RTK2-compatible and RTK3 labels describe supported radio formats.
+The compact stream's physical product generation remains unverified. Regulatory
+model names, mower generations, GNSS receiver descriptors and firmware revisions
+do not establish a distinct over-the-air format. No reliable evidence of a separate
+RTK4 protocol was found in this review. New samples and checksum-verified format
+analysis would be needed before adding another decoder profile.
+
+Sources reviewed on 31 October 2026:
+
+- Regulatory listings: [original RTK](https://fccid.io/2A8QJ-RTK),
+  [RTK0002](https://fccid.io/2A8QJ-RTK0002),
+  [RBS03 / RTK300](https://fccid.io/2A8QJ-RTK300), and
+  [RBS03 / RTK310](https://fccid.io/2A8QJ-RTK310). Model descriptions were available
+  in search-indexed listings; direct FCC mirror access was blocked during review.
+- Mammotion AU [full-size base product](https://au.mammotion.com/products/rtk-reference-station-for-luba-2-awd-x)
+  and [mini base product](https://au.mammotion.com/products/rtk-reference-station-for-luba-mini-yuka-mini),
+  reviewed directly for their advertised compatibility.
+
 ## Recorded NZ variants and hop following
 
-Two supplied 60-second, 20 MSPS recordings from 30 October 2026 establish
-additional formats and channel plans. The latest recording contains RTK1 at
+Two initial supplied 60-second, 20 MSPS recordings from the morning of 30 October 2026 establish
+additional formats and channel plans. The later of these two contains RTK1 at
 approximately **919.058 MHz**, a hopping DU1021D-compatible compact stream,
 and checksum-verified RTK3 traffic. Selecting the old fixed-frequency presets
 does not follow these hopping streams.
@@ -25,17 +122,17 @@ the VFO's audio frequency. The settings show the current decoder channel.
 The option defaults off and applies only to these measured plans; the US RTK3
 plan and other firmware/regional variants can differ.
 
-| Profile                 | Measured plan                                                | Latest recording: verified radio frames | CRC24Q-valid corrections |
-| ----------------------- | ------------------------------------------------------------ | --------------------------------------: | -----------------------: |
-| RTK1                    | Fixed VFO at 919.058 MHz                                     |                                     122 |                       91 |
-| RTK2-compatible compact | 18 slots, 700 kHz grid, approximately 1 s dwell / 18 s lap   |                                     193 |                      143 |
-| RTK3                    | 25 ascending slots, 500 kHz spacing, 600 ms dwell / 15 s lap |                                     272 |                      118 |
+| Profile                 | Measured plan                                                | Later morning recording: verified radio frames | CRC24Q-valid corrections |
+| ----------------------- | ------------------------------------------------------------ | ---------------------------------------------: | -----------------------: |
+| RTK1                    | Fixed VFO at 919.058 MHz                                     |                                            122 |                       91 |
+| RTK2-compatible compact | 18 slots, 700 kHz grid, approximately 1 s dwell / 18 s lap   |                                            193 |                      143 |
+| RTK3                    | 25 ascending slots, 500 kHz spacing, 600 ms dwell / 15 s lap |                                            272 |                      118 |
 
 These are actual replays through the browser's WASM DDC and TypeScript streaming
 decoder, rather than synthetic waveforms. The older recording also yields
 166 verified compact frames / 121 corrections and 243 RTK3 frames / 99
 corrections using the followers. No new live hardware test was performed.
-RTK3's fixed VFO at 915.401 MHz yields only four corrections in the latest
+RTK3's fixed VFO at 915.401 MHz yields only four corrections in the later morning
 recording; following the visits substantially improves recovery.
 
 The compact stream reports **UNICORE UM960** and carries RTCM1006, 1033,
@@ -50,6 +147,48 @@ Both recordings retain reception errors. Rejected candidates and incomplete
 corrections are excluded from the exports. Their metadata does not report a
 hardware missing-sample count; zero detected worker chunk gaps in replay does
 not establish uninterrupted RF samples in the original capture.
+
+### Additional evening recordings
+
+The newest recording in the second batch, captured at **22:51 UTC on 30 October 2026**,
+contains three distinct RTK3 streams and one compact RTK2-compatible stream.
+Two RTK3 streams use a nonzero first header word. Their full radio CRC16/MODBUS,
+correction containers and RTCM CRC24Q validate normally; this word does not prevent
+decoding their corrections. Preserve both header words in each stream's identity
+to keep reassembly and exports separate. Its protocol meaning remains unknown.
+All three RTK3 streams consistently yield RTCM1006 reference positions in 1× browser replay.
+The RTK2-compatible stream also yields GPS, GLONASS, Galileo, QZSS and BeiDou
+MSM4 observations. Its reference position was recovered in one of two full
+browser replays; the other recovered observations only. Reception and fragment
+recovery for this stream remain intermittent.
+
+The four-VFO browser replay recovered the following for the selected bases:
+
+| Stream                  | Initial VFO | Verified radio frames | CRC24Q-valid corrections | Position     |
+| ----------------------- | ----------- | --------------------: | -----------------------: | ------------ |
+| Compact RTK2-compatible | 921.791 MHz |                 35–39 |                    21–22 | Intermittent |
+| RTK3 A                  | 920.901 MHz |                   216 |                       56 | Yes          |
+| RTK3 B                  | 915.401 MHz |                   102 |                       27 | Yes          |
+| RTK3 C                  | 926.901 MHz |                   271 |                      104 | Yes          |
+
+A/B/C are anonymous labels for this recording. Counters above exclude incidental
+frames from other bases. Both replays reported zero DSP drops and zero detected IQ
+chunk gaps. These are recorded-IQ integration results, not a fresh hardware test;
+radio corruption and incomplete containers remain in the capture.
+
+Each hop follower tracks one base. Different starting channels can acquire the
+same base, so adding VFOs alone does not guarantee independent reception. Under
+**Decoder settings → Base to follow**, choose a detected base for each VFO.
+The default **First verified base** acquires automatically. An explicit choice
+survives missed beacons and IQ-gap reacquisition; changing profile clears it.
+Other stations' incidental packets may still appear in the directory, but their
+beacons cannot change the selected base's hop timing.
+
+To discover choices, briefly replay with RTK3 VFOs at **920.901, 915.401 and
+926.901 MHz**, **0 ppm**, and NZ following enabled. Pause, select different
+detected identities, then restart. Use **921.791 MHz**, **+10 ppm**, and the RTK2
+NZ follower for the compact stream. These are acquisition channels verified in
+this recording, rather than universal frequencies for each generation.
 
 ### Compact DU1021D-compatible format
 
@@ -74,6 +213,11 @@ body length, `1E 00`, a little-endian uint32 counter advancing in seconds,
 two padding zeros and CRC8/MAXIM. Structural checks and CRC8 must pass before
 it anchors following. Control beacons never enter the correction stream.
 A decreasing counter discards unfinished corrections for that base.
+
+The evening recording also contains **15-byte beacons**: the normal compact
+header, zero body length and CRC8/MAXIM, without an uptime counter. These anchor
+following only when their decoded radio slot agrees with the current channel.
+They carry no corrections and cannot indicate a device-uptime restart.
 
 The measured slot-to-frequency grid is approximately
 `915.491 MHz + slot × 0.700 MHz`, with transmission order:
@@ -207,9 +351,12 @@ A fixed VFO can decode intermittent bursts during visits to its channel; it
 will miss most of that hopping stream and may not receive all base details.
 The reported US plan is not used by the recorded NZ follower.
 
-Every accepted radio frame must have the documented `00 00` prefix, a
-little-endian 16-bit address, length no greater than 231 bytes, and valid
-**CRC16/MODBUS** over the full frame including its address. Frames with detected
+Every accepted radio frame has two little-endian 16-bit header words, length no
+greater than 231 bytes, and valid **CRC16/MODBUS** over the full frame including
+both words. The published format uses `00 00` for the first word; the evening NZ
+recording also verifies nonzero values. The second word retains its address
+interpretation; the first is exposed as an additional header word with unknown
+meaning. Frames with detected
 coding parity errors are rejected. Complete 21-byte beacons with marker
 `55 55 00 40`, five padding zeros and `AA AA` are counted separately; neither
 beacons nor the address and CRC trailers enter the container stream.
@@ -223,7 +370,7 @@ A5 5A 04 01 04 TYPE LENGTH_LE16 SEQUENCE_LE16 <payload>
 Type `01` must contain exactly one complete RTCM3 frame, including its matching
 length and valid **CRC24Q**. Type `00` is consumed without interpreting or
 exporting its contents. Containers may span radio frames and interleaved beacons.
-Reassembly is isolated by address and bounded to 16 bases. Invalid radio frames,
+Reassembly is isolated by both header words and bounded to 16 bases. Invalid radio frames,
 lost IQ chunks, manual retunes, profile/rate changes and more than two seconds of silence
 discard incomplete containers. A decreasing beacon uptime also clears that
 base's partial stream and sequence state. Repeated container sequence numbers
@@ -233,7 +380,8 @@ samples.
 
 Checksum-verified corrections feed the existing station list, position/map,
 GNSS observations and per-base RTCM exports. The UI shows only the decoded
-**LoRa station address**, without inventing scan/channel/loc values. Beacons
+**LoRa station address**, or both header words when the first is nonzero,
+without inventing scan/channel/loc values. Beacons
 alone show **Verified beacons** and never create a correction station row or map.
 Radio rejection and invalid RTCM-container counters remain separate.
 

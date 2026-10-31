@@ -99,6 +99,26 @@
 	grid-column: 1 / -1;
 	padding: 8px 0;
 }
+.rtk-survey {
+	grid-column: 1 / -1;
+	padding: 8px 16px;
+	border-top: 1px solid var(--border);
+	min-width: 0;
+	overflow-wrap: anywhere;
+}
+.rtk-scan-fields {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 8px 16px;
+}
+.rtk-discovery-detail {
+	grid-column: 1 / -1;
+	margin-top: 8px;
+}
+.rtk-discovery-detail button {
+	margin-top: 8px;
+}
 .rtk-station-scroll {
 	grid-column: 1 / -1;
 	min-height: 0;
@@ -396,7 +416,7 @@
 		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 		grid-template-rows: minmax(0, 1fr) auto;
 		gap: 4px 12px;
-		height: var(--rtk-station-row-height);
+		min-height: var(--rtk-station-row-height);
 		padding: 8px 12px;
 		border-bottom: 1px solid var(--border);
 	}
@@ -413,6 +433,12 @@
 	.rtk-station-list td:nth-child(2) > .rtk-caption {
 		display: inline;
 		margin-left: 6px;
+	}
+	.rtk-station-list td:nth-child(2) > .rtk-discovered-channels {
+		display: block;
+		margin-left: 0;
+		white-space: normal;
+		font-size: 11px;
 	}
 	.rtk-station-list td:nth-child(3) {
 		grid-column: 2;

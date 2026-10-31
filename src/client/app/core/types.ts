@@ -1,12 +1,15 @@
 import type { CharsetKey } from '@/worker/decoders/charsets';
 import type { PocsagMode } from '@/worker/decoders/types';
-import type { RtkProfile } from '@/worker/decoders/rtk/types';
+import type { RtkProfileMode } from '@/worker/decoders/rtk/types';
 
 export interface Vfo {
 	rtk?: boolean;
-	rtkProfile?: RtkProfile;
+	rtkProfile?: RtkProfileMode;
 	rtkClockPpm?: number;
 	rtkFollowHops?: boolean;
+	rtkFollowSource?: string;
+	rtkScanStart?: number;
+	rtkScanEnd?: number;
 	adsb?: boolean;
 	ais?: boolean;
 	radiosonde?: boolean;
