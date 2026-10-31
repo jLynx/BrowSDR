@@ -56,6 +56,7 @@ import '@/devices/rtlsdr/device';
 import '@/devices/airspy';
 import '@/devices/airspyhf';
 import '@/devices/limesdr/device';
+import '@/devices/plutosdr/device';
 import {
 	setRemoteHostCallback,
 	setRemoteHostFftCallback,

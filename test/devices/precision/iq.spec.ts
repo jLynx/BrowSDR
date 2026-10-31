@@ -4,6 +4,7 @@ import { decodeHfIq } from '@/devices/airspyhf/iq-converter';
 import { LimeSDRDevice } from '@/devices/limesdr/device';
 import { AirspyDevice } from '@/devices/airspy';
 import { AirspyHfDevice } from '@/devices/airspyhf';
+import { PlutoSdrDevice } from '@/devices/plutosdr/device';
 
 describe('receiver IQ precision', () => {
 	it.each([false, true])('preserves all signed 12-bit LimeSDR values (packed=%s)', (packed) => {
@@ -38,7 +39,7 @@ describe('receiver IQ precision', () => {
 		expect(() => decodeHfIq(new DataView(new ArrayBuffer(6)), 16)).toThrow('incomplete IQ pair');
 	});
 
-	it.each([new LimeSDRDevice(), new AirspyDevice(), new AirspyHfDevice()])(
+	it.each([new LimeSDRDevice(), new AirspyDevice(), new AirspyHfDevice(), new PlutoSdrDevice()])(
 		'defaults $deviceType to native precision and exposes an 8-bit option',
 		(device) => {
 			expect(device.sampleFormat).toBe('int16');

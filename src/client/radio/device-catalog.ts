@@ -83,6 +83,11 @@ export const DEVICE_CATALOG: DeviceCatalogEntry[] = [
 			{ vendorId: 0x1d50, productId: 0x6108 },
 		],
 	},
+	{
+		type: 'plutosdr',
+		name: 'PlutoSDR',
+		filters: [{ vendorId: 0x0456, productId: 0xb673 }],
+	},
 ];
 
 /** Get all USB filters for the browser device picker. */
