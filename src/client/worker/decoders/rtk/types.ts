@@ -36,6 +36,7 @@ export interface RtkStatus {
 		channels: number;
 		pass: number;
 		remainingSeconds: number;
+		priorityFrequenciesMHz?: number[];
 	};
 	detectedProfile?: RtkProfile;
 	hopDecision?: RtkHopDecision;
@@ -72,7 +73,14 @@ export interface RtkIdentity {
 }
 
 export interface RtkStation extends RtkIdentity {
-	discovery?: { profile: RtkProfile; frequencyMHz: number; frequenciesMHz: number[]; hoppingObserved: boolean; verifiedFrames: number };
+	discovery?: {
+		profile: RtkProfile;
+		frequencyMHz: number;
+		latestFrequencyMHz?: number;
+		frequenciesMHz: number[];
+		hoppingObserved: boolean;
+		verifiedFrames: number;
+	};
 	name: string;
 	packets: number;
 	lastSeen: number;

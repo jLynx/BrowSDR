@@ -25,7 +25,18 @@
 					{{ status.scan.startMHz.toFixed(3) }}–{{ status.scan.endMHz.toFixed(3) }} MHz · Checking {{ status.scan.frequencyMHz.toFixed(3) }}
 					MHz · Pass {{ status.scan.pass }} · {{ Math.ceil(status.scan.remainingSeconds) }} s remaining in this pass
 				</p>
-				<p class="rtk-caption">Keeps searching after each discovery. A broad sweep can take several minutes.</p>
+				<p v-if="status?.scan?.priorityFrequenciesMHz?.length" class="rtk-caption">
+					NZ acquisition channels: {{ status.scan.priorityFrequenciesMHz.map(f => f.toFixed(3)).join(', ') }} MHz
+				</p>
+				<p class="rtk-caption" aria-label="RTK tracking VFOs">
+					{{ trackingCount }} / {{ trackerLimit }} tracking VFOs · Scout keeps searching
+				</p>
+				<p v-if="trackingCount >= trackerLimit" class="rtk-caption rtk-estimate">
+					Tracker limit reached. Additional bases remain in the discovery list.
+				</p>
+				<p v-if="bandLimited" class="rtk-caption rtk-estimate" role="status">
+					NZ hopping needs 915.251–927.551 MHz inside the received band. Use a centre near 921.4 MHz at 20 MSPS or higher.
+				</p>
 			</div>
 			<p v-if="!entries.length" class="rtk-empty">Waiting for RTK base stations. Enable decoding on a VFO tuned to an RTK signal.</p>
 			<div v-else class="rtk-station-scroll">
@@ -61,6 +72,9 @@
 							</td>
 							<td>
 								{{ item.frequency.toFixed(3) }} MHz<span class="rtk-caption">VFO {{ item.indices.map((i) => i + 1).join(', ') }}</span>
+								<span v-if="trackingIndex(item.source, item.profile) >= 0" class="rtk-caption"
+									>Tracking VFO {{ trackingIndex(item.source, item.profile) + 1 }}</span
+								>
 								<span
 									v-if="item.station.discovery"
 									class="rtk-caption rtk-discovered-channels"
@@ -125,10 +139,11 @@
 			<div v-if="scanning && station" class="rtk-discovery-detail">
 				<p class="rtk-caption">
 					{{ station.discovery?.hoppingObserved ? 'Hopping observed on' : 'Observed on' }} {{ station.discovery?.frequenciesMHz.map(f =>
-					f.toFixed(3)).join(', ') }} MHz. Discovery receives intermittent channel visits; continuous following can recover more
-					corrections.
+					f.toFixed(3)).join(', ') }} MHz. Each tracking VFO stays on one base while discovery continues.
 				</p>
-				<UiButton variant="transcript" @click="followDiscovered">Follow this base on this VFO</UiButton>
+				<UiButton variant="transcript" @click="followDiscovered"
+					>{{ trackingIndex(entry.source, entry.profile) >= 0 ? 'Open tracking VFO' : 'Track this base on a new VFO' }}</UiButton
+				>
 			</div>
 			<div v-if="station" class="rtk-overview">
 				<div class="rtk-summary">
@@ -213,6 +228,12 @@
 						</select></label
 					>
 					<template v-if="scanning">
+						<UiCheckbox
+							v-model="vfo.rtkAutoTrack"
+							label="Automatically track discovered bases"
+							input-label="Automatically track discovered RTK bases"
+							@change="updateAutoTracking"
+						/>
 						<div class="rtk-scan-fields">
 							<label class="rtk-field"
 								>From
@@ -223,6 +244,7 @@
 									max="930"
 									step="0.001"
 									aria-label="RTK discovery start MHz"
+									:disabled="scanApplying"
 								/>
 								MHz</label
 							>
@@ -235,16 +257,27 @@
 									max="930"
 									step="0.001"
 									aria-label="RTK discovery end MHz"
+									:disabled="scanApplying"
 								/>
 								MHz</label
 							>
-							<UiButton variant="transcript" @click="applyScan">Apply discovery range</UiButton>
-							<UiButton variant="transcript" @click="useReceivedBand">Use received band</UiButton>
+							<UiButton variant="transcript" :disabled="scanApplying" @click="applyScan"
+								>{{ scanApplying ? 'Applying range…' : 'Apply discovery range' }}</UiButton
+							>
+							<UiButton variant="transcript" :disabled="scanApplying" @click="useReceivedBand">Use received band</UiButton>
 						</div>
+						<p class="rtk-caption">
+							Apply centers the live SDR on this range and increases the sample rate if needed. IQ recordings and remote receive bands stay
+							fixed.
+						</p>
 						<p v-if="scanError" class="rtk-caption rtk-estimate" role="alert">{{ scanError }}</p>
 						<p class="rtk-caption">
-							Scans supported RTK1/2/3 signals inside the current receiver bandwidth. Enter channel centre limits in MHz. A broad sweep can
-							take several minutes; NZ hop channels are checked first. Use Decode to stop or resume.
+							Checks known fixed channels and NZ hop plans, then continues the full range sweep. Creates up to {{ trackerLimit }} muted,
+							source-locked Auto VFOs. A tracker may need one 15–18 s hop lap to acquire its base. Broad sweeps can take several minutes.
+						</p>
+						<p class="rtk-caption">
+							Use Decode to stop the scout. Tracking VFOs keep running until you disable or remove them; removed trackers are not added
+							again in the same survey. Turning off automatic tracking stops new VFOs being added.
 						</p>
 					</template>
 					<template v-if="vfo.rtkProfile === 'auto'">

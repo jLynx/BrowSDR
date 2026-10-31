@@ -73,6 +73,7 @@ export const ReceiverView = defineComponent({
 		watchVfoSelection.call(this);
 	},
 	methods: {
+		saveSetting: () => {},
 		...uiHelperMethods,
 		...autoGainMethods,
 		...rdsMethods,

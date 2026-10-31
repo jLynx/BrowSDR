@@ -131,24 +131,20 @@ export const vfoMethods = {
 	},
 	async addVfo(this: AppInstance) {
 		const newVfo = makeDefaultVfo(this.radio.centerFreq);
-		this.vfos.push(newVfo);
-		if (this.backend && this.running) {
-			if (this.remoteMode === 'client' && this._webrtc) {
-				// Tell the host to allocate a new remote VFO worker slot.
-				this._webrtc.sendCommand({ type: 'addRemoteVfo' });
-				this.updateBackendVfoParams(this.vfos.length - 1);
-			} else {
-				await this.backend.addVfo();
-				this.updateBackendVfoParams(this.vfos.length - 1);
-			}
-		}
-		this.activeVfoIndex = this.vfos.length - 1;
-
-		// Auto-lock unless the user has explicitly chosen to keep the display unlocked.
-		if (this.vfos.length >= 5 && !this.view.locked && !this.view.autoLockDisabled) {
-			this.view.locked = true;
-			this.showMsg('Display auto-locked (5 or more VFOs)');
-		}
+		await appendVfo(this, newVfo, true);
+	},
+	async addRtkTrackingVfo(this: AppInstance, frequency: number, source: string) {
+		const vfo = {
+			...makeDefaultVfo(frequency),
+			mode: 'nfm',
+			bandwidth: 12500,
+			snapInterval: 0,
+			deEmphasis: 'none',
+			rtk: true,
+			rtkProfile: 'auto' as const,
+			rtkFollowSource: source,
+		};
+		await appendVfo(this, vfo, false);
 	},
 	isFreqInBandwidth(this: AppInstance, freq: number): boolean {
 		const halfBw = this.radio.sampleRate / 2e6;
@@ -362,6 +358,30 @@ export const vfoMethods = {
 		if (removedSolo) this.updateAllBackendVfoParams();
 	},
 };
+
+async function appendVfo(receiver: AppInstance, vfo: ReturnType<typeof makeDefaultVfo>, select: boolean): Promise<void> {
+	receiver.vfos.push(vfo);
+	if (receiver.backend && receiver.running) {
+		if (receiver.remoteMode === 'client' && receiver._webrtc) {
+			receiver._webrtc.sendCommand({ type: 'addRemoteVfo' });
+		} else {
+			try {
+				await receiver.backend.addVfo();
+			} catch (error) {
+				const index = receiver.vfos.indexOf(vfo);
+				if (index >= 0) receiver.vfos.splice(index, 1);
+				throw error;
+			}
+		}
+		const index = receiver.vfos.indexOf(vfo);
+		if (index >= 0) receiver.updateBackendVfoParams(index);
+	}
+	if (select) receiver.activeVfoIndex = receiver.vfos.indexOf(vfo);
+	if (receiver.vfos.length >= 5 && !receiver.view.locked && !receiver.view.autoLockDisabled) {
+		receiver.view.locked = true;
+		receiver.showMsg('Display auto-locked (5 or more VFOs)');
+	}
+}
 
 /** Per-VFO decoder telemetry is index-aligned with `vfos`. */
 function removeDecoderState(receiver: AppInstance, index: number): void {

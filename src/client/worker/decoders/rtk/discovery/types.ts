@@ -10,6 +10,7 @@ export interface Evidence {
 	confirmed: boolean;
 	lastTime: number;
 	frequencies: number[];
+	latestFrequency?: number;
 	station?: RtkStation;
 	lastTracked?: { packets: number; rtcmCount: number; rtcmTypes: Record<string, number> };
 }

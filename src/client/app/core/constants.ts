@@ -43,6 +43,7 @@ export const makeDefaultVfo = (freq = 100.0) => ({
 	rtkFollowSource: '',
 	rtkScanStart: 915,
 	rtkScanEnd: 928,
+	rtkAutoTrack: true,
 	ble: false,
 	acars: false,
 	aprs: false,

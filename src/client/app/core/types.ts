@@ -10,6 +10,7 @@ export interface Vfo {
 	rtkFollowSource?: string;
 	rtkScanStart?: number;
 	rtkScanEnd?: number;
+	rtkAutoTrack?: boolean;
 	adsb?: boolean;
 	ais?: boolean;
 	radiosonde?: boolean;

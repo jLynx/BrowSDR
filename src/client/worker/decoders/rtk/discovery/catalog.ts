@@ -22,6 +22,7 @@ export class RtkDiscoveryCatalog {
 		evidence.lastTime = radio.time;
 		evidence.confirmed ||= radio.beacon || evidence.count >= 2;
 		const frequency = Math.round(radio.frequencyHz / 1000) / 1000;
+		evidence.latestFrequency = frequency;
 		// Residual carrier/sample-clock errors must not turn one channel into several.
 		if (!evidence.frequencies.some((previous) => Math.abs(previous - frequency) < 0.075)) {
 			evidence.frequencies.push(frequency);
@@ -44,6 +45,7 @@ export class RtkDiscoveryCatalog {
 				discovery: {
 					profile,
 					frequencyMHz: evidence.frequencies[0],
+					latestFrequencyMHz: evidence.latestFrequency,
 					frequenciesMHz: [...evidence.frequencies],
 					hoppingObserved: evidence.frequencies.length > 1,
 					verifiedFrames: evidence.count,

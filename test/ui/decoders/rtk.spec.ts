@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { mount, type VueWrapper } from '@vue/test-utils';
+import { mount, flushPromises, type VueWrapper } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import { ReceiverView } from '../helpers/receiver-view';
 import { makeDefaultVfo } from '@/app/core/constants';
@@ -49,7 +49,7 @@ async function setup() {
 	await wrapper.setData({
 		running: true,
 		connected: true,
-		backend: { setVfoParams: vi.fn() },
+		backend: { setVfoParams: vi.fn(), addVfo: vi.fn(), setFrequency: vi.fn() },
 		vfos: [{ ...makeDefaultVfo(923.118), enabled: false }],
 	});
 }
@@ -69,6 +69,8 @@ describe('live RTK receiver tools', () => {
 			.findAll('button')
 			.find((button) => button.text() === 'Apply discovery range')!
 			.trigger('click');
+		await flushPromises();
+		expect(wrapper.findAll('[role="alert"]').map((alert) => alert.text())).toEqual([]);
 		expect(wrapper.vm.backend!.setVfoParams).toHaveBeenLastCalledWith(
 			0,
 			expect.objectContaining({ rtkProfile: 'scan', rtk: true, rtkScanStart: 915, rtkScanEnd: 928 }),
@@ -89,6 +91,7 @@ describe('live RTK receiver tools', () => {
 			},
 		];
 		wrapper.vm._onRtkMessage(0, packet.freq, packet);
+		await flushPromises();
 		await nextTick();
 		expect(wrapper.get('[aria-label="RTK base stations"]').text()).toContain('Mammotion RTK3');
 		expect(wrapper.get('[aria-label="RTK base stations"]').text()).toContain('Mammotion RTK1');
@@ -96,18 +99,18 @@ describe('live RTK receiver tools', () => {
 		expect(wrapper.get('[aria-label="RTK base stations"]').text()).toContain('Hops observed');
 		await wrapper
 			.findAll('button')
-			.find((button) => button.text() === 'Follow this base on this VFO')!
+			.find((button) => button.text() === 'Open tracking VFO')!
 			.trigger('click');
-		expect(wrapper.vm.vfos[0]).toMatchObject({ rtkProfile: 'auto', rtkFollowSource: 'rtk3-100-4242', freq: 915.401 });
-		expect(wrapper.vm.backend!.setVfoParams).toHaveBeenLastCalledWith(
-			0,
-			expect.objectContaining({ rtkProfile: 'auto', rtkFollowSource: 'rtk3-100-4242' }),
-		);
+		expect(wrapper.vm.vfos[0]).toMatchObject({ rtkProfile: 'scan', freq: 923.118 });
+		expect(wrapper.vm.vfos[1]).toMatchObject({ rtkProfile: 'auto', rtkFollowSource: 'rtk3-100-4242', freq: 915.401, enabled: false });
+		expect(wrapper.vm.activeVfoIndex).toBe(1);
+		expect(wrapper.vm.backend!.addVfo).toHaveBeenCalledTimes(2);
 	});
-	it('validates ranges against capture bandwidth and can use the current received band', async () => {
+	it('rejects ranges wider than receiver capability and can use the current received band', async () => {
 		await setup();
 		wrapper.vm.radio.centerFreq = 923.118;
 		wrapper.vm.radio.sampleRate = 2000000;
+		wrapper.vm.deviceCapabilities = { deviceType: 'test', sampleRates: [2000000], gainControls: [], sampleFormat: 'int8' };
 		wrapper.vm.rtk.panelOpen = true;
 		await nextTick();
 		await wrapper.get('select[aria-label="RTK signal profile"]').setValue('scan');
@@ -115,11 +118,13 @@ describe('live RTK receiver tools', () => {
 			.findAll('button')
 			.find((button) => button.text() === 'Apply discovery range')!
 			.trigger('click');
-		expect(wrapper.get('[role="alert"]').text()).toContain('entire discovery range');
+		await flushPromises();
+		expect(wrapper.get('[role="alert"]').text()).toContain('no suitable sample rate');
 		await wrapper
 			.findAll('button')
 			.find((button) => button.text() === 'Use received band')!
 			.trigger('click');
+		await flushPromises();
 		expect(wrapper.vm.vfos[0]).toMatchObject({ rtkScanStart: 922.418, rtkScanEnd: 923.818, rtk: true });
 		expect(wrapper.find('[role="alert"]').exists()).toBe(false);
 	});

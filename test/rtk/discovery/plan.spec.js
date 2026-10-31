@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { surveyPlan } from '@/worker/decoders/rtk/discovery/plan';
+import { surveyPlan, priorityPlan } from '@/worker/decoders/rtk/discovery/plan';
 
 describe('RTK range discovery planning', () => {
 	it('covers arbitrary channel centres, including both edges, without leaving the requested range', () => {
@@ -8,11 +8,18 @@ describe('RTK range discovery planning', () => {
 		expect(plan.at(-1).frequencyMHz).toBe(919.361);
 		for (let i = 1; i < plan.length; i++) expect(plan[i].frequencyMHz - plan[i - 1].frequencyMHz).toBeLessThanOrEqual(0.05);
 	});
-	it('visits measured NZ hop channels for a full lap before sweeping other frequencies', () => {
+	it('sweeps while concurrent priority lanes cover full measured NZ laps', () => {
 		const plan = surveyPlan(915, 928, 20000000, 923.118);
-		expect(plan.slice(0, 4).map((channel) => channel.frequencyMHz)).toEqual([923.118, 915.401, 921.401, 921.791]);
-		expect(plan[1].seconds).toBeGreaterThan(15);
-		expect(plan[3].seconds).toBeGreaterThan(18);
+		expect(plan.slice(0, 5).map((channel) => channel.frequencyMHz)).toEqual([923.118, 915.191, 915.401, 921.401, 921.791]);
+		expect(plan[1].seconds).toBeGreaterThan(3);
+		expect(plan[2].seconds).toBeGreaterThan(15);
+		expect(plan[3].seconds).toBeGreaterThan(15);
+		expect(plan[4].seconds).toBeGreaterThan(18);
+		const priority = priorityPlan(915, 928);
+		expect(priority.map((channel) => channel.frequencyMHz)).toEqual([921.791]);
+		expect(priority[0].seconds).toBeGreaterThan(18);
+		expect(priorityPlan(921.6, 922)).toEqual(priority);
+		expect(priorityPlan(915, 928, 61440000)).toEqual([]);
 		expect(new Set(plan.map((channel) => channel.frequencyMHz)).size).toBe(plan.length);
 	});
 	it.each([

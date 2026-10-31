@@ -6,7 +6,7 @@ import { mockRtk3Packet, mockRtk3Beacon, mockRtk3Container, mockRtk3Options, moc
 import { mockRtk2Packet, mockRtk2Options } from '../../fixtures/rtk/mock-rtk2';
 
 afterEach(() => vi.restoreAllMocks());
-function setup(frequency = 923.118) {
+function setup(frequency = 923.118, source = '') {
 	const memory = { buffer: new ArrayBuffer(65536) },
 		messages = [];
 	const stream = new RtkStream(
@@ -18,7 +18,7 @@ function setup(frequency = 923.118) {
 		memory,
 		(message) => messages.push(message),
 	);
-	stream.configure({ rtk: true, freq: frequency, rtkProfile: 'auto' }, 1000000, frequency);
+	stream.configure({ rtk: true, freq: frequency, rtkProfile: 'auto', rtkFollowSource: source }, 1000000, frequency);
 	let id = 0,
 		now = performance.now();
 	vi.spyOn(performance, 'now').mockImplementation(() => (now += 300));
@@ -35,6 +35,26 @@ function setup(frequency = 923.118) {
 }
 
 describe('automatic profile acquisition from synthetic IQ', () => {
+	it('keeps RTK2 bases with a reused address on different networks separate', () => {
+		const network = 'TESTNET1',
+			source = `rtk2-${Array.from(new TextEncoder().encode(network), (byte) => byte.toString(16).padStart(2, '0')).join('')}-4242`;
+		const { feed, messages } = setup(923.118, source);
+		for (const [sequence, net] of ['TESTNET2', network, network, 'TESTNET2', network].entries())
+			feed(mockRtk2Packet(mockRtcmReference(), sequence + 1, 4242, net).data, mockRtk2Options);
+		expect(messages.at(-1).stations).toHaveLength(1);
+		expect(messages.at(-1).stations[0]).toMatchObject({ address: 4242, rtcmCount: 3 });
+	});
+	it('keeps overlapping RTK3 header identities out of a source-locked follower', () => {
+		const { feed, messages } = setup(923.118, 'rtk3-100-4242');
+		feed(mockRtk3Beacon(4242, 100, 101).data, mockRtk3Options);
+		expect(messages.at(-1).status.detectedProfile).toBeUndefined();
+		feed(mockRtk3Beacon(4242, 100, 100).data, mockRtk3Options);
+		expect(messages.at(-1).status.detectedProfile).toBe('rtk3');
+		for (const [sequence, prefix] of [101, 100, 101, 100].entries())
+			feed(mockRtk3Packet(mockRtk3Container(undefined, sequence + 1), 4242, prefix).data, mockRtk3Options);
+		expect(messages.at(-1).stations).toHaveLength(1);
+		expect(messages.at(-1).stations[0]).toMatchObject({ address: 4242, addressPrefix: 100, rtcmCount: 2 });
+	});
 	it.each(['rtk1', 'rtk2', 'rtk3'])('detects %s and preserves corrections received during acquisition', (profile) => {
 		const { feed, messages } = setup();
 		const packets =

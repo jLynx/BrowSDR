@@ -58,20 +58,66 @@ separate. A base appears once within discovery as its observed channels grow.
 **Hops observed** means that the same verified identity was received on multiple
 distinct channels. **Hopping not yet observed** does not establish a fixed base.
 
-The initial NZ visits cover full RTK3 and RTK2 laps on measured acquisition
-channels. The subsequent sweep uses at most 50 kHz between channel centres and
+The scout first checks the measured RTK1 channel and fixed RTK2 channel at
+915.191 MHz, then visits measured RTK3 acquisition channels for a full lap,
+while a temporary second channel checks the measured RTK2 acquisition channel
+for 18 seconds at sample rates up to 20 MSPS. Higher rates use one sequential
+scout channel to avoid overloading its worker. The second channel is released
+afterward to limit CPU load; the sequential scout also covers a full RTK2 lap.
+The subsequent sweep uses at most 50 kHz between channel centres and
 about 1.37 seconds per visit. Broad ranges can take several minutes per pass;
 the panel shows the channel and remaining time. Scanning continues until
 decoding or reception stops. The short evening recording ends before a whole
 915–928 MHz sweep finishes, but its initial visits identify the three targeted
 RTK3 bases and the compact RTK2-compatible source.
 
-Select a discovered base and choose **Follow this base on this VFO** to switch
-that VFO to Auto with its source preference retained. Continuous following
-usually recovers more corrections than a survey's intermittent channel visits.
-The first survey of the evening recording identified all four targeted sources
-but recovered only a few corrections and no positions. The existing followers
-recover the RTK3 positions. This is recorded-IQ verification, not new live RF.
+**Automatically track discovered bases** is enabled by default. Each verified
+identity gets a muted, source-locked **Auto** VFO with its own DSP worker, while
+the scout continues searching. Existing trackers are reused, including manually
+disabled trackers. The station list merges scout sightings with tracker data and
+shows the tracking VFO. **Open tracking VFO** selects it; **Track this base on a
+new VFO** creates one when automatic tracking is disabled.
+
+**Apply discovery range** centers the live SDR on the requested midpoint and,
+if necessary, selects the smallest supported sample rate that fits the range
+plus 300 kHz at each edge. For 915–928 MHz, that is a 921.5 MHz center and at least
+13.6 MSPS (20 MSPS on LimeSDR). A sample-rate increase briefly restarts reception;
+existing VFO frequencies, gains and mute settings are retained. **Use received
+band** keeps the current tuning. Recordings and remote receive bands stay fixed;
+a range outside them needs a wider recording or a host receiver adjustment.
+
+Automatic allocation is capped at eight active source-locked RTK VFOs per
+receiver. Additional identities remain in the discovery list. Disable or remove
+trackers you no longer need. Removing a tracker suppresses its automatic recreation
+in that survey; changing the range or receive band begins a new survey. Disabling
+automatic tracking stops new allocations. Stopping the scout leaves its existing
+trackers running; stop each tracker or reception to stop them all.
+
+Each tracker acquires its own beacon timing, so it can need another 15–18 second
+lap before confirming hops. Weak signals can take longer. Position requires a
+complete position correction; joining after that correction was sent can delay
+the location even when satellites and other corrections are arriving.
+The whole measured NZ hop band (915.251–927.551 MHz, including filter margins)
+must fit inside reception. A centre near 921.4 MHz at 20 MSPS includes it.
+The scout and followers shift their own decoder channels; they do not retune the
+SDR, top VFO or audio channel.
+
+The latest 60-second IQ replay found four targeted identities in about 20 seconds
+and created four independent followers. All four confirmed NZ hopping and
+recovered corrections, with no reported DSP drops or detected input-chunk gaps.
+Three recovered positions; one RTK3 follower recovered corrections but no position
+frame in that replay. Discovery and following do not guarantee every transmitted
+frame is recovered. A separate built-in-browser replay also found four identities.
+Restarting with four existing trackers had 17 dropped IQ buffers early in reception;
+the count stayed unchanged through the rest of the recording. Discovery timing
+and startup drops vary with browser scheduling and competing work.
+
+Live LimeSDR testing also kept the fixed RTK1 and RTK2 bases updating their
+positions and satellites while the scout moved on. Narrow-band checks at 1, 2,
+5 and 10 MSPS had no DSP IQ drops. Full-band testing at 20 and 61.44 MSPS showed
+stable DSP after startup; the 61.44 MSPS run still had startup drops and upstream
+LimeSDR sample-counter gaps. Those source gaps are separate from decoder workload.
+20 MSPS is the recommended starting point for this setup.
 
 Discovery searches the supported RTK1/2/3 protocols. Weak signals, simultaneous
 collisions, intermittent transmissions, other spreading factors and unknown

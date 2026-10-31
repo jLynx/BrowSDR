@@ -1,6 +1,7 @@
 import type { AppInstance } from '@/app/core/receiver.types';
 import type { Vfo } from '@/app/core/types';
 import type { RtkMessage } from '@/worker/decoders/rtk/types';
+import { discoverFollowers } from './discovery/followers';
 
 function matchingProfile(vfo: Vfo, message: RtkMessage): boolean {
 	if (vfo.rtkProfile === 'scan') return message.profile === undefined && (!!message.status.scan || message.status.state !== 'receiving');
@@ -28,5 +29,6 @@ export const rtkMethods = {
 		const frames = this.rtk.frames[index];
 		frames.push(...message.rtcm);
 		if (frames.length > 512) frames.splice(0, frames.length - 512);
+		if (message.status.scan) discoverFollowers(this, vfo, message.stations);
 	},
 };

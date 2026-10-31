@@ -22,6 +22,7 @@ export class RtkSurvey {
 		private start: number,
 		private end: number,
 		private params: VfoParams,
+		private profiles: Array<'rtk1' | 'rtk2'> = ['rtk1', 'rtk2'],
 	) {
 		this.acquisition = new RtkAcquisition(Processor);
 	}
@@ -31,7 +32,7 @@ export class RtkSurvey {
 		this.epoch = epoch;
 		this.frequency = frequency;
 		this.acquisition.configure(rate, center, frequency);
-		for (const profile of ['rtk1', 'rtk2'] as const) {
+		for (const profile of this.profiles) {
 			const channel = new RtkChannel(
 				this.Processor,
 				this.memory,
@@ -49,7 +50,15 @@ export class RtkSurvey {
 			);
 			this.channels.push(channel);
 			channel.configure(
-				{ ...this.params, freq: frequency, rtk: true, rtkProfile: profile, rtkClockPpm: timingPpm[profile], rtkFollowHops: false },
+				{
+					...this.params,
+					freq: frequency,
+					rtk: true,
+					rtkProfile: profile,
+					rtkClockPpm: timingPpm[profile],
+					rtkFollowHops: false,
+					rtkFollowSource: '',
+				},
 				RTK_RATE,
 				frequency,
 			);

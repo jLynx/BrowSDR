@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/vue3-vite';
 import { expect, userEvent, within } from 'storybook/test';
-import { onBeforeUnmount, provide, reactive } from 'vue';
+import { nextTick, onBeforeUnmount, provide, reactive } from 'vue';
 import RtkPanel from '@/app/decoders/rtk/panel';
 import { createAppData } from '@/app/core/state';
 import { makeDefaultVfo } from '@/app/core/constants';
@@ -45,6 +45,8 @@ function mockBase(scan: number, name: string, longitude: number): RtkStation {
 function mockSurvey(receiver: Pick<AppInstance, 'vfos' | 'radio' | 'rtk'>) {
 	receiver.vfos = [{ ...makeDefaultVfo(923.118), rtk: true, rtkProfile: 'scan', enabled: false }];
 	Object.assign(receiver.radio, { centerFreq: 923.118, sampleRate: 20000000 });
+	receiver.rtk.frequencies = [923.118];
+	receiver.rtk.status = [receiver.rtk.status[0]!];
 	receiver.rtk.sources = [
 		[
 			{
@@ -88,6 +90,23 @@ function mockSurvey(receiver: Pick<AppInstance, 'vfos' | 'radio' | 'rtk'>) {
 		remainingSeconds: 360,
 	};
 	receiver.rtk.status[0]!.message = 'Discovering RTK bases · 3 verified identities';
+	for (const [stationIndex, source] of [
+		[0, 'rtk3-100-4242'],
+		[2, 'rtk2-0102030405060708-4243'],
+	] as const) {
+		const base = receiver.rtk.sources[0][stationIndex];
+		const frequency = base.discovery!.frequencyMHz;
+		receiver.vfos.push({ ...makeDefaultVfo(frequency), rtk: true, rtkProfile: 'auto', rtkFollowSource: source });
+		receiver.rtk.frequencies.push(frequency);
+		receiver.rtk.sources.push([{ ...base, discovery: undefined, rtcmCount: 40 }]);
+		receiver.rtk.status.push({
+			...receiver.rtk.status[0]!,
+			scan: undefined,
+			detectedProfile: base.discovery!.profile,
+			hopDecision: 'following',
+			hopTracking: true,
+		});
+	}
 }
 
 function mockPanel(followHops = false, automatic?: RtkHopDecision | 'detecting', survey = false) {
@@ -99,6 +118,10 @@ function mockPanel(followHops = false, automatic?: RtkHopDecision | 'detecting',
 				running: true,
 				isFreqInBandwidth: () => true,
 				updateBackendVfoParams: () => {},
+				updateAllBackendVfoParams: () => {},
+				applyZoomToEngine: () => {},
+				saveSetting: () => {},
+				$nextTick: nextTick,
 				tuneRtkVfo: () => {},
 			});
 			receiver.vfos = [923.118, 921.25].map((frequency) => ({ ...makeDefaultVfo(frequency), rtk: true, enabled: false }));
@@ -289,6 +312,8 @@ export const RangeDiscovery: Story = {
 		await expect(canvas.getByLabelText('Base station position')).toHaveTextContent('Waiting for the base');
 		await userEvent.click(canvas.getByText('Decoder settings', { selector: 'summary' }));
 		await expect(canvas.getByRole('combobox', { name: 'RTK signal profile' })).toHaveValue('scan');
+		await expect(canvas.getByLabelText('RTK tracking VFOs')).toHaveTextContent('2 / 8 tracking VFOs');
+		await expect(canvas.getByRole('checkbox', { name: 'Automatically track discovered RTK bases' })).toBeChecked();
 		await expect(canvas.getByRole('spinbutton', { name: 'RTK discovery start MHz' })).toHaveValue(915);
 		await expect(canvas.queryByRole('spinbutton', { name: 'RTK sample clock correction' })).toBeNull();
 		await expect(canvasElement.scrollWidth).toBeLessThanOrEqual(canvasElement.clientWidth);
@@ -298,6 +323,19 @@ export const RangeDiscovery: Story = {
 export const RangeDiscoveryNarrow: Story = {
 	render: () => ({ ...mockPanel(false, undefined, true), template: '<div style="width:320px;max-width:100%"><RtkPanel /></div>' }),
 	play: RangeDiscovery.play,
+};
+
+export const OpenDiscoveredTracker: Story = {
+	render: () => mockPanel(false, undefined, true),
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await userEvent.click(
+			within(canvas.getByRole('table', { name: 'RTK base stations' })).getByRole('button', { name: /LoRa header 100:4242/ }),
+		);
+		await userEvent.click(canvas.getByRole('button', { name: 'Open tracking VFO' }));
+		await expect(canvas.getByRole('combobox', { name: 'RTK VFO' })).toHaveValue('1');
+		await expect(canvas.getByLabelText('GNSS receiver')).toHaveTextContent('MOCK GNSS A');
+	},
 };
 
 export const NarrowLayout: Story = {

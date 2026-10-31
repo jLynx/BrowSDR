@@ -1,6 +1,7 @@
 import type { AppInstance } from '@/app/core/receiver.types';
 import type { RtkStationEntry } from './types';
 import type { RtkProfile } from '@/worker/decoders/rtk/types';
+import type { Vfo } from '@/app/core/types';
 import { stationKey } from '@/worker/decoders/rtk/station-key';
 import { receptionState } from './reception';
 import { observedSatellites } from './station-details';
@@ -34,21 +35,28 @@ function mergeStation(a: RtkStationEntry['station'], b: RtkStationEntry['station
 		reference: newer.reference ?? older.reference,
 		equipment: newer.equipment ?? older.equipment,
 		observations,
+		discovery: newer.discovery ?? older.discovery,
 	};
 }
 
 export function collectStations(receiver: AppInstance, now: number): RtkStationEntry[] {
 	const entries = new Map<string, RtkStationEntry>();
+	const discovered = new Set(
+		receiver.rtk.sources
+			.flatMap((sources) => sources ?? [])
+			.filter((station) => station.discovery)
+			.map((station) => `${station.discovery!.profile}:${stationKey(station)}`),
+	);
 	receiver.vfos.forEach((vfo, index) => {
 		if (!vfo.rtk || receiver.rtk.frequencies[index] !== vfo.freq) return;
 		for (const received of receiver.rtk.sources[index] ?? []) {
 			const profile = received.discovery?.profile ?? profileForVfo(receiver, index);
 			if (!profile) continue;
 			let station = received;
-			if (!station.rtcmCount && !station.discovery) continue;
+			if (!station.rtcmCount && !station.discovery && !vfo.rtkFollowSource) continue;
 			const frequency = station.discovery?.frequencyMHz ?? vfo.freq;
 			const source = stationKey(station),
-				key = `${station.discovery ? 'scan' : frequency}:${profile}:${source}`;
+				key = entryKey(station, vfo, discovered, profile, source, frequency);
 			const previous = entries.get(key);
 			const indices = previous ? [...previous.indices, index] : [index];
 			if (previous) station = mergeStation(previous.station, station);
@@ -75,6 +83,18 @@ export function collectStations(receiver: AppInstance, now: number): RtkStationE
 	});
 	// Stable identity order prevents selection targets moving with every packet.
 	return [...entries.values()].sort((a, b) => a.frequency - b.frequency || a.source.localeCompare(b.source));
+}
+
+function entryKey(
+	station: RtkStationEntry['station'],
+	vfo: Vfo,
+	discovered: Set<string>,
+	profile: RtkProfile,
+	source: string,
+	frequency: number,
+): string {
+	const identity = `${profile}:${source}`;
+	return `${station.discovery || vfo.rtkFollowSource === source || discovered.has(identity) ? 'scan' : frequency}:${identity}`;
 }
 
 export function selectedCorrections(receiver: AppInstance, index: number, entry: RtkStationEntry | undefined) {

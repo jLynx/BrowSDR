@@ -1,12 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import { RtkDiscoveryCatalog } from '@/worker/decoders/rtk/discovery/catalog';
 import { verifiedObservation } from '@/worker/decoders/rtk/receiver/policy';
+import { discoveryInventory } from '@/worker/decoders/rtk/discovery/inventory';
 import { mockRtk3Beacon, mockRtk3Packet, mockRtk3Container } from '../../fixtures/rtk/mock-rtk3';
 import { mockRtk2Compact } from '../../fixtures/rtk/mock-rtk2';
 
 const radio = (packet, frequencyHz = 915401000, time = 1, profile = 'rtk3') => verifiedObservation({ packet, frequencyHz, time, profile });
 
 describe('RTK discovery inventory', () => {
+	it('merges independent scout lanes without joining fragments or losing positions and latest acquisition channels', () => {
+		const first = new RtkDiscoveryCatalog(),
+			second = new RtkDiscoveryCatalog();
+		first.observe(radio(mockRtk3Packet(mockRtk3Container(undefined, 1), 4242, 100)));
+		first.observe(radio(mockRtk3Packet(mockRtk3Container(undefined, 2), 4242, 100), 915401000, 2));
+		second.observe(radio(mockRtk3Beacon(4242, 100, 100), 921401000, 10));
+		second.observe(radio(mockRtk3Beacon(4242, 100, 101), 921401000, 11));
+		const merged = discoveryInventory([first, second]);
+		expect(merged).toHaveLength(2);
+		const station = merged.find((base) => base.addressPrefix === 100);
+		expect(station.reference).toBeDefined();
+		expect(station.discovery).toMatchObject({ hoppingObserved: true, frequenciesMHz: [915.401, 921.401], latestFrequencyMHz: 921.401 });
+		expect(first.flush()).toHaveLength(2);
+		expect(second.flush()).toHaveLength(0);
+	});
 	it('keeps overlapping bases, different generations, and both RTK3 address words separate', () => {
 		const catalog = new RtkDiscoveryCatalog();
 		catalog.observe(radio(mockRtk3Beacon(4242, 100, 100)));

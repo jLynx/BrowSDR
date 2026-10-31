@@ -12,6 +12,7 @@ import { stationKey } from '@/worker/decoders/rtk/station-key';
 import { RTK_PROFILES, RTK_RATE, profileName, physicalProfile } from './profiles';
 import type { RadioObservation, ChannelOptions } from './types';
 import { errorMessage } from '@/platform/errors';
+import { verifiedObservation } from './policy';
 
 const initialStatus = (): RtkStatus => ({
 	state: 'off',
@@ -29,6 +30,7 @@ const initialStatus = (): RtkStatus => ({
 export class RtkChannel {
 	private key = '';
 	private frequency = 923.118;
+	private source?: string;
 	private profile: RtkProfile = 'rtk1';
 	private ddc?: DspProcessor;
 	private direct = false;
@@ -52,6 +54,7 @@ export class RtkChannel {
 	) {}
 	configure(params: VfoParams, rate: number, center: number): void {
 		this.frequency = params.freq;
+		this.source = params.rtkFollowSource || undefined;
 		if (!params.rtk) {
 			if (this.key) {
 				this.reset();
@@ -123,6 +126,12 @@ export class RtkChannel {
 		}
 	}
 	private packet(packet: LoraPacket): void {
+		if (this.source) {
+			const observation = { profile: this.profile, packet, frequencyHz: this.frequency * 1e6, time: 0 };
+			const source = verifiedObservation(observation)?.source;
+			const alternate = this.options.searchBoth250 ? verifiedObservation({ ...observation, profile: 'rtk3' })?.source : undefined;
+			if (source !== this.source && alternate !== this.source) return;
+		}
 		if (this.hopping) {
 			this.beacon(packet);
 		}
