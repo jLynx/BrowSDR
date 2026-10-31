@@ -2,6 +2,7 @@ import type { Rtk3Containers } from './containers';
 
 export interface Rtk3Frame {
 	address: number;
+	addressPrefix?: number;
 	body: Uint8Array;
 	beaconMs?: number;
 }

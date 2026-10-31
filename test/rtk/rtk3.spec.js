@@ -8,6 +8,21 @@ import { mockRtk3Packet, mockRtk3Beacon, mockRtk3Container, mockRtcmReference } 
 afterEach(() => vi.restoreAllMocks());
 
 describe('RTK3 / RBS03 frame integrity', () => {
+	it('accepts checksummed nonzero header words and keeps their streams separate', () => {
+		const tracker = new Rtk3Tracker();
+		const container = mockRtk3Container();
+		for (const prefix of [100, 101]) tracker.process(mockRtk3Packet(container.slice(0, 18), 4242, prefix));
+		for (const prefix of [100, 101]) {
+			const beacon = mockRtk3Beacon(4242, 15000, prefix);
+			expect(decodeRtk3Frame(beacon)).toMatchObject({ addressPrefix: prefix, address: 4242, beaconMs: 15000 });
+			tracker.process(beacon);
+			tracker.process(mockRtk3Packet(container.slice(18), 4242, prefix));
+			beacon.data[0] ^= 1;
+			expect(decodeRtk3Frame(beacon)).toBeUndefined();
+		}
+		expect(tracker.flush().map((frame) => frame.source)).toEqual(['rtk3-100-4242', 'rtk3-101-4242']);
+		expect(tracker.snapshot().map((station) => station.rtcmCount)).toEqual([1, 1]);
+	});
 	it('uses standard CRC16/MODBUS and validates the address as part of the checksum', () => {
 		expect(crc16Modbus(new TextEncoder().encode('123456789'))).toBe(0x4b37);
 		const packet = mockRtk3Packet(mockRtk3Container());

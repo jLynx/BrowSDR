@@ -10,6 +10,7 @@ import { useBaseMap } from './map-view';
 import { useStationSelection } from './station-selection';
 import { usePairingEstimates } from './pairing-estimates';
 import { stationKey } from '@/worker/decoders/rtk/station-key';
+import { useDiscoveryControls } from './discovery-controls';
 
 export default defineComponent({
 	name: 'RtkPanel',
@@ -28,6 +29,11 @@ export default defineComponent({
 		const status = computed(() => (matching.value ? (receiver.rtk.status[index.value] ?? undefined) : undefined));
 		const selection = useStationSelection(receiver, now);
 		const { station, frames, entry } = selection;
+		const discovery = useDiscoveryControls(receiver, entry);
+		const { scanning, scanError } = discovery;
+		const effectiveProfile = computed(() =>
+			scanning.value ? entry.value?.profile : vfo.value?.rtkProfile === 'auto' ? status.value?.detectedProfile : vfo.value?.rtkProfile,
+		);
 		const pairing = usePairingEstimates(station);
 		const satellites = useSatelliteObservations(station, now, () => receiver.running && !!vfo.value?.rtk);
 		const title = computed(() => (entry.value ? selection.stationTitle(entry.value) : 'RTK channel'));
@@ -39,7 +45,7 @@ export default defineComponent({
 				running: receiver.running,
 				enabled: !!vfo.value?.rtk,
 				local: receiver.remoteMode !== 'client',
-				inBand: !!vfo.value && receiver.isFreqInBandwidth(vfo.value.freq),
+				inBand: scanning.value || (!!vfo.value && receiver.isFreqInBandwidth(vfo.value.freq)),
 				status: status.value,
 				station: station.value,
 				now: now.value,
@@ -66,6 +72,8 @@ export default defineComponent({
 			receiver,
 			vfo,
 			status,
+			effectiveProfile,
+			...discovery,
 			title,
 			reception,
 			correctionAge,
@@ -79,7 +87,9 @@ export default defineComponent({
 			signalStrength,
 			update: () => receiver.updateBackendVfoParams(index.value),
 			changeProfile: () => {
+				scanError.value = '';
 				vfo.value.rtkFollowHops = false;
+				if (vfo.value.rtkProfile !== 'auto' && vfo.value.rtkProfile !== status.value?.detectedProfile) vfo.value.rtkFollowSource = '';
 				vfo.value.rtkClockPpm = vfo.value.rtkProfile === 'rtk3' ? 0 : vfo.value.rtkProfile === 'rtk1' ? 20 : 10;
 				// Profile changes invalidate results even when the frequency stays the same.
 				receiver.rtk.sources[index.value] = [];
@@ -89,10 +99,11 @@ export default defineComponent({
 			},
 			exportData: () => {
 				if (!canDownload.value) return;
-				if (exportFormat.value === 'corrections') downloadCorrections(frames.value, vfo.value.freq, entry.value?.source);
+				if (exportFormat.value === 'corrections')
+					downloadCorrections(frames.value, entry.value?.frequency ?? vfo.value.freq, entry.value?.source);
 				else
 					downloadReport({
-						frequency: vfo.value.freq,
+						frequency: entry.value?.frequency ?? vfo.value.freq,
 						profile: vfo.value.rtkProfile ?? 'rtk1',
 						status: status.value,
 						stations: station.value ? [station.value] : [],

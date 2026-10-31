@@ -6,7 +6,7 @@ import { Rtk3Containers } from './containers';
 import type { BaseStream } from './types';
 
 export class Rtk3Tracker {
-	private bases = new Map<number, BaseStream>();
+	private bases = new Map<string, BaseStream>();
 	private stations = new RtkStations();
 	readonly counters = { packets: 0, crcErrors: 0, beacons: 0, containers: 0, containerErrors: 0, sequenceGaps: 0 };
 
@@ -19,8 +19,14 @@ export class Rtk3Tracker {
 			return;
 		}
 		this.counters.packets++;
-		const base = this.base(frame.address);
-		const station = this.stations.observe({ address: frame.address, netId: frame.address }, packet);
+		const identity = {
+			address: frame.address,
+			netId: frame.address,
+			...(frame.addressPrefix ? { addressPrefix: frame.addressPrefix } : {}),
+		};
+		const key = stationKey(identity);
+		const base = this.base(key);
+		const station = this.stations.observe(identity, packet);
 		if (frame.beaconMs !== undefined) {
 			this.counters.beacons++;
 			// Handle device restart, including a possible uint32 uptime wrap.
@@ -43,17 +49,17 @@ export class Rtk3Tracker {
 			this.counters[name] += base.containers.counters[name] - before[name];
 	}
 
-	private base(address: number): BaseStream {
+	private base(key: string): BaseStream {
 		const now = Date.now();
-		const base = this.bases.get(address) ?? { containers: new Rtk3Containers(), lastSeen: now };
+		const base = this.bases.get(key) ?? { containers: new Rtk3Containers(), lastSeen: now };
 		// A fixed VFO misses most of a hop lap. Never join tails from separate visits.
 		if (now - base.lastSeen > 2000) {
 			base.containers.reset();
-			this.stations.discontinuity(stationKey({ address, netId: address }));
+			this.stations.discontinuity(key);
 		}
 		base.lastSeen = now;
-		this.bases.delete(address);
-		this.bases.set(address, base);
+		this.bases.delete(key);
+		this.bases.set(key, base);
 		if (this.bases.size > 16) this.bases.delete(this.bases.keys().next().value!);
 		return base;
 	}

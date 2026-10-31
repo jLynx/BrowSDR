@@ -146,6 +146,7 @@ export interface ReceiverMethods {
 	applyModeDefaults(index: number): void;
 	updateBackendVfoParams(index: number): void;
 	addVfo(): Promise<void>;
+	addRtkTrackingVfo(frequency: number, source: string): Promise<void>;
 	isFreqInBandwidth(freq: number): boolean;
 	findCenterForAllVfos(newFreq: number, vfoIndex: number): number | null;
 	findBestCenterForSubset(newFreq: number, vfoIndex: number): { centerFreq: number; included: number[]; excluded: number[] };

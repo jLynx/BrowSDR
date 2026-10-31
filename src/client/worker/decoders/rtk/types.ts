@@ -1,4 +1,6 @@
 export type RtkProfile = 'rtk1' | 'rtk2' | 'rtk3';
+export type RtkProfileMode = RtkProfile | 'auto' | 'scan';
+export type RtkHopDecision = 'fixed' | 'checking' | 'following' | 'unconfirmed' | 'band-limited';
 
 export interface LoraProfile {
 	bandwidth: number;
@@ -26,6 +28,18 @@ export interface LoraPacket {
 }
 
 export interface RtkStatus {
+	scan?: {
+		startMHz: number;
+		endMHz: number;
+		frequencyMHz: number;
+		channel: number;
+		channels: number;
+		pass: number;
+		remainingSeconds: number;
+		priorityFrequenciesMHz?: number[];
+	};
+	detectedProfile?: RtkProfile;
+	hopDecision?: RtkHopDecision;
 	state: 'off' | 'receiving' | 'error';
 	message: string;
 	samples: number;
@@ -54,9 +68,19 @@ export interface RtkIdentity {
 	loc?: number;
 	netId: number;
 	address?: number;
+	/** Additional checksummed RTK3 header word; its meaning is not established. */
+	addressPrefix?: number;
 }
 
 export interface RtkStation extends RtkIdentity {
+	discovery?: {
+		profile: RtkProfile;
+		frequencyMHz: number;
+		latestFrequencyMHz?: number;
+		frequenciesMHz: number[];
+		hoppingObserved: boolean;
+		verifiedFrames: number;
+	};
 	name: string;
 	packets: number;
 	lastSeen: number;

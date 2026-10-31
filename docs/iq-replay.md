@@ -55,14 +55,46 @@ from the original recording.
 For the supplied 20 MSPS recordings, metadata restores the receiver centre to
 923.118 MHz. Configure separate VFOs before pressing Play:
 
-| Stream                   | Profile | Initial VFO | Sample timing | Following             |
-| ------------------------ | ------- | ----------- | ------------- | --------------------- |
-| RTK1 in these recordings | RTK1    | 919.058 MHz | +20 ppm       | Off                   |
-| Compact RTK2-compatible  | RTK2    | 921.791 MHz | +10 ppm       | Recorded NZ RTK2 hops |
-| RTK3                     | RTK3    | 915.401 MHz | 0 ppm         | Recorded NZ RTK3 hops |
+| Stream                    | Profile | Initial VFO | Sample timing | Following             |
+| ------------------------- | ------- | ----------- | ------------- | --------------------- |
+| RTK1 in the morning batch | RTK1    | 919.058 MHz | +20 ppm       | Off                   |
+| Compact RTK2-compatible   | RTK2    | 921.791 MHz | +10 ppm       | Recorded NZ RTK2 hops |
+| RTK3                      | RTK3    | 915.401 MHz | 0 ppm         | Recorded NZ RTK3 hops |
 
 See [RTK reception and measured channel plans](rtk.md). Configure only the streams
 you need to test; each enabled VFO adds DSP work. Audio may stay muted.
+
+Alternatively, choose **Auto · detect type and hopping** on each VFO. Auto uses
+verified radio frames to choose its profile and timing, and tests the supported
+NZ hop plan when the received bandwidth covers it. Keep the initial frequencies
+above; Auto identifies the tuned signal rather than scanning the entire recording.
+The status distinguishes acquisition, a hop check, confirmed following, and
+limited bandwidth. Manual profiles and following controls remain available.
+
+For an inventory without configuring several initial VFOs, choose **Auto ·
+discover a frequency range** on one VFO and apply **915–928 MHz**. Discovery
+retains separate verified identities and their observed channels. The initial
+visits find the three targeted RTK3 bases and the RTK2-compatible source in the
+evening recording; a complete sweep takes longer than its 60 seconds. Select a
+base and use **Follow this base on this VFO** to switch to continuous Auto
+following. Survey visits alone can leave positions or satellite observations
+incomplete. See [range discovery](rtk.md#discover-a-frequency-range).
+
+The newest recording in the evening batch (30 October 2026, 22:51 UTC) contains
+three RTK3 streams. Start RTK3 VFOs at **920.901, 915.401 and 926.901 MHz**, with
+**0 ppm** and NZ following enabled. Briefly play to discover bases, then pause
+and choose a different **Decoder settings → Base to follow** on each VFO before
+restarting. Different initial frequencies can otherwise lock onto the same base.
+Use the compact RTK2 settings above for the fourth stream. All three RTK3 streams
+yield base positions consistently in 1× browser replay. The RTK2-compatible
+position is intermittent: one full replay recovered it, while a repeat recovered
+satellite observations only. A location requires a complete reference-position
+correction.
+
+Hop following changes the decoder's channel inside the recording. The top VFO
+frequency remains its acquisition/audio frequency; Decoder settings shows the
+current hop frequency. Changing files preserves base preferences, so choose
+**First verified base** if the replacement recording contains different bases.
 
 ## What a replay test establishes
 
