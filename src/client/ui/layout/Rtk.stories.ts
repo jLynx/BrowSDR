@@ -303,6 +303,19 @@ export const RangeDiscovery: Story = {
 	render: () => mockPanel(false, undefined, true),
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
+		const details = canvas.getByRole('region', { name: 'Selected RTK base station' });
+		const heading = details.querySelector<HTMLElement>('.rtk-heading')!.getBoundingClientRect();
+		const discovery = details.querySelector<HTMLElement>('.rtk-discovery-detail')!.getBoundingClientRect();
+		const map = canvas.getByRole('region', { name: 'Base station location map' }).getBoundingClientRect();
+		const freshness = canvas.getByLabelText('Satellite data freshness').getBoundingClientRect();
+		await expect(discovery.top - heading.bottom).toBeLessThanOrEqual(16);
+		if (details.getBoundingClientRect().width > 760) {
+			await expect(freshness.top - discovery.bottom).toBeLessThanOrEqual(20);
+			await expect(map.top).toBeCloseTo(heading.top, 0);
+		} else {
+			await expect(map.top).toBeGreaterThanOrEqual(discovery.bottom);
+			await expect(map.bottom).toBeLessThanOrEqual(freshness.top);
+		}
 		await expect(canvas.getByLabelText('RTK range discovery')).toHaveTextContent('3 verified identities');
 		const table = canvas.getByRole('table', { name: 'RTK base stations' });
 		await expect(table.querySelectorAll('tbody tr')).toHaveLength(3);
@@ -312,7 +325,7 @@ export const RangeDiscovery: Story = {
 		await expect(canvas.getByLabelText('Base station position')).toHaveTextContent('Waiting for the base');
 		await userEvent.click(canvas.getByText('Decoder settings', { selector: 'summary' }));
 		await expect(canvas.getByRole('combobox', { name: 'RTK signal profile' })).toHaveValue('scan');
-		await expect(canvas.getByLabelText('RTK tracking VFOs')).toHaveTextContent('2 / 8 tracking VFOs');
+		await expect(canvas.getByLabelText('RTK tracking VFOs')).toHaveTextContent('2 tracking VFOs');
 		await expect(canvas.getByRole('checkbox', { name: 'Automatically track discovered RTK bases' })).toBeChecked();
 		await expect(canvas.getByRole('spinbutton', { name: 'RTK discovery start MHz' })).toHaveValue(915);
 		await expect(canvas.queryByRole('spinbutton', { name: 'RTK sample clock correction' })).toBeNull();

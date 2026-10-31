@@ -4,7 +4,7 @@ import type { AppInstance } from '@/app/core/receiver.types';
 import type { RtkStationEntry } from './types';
 import { fitDiscoveryRange } from './discovery/range';
 import { errorMessage } from '@/platform/errors';
-import { MAX_RTK_TRACKERS, trackingVfo, discoverFollowers } from './discovery/followers';
+import { trackingVfo, discoverFollowers } from './discovery/followers';
 import { hopPlanAvailability } from '@/worker/decoders/rtk/receiver/policy';
 
 export function useDiscoveryControls(receiver: AppInstance, entry: ComputedRef<RtkStationEntry | undefined>) {
@@ -42,7 +42,6 @@ export function useDiscoveryControls(receiver: AppInstance, entry: ComputedRef<R
 		scanning: computed(() => vfo.value?.rtkProfile === 'scan'),
 		scanError,
 		scanApplying,
-		trackerLimit: MAX_RTK_TRACKERS,
 		trackingCount: computed(() => receiver.vfos.filter((channel) => channel.rtk && channel.rtkFollowSource).length),
 		trackingIndex: (source: string, profile: RtkStationEntry['profile']) => trackingVfo(receiver, source, profile),
 		bandLimited: computed(
@@ -60,10 +59,6 @@ export function useDiscoveryControls(receiver: AppInstance, entry: ComputedRef<R
 			const { frequency, source, profile } = entry.value;
 			let target = trackingVfo(receiver, source, profile);
 			if (target < 0) {
-				if (receiver.vfos.filter((channel) => channel.rtk && channel.rtkFollowSource).length >= MAX_RTK_TRACKERS) {
-					scanError.value = `The ${MAX_RTK_TRACKERS} RTK tracker limit is reached. Remove a tracker to add this base.`;
-					return;
-				}
 				await receiver.addRtkTrackingVfo(entry.value.station.discovery?.latestFrequencyMHz ?? frequency, source);
 				target = trackingVfo(receiver, source, profile);
 			}

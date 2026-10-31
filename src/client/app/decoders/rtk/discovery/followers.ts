@@ -3,8 +3,14 @@ import type { DiscoveryVfo, Followers } from './types';
 import type { RtkStation, RtkProfile } from '@/worker/decoders/rtk/types';
 import { stationKey } from '@/worker/decoders/rtk/station-key';
 
-export const MAX_RTK_TRACKERS = 8;
 const receivers = new WeakMap<AppInstance, Followers>();
+
+/** A fresh input stream can rediscover bases whose trackers were removed earlier. */
+export function resetDiscoveryFollowers(receiver: AppInstance): void {
+	const state = receivers.get(receiver);
+	// Keep the allocation queue so old in-flight work and new reports remain serialized.
+	if (state) state.scouts = new WeakMap();
+}
 
 export function trackingVfo(receiver: AppInstance, source: string, profile: RtkProfile): number {
 	return receiver.vfos.findIndex((vfo) => vfo.rtkFollowSource === source && (vfo.rtkProfile === 'auto' || vfo.rtkProfile === profile));
@@ -48,10 +54,6 @@ export function discoverFollowers(receiver: AppInstance, vfo: DiscoveryVfo, stat
 					return;
 				}
 				if (state.scouts.get(vfo) !== expected || trackingVfo(receiver, source, profile) >= 0) return;
-				if (receiver.vfos.filter((channel) => channel.rtk && channel.rtkFollowSource).length >= MAX_RTK_TRACKERS) {
-					expected.attempted.delete(id);
-					return;
-				}
 				await receiver.addRtkTrackingVfo(frequency, source);
 			})
 			.catch((error: unknown) => {

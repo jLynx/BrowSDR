@@ -86,12 +86,13 @@ existing VFO frequencies, gains and mute settings are retained. **Use received
 band** keeps the current tuning. Recordings and remote receive bands stay fixed;
 a range outside them needs a wider recording or a host receiver adjustment.
 
-Automatic allocation is capped at eight active source-locked RTK VFOs per
-receiver. Additional identities remain in the discovery list. Disable or remove
-trackers you no longer need. Removing a tracker suppresses its automatic recreation
-in that survey; changing the range or receive band begins a new survey. Disabling
-automatic tracking stops new allocations. Stopping the scout leaves its existing
-trackers running; stop each tracker or reception to stop them all.
+There is no fixed limit on tracking VFOs. Disable or remove trackers you no longer
+need. Removing a tracker suppresses its automatic recreation for that receive
+session. Restarting reception, restarting or replacing an IQ recording, or changing
+the range or receive band begins a fresh survey and allows removed trackers to be
+created again. Existing trackers, including manually disabled ones, are reused.
+Disabling automatic tracking stops new allocations. Stopping the scout leaves its
+existing trackers running; stop each tracker or reception to stop them all.
 
 Each tracker acquires its own beacon timing, so it can need another 15–18 second
 lap before confirming hops. Weak signals can take longer. Position requires a

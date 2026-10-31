@@ -1,11 +1,16 @@
 import { describe, expect, it, vi } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
-import { reactive } from 'vue';
+import { computed, reactive } from 'vue';
+import { File as NodeFile } from 'node:buffer';
 import { makeDefaultVfo } from '@/app/core/constants';
+import { createAppData } from '@/app/core/state';
+import { clearDecoderSources } from '@/app/core/decoder-state';
 import type { AppInstance } from '@/app/core/receiver.types';
 import type { RtkStation } from '@/worker/decoders/rtk/types';
-import { discoverFollowers, MAX_RTK_TRACKERS } from '@/app/decoders/rtk/discovery/followers';
+import { discoverFollowers } from '@/app/decoders/rtk/discovery/followers';
+import { useDiscoveryControls } from '@/app/decoders/rtk/discovery-controls';
 import { collectStations } from '@/app/decoders/rtk/stations';
+import { replayMethods } from '@/app/replay/connection';
 
 function station(prefix = 100, profile: 'rtk2' | 'rtk3' = 'rtk3'): RtkStation {
 	return {
@@ -32,6 +37,7 @@ function station(prefix = 100, profile: 'rtk2' | 'rtk3' = 'rtk3'): RtkStation {
 
 function setup() {
 	const receiver = reactive({
+		...createAppData(),
 		running: true,
 		vfos: [{ ...makeDefaultVfo(923.118), rtk: true, rtkProfile: 'scan' as const }],
 		radio: { centerFreq: 923.118, sampleRate: 20000000 },
@@ -85,17 +91,117 @@ describe('scout and independent RTK tracking VFOs', () => {
 			expect(receiver.addRtkTrackingVfo).not.toHaveBeenCalled();
 		},
 	);
-	it('bounds allocations and can fill a freed slot with an additional base', async () => {
+	it('automatically tracks more than eight bases without duplicates', async () => {
 		const { receiver, scout } = setup();
 		const bases = Array.from({ length: 12 }, (_, i) => station(100 + i));
 		discoverFollowers(receiver, scout, bases);
 		await flushPromises();
-		expect(receiver.vfos).toHaveLength(MAX_RTK_TRACKERS + 1);
+		expect(receiver.vfos).toHaveLength(13);
+		expect(new Set(receiver.vfos.slice(1).map((vfo) => vfo.rtkFollowSource)).size).toBe(12);
 		receiver.vfos.splice(1, 1);
 		discoverFollowers(receiver, scout, bases);
 		await flushPromises();
-		expect(receiver.vfos).toHaveLength(MAX_RTK_TRACKERS + 1);
+		expect(receiver.vfos).toHaveLength(12);
 		expect(receiver.vfos.some((vfo) => vfo.rtkFollowSource === 'rtk3-100-42')).toBe(false);
+	});
+	it('can manually add a tracker after more than eight have already been allocated', async () => {
+		const { receiver, scout } = setup();
+		discoverFollowers(
+			receiver,
+			scout,
+			Array.from({ length: 12 }, (_, i) => station(100 + i)),
+		);
+		await flushPromises();
+		scout.rtkAutoTrack = false;
+		receiver.rtk.sources[0] = [station(200)];
+		receiver.rtk.frequencies[0] = scout.freq;
+		const entry = computed(() => collectStations(receiver, Date.now())[0]);
+		await useDiscoveryControls(receiver, entry).followDiscovered();
+		expect(receiver.vfos).toHaveLength(14);
+		expect(receiver.vfos[13].rtkFollowSource).toBe('rtk3-200-42');
+		expect(receiver.activeVfoIndex).toBe(13);
+	});
+	it('rediscovers removed trackers on a fresh input stream with the same range and keeps disabled trackers', async () => {
+		const { receiver, scout } = setup();
+		const bases = [station(), station(101), station(102)];
+		discoverFollowers(receiver, scout, bases);
+		await flushPromises();
+		receiver.vfos[1].rtk = false;
+		receiver.vfos.splice(2);
+		discoverFollowers(receiver, scout, bases);
+		await flushPromises();
+		expect(receiver.vfos).toHaveLength(2);
+		clearDecoderSources(receiver);
+		discoverFollowers(receiver, scout, bases);
+		await flushPromises();
+		expect(receiver.vfos).toHaveLength(4);
+		expect(receiver.vfos[1].rtk).toBe(false);
+		expect(receiver.addRtkTrackingVfo).toHaveBeenCalledTimes(5);
+		expect(receiver.activeVfoIndex).toBe(0);
+	});
+	it('invalidates queued discoveries from the previous stream', async () => {
+		const { receiver, scout } = setup();
+		discoverFollowers(receiver, scout, [station()]);
+		clearDecoderSources(receiver);
+		discoverFollowers(receiver, scout, [station(101)]);
+		await flushPromises();
+		expect(receiver.addRtkTrackingVfo).toHaveBeenCalledTimes(1);
+		expect(receiver.vfos[1].rtkFollowSource).toBe('rtk3-101-42');
+	});
+	it('keeps in-flight allocations serialized across a stream reset', async () => {
+		const { receiver, scout } = setup();
+		let finish!: () => void;
+		vi.mocked(receiver.addRtkTrackingVfo).mockImplementationOnce(async (frequency, source) => {
+			await new Promise<void>((resolve) => {
+				finish = resolve;
+			});
+			receiver.vfos.push({ ...makeDefaultVfo(frequency), rtk: true, rtkProfile: 'auto', rtkFollowSource: source });
+		});
+		discoverFollowers(receiver, scout, [station()]);
+		await flushPromises();
+		clearDecoderSources(receiver);
+		discoverFollowers(receiver, scout, [station(), station(101)]);
+		await flushPromises();
+		expect(receiver.addRtkTrackingVfo).toHaveBeenCalledTimes(1);
+		finish();
+		await flushPromises();
+		expect(receiver.addRtkTrackingVfo).toHaveBeenCalledTimes(2);
+		expect(receiver.vfos).toHaveLength(3);
+	});
+	it('recreates removed trackers after reloading the very same IQ recording', async () => {
+		const { receiver, scout } = setup();
+		const recording = {
+			file: new NodeFile([new Uint8Array(2)], 'test.iq') as unknown as File,
+			sampleRate: 20000000,
+			centerHz: 923118000,
+			frequencyShiftHz: 0,
+		};
+		receiver.iqReplay = { recording, progress: { state: 'playing', seconds: 0, duration: 1, delaySeconds: 0 } };
+		receiver._togglePlay = vi.fn(async () => {
+			receiver.running = false;
+		});
+		receiver.backend = {
+			replaceIqReplay: vi.fn(async () => {}),
+			getDeviceCapabilities: vi.fn(async () => ({
+				deviceType: 'iq-replay',
+				sampleRates: [20000000],
+				gainControls: [],
+				sampleFormat: 'int8',
+			})),
+			info: vi.fn(async () => ({ name: 'IQ File Replay' })),
+		} as unknown as AppInstance['backend'];
+		const bases = [station(), station(101)];
+		discoverFollowers(receiver, scout, bases);
+		await flushPromises();
+		receiver.vfos.splice(1);
+		await replayMethods.replaceIqReplay.call(receiver, recording);
+		expect(receiver.vfos).toHaveLength(1);
+		receiver.running = true;
+		discoverFollowers(receiver, scout, bases);
+		await flushPromises();
+		expect(receiver.vfos).toHaveLength(3);
+		expect(receiver.addRtkTrackingVfo).toHaveBeenCalledTimes(4);
+		expect(scout.rtkProfile).toBe('scan');
 	});
 	it('merges scout sightings with current follower corrections into one station row', () => {
 		const { receiver } = setup();

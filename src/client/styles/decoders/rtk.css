@@ -34,23 +34,10 @@
 }
 .rtk-details {
 	container-type: normal;
-	display: grid;
-	grid-template-columns: minmax(0, 1fr) minmax(260px, 32%);
-	column-gap: 24px;
-	align-content: start;
 	min-width: 0;
 	min-height: 0;
 	overflow: visible;
 	padding: 12px 20px;
-}
-.rtk-heading,
-.rtk-description,
-.rtk-summary,
-.rtk-details > .rtk-empty {
-	grid-column: 1;
-}
-.rtk-details > .rtk-section {
-	grid-column: 1 / -1;
 }
 .rtk-heading {
 	display: flex;
@@ -113,7 +100,6 @@
 	gap: 8px 16px;
 }
 .rtk-discovery-detail {
-	grid-column: 1 / -1;
 	margin-top: 8px;
 }
 .rtk-discovery-detail button {
@@ -216,7 +202,16 @@
 	color: #bcbcbc;
 }
 .rtk-overview {
-	display: contents;
+	display: grid;
+	grid-template-columns: minmax(0, 1fr);
+	column-gap: 24px;
+	align-items: start;
+}
+.rtk-overview-with-map {
+	grid-template-columns: minmax(0, 1fr) minmax(260px, 32%);
+}
+.rtk-detail-main {
+	min-width: 0;
 }
 .rtk-summary {
 	min-width: 0;
@@ -226,8 +221,6 @@
 	margin-bottom: 8px;
 }
 .rtk-map-wrap {
-	grid-column: 2;
-	grid-row: 1 / span 3;
 	align-self: start;
 	position: sticky;
 	top: 0;
@@ -398,9 +391,6 @@
 	font-size: 16px;
 }
 @container rtk-panel (max-width: 760px) {
-	.rtk-details {
-		display: block;
-	}
 	.rtk-station-scroll {
 		scroll-padding-top: 0;
 	}
@@ -483,9 +473,17 @@
 	.rtk-overview {
 		display: flex;
 		flex-direction: column;
+		align-items: stretch;
+	}
+	.rtk-detail-main {
+		display: contents;
+	}
+	.rtk-summary,
+	.rtk-detail-main > .rtk-empty {
+		order: 2;
 	}
 	.rtk-map-wrap {
-		order: -1;
+		order: 1;
 		align-self: stretch;
 		position: relative;
 		margin-top: 16px;
