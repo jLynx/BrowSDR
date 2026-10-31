@@ -66,9 +66,26 @@ impl SharedChannelizer {
     }
 
     pub fn process(&mut self, input: &[i8]) {
+        self.process_values(input.chunks_exact(2).map(|pair| Complex::new(pair[0] as f32 / 128.0, pair[1] as f32 / 128.0)));
+    }
+
+    pub fn process_f32(&mut self, input: &[f32]) {
+        self.process_values(input.chunks_exact(2).map(|pair| Complex::new(pair[0], pair[1])));
+    }
+
+    pub fn process_i16(&mut self, input: &[i16]) {
+        self.process_values(input.chunks_exact(2).map(|pair| Complex::new(pair[0] as f32 / 32768.0, pair[1] as f32 / 32768.0)));
+    }
+    pub fn set_batch_samples(&mut self, count: usize) { self.batch_samples = count; }
+    pub fn output_ptr(&self, band: usize) -> *const f32 { self.outputs[band].as_ptr() }
+    pub fn output_len(&self, band: usize) -> usize { if self.output_ready { self.outputs[band].len() } else { 0 } }
+}
+
+impl SharedChannelizer {
+    fn process_values(&mut self, input: impl Iterator<Item = Complex<f32>>) {
         if self.output_ready { for output in &mut self.outputs { output.clear(); } }
         self.output_ready = false;
-        self.pending.extend(input.chunks_exact(2).map(|pair| Complex::new(pair[0] as f32 / 128.0, pair[1] as f32 / 128.0)));
+        self.pending.extend(input);
         let mut consumed = 0;
         while self.pending.len() - consumed >= self.hop {
             self.spectrum[..self.overlap].copy_from_slice(&self.history);
@@ -93,9 +110,7 @@ impl SharedChannelizer {
         self.output_ready = self.outputs.first().is_some_and(|output| !output.is_empty() && output.len() / 2 >= self.batch_samples);
     }
 
-    pub fn set_batch_samples(&mut self, count: usize) { self.batch_samples = count; }
-    pub fn output_ptr(&self, band: usize) -> *const f32 { self.outputs[band].as_ptr() }
-    pub fn output_len(&self, band: usize) -> usize { if self.output_ready { self.outputs[band].len() } else { 0 } }
+
 }
 
 #[cfg(test)]

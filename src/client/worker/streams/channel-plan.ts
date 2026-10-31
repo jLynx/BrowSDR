@@ -65,7 +65,7 @@ function channelWidth(value: VfoParams, sampleRate: number): number {
 		value.adsb ? 2000000 : 0,
 		value.ais ? 48000 : 0,
 		value.radiosonde ? 48000 : 0,
-		value.rtk ? 1000000 : 0,
+		value.rtk ? (value.rtkFollowHops ? sampleRate : 1000000) : 0,
 		value.ble ? 2000000 : 0,
 		value.acars ? 48000 : 0,
 		value.aprs ? 48000 : 0,

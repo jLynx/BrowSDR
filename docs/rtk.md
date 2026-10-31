@@ -9,6 +9,99 @@ verified Mammotion RTK1 and RTK2 wrappers and an experimental RTK3 / RBS03 decod
 Other RTK radio protocols still need
 their own decoders.
 
+## Recorded NZ variants and hop following
+
+Two supplied 60-second, 20 MSPS recordings from 30 October 2026 establish
+additional formats and channel plans. The latest recording contains RTK1 at
+approximately **919.058 MHz**, a hopping DU1021D-compatible compact stream,
+and checksum-verified RTK3 traffic. Selecting the old fixed-frequency presets
+does not follow these hopping streams.
+
+Select the matching profile and enable **Follow recorded NZ RTK2 hops** or
+**Follow recorded NZ RTK3 hops** in Decoder settings. Receive the whole plan:
+20 MSPS centred near 923.118 MHz covers both. The follower shifts its decoder
+channel inside the existing IQ bandwidth, without retuning the SDR or changing
+the VFO's audio frequency. The settings show the current decoder channel.
+The option defaults off and applies only to these measured plans; the US RTK3
+plan and other firmware/regional variants can differ.
+
+| Profile                 | Measured plan                                                | Latest recording: verified radio frames | CRC24Q-valid corrections |
+| ----------------------- | ------------------------------------------------------------ | --------------------------------------: | -----------------------: |
+| RTK1                    | Fixed VFO at 919.058 MHz                                     |                                     122 |                       91 |
+| RTK2-compatible compact | 18 slots, 700 kHz grid, approximately 1 s dwell / 18 s lap   |                                     193 |                      143 |
+| RTK3                    | 25 ascending slots, 500 kHz spacing, 600 ms dwell / 15 s lap |                                     272 |                      118 |
+
+These are actual replays through the browser's WASM DDC and TypeScript streaming
+decoder, rather than synthetic waveforms. The older recording also yields
+166 verified compact frames / 121 corrections and 243 RTK3 frames / 99
+corrections using the followers. No new live hardware test was performed.
+RTK3's fixed VFO at 915.401 MHz yields only four corrections in the latest
+recording; following the visits substantially improves recovery.
+
+The compact stream reports **UNICORE UM960** and carries RTCM1006, 1033,
+1074, 1084, 1094, 1114 and 1124, including reference position and GPS,
+GLONASS, Galileo, QZSS and BeiDou corrections. Its physical Mammotion generation
+has not been independently identified; compatibility is established by the
+DU1021D transform, radio checksum and RTCM checksums. The RTK3 replay recovers
+GPS/GLONASS/Galileo/BeiDou MSM4 corrections; no RTK3 position or equipment
+descriptor was recovered from these recordings.
+
+Both recordings retain reception errors. Rejected candidates and incomplete
+corrections are excluded from the exports. Their metadata does not report a
+hardware missing-sample count; zero detected worker chunk gaps in replay does
+not establish uninterrupted RF samples in the original capture.
+
+### Compact DU1021D-compatible format
+
+This variant uses SF7/BW250, CR4/5, explicit header, LDRO off, no LoRa payload
+CRC and sync **[8,16]**. The RTK2 profile now accepts both this sync and the
+previously verified **[16,8]**, while requiring the appropriate application
+checksums. The wire transform remains unchanged. After reversing it:
+
+```text
+5D A6 NETWORK[8] ADDRESS_LE16 RADIO_SLOT_U8 BODY_LENGTH_U8
+<raw stream bytes> CRC8/MAXIM
+```
+
+The body is at most 240 bytes. It can mix NMEA text and arbitrary RTCM stream
+fragments, without the legacy `A5 5A` container or CR/LF frame trailer. NMEA
+bytes are skipped rather than interpreted as station coordinates. Every
+reassembled correction still requires CRC24Q. Network bytes remain opaque;
+their meaning as a loc ID has not been established for this variant.
+
+Its 23-byte control beacon has the same network/address/slot fields, a zero
+body length, `1E 00`, a little-endian uint32 counter advancing in seconds,
+two padding zeros and CRC8/MAXIM. Structural checks and CRC8 must pass before
+it anchors following. Control beacons never enter the correction stream.
+A decreasing counter discards unfinished corrections for that base.
+
+The measured slot-to-frequency grid is approximately
+`915.491 MHz + slot × 0.700 MHz`, with transmission order:
+
+```text
+9, 15, 4, 10, 16, 5, 11, 17, 0, 6, 12, 1, 7, 13, 2, 8, 14, 3
+```
+
+This radio slot is not treated as a Mammotion pairing-channel field or packet
+sequence. Rejected candidates clear compact partial streams because they
+cannot prove adjacency. The legacy container variant retains its independently
+verified sequence-gap handling.
+
+### Following and sample timing
+
+The followers anchor only on verified beacons and use input sample time,
+independent of worker scheduling and playback speed. They switch the DDC
+during the measured silent guard interval, preserve correction fragments
+across planned hops, and tolerate missed beacons for a complete lap. Actual
+IQ chunk gaps, manual retunes and profile/rate changes discard partial state
+and return to beacon acquisition. Full-band IQ is retained for followers when
+other VFOs use shared channelization.
+
+Long packets can accumulate enough sample-clock error to corrupt their tails.
+The receiver now tries a bounded ±20 ppm neighbourhood of the selected timing
+in 5 ppm increments after a failed payload. A retry is accepted only with its
+LoRa or application checksum; it does not lower RTCM validation requirements.
+
 ## RTK2 / DU1021D support
 
 Select **Decoder settings → Mammotion RTK2 · 250 kHz**, then use
@@ -40,8 +133,9 @@ The PHY is SF7, BW250 kHz, CR4/5, explicit header, preamble16, no LoRa payload
 CRC, LDRO off and sync **[16,8]**. Timing starts at +10 ppm for the measured
 receiver. Tune to the active signal in the waterfall: the recording shows
 startup channel changes between approximately 915.191 and 924.116 MHz, without
-establishing continuous hopping or a universal regional channel plan. Automatic
-channel following is not available.
+establishing continuous hopping or a universal regional channel plan. The optional
+recorded NZ follower above applies to the compact variant, not this legacy
+startup-channel behavior.
 
 DU1021D applies a reversible bit transpose, nibble substitution, parity mixing
 and fixed mask after application framing. The decoder undoes that transform
@@ -93,23 +187,25 @@ position, equipment and GPS/GLONASS/Galileo/BeiDou MSM4 observations.
 Select **Decoder settings → Mammotion RTK3 · 250 kHz (experimental)**
 to decode the format documented by
 [Martin Boissonneault (VE2MRX)](https://github.com/Ve2mrx/mammotion-rtk-lora/blob/7cb61c36187c4becd408a99be4f0050d416e65bf/PROTOCOL.md)
-from an RBS03 base with a Luba mini in the US. This implementation was checked
-with invented packets and synthetic IQ, **without RTK3 hardware or real RTK3
-captures**. Firmware and regional variations remain unverified.
+from an RBS03 base with a Luba mini in the US. The parser has synthetic regression
+coverage and has now been validated against the supplied real IQ recordings.
+The measured NZ hop plan differs from that US reference; other firmware and
+regional variations remain unverified.
 
 The profile uses LoRa SF7, BW250 kHz, CR4/5, explicit header, preamble16,
 no LoRa payload CRC and LDRO off. Standard private sync word **0x12** maps to
 SF7 sync symbols **[8,16]**; this differs from RTK2's
-observed **[16,8]**. The profiles remain separate. Timing starts at 0 ppm because
-no RTK3/SDR clock error has been measured; adjust it for your receiver.
+legacy **[16,8]**. The profiles remain separate even when a compact RTK2 signal
+uses the same sync. Timing starts at 0 ppm because no universal RTK3/SDR clock
+error has been measured; adjust it for your receiver.
 
 Tune the VFO to an active channel in the waterfall within the received band
 (currently 900–930 MHz, at 1 MSPS or higher). There is no guessed frequency
-preset or automatic hop follower. VE2MRX reports 25 ascending US slots spaced
+preset. The optional follower uses the recorded NZ plan above. VE2MRX reports 25 ascending US slots spaced
 1 MHz apart, 600 ms per slot and a 15-second lap, with the lowest slot silent.
 A fixed VFO can decode intermittent bursts during visits to its channel; it
 will miss most of that hopping stream and may not receive all base details.
-The reported US plan is not assumed to apply to New Zealand or other regions.
+The reported US plan is not used by the recorded NZ follower.
 
 Every accepted radio frame must have the documented `00 00` prefix, a
 little-endian 16-bit address, length no greater than 231 bytes, and valid
@@ -128,7 +224,7 @@ Type `01` must contain exactly one complete RTCM3 frame, including its matching
 length and valid **CRC24Q**. Type `00` is consumed without interpreting or
 exporting its contents. Containers may span radio frames and interleaved beacons.
 Reassembly is isolated by address and bounded to 16 bases. Invalid radio frames,
-lost IQ chunks, retunes, profile/rate changes and more than two seconds of silence
+lost IQ chunks, manual retunes, profile/rate changes and more than two seconds of silence
 discard incomplete containers. A decreasing beacon uptime also clears that
 base's partial stream and sequence state. Repeated container sequence numbers
 are suppressed; forward increments, including 16-bit wrap, provide gap
@@ -295,7 +391,8 @@ validated outer frame and container checksums before displaying GNSS information
    and receiver model. **Decoder settings** controls the selected VFO's profile
    and preset tuning: **RTK1** offers **923.118 MHz** and **RTK2** offers
    **915.191 MHz**, both measured locally. RTK3 has no fixed-frequency preset;
-   tune its VFO to the active waterfall signal, which can change after a restart.
+   tune its VFO to the active waterfall signal, or enable the matching recorded
+   NZ follower while receiving its entire channel span.
 5. **Save data** offers a station summary (JSON) or a verified correction
    stream (RTCM3), with explanations of both formats. **Diagnostics** contains
    pairing fields, message types, satellite IDs and packet/error counters.
@@ -474,6 +571,11 @@ existing worker backpressure. Retunes, profile changes, sample-rate changes
 and sequence gaps reset acquisition. No new application dependency is needed.
 
 ## Capture files and fixtures
+
+During local development, use **Add SDR → IQ File Replay** to load a BrowSDR recording and its matching
+SigMF metadata. Configure the RTK VFOs while paused, then replay through the normal
+receive pipeline at 1×. See the [IQ replay guide](iq-replay.md) for the recorded
+RTK frequencies and the limits of replay testing.
 
 **Tools → IQ Capture** records raw signed IQ with SigMF metadata for further
 protocol research and offline demodulation. Choose Seconds or Minutes for the

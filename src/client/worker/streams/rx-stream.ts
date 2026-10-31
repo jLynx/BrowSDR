@@ -41,6 +41,7 @@ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABI
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+import { iqView, deviceIqFormat } from '@/radio/iq/format';
 import { SpectrumStream } from './spectrum-stream';
 import type { ChannelPlan } from './types';
 import type { RxStreamOpts, VfoParams } from '@/worker/runtime/types';
@@ -86,7 +87,7 @@ export async function startRxStream(
 		}
 
 		// ── Spectrum FFT setup ────────────────────────────────────────
-		const spectrum = new SpectrumStream(backend, fftSize, spectrumCallback);
+		const spectrum = new SpectrumStream(backend, fftSize, spectrumCallback, deviceIqFormat(device.sampleFormat));
 		backend.setSpectrumFps(opts.spectrumFps ?? 20);
 		backend._sharedChannelization = opts.sharedChannelization !== false;
 		backend.setWhisperEnabled(opts.whisperEnabled === true);
@@ -99,6 +100,7 @@ export async function startRxStream(
 			perf: { calls: 0, sum: 0, max: 0 },
 		};
 		installChannelCleanup(backend, channel);
+		backend._replayPending = () => channel.pending > 0;
 
 		// ── Audio DDC setup ───────────────────────────────────────────
 		// Full SDR++ pipeline in Rust: NCO → polyphase resampler (→50kHz)
@@ -141,7 +143,7 @@ export async function startRxStream(
 			}
 			perf.usbCallbacks++;
 
-			const signed = new Int8Array(data.buffer, data.byteOffset, data.byteLength);
+			const signed = iqView(data, deviceIqFormat(device.sampleFormat));
 			perf.lastChunkSize = signed.length;
 			perf.inputSamplesSum += signed.length / 2;
 

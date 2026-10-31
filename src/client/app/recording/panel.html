@@ -30,6 +30,13 @@
 					</UiSelect>
 				</div>
 			</UiFormRow>
+			<UiFormRow v-if="precisionBits > 8" label="IQ format" :input-id="receiver.receiverId + '-iq-format'">
+				<UiSelect :id="receiver.receiverId + '-iq-format'" v-model="format" aria-label="Recording IQ format" :disabled="active">
+					<option value="ci8">8-bit · smaller files</option>
+					<option value="ci16_le">16-bit · retain received precision</option>
+					<option value="cf32_le">32-bit float · normalized samples</option>
+				</UiSelect>
+			</UiFormRow>
 			<dl class="iq-recorder-details">
 				<div>
 					<dt>{{ mode === 'manual' ? 'Recording size' : 'Estimated size' }}</dt>
@@ -50,8 +57,8 @@
 			lower sample rate records a narrower band and uses less space.
 		</p>
 		<p v-if="mode === 'manual' && !saveToFile" class="iq-recorder-save-mode">
-			Recording stops automatically at the 64 MiB download limit (about {{ (64 * 1024 * 1024 / receiver.radio.sampleRate / 2).toFixed(1) }}
-			seconds). Use Chrome or Edge to save longer recordings directly to a file.
+			Recording stops automatically at the 64 MiB download limit (about {{ (64 * 1024 * 1024 / receiver.radio.sampleRate /
+			bytesPerSample).toFixed(1) }} seconds). Use Chrome or Edge to save longer recordings directly to a file.
 		</p>
 		<div class="iq-recorder-actions">
 			<UiButton
@@ -80,7 +87,8 @@
 			<summary>About IQ recordings</summary>
 			<p>
 				IQ files contain the radio samples across the full received band, before audio or decoding. Use compatible signal analysis software
-				to inspect, demodulate, or decode them. Files use SigMF format with signed 8-bit I/Q samples.
+				to inspect, demodulate, or decode them. Files use SigMF with signed 8-bit or 16-bit I/Q, or normalized 32-bit float. 12-bit samples
+				use 16-bit storage. Choosing 8-bit halves the file size compared with 16-bit and discards fine sample detail.
 			</p>
 			<p>
 				Stop recording saves the samples captured so far. Cancel recording discards them. Keep this tab open. Retuning, changing gains, or

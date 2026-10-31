@@ -3,6 +3,140 @@
 	min-height: 0;
 	max-height: 55vh;
 }
+.iq-replay {
+	font-size: 12px;
+	line-height: 1.5;
+	overflow-wrap: anywhere;
+}
+.iq-replay p {
+	margin: 8px 0;
+}
+.iq-replay-name {
+	color: var(--text-main);
+}
+.iq-replay progress {
+	width: 100%;
+	height: 8px;
+	accent-color: var(--accent);
+}
+.iq-replay-actions {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+}
+.bookmark-dialog.iq-replay-loader {
+	width: 460px;
+	max-width: calc(100vw - 32px);
+	max-height: calc(100dvh - 32px);
+	display: flex;
+	flex-direction: column;
+	overflow-wrap: anywhere;
+}
+.iq-replay-loader .bookmark-dialog-title,
+.iq-replay-loader .bookmark-dialog-footer {
+	flex-shrink: 0;
+}
+.iq-replay-loader-body {
+	min-height: 0;
+	overflow-y: auto;
+	gap: 14px;
+	font-size: 13px;
+	line-height: 1.5;
+}
+.iq-replay-loader-body p {
+	margin: 0;
+}
+.iq-replay-files,
+.iq-replay-recording {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 12px;
+	border: 1px solid var(--border);
+	border-radius: 6px;
+	background: var(--bg-dark);
+}
+.iq-replay-files .form-row {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 10px;
+}
+.iq-replay-files label {
+	font-weight: 600;
+}
+.iq-replay-loader input[type='file'] {
+	width: 100%;
+	min-width: 0;
+	font-size: 0;
+}
+.iq-replay-loader input[type='file']::file-selector-button {
+	margin-right: 10px;
+	padding: 8px 12px;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	background: var(--bg-header);
+	color: var(--text-main);
+	font-family: inherit;
+	font-size: 13px;
+	cursor: pointer;
+}
+.iq-replay-loader .btn:disabled,
+.iq-replay-loader input[type='file']:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
+}
+.iq-replay-loader input[type='file']:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: 3px;
+}
+.iq-replay-hint,
+.iq-replay-note,
+.iq-replay-help {
+	font-size: 12px;
+	color: var(--text-muted);
+}
+.iq-replay-file-summary {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	padding-bottom: 10px;
+	border-bottom: 1px solid var(--border);
+}
+.iq-replay-file-summary span {
+	font-weight: 600;
+}
+.iq-replay-file-summary small {
+	color: var(--text-muted);
+	font-size: 12px;
+}
+.iq-replay-recording .form-row {
+	gap: 12px;
+}
+.iq-replay-recording label {
+	overflow-wrap: normal;
+}
+.iq-replay-note {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 6px 18px;
+}
+.iq-replay-help {
+	padding-top: 12px;
+	border-top: 1px solid var(--border);
+}
+.iq-replay-help summary {
+	width: fit-content;
+	cursor: pointer;
+}
+.iq-replay-help[open] summary {
+	color: var(--text-main);
+}
+.iq-replay-help p {
+	margin-top: 10px;
+}
+.iq-replay-error {
+	color: #e57373;
+}
 .iq-recorder-panel > .msgcenter-header {
 	flex-shrink: 0;
 }

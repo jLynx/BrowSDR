@@ -21,6 +21,8 @@ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABI
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
+import { decodeHfIq } from './airspyhf/iq-converter';
+import { iqPrecisionControl, selectedIqBits } from '@/radio/iq/format';
 import type { SdrDevice, SdrDeviceInfo, GainControl } from '@/radio/types';
 import { registerDriver } from '@/radio/sdr-device';
 
@@ -47,8 +49,13 @@ const BOARD_NAMES: Record<number, string> = {
 
 export class AirspyHfDevice implements SdrDevice {
 	readonly deviceType = 'airspyhf';
-	readonly sampleFormat = 'float32' as const;
+	readonly nativeIqBits = 16;
+	private iqBits: 8 | 12 | 16 = 16;
+	get sampleFormat() {
+		return this.iqBits === 8 ? ('int8' as const) : ('int16' as const);
+	}
 	readonly gainControls: GainControl[] = [
+		iqPrecisionControl(16),
 		{ name: 'Attenuation', min: 0, max: 48, step: 6, default: 0, type: 'slider' },
 		{ name: 'HF AGC', min: 0, max: 1, step: 1, default: 1, type: 'checkbox' },
 		{ name: 'HF LNA', min: 0, max: 1, step: 1, default: 0, type: 'checkbox' },
@@ -146,6 +153,10 @@ export class AirspyHfDevice implements SdrDevice {
 
 	async setGain(name: string, value: number): Promise<void> {
 		switch (name) {
+			case 'IQ Precision':
+				if (this.rxRunning && selectedIqBits(16, value) !== this.iqBits) throw new Error('Stop reception before changing IQ precision');
+				this.iqBits = selectedIqBits(16, value);
+				break;
 			case 'Attenuation':
 				await this.vendorOut(AIRSPYHF_SET_ATT, 0, value);
 				break;
@@ -167,7 +178,7 @@ export class AirspyHfDevice implements SdrDevice {
 
 		// Enable receiver
 		await this.vendorOut(AIRSPYHF_RECEIVER_MODE, 1, 0);
-		const transferSize = receiveTransferSize(this.sampleRate, TRANSFER_BUFFER_SIZE, 8);
+		const transferSize = receiveTransferSize(this.sampleRate, TRANSFER_BUFFER_SIZE, 4, 4);
 		const session: Array<Promise<void>> = [];
 		this.rxRunning = session;
 
@@ -178,20 +189,8 @@ export class AirspyHfDevice implements SdrDevice {
 					const result = await this.dev.transferIn(1, transferSize);
 					if (this.rxRunning !== session) break;
 					if (result.status !== 'ok' || !result.data) break;
-					const raw = new Uint8Array(result.data.buffer, result.data.byteOffset, result.data.byteLength);
-
-					// Airspy HF+ sends complex float32 IQ pairs
-					// Convert to int8 IQ for the DSP pipeline
-					const floatView = new Float32Array(raw.buffer, raw.byteOffset, raw.byteLength / 4);
-					const int8Data = new Int8Array(floatView.length);
-					for (let i = 0; i < floatView.length; i++) {
-						// Float range is typically -1.0 to 1.0, scale to int8
-						let val = Math.round(floatView[i] * 127);
-						if (val > 127) val = 127;
-						else if (val < -128) val = -128;
-						int8Data[i] = val;
-					}
-					callback(new Uint8Array(int8Data.buffer));
+					// libairspyhf: little-endian signed int16 Q then I on USB.
+					callback(decodeHfIq(result.data, this.iqBits));
 				} catch (e: unknown) {
 					if (this.rxRunning === session) {
 						const msg = e instanceof Error ? errorMessage(e) : String(e);

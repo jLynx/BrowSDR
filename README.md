@@ -40,8 +40,7 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
   searchable text.
 - **📍 APRS Stations and Live Map**
   Decode amateur radio position reports, messages, weather and telemetry on
-  1200-baud packet channels, with a live station map. See the
-  [reception guide](docs/aprs.md).
+  1200-baud packet channels, with a live station map.
 - **📊 Frequency Activity**
   Visually spot active signals and quickly jump to transmissions using the dynamic frequency activity scanner and interactive waterfall display.
 - **🔖 Advanced Bookmarking System**
@@ -168,12 +167,26 @@ Choose **RX1** or **RX2** using **RX Channel** in the Radio panel, then select *
 
 BrowSDR talks to the PlutoSDR's own **IIO** USB interface, the one libiio uses; the network, storage and serial interfaces stay with the operating system. It controls `ad9361-phy` and streams `cf-ad9361-lpc`, so Pluto firmware clones with the same IIO devices should also work.
 
-- **Sample rates:** 2.4–6 MSPS; each sample takes 4 bytes over USB 2.0, which limits continuous reception to about 6 MSPS. The AD936x's 12-bit samples are narrowed to 8 bits for the DSP pipeline. A programmable FIR left enabled by other software is turned off, since these rates do not need it.
+- **Sample rates:** 2.4–6 MSPS; each sample takes 4 bytes over USB 2.0, which limits continuous reception to about 6 MSPS. The AD936x's 12-bit samples are kept in 16-bit containers unless a lower **IQ Precision** is selected. A programmable FIR left enabled by other software is turned off, since these rates do not need it.
 - **Dropped samples:** IIO buffers carry no sample counters, so BrowSDR compares the received rate with the configured one every 10 seconds. A shortfall is logged as a browser console warning; development builds also log each measurement.
 - **Tuning range:** whatever the firmware reports, typically 325–3800 MHz, or 70–6000 MHz on firmware switched to AD9364 mode.
 - **Gain:** **Gain Mode** selects manual gain or one of the AD936x AGC modes; **RF Gain** applies in manual mode and is limited to the range for the current band.
 - **Linux:** install the [PlutoSDR udev rules](https://github.com/analogdevicesinc/plutosdr-fw/blob/master/scripts/53-adi-plutosdr-usb.rules) so the browser can open the device without root.
 - **Windows:** Chrome needs **WinUSB** on the Pluto's **IIO** interface. If connecting fails with **Access denied**, install WinUSB for that interface only with [Zadig](https://zadig.akeo.ie/) (enable _List All Devices_ and pick the PlutoSDR entry ending in _Interface 5_ or named _IIO_).
+
+### IQ precision and recording size
+
+Reception retains each driver's native sample precision: HackRF and RTL-SDR use
+8-bit IQ, LimeSDR, Airspy and PlutoSDR retain their 12-bit sources in 16-bit containers, and
+Airspy HF+ retains its delivered 16-bit samples. Stop reception to select a lower
+**IQ Precision** under **Radio → Advanced** on higher-resolution radios. This
+reduces sample detail and internal memory traffic. LimeSDR's separate **USB Format**
+controls wire packing; reducing IQ precision alone does not reduce USB traffic.
+
+**Tools → IQ Recorder** offers 8-bit, 16-bit, and normalized 32-bit float recording
+on higher-precision reception. 12-bit samples use 16-bit file storage; choosing
+8-bit halves that file size. See [IQ recording](docs/iq-recording.md) and
+[IQ replay](docs/iq-replay.md).
 
 ### Automatic receive gains (LimeSDR and HackRF)
 

@@ -17,6 +17,7 @@ describe('RTK2 wire and application integrity', () => {
 		const wire = bytes(frame.wire);
 		expect(decodeRtk2Bytes(wire)).toEqual(bytes(frame.plain));
 		expect(decodeRtk2Frame({ ...mockRtk2Packet(new Uint8Array()), data: wire })).toEqual({
+			format: 'container',
 			network: Array.from(new TextEncoder().encode(String(frame.loc).padStart(8, '0')), (byte) => byte.toString(16).padStart(2, '0')).join(
 				'',
 			),
@@ -81,6 +82,17 @@ describe('RTK2 wire and application integrity', () => {
 });
 
 describe('RTK2 correction stream', () => {
+	it('retains verified legacy sequence-gap diagnostics after a long silence', () => {
+		let now = 20000;
+		vi.spyOn(Date, 'now').mockImplementation(() => now);
+		const tracker = new Rtk2Tracker(),
+			frame = mockRtcmReference();
+		tracker.process(mockRtk2Packet(frame.slice(0, 12), 100));
+		now += 3000;
+		tracker.process(mockRtk2Packet(frame, 103));
+		expect(tracker.flush()).toHaveLength(1);
+		expect(tracker.counters.sequenceGaps).toBe(2);
+	});
 	it('keeps verified partial corrections when a rejected candidate is followed by a contiguous container', () => {
 		const frame = mockRtcmReference();
 		const tracker = new Rtk2Tracker();

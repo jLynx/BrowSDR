@@ -25,12 +25,14 @@ import type { DSDStatus } from '@/worker/decoders/dsd/types';
 import type { CapabilityIssue } from '@/platform/types';
 import type { Rtl433Status, Rtl433Protocol } from '@/worker/decoders/types';
 import { DEFAULT_FFT_SIZE, DEFAULT_SPECTRUM_RANGE } from '@/display/spectrum-range';
+import type { IqRecording, IqReplayProgress } from '@/radio/iq-replay/types';
 
 export function createAppData() {
 	return {
 		backend: null as Remote<Backend> | null,
 		usbCapabilityIssue: null as CapabilityIssue | null,
 		connected: false,
+		...createReplayState(),
 		running: false,
 		isOnline: navigator.onLine,
 		remoteMode: 'none' as 'none' | 'host' | 'client',
@@ -122,6 +124,15 @@ export function createAppData() {
 			optionA: null as VfoConflictOption,
 			optionB: null as VfoConflictSubsetOption,
 		},
+	};
+}
+
+function createReplayState() {
+	return {
+		showIqReplayLoader: false,
+		iqReplayReplace: false,
+		iqReplayReplacing: false,
+		iqReplay: null as { recording: IqRecording; progress: IqReplayProgress } | null,
 	};
 }
 

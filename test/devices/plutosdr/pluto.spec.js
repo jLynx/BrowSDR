@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { PlutoSdrDevice, parseIioRange, plutoBlockSamples } from '@/devices/plutosdr/device';
 import { bufferMask, findDevice, parseIioContext, parseSampleFormat } from '@/devices/plutosdr/context';
 import { IiodPipe } from '@/devices/plutosdr/iiod';
-import { narrowIq } from '@/devices/plutosdr/samples';
+import { convertIq } from '@/devices/plutosdr/samples';
 import { PlutoThroughput } from '@/devices/plutosdr/throughput';
 import { findIiodInterface, openPipe } from '@/devices/plutosdr/usb';
 import { detectDevice } from '@/radio/sdr-device';
@@ -27,7 +27,7 @@ async function receive(device, blocks, onBlock = () => {}) {
 	let done;
 	const finished = new Promise((resolve) => (done = resolve));
 	await device.startRx((data) => {
-		received.push(new Int8Array(data.buffer, data.byteOffset, data.byteLength).slice());
+		received.push(data.slice());
 		onBlock(received.length);
 		if (received.length === blocks) done();
 	});
@@ -88,13 +88,17 @@ describe('IIO context XML', () => {
 });
 
 describe('PlutoSDR sample conversion', () => {
-	it('keeps the top eight of twelve bits, including from unaligned USB data', () => {
+	it('left-aligns twelve bits in int16 or keeps the top eight, including from unaligned USB data', () => {
 		const words = new Int16Array([2047, -2048, 16 + 15, -16, 0, -1]);
 		const unaligned = new Uint8Array(words.byteLength + 1);
 		unaligned.set(new Uint8Array(words.buffer), 1);
-		const out = new Int8Array(words.length + 2);
-		narrowIq(unaligned.subarray(1), parseSampleFormat('le:S12/16>>0'), out, 2);
-		expect(Array.from(out)).toEqual([0, 0, 127, -128, 1, -1, 0, -1]);
+		const format = parseSampleFormat('le:S12/16>>0');
+		const full = new Int16Array(words.length + 2);
+		convertIq(unaligned.subarray(1), format, full, 2);
+		expect(Array.from(full)).toEqual([0, 0, 32752, -32768, 496, -256, 0, -16]);
+		const small = new Int8Array(words.length + 2);
+		convertIq(unaligned.subarray(1), format, small, 2);
+		expect(Array.from(small)).toEqual([0, 0, 127, -128, 1, -1, 0, -1]);
 	});
 
 	it('sizes reads to about 20 ms of whole kilo-samples', () => {
@@ -181,7 +185,7 @@ describe('PlutoSDR control over iiod', () => {
 });
 
 describe('PlutoSDR streaming', () => {
-	it('streams narrowed IQ with replies queued ahead and leaves nothing unread on stop', async () => {
+	it('streams 12-bit IQ with replies queued ahead and leaves nothing unread on stop', async () => {
 		const { state, device, unread, pendingReads } = await connected();
 		await device.setSampleRate(2400000);
 		const samples = plutoBlockSamples(2400000);
@@ -192,13 +196,30 @@ describe('PlutoSDR streaming', () => {
 		expect(state.commands.find(({ line }) => line.startsWith('READBUF'))?.line).toBe(`READBUF iio:device3 ${samples * 4}`);
 		// Two more blocks are already requested whenever one is handed to the DSP.
 		expect(requestedAtDelivery).toEqual([3, 4, 5]);
-		expect(blocks.map((block) => block.length)).toEqual([samples * 2, samples * 2, samples * 2]);
+		expect(blocks.map((block) => [block.constructor, block.length])).toEqual(Array(3).fill([Int16Array, samples * 2]));
 		const all = blocks.flatMap((block) => Array.from(block));
-		for (const k of [0, 1, 255, 256, samples + 7]) expect(all.slice(k * 2, k * 2 + 2)).toEqual(rawSample(k).map((v) => v >> 4));
+		for (const k of [0, 1, 255, 256, samples + 7]) expect(all.slice(k * 2, k * 2 + 2)).toEqual(rawSample(k).map((v) => v << 4));
 		// The replies requested ahead were consumed before CLOSE; the pipe stays open.
 		expect(state.commands.at(-1)).toEqual({ pipe: 1, line: 'CLOSE iio:device3' });
 		expect([unread(1), pendingReads(1)]).toEqual([0, 0]);
 		expect(state.controls.filter((control) => control.request === 2)).toEqual([]);
+		await device.close();
+	});
+
+	it('narrows to 8-bit IQ when selected, and changes precision only while stopped', async () => {
+		const { device } = await connected();
+		await device.setSampleRate(2400000);
+		await device.setGains({ 'IQ Precision': 1 });
+		expect(device.sampleFormat).toBe('int8');
+		let rejected;
+		const [block] = await receive(device, 1, () => {
+			rejected = device.setGain('IQ Precision', 0).catch((error) => error.message);
+		});
+		expect(block).toBeInstanceOf(Int8Array);
+		expect(Array.from(block.slice(0, 4))).toEqual([...rawSample(0), ...rawSample(1)].map((v) => v >> 4));
+		expect(await rejected).toBe('Stop reception before changing IQ precision');
+		await device.setGain('IQ Precision', 0);
+		expect(device.sampleFormat).toBe('int16');
 		await device.close();
 	});
 

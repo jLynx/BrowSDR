@@ -19,6 +19,67 @@ async function receiver() {
 }
 
 describe('live DSP reconfiguration with real WASM', () => {
+	it.each([{ iqFormat: 'int8' }, { iqFormat: 'int16' }, { iqFormat: 'float32' }, { floatIq: true }])(
+		'uses the input centre for tuning $iqFormat (shared band: $floatIq)',
+		async (format) => {
+			const rx = await receiver();
+			const { DspProcessor } = await import('/wasm/dsp/browsdr_dsp.js');
+			const shift = vi.spyOn(DspProcessor.prototype, 'set_shift');
+			try {
+				const params = { freq: 100.25, mode: 'am', bandwidth: 10000, enabled: false };
+				await rx.send({ type: 'init', sampleRate: 1920000, centerFreq: 100, params });
+				await rx.send({ type: 'process', ...format, centerFreq: 100.1, params, chunkLen: 0, chunkId: 0 });
+				await rx.send({ type: 'configure', centerFreq: 101, params });
+				// Hardware retunes apply to raw samples; a channelized band retains its own centre.
+				const center = format.floatIq ? 100.1 : 101;
+				expect(shift).toHaveBeenLastCalledWith(1920000, (params.freq - center) * 1e6);
+				await rx.send({ type: 'init', sampleRate: 1920000, centerFreq: 100, params });
+				await rx.send({ type: 'configure', centerFreq: 101, params });
+				expect(shift).toHaveBeenLastCalledWith(1920000, -750000);
+			} finally {
+				shift.mockRestore();
+			}
+		},
+	);
+	it.each([false, true])('matches native int16 and float PCM with full-size input buffers (SAB=%s)', async (useSab) => {
+		const rx = await receiver();
+		const params = { freq: 100, mode: 'nfm', bandwidth: 12500, enabled: true, squelchEnabled: false, deEmphasis: 'none' };
+		const input = new Int16Array(262144);
+		for (let i = 0; i < input.length / 2; i++) {
+			const phase = 0.02 * Math.sin((2 * Math.PI * 1000 * i) / 1e6);
+			input[2 * i] = Math.round(1000 * Math.cos(phase));
+			input[2 * i + 1] = Math.round(1000 * Math.sin(phase));
+		}
+		const pool = new SharedArrayBuffer(input.byteLength);
+		new Int16Array(pool).set(input);
+		const process = async (iqFormat, samples) => {
+			await rx.send({ type: 'init', sampleRate: 1e6, centerFreq: 100, params, sabs: [pool] });
+			const output = [];
+			for (let chunkId = 0; chunkId < 3; chunkId++) {
+				await rx.send({
+					type: 'process',
+					params,
+					iqFormat,
+					chunkLen: samples.length,
+					chunk: samples.buffer,
+					useSab: useSab && iqFormat === 'int16',
+					sabIndex: 0,
+					chunkId,
+				});
+				expect(rx.messages.at(-1).type).toBe('audio');
+				output.push(...new Float32Array(rx.messages.at(-1).samples));
+			}
+			return output;
+		};
+		const full = await process('int16', input);
+		const float = await process(
+			'float32',
+			Float32Array.from(input, (value) => value / 32768),
+		);
+		expect(full.length).toBeGreaterThan(0);
+		expect(full.every(Number.isFinite)).toBe(true);
+		expect(full).toEqual(float);
+	});
 	it.each([
 		{ freq: 131.55, mode: 'nfm', bandwidth: 12500, enabled: false, acars: true, squelchEnabled: false },
 		{ freq: 121.475, mode: 'am', bandwidth: 10000, enabled: true, squelchEnabled: true },

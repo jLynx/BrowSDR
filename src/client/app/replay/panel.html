@@ -1,0 +1,25 @@
+<div v-if="receiver.iqReplay && receiver.connected" class="iq-replay" aria-label="IQ file replay">
+	<p class="iq-replay-name">{{ receiver.iqReplay.recording.file.name }}</p>
+	<progress :value="receiver.iqReplay.progress.seconds" :max="receiver.iqReplay.progress.duration" aria-label="Replay progress"></progress>
+	<p role="status">
+		{{ receiver.iqReplay.progress.state }} · {{ receiver.iqReplay.progress.seconds.toFixed(1) }} / {{
+		receiver.iqReplay.progress.duration.toFixed(1) }} s · 1×
+	</p>
+	<div class="iq-replay-actions">
+		<UiButton variant="primary" :disabled="busy || receiver.iqReplayReplacing" @click="receiver.togglePlay()"
+			>{{ receiver.running ? 'Pause replay' : 'Play replay' }}</UiButton
+		><UiButton :disabled="busy || receiver.iqReplayReplacing" @click="restart">Restart</UiButton>
+		<UiButton :disabled="busy || receiver.iqReplayReplacing" @click="receiver.iqReplayReplace = true; receiver.showIqReplayLoader = true"
+			>Change recording</UiButton
+		>
+	</div>
+	<p v-if="receiver.iqReplay.progress.error" role="alert">{{ receiver.iqReplay.progress.error }}</p>
+	<p v-if="receiver.iqReplay.progress.delaySeconds > 0.1">
+		Playback delayed by {{ receiver.iqReplay.progress.delaySeconds.toFixed(1) }} s due to file reading or scheduling.
+	</p>
+	<p>Centre and sample rate come from the recording. Tune VFOs within its bandwidth.</p>
+	<p v-if="receiver.iqReplay.recording.missingSamples">
+		The original capture reported {{ receiver.iqReplay.recording.missingSamples }} missing samples.
+	</p>
+	<p v-else-if="receiver.iqReplay.recording.missingSamples !== 0">Original sample continuity is unknown.</p>
+</div>

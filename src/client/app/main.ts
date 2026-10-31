@@ -49,6 +49,9 @@ import { rtl433Methods } from './decoders/rtl433';
 import HeaderTools from './workspace/receiver-tools';
 import DiscoveryPanel from './discovery/panel';
 import IqCapturePanel from './recording/panel';
+import IqReplayLoader from './replay/loader';
+import IqReplayPanel from './replay/panel';
+import { replayMethods } from './replay/connection';
 import * as uiComponents from '@/ui';
 import { coreCapabilityIssues } from '@/platform/browser-capabilities';
 
@@ -77,6 +80,8 @@ const Receiver = {
 		HeaderTools,
 		DiscoveryPanel,
 		IqCapturePanel,
+		IqReplayLoader,
+		IqReplayPanel,
 	},
 	provide(this: AppInstance) {
 		return { receiver: this };
@@ -89,6 +94,7 @@ const Receiver = {
 	methods: {
 		...uiHelperMethods,
 		...connectionMethods,
+		...replayMethods,
 		...canvasMethods,
 		...audioMethods,
 		...vfoMethods,
@@ -328,6 +334,10 @@ function watchRadioFrequency(this: AppInstance) {
 	this.$watch(
 		() => [this.radio.sampleRate, this.radio.fftSize],
 		async (newVals: number[], oldVals: number[]) => {
+			if (this.iqReplay && newVals[0] !== this.iqReplay.recording.sampleRate) {
+				this.radio.sampleRate = this.iqReplay.recording.sampleRate;
+				return;
+			}
 			this.saveSetting();
 			this.view.zoomScale = 1.0;
 			this.view.zoomOffset = 0.0;

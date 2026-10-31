@@ -1,9 +1,10 @@
 import { errorMessage } from '@/platform/errors';
+import { iqPrecisionControl, selectedIqBits } from '@/radio/iq/format';
 import { registerDriver } from '@/radio/sdr-device';
 import type { GainControl, SdrDevice, SdrDeviceInfo } from '@/radio/types';
 import { bufferMask, findChannel, findDevice, parseIioContext, parseSampleFormat } from './context';
 import { IiodPipe } from './iiod';
-import { isSupportedSampleFormat, narrowIq } from './samples';
+import { convertIq, isSupportedSampleFormat } from './samples';
 import { PlutoThroughput } from './throughput';
 import type { IioAttributeTarget, IioChannel, IioContext, IioDevice, IioSampleFormat, IiodUsbInterface, PlutoRxSession } from './types';
 import { closePipe, findIiodInterface, openPipe, resetPipes } from './usb';
@@ -56,8 +57,13 @@ export class PlutoSdrDevice implements SdrDevice {
 	readonly deviceType = 'plutosdr';
 	// 2.4 MSPS and above run without a custom FIR; USB 2.0 carries 16-bit IQ continuously to about 6 MSPS.
 	readonly sampleRates = [2400000, 3000000, 4000000, 5000000, 6000000];
-	readonly sampleFormat = 'int8' as const;
+	readonly nativeIqBits = 12;
+	private iqBits: 8 | 12 | 16 = 12;
+	get sampleFormat() {
+		return this.iqBits === 8 ? ('int8' as const) : ('int16' as const);
+	}
 	readonly gainControls: GainControl[] = [
+		iqPrecisionControl(12),
 		{ name: 'Gain Mode', min: 0, max: 3, step: 1, default: 0, labels: ['Manual', 'Slow AGC', 'Fast AGC', 'Hybrid AGC'], type: 'select' },
 		{ name: 'RF', min: 0, max: 73, step: 1, default: 40, type: 'slider' },
 	];
@@ -210,6 +216,9 @@ export class PlutoSdrDevice implements SdrDevice {
 
 	async setGain(name: string, value: number): Promise<void> {
 		switch (name) {
+			case 'IQ Precision':
+				this.setIqPrecision(value);
+				break;
 			case 'Gain Mode': {
 				const mode = Math.round(clamp(value, [0, GAIN_MODES.length - 1]));
 				await this.write(this.rxPath, 'gain_control_mode', GAIN_MODES[mode]);
@@ -227,9 +236,17 @@ export class PlutoSdrDevice implements SdrDevice {
 	}
 
 	async setGains(gains: Record<string, number>): Promise<void> {
+		if (gains['IQ Precision'] !== undefined) this.setIqPrecision(gains['IQ Precision']);
 		if (gains.RF !== undefined) this.gain = gains.RF;
 		if (gains['Gain Mode'] !== undefined) await this.setGain('Gain Mode', gains['Gain Mode']);
 		else if (this.gainMode === 0) await this.applyManualGain();
+	}
+
+	/** Host-side only: USB always carries 16-bit words, and the DSP format is fixed while receiving. */
+	private setIqPrecision(selection: number): void {
+		const bits = selectedIqBits(12, selection);
+		if (this.session && bits !== this.iqBits) throw new Error('Stop reception before changing IQ precision');
+		this.iqBits = bits;
 	}
 
 	private async applyManualGain(): Promise<void> {
@@ -310,17 +327,18 @@ export class PlutoSdrDevice implements SdrDevice {
 			if (this.session !== session) continue;
 			request();
 			const processing = performance.now();
-			callback(this.narrow(chunks, bytes));
+			callback(this.convert(chunks, bytes));
 			started();
 			throughput.block(samples, processing - waiting, performance.now() - processing);
 		}
 	}
 
-	private narrow(chunks: Uint8Array[], bytes: number): Int8Array {
-		const iq = new Int8Array(bytes / (this.rxFormat.storageBits / 8));
+	private convert(chunks: Uint8Array[], bytes: number): Int8Array | Int16Array {
+		const IqArray = this.iqBits === 8 ? Int8Array : Int16Array;
+		const iq = new IqArray(bytes / (this.rxFormat.storageBits / 8));
 		let offset = 0;
 		for (const chunk of chunks) {
-			narrowIq(chunk, this.rxFormat, iq, offset >> 1);
+			convertIq(chunk, this.rxFormat, iq, offset >> 1);
 			offset += chunk.byteLength;
 		}
 		return iq;

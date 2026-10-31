@@ -30,6 +30,7 @@ export class LoraReceiver {
 		private clockPpm: number,
 		private onPacket: (packet: LoraPacket) => void,
 		private onInvalid: () => void = () => {},
+		private validate?: (packet: LoraPacket) => boolean,
 	) {
 		this.spectrum = new ChirpSpectrum(this.samples, profile.oversample);
 	}
@@ -105,7 +106,8 @@ export class LoraReceiver {
 			this.spectrum.peak(aligned - 2 * this.symbol, false, cfo).bin,
 			this.spectrum.peak(aligned - this.symbol, false, cfo).bin,
 		];
-		if (sync.some((bin, i) => Math.abs(signedBin(bin - this.profile.sync[i])) > 2)) return;
+		const matches = (expected: [number, number]) => sync.every((bin, i) => Math.abs(signedBin(bin - expected[i])) <= 2);
+		if (!matches(this.profile.sync) && !(this.profile.alternateSync && matches(this.profile.alternateSync))) return;
 		this.counters.syncs++;
 		this.frame = { start: aligned + 2.25 * this.symbol, cfo, sync };
 	}
@@ -125,16 +127,34 @@ export class LoraReceiver {
 			// Publish the observed symbols only after the explicit header checksum passes.
 			this.counters.syncSymbols = frame.sync;
 		}
-		if (frame.start + frame.header.symbols * step + 4 >= this.samples.end) return false;
-		const bins = Array.from({ length: frame.header.symbols }, (_, i) => this.spectrum.peak(frame.start + i * step, false, frame.cfo).bin);
-		const packet = decodePayload(bins, frame.header, this.profile.ldro, (frame.cfo * this.profile.bandwidth) / 128);
+		if (frame.start + frame.header.symbols * (step + this.symbol * 20e-6) + 4 >= this.samples.end) return false;
+		const recovered = this.payload(frame, frame.header, step);
+		const packet = recovered.packet;
 		this.counters.payloads++;
 		this.counters.codingErrors += packet.codingErrors ?? 0;
 		if (packet.verified) this.counters.packets++;
 		else if (packet.hasCrc) this.counters.crcErrors++;
-		this.onPacket(packet);
-		this.finish(frame.start + frame.header.symbols * step);
+		this.onPacket({ ...packet, startSample: frame.start });
+		this.finish(frame.start + frame.header.symbols * recovered.step);
 		return true;
+	}
+	private payload(frame: { start: number; cfo: number }, header: LoraHeader, step: number) {
+		const decode = (timing: number) => {
+			const bins = Array.from({ length: header.symbols }, (_, i) => this.spectrum.peak(frame.start + i * timing, false, frame.cfo).bin);
+			return decodePayload(bins, header, this.profile.ldro, (frame.cfo * this.profile.bandwidth) / 128);
+		};
+		const valid = (packet: LoraPacket) => packet.verified || this.validate?.(packet) === true;
+		const packet = decode(step);
+		if (valid(packet) || (!header.hasCrc && !this.validate) || header.symbols <= 24) return { packet, step };
+		// Long packets accumulate sample-clock error. Retry a bounded neighbourhood of
+		// the configured timing, accepting a retry only with a radio/application checksum.
+		for (const delta of [-5, 5, -10, 10, -15, 15, -20, 20]) {
+			if (Math.abs(this.clockPpm + delta) > 200) continue;
+			const timing = step + (this.symbol * delta) / 1e6;
+			const candidate = decode(timing);
+			if (valid(candidate)) return { packet: candidate, step: timing };
+		}
+		return { packet, step };
 	}
 	private finish(at: number): void {
 		this.cursor = Math.ceil(at);

@@ -1,6 +1,8 @@
-import { computed, defineComponent, inject, ref } from 'vue';
+import { computed, defineComponent, inject, ref, watch } from 'vue';
 import type { AppInstance } from '@/app/core/receiver.types';
 import * as components from '@/ui';
+import { recordingBytesPerSample, selectedIqBits } from '@/radio/iq/format';
+import type { RecordingFormat } from '@/radio/iq/types';
 import { IQ_MEMORY_LIMIT, iqCaptureByteLength } from '@/worker/recording/limits';
 import type { IqCaptureWindow } from './types';
 import { formatIqSize } from './sigmf';
@@ -26,27 +28,41 @@ export default defineComponent({
 		const duration = ref(5),
 			unit = ref(1);
 		const mode = ref('timed');
+		const precisionBits = computed(() => {
+			const native = receiver.deviceCapabilities?.nativeIqBits;
+			return native === 12 || native === 16 ? selectedIqBits(native, receiver.gains['IQ Precision'] ?? 0) : 8;
+		});
+		const format = ref<RecordingFormat>(precisionBits.value > 8 ? 'ci16_le' : 'ci8');
+		watch(precisionBits, (bits) => {
+			if (bits === 8) format.value = 'ci8';
+		});
+		const bytesPerSample = computed(() => recordingBytesPerSample(format.value));
 		const seconds = computed(() => (mode.value === 'manual' ? null : duration.value * unit.value));
 		const pickFile = (window as IqCaptureWindow).showSaveFilePicker?.bind(window);
 		const byteLength = computed(() => {
 			try {
 				if (seconds.value === null) return IQ_MEMORY_LIMIT;
-				return iqCaptureByteLength(receiver.radio.sampleRate, seconds.value);
+				return iqCaptureByteLength(receiver.radio.sampleRate, seconds.value, format.value);
 			} catch {
 				return 0;
 			}
 		});
 		const saveToFile = computed(() => (seconds.value === null ? !!pickFile : byteLength.value > IQ_MEMORY_LIMIT));
-		const blockedReason = computed(() => recordingBlockedReason(receiver, byteLength.value, !!pickFile));
+		const blockedReason = computed(() => recordingBlockedReason(receiver, byteLength.value, !!pickFile, bytesPerSample.value));
 		const { active, status, stopping, data, metadata, filename, backendCaptureStarted, progress, capture, stop, cancel } = useIqSession(
 			receiver,
 			seconds,
 			saveToFile,
 			blockedReason,
 			pickFile,
+			format,
+			precisionBits,
 		);
 		return {
 			receiver,
+			format,
+			precisionBits,
+			bytesPerSample,
 			duration,
 			unit,
 			mode,
@@ -60,7 +76,9 @@ export default defineComponent({
 			metadata,
 			saveToFile,
 			size: computed(() =>
-				seconds.value === null ? `${formatIqSize(receiver.radio.sampleRate * 2)} / second` : formatIqSize(byteLength.value),
+				seconds.value === null
+					? `${formatIqSize(receiver.radio.sampleRate * bytesPerSample.value)} / second`
+					: formatIqSize(byteLength.value),
 			),
 			capture,
 			stop,

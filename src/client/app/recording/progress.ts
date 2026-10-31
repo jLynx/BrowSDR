@@ -1,6 +1,7 @@
 import { computed, onBeforeUnmount, shallowRef, type Ref } from 'vue';
 import type { AppInstance } from '@/app/core/receiver.types';
 import type { IqCaptureProgress } from '@/worker/recording/types';
+import { recordingBytesPerSample } from '@/radio/iq/format';
 import { formatIqSize } from './sigmf';
 
 export function useIqProgress(
@@ -39,7 +40,7 @@ export function useIqProgress(
 		status: computed(() => {
 			const value = progress.value;
 			if (!isCapturing() || !value) return status.value;
-			const capturedSeconds = value.capturedBytes / 2 / receiver.radio.sampleRate;
+			const capturedSeconds = value.capturedBytes / recordingBytesPerSample(value.format ?? 'ci8') / receiver.radio.sampleRate;
 			if (value.phase === 'finalizing')
 				return `Finalizing ${formatIqSize(value.writtenBytes)}… The browser is checking and committing the temporary file. Large recordings can take several minutes. Keep this tab open.`;
 			if (value.phase === 'flushing' || stopping.value)

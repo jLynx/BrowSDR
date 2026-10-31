@@ -55,7 +55,7 @@ export class DspProcessor {
      */
     constructor(in_sample_rate, shift_hz, bandwidth) {
         const ret = wasm.dspprocessor_new(in_sample_rate, shift_hz, bandwidth);
-        this.__wbg_ptr = ret;
+        this.__wbg_ptr = ret >>> 0;
         DspProcessorFinalization.register(this, this.__wbg_ptr, this);
         return this;
     }
@@ -246,6 +246,28 @@ export class FFT {
         wasm.fft_fft(this.__wbg_ptr, ptr0, len0, ptr1, len1, result);
     }
     /**
+     * @param {Float32Array} input
+     * @param {Float32Array} result
+     */
+    fft_f32(input, result) {
+        const ptr0 = passArrayF32ToWasm0(input, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        var ptr1 = passArrayF32ToWasm0(result, wasm.__wbindgen_malloc);
+        var len1 = WASM_VECTOR_LEN;
+        wasm.fft_fft_f32(this.__wbg_ptr, ptr0, len0, ptr1, len1, result);
+    }
+    /**
+     * @param {Int16Array} input
+     * @param {Float32Array} result
+     */
+    fft_i16(input, result) {
+        const ptr0 = passArray16ToWasm0(input, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        var ptr1 = passArrayF32ToWasm0(result, wasm.__wbindgen_malloc);
+        var len1 = WASM_VECTOR_LEN;
+        wasm.fft_fft_i16(this.__wbg_ptr, ptr0, len0, ptr1, len1, result);
+    }
+    /**
      * Zero-copy FFT: takes a raw pointer to i8 IQ data, returns a raw pointer to f32 output.
      * The returned pointer is valid until the next call to `fft` or `fft_ptr`.
      * @param {number} iq_ptr
@@ -269,7 +291,7 @@ export class FFT {
         const ptr0 = passArrayF32ToWasm0(window_, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.fft_new(n, ptr0, len0);
-        this.__wbg_ptr = ret;
+        this.__wbg_ptr = ret >>> 0;
         FFTFinalization.register(this, this.__wbg_ptr, this);
         return this;
     }
@@ -304,7 +326,7 @@ export class SharedChannelizer {
         const ptr0 = passArray32ToWasm0(centers, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
         const ret = wasm.sharedchannelizer_new(ratio, ptr0, len0);
-        this.__wbg_ptr = ret;
+        this.__wbg_ptr = ret >>> 0;
         SharedChannelizerFinalization.register(this, this.__wbg_ptr, this);
         return this;
     }
@@ -331,6 +353,22 @@ export class SharedChannelizer {
         const ptr0 = passArray8ToWasm0(input, wasm.__wbindgen_malloc);
         const len0 = WASM_VECTOR_LEN;
         wasm.sharedchannelizer_process(this.__wbg_ptr, ptr0, len0);
+    }
+    /**
+     * @param {Float32Array} input
+     */
+    process_f32(input) {
+        const ptr0 = passArrayF32ToWasm0(input, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.sharedchannelizer_process_f32(this.__wbg_ptr, ptr0, len0);
+    }
+    /**
+     * @param {Int16Array} input
+     */
+    process_i16(input) {
+        const ptr0 = passArray16ToWasm0(input, wasm.__wbindgen_malloc);
+        const len0 = WASM_VECTOR_LEN;
+        wasm.sharedchannelizer_process_i16(this.__wbg_ptr, ptr0, len0);
     }
     /**
      * @param {number} count
@@ -367,19 +405,31 @@ export function free_iq_buffer(ptr, capacity) {
     wasm.free_iq_buffer(ptr, capacity);
 }
 
+/**
+ * Normalize full-scale signed int16 IQ into the existing float DSP input buffer.
+ * Callers own both allocations and pass at most their allocated component count.
+ * @param {number} input
+ * @param {number} output
+ * @param {number} count
+ */
+export function normalize_i16_to_f32(input, output, count) {
+    wasm.normalize_i16_to_f32(input, output, count);
+}
+
 export function set_panic_hook() {
     wasm.set_panic_hook();
 }
+
 function __wbg_get_imports() {
     const import0 = {
         __proto__: null,
-        __wbg___wbindgen_copy_to_typed_array_88899a52af046901: function(arg0, arg1, arg2) {
+        __wbg___wbindgen_copy_to_typed_array_5294f8e46aecc086: function(arg0, arg1, arg2) {
             new Uint8Array(arg2.buffer, arg2.byteOffset, arg2.byteLength).set(getArrayU8FromWasm0(arg0, arg1));
         },
-        __wbg___wbindgen_throw_41e9ee4f547fc59a: function(arg0, arg1) {
+        __wbg___wbindgen_throw_39bc967c0e5a9b58: function(arg0, arg1) {
             throw new Error(getStringFromWasm0(arg0, arg1));
         },
-        __wbg_error_757e9472f8410341: function(arg0, arg1) {
+        __wbg_error_a6fa202b58aa1cd3: function(arg0, arg1) {
             let deferred0_0;
             let deferred0_1;
             try {
@@ -419,13 +469,13 @@ function __wbg_get_imports() {
 
 const DspProcessorFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
-    : new FinalizationRegistry(ptr => wasm.__wbg_dspprocessor_free(ptr, 1));
+    : new FinalizationRegistry(ptr => wasm.__wbg_dspprocessor_free(ptr >>> 0, 1));
 const FFTFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
-    : new FinalizationRegistry(ptr => wasm.__wbg_fft_free(ptr, 1));
+    : new FinalizationRegistry(ptr => wasm.__wbg_fft_free(ptr >>> 0, 1));
 const SharedChannelizerFinalization = (typeof FinalizationRegistry === 'undefined')
     ? { register: () => {}, unregister: () => {} }
-    : new FinalizationRegistry(ptr => wasm.__wbg_sharedchannelizer_free(ptr, 1));
+    : new FinalizationRegistry(ptr => wasm.__wbg_sharedchannelizer_free(ptr >>> 0, 1));
 
 function getArrayU8FromWasm0(ptr, len) {
     ptr = ptr >>> 0;
@@ -449,7 +499,16 @@ function getFloat32ArrayMemory0() {
 }
 
 function getStringFromWasm0(ptr, len) {
-    return decodeText(ptr >>> 0, len);
+    ptr = ptr >>> 0;
+    return decodeText(ptr, len);
+}
+
+let cachedUint16ArrayMemory0 = null;
+function getUint16ArrayMemory0() {
+    if (cachedUint16ArrayMemory0 === null || cachedUint16ArrayMemory0.byteLength === 0) {
+        cachedUint16ArrayMemory0 = new Uint16Array(wasm.memory.buffer);
+    }
+    return cachedUint16ArrayMemory0;
 }
 
 let cachedUint32ArrayMemory0 = null;
@@ -466,6 +525,13 @@ function getUint8ArrayMemory0() {
         cachedUint8ArrayMemory0 = new Uint8Array(wasm.memory.buffer);
     }
     return cachedUint8ArrayMemory0;
+}
+
+function passArray16ToWasm0(arg, malloc) {
+    const ptr = malloc(arg.length * 2, 2) >>> 0;
+    getUint16ArrayMemory0().set(arg, ptr / 2);
+    WASM_VECTOR_LEN = arg.length;
+    return ptr;
 }
 
 function passArray32ToWasm0(arg, malloc) {
@@ -555,13 +621,13 @@ if (!('encodeInto' in cachedTextEncoder)) {
 
 let WASM_VECTOR_LEN = 0;
 
-let wasmModule, wasmInstance, wasm;
+let wasmModule, wasm;
 function __wbg_finalize_init(instance, module) {
-    wasmInstance = instance;
     wasm = instance.exports;
     wasmModule = module;
     cachedDataViewMemory0 = null;
     cachedFloat32ArrayMemory0 = null;
+    cachedUint16ArrayMemory0 = null;
     cachedUint32ArrayMemory0 = null;
     cachedUint8ArrayMemory0 = null;
     wasm.__wbindgen_start();
@@ -570,15 +636,11 @@ function __wbg_finalize_init(instance, module) {
 
 async function __wbg_load(module, imports) {
     if (typeof Response === 'function' && module instanceof Response) {
-        if (!module.ok) {
-            throw new Error(`failed to fetch Wasm: ${module.status} ${module.statusText} fetching '${module.url}'`);
-        }
-
         if (typeof WebAssembly.instantiateStreaming === 'function') {
             try {
                 return await WebAssembly.instantiateStreaming(module, imports);
             } catch (e) {
-                const validResponse = expectedResponseType(module.type);
+                const validResponse = module.ok && expectedResponseType(module.type);
 
                 if (validResponse && module.headers.get('Content-Type') !== 'application/wasm') {
                     console.warn("`WebAssembly.instantiateStreaming` failed because your server does not serve Wasm with `application/wasm` MIME type. Falling back to `WebAssembly.instantiate` which is slower. Original error:\n", e);

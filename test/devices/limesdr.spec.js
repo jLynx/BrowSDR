@@ -644,7 +644,7 @@ describe('LimeSDR receive configuration', () => {
 			} else {
 				expect(callback).toHaveBeenCalledOnce();
 				expect(callback.mock.calls[0][0]).toHaveLength((size / 4096) * (packed ? 2720 : 2040));
-				expect(Array.from(callback.mock.calls[0][0].slice(0, 4))).toEqual([64, -8, 64, -8]);
+				expect(Array.from(callback.mock.calls[0][0].slice(0, 4))).toEqual([16384, -2048, 16384, -2048]);
 			}
 			// Keep USB reads fed, but exclude IQ while the LO is being recovered.
 			driver.sxReady = false;
@@ -709,7 +709,7 @@ describe('LimeSDR RX channel selection', () => {
 	afterEach(() => vi.restoreAllMocks());
 
 	it('advertises RX1 and RX2 with RX1 as the default', () => {
-		expect(new LimeSDRDevice().gainControls[0]).toMatchObject({
+		expect(new LimeSDRDevice().gainControls.find((control) => control.name === 'RX Channel')).toMatchObject({
 			name: 'RX Channel',
 			min: 0,
 			max: 1,

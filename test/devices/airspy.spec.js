@@ -204,7 +204,7 @@ describe('Airspy receive lifecycle', () => {
 		const { device, usb, pending } = await connected();
 		const callback = vi.fn();
 		await device.startRx(callback);
-		expect(device.sampleFormat).toBe('int8');
+		expect(device.sampleFormat).toBe('int16');
 		expect(usb.controlTransferIn).toHaveBeenLastCalledWith(expect.objectContaining({ request: 26, index: 0 }), 1);
 		expect(usb.transferIn).toHaveBeenCalledTimes(4);
 		const bytes = adcTone(0.05, 4096);
@@ -214,7 +214,7 @@ describe('Airspy receive lifecycle', () => {
 		expect(callback).not.toHaveBeenCalled();
 		reads[0].resolve({ status: 'ok', data: view(bytes.slice(0, 1024)) });
 		await flush();
-		const expected = new AirspyIqConverter().process(view(bytes.slice(0, 2048)));
+		const expected = new AirspyIqConverter(12).process(view(bytes.slice(0, 2048)));
 		expect(callback.mock.calls.flatMap(([iq]) => [...iq])).toEqual([...expected]);
 		reads.slice(2).forEach(({ resolve }) => pending.push({ resolve }));
 		await device.stopRx();
@@ -222,7 +222,7 @@ describe('Airspy receive lifecycle', () => {
 		await device.startRx(callback);
 		pending.shift().resolve({ status: 'ok', data: view(bytes.slice(0, 1024)) });
 		await flush();
-		expect([...callback.mock.lastCall[0]]).toEqual([...new AirspyIqConverter().process(view(bytes.slice(0, 1024)))]);
+		expect([...callback.mock.lastCall[0]]).toEqual([...new AirspyIqConverter(12).process(view(bytes.slice(0, 1024)))]);
 		await device.stopRx();
 	});
 	it('cancels blocked reads by closing/reopening USB after a bounded stop wait', async () => {

@@ -192,12 +192,31 @@
 						<p class="rtk-caption">Changes the selected VFO to the measured signal frequency.</p>
 					</template>
 					<p v-else-if="vfo.rtkProfile === 'rtk3'" class="rtk-caption">
-						RTK3 support follows the published RBS03 protocol and has not been tested with hardware. Tune the VFO to an active channel in
-						the waterfall. Hopping bases send intermittent bursts on each channel; automatic hop following is not available.
+						RTK3 support follows the published RBS03 protocol and has been verified against recorded IQ. Tune the VFO to an active channel
+						in the waterfall, or enable the measured New Zealand hop plan below. A fixed VFO receives intermittent channel visits.
 					</p>
 					<p v-if="vfo.rtkProfile === 'rtk2'" class="rtk-caption">
-						RTK2 can change channel during startup. If this preset is quiet, tune to its active signal in the waterfall.
+						RTK2 can use a fixed channel or hop between channels. If this preset is quiet, tune to its active signal in the waterfall.
 					</p>
+					<template v-if="vfo.rtkProfile === 'rtk2' || vfo.rtkProfile === 'rtk3'">
+						<UiCheckbox
+							v-model="vfo.rtkFollowHops"
+							:label="'Follow recorded NZ ' + vfo.rtkProfile.toUpperCase() + ' hops'"
+							:input-label="'Follow recorded NZ ' + vfo.rtkProfile.toUpperCase() + ' hops'"
+							@change="update"
+						/>
+						<p v-if="vfo.rtkProfile === 'rtk3'" class="rtk-caption">
+							Follows 25 channels from 915.401 to 927.401 MHz within the receiver bandwidth. Use 20 MSPS or higher. This measured plan may
+							differ on other bases.
+						</p>
+						<p v-else class="rtk-caption">
+							Follows the recorded 18-slot RTK2-compatible sequence from 915.491 to 927.391 MHz. Use 20 MSPS or higher. Enable only for a
+							base using this measured plan.
+						</p>
+						<p v-if="status?.hopFrequencyMHz !== undefined" class="rtk-caption">
+							{{ status.hopTracking ? 'Following' : 'Waiting for a beacon on' }} {{ status.hopFrequencyMHz.toFixed(3) }} MHz.
+						</p>
+					</template>
 					<label class="rtk-field"
 						>Sample timing adjustment (ppm)<input
 							v-model.number="vfo.rtkClockPpm"
@@ -208,7 +227,9 @@
 							aria-label="RTK sample clock correction"
 							@change="update"
 					/></label>
-					<p class="rtk-caption">Measured presets: 20 for RTK1, 10 for RTK2. RTK3 starts at 0; adjust for your receiver.</p>
+					<p class="rtk-caption">
+						Presets: 20 for RTK1, 10 for RTK2, 0 for RTK3. Long packets retry nearby timing with checksum validation.
+					</p>
 					<p class="rtk-caption">
 						A strong waterfall signal can still lose packets through interference or sample timing mismatch. Timing presets are not
 						calibrated for every SDR; GNSS signal quality describes the satellites at the base, not this radio link.
@@ -294,6 +315,10 @@
 								<dt>Validated containers</dt>
 								<dd>{{ status.containers ?? 0 }}</dd>
 							</div>
+							<div v-if="vfo.rtkProfile === 'rtk2' && status.compactPackets">
+								<dt>Verified compact packets</dt>
+								<dd>{{ status.compactPackets }}</dd>
+							</div>
 							<div>
 								<dt>{{ vfo.rtkProfile === 'rtk2' ? 'Rejected RTCM frames' : 'Invalid RTCM containers' }}</dt>
 								<dd>{{ status.containerErrors ?? 0 }}</dd>
@@ -311,9 +336,10 @@
 						are observed counter increments, not a measurement of USB loss.
 					</p>
 					<p v-if="status && vfo.rtkProfile === 'rtk2'" class="rtk-caption">
-						RTK2 packets require CRC8 and container CRC16/MODBUS; corrections also require RTCM CRC24Q. Keepalives carry no corrections.
-						Sequence gaps count skipped base packet numbers, not USB loss. Packets missed before header detection do not increase checksum
-						errors; missing fragments can delay complete corrections.
+						RTK2 packets require CRC8; the container format also requires CRC16/MODBUS. Compact packets carry raw correction bytes.
+						Corrections require RTCM CRC24Q. Compact packets have no verified sequence counter; sequence gaps describe the container format.
+						Keepalives carry no corrections. Packets missed before header detection do not increase checksum errors; missing fragments can
+						delay complete corrections.
 					</p>
 					<template v-if="station">
 						<p v-if="station.address !== undefined">
