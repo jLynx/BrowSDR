@@ -9,7 +9,7 @@ import { decodeRtk2Frame } from '@/worker/decoders/rtk/rtk2/frame';
 import { decodeRtk3Frame } from '@/worker/decoders/rtk/rtk3/frame';
 import { RtkHopFollower } from '@/worker/decoders/rtk/hopping/follower';
 import { stationKey } from '@/worker/decoders/rtk/station-key';
-import { RTK_PROFILES, RTK_RATE, profileName, physicalProfile } from './profiles';
+import { RTK_PROFILES, RTK_RATE, profileName, physicalProfile, channelSampleRate } from './profiles';
 import type { RadioObservation, ChannelOptions } from './types';
 import { errorMessage } from '@/platform/errors';
 import { verifiedObservation } from './policy';
@@ -40,11 +40,15 @@ export class RtkChannel {
 	private lora?: LoraReceiver;
 	private hopping?: RtkHopFollower;
 	private inputRate = 0;
+	private channelRate = RTK_RATE;
 	private centerHz = 0;
 	private inputTime = 0;
 	private channelEpoch = 0;
 	private lastEmit = 0;
 	private status = initialStatus();
+	get headerDetected(): boolean {
+		return !!this.lora?.counters.headers;
+	}
 	constructor(
 		private Processor: typeof DspProcessor,
 		private memory: { buffer: ArrayBuffer },
@@ -64,6 +68,7 @@ export class RtkChannel {
 		}
 		const name = physicalProfile(params.rtkProfile),
 			profile = RTK_PROFILES[name];
+		this.channelRate = channelSampleRate(profile, this.options.lowRate250);
 		const ppm = params.rtkClockPpm ?? (name === 'rtk3' ? 0 : name === 'rtk1' ? 20 : 10);
 		const follow = name !== 'rtk1' && params.rtkFollowHops === true;
 		const key = JSON.stringify([params.freq, rate, center, name, ppm, follow, params.rtkFollowSource]);
@@ -77,7 +82,7 @@ export class RtkChannel {
 		if (
 			params.freq < 900 ||
 			params.freq > 930 ||
-			rate < RTK_RATE ||
+			rate < this.channelRate ||
 			Math.abs(params.freq - center) * 1e6 + profile.bandwidth * 0.6 > rate / 2
 		) {
 			this.fail('Tune a 900–930 MHz RTK signal inside the received band, at 1 MSPS or higher.');
@@ -88,7 +93,7 @@ export class RtkChannel {
 			this.configureChannel(profile, rate, center, params.freq, follow, params.rtkFollowSource);
 			this.tracker = name === 'rtk3' ? new Rtk3Tracker() : name === 'rtk2' ? new Rtk2Tracker() : new RtkTracker();
 			this.lora = new LoraReceiver(
-				profile,
+				{ ...profile, oversample: this.channelRate / profile.bandwidth },
 				ppm,
 				(packet) => this.packet(packet),
 				() => {
@@ -117,11 +122,12 @@ export class RtkChannel {
 					`${this.profile.toUpperCase()} NZ hop following needs ${((this.hopping.minimumHz - 150000) / 1e6).toFixed(3)}–${((this.hopping.maximumHz + 150000) / 1e6).toFixed(3)} MHz inside the received band. Use a suitable centre and 20 MSPS or higher.`,
 				);
 		}
-		this.direct = !follow && !this.options.filterInput && rate === RTK_RATE && Math.abs(frequency - center) < 0.000001;
+		this.direct = !follow && !this.options.filterInput && rate === this.channelRate && Math.abs(frequency - center) < 0.000001;
 		if (!this.direct) {
 			this.ddc =
-				this.options.takeDdc?.() ?? new this.Processor(rate, (this.hopping?.frequencyHz ?? frequency * 1e6) - this.centerHz, RTK_RATE);
-			this.ddc.set_if_sample_rate(RTK_RATE);
+				this.options.takeDdc?.() ??
+				new this.Processor(rate, (this.hopping?.frequencyHz ?? frequency * 1e6) - this.centerHz, this.channelRate);
+			this.ddc.set_if_sample_rate(this.channelRate);
 			this.ddc.set_bandwidth(profile.bandwidth * 1.2);
 		}
 	}
@@ -141,12 +147,12 @@ export class RtkChannel {
 				profile: this.profile,
 				packet,
 				frequencyHz: this.hopping?.frequencyHz ?? this.frequency * 1e6,
-				time: this.channelEpoch + packet.startSample / RTK_RATE,
+				time: this.channelEpoch + packet.startSample / this.channelRate,
 			});
 	}
 	private beacon(packet: LoraPacket): void {
 		if (packet.startSample === undefined) return;
-		const time = this.channelEpoch + packet.startSample / RTK_RATE;
+		const time = this.channelEpoch + packet.startSample / this.channelRate;
 		if (this.profile === 'rtk3') {
 			const frame = decodeRtk3Frame(packet);
 			if (frame?.beaconMs !== undefined) this.hopping!.beacon(stationKey({ ...frame, netId: frame.address }), time);
@@ -177,6 +183,7 @@ export class RtkChannel {
 	useInput(rate: number, center: number, time: number, takeDdc?: () => DspProcessor | undefined): void {
 		this.ddc?.free();
 		this.options = { takeDdc };
+		// Retain the acquisition sample rate and LoRa history convention during promotion.
 		this.configureChannel(RTK_PROFILES[this.profile], rate, center, this.frequency, false);
 		this.startAt(time);
 	}
@@ -187,7 +194,7 @@ export class RtkChannel {
 	private startAt(time: number): void {
 		this.inputTime = time;
 		this.channelEpoch = time;
-		this.status.samples = time * RTK_RATE;
+		this.status.samples = time * this.channelRate;
 		this.lora!.reset();
 	}
 	endFollowing(): void {

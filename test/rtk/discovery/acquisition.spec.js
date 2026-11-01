@@ -40,15 +40,17 @@ function survey(start = 919, end = start + 0.05) {
 }
 
 describe('RTK discovery burst acquisition', () => {
-	it('checks an activity candidate at the next boundary, then resumes the full sweep without resetting inventory', () => {
+	it('checks an activity candidate immediately alongside the sweep without resetting inventory', () => {
 		const test = survey(919, 919.2);
 		test.feed(mockRtkIq());
 		test.feed(mockRtkIq());
 		test.stream.offerCandidates([919.173, 929, NaN], 1000000, 919);
 		expect(test.snapshot().stations).toHaveLength(1);
+		test.silence(0.06);
+		expect(test.snapshot().status.scan).toMatchObject({ frequencyMHz: 919, activityFrequenciesMHz: [919.173] });
+		test.silence(0.8);
+		expect(test.snapshot().status.scan.activityFrequenciesMHz).toEqual([]);
 		test.silence(6.5);
-		expect(test.snapshot().status.scan).toMatchObject({ frequencyMHz: 919.173, activityCandidate: true });
-		test.silence(6.4);
 		expect(test.snapshot().status.scan).toMatchObject({ frequencyMHz: 919.05, activityCandidate: false });
 		expect(test.snapshot().stations).toHaveLength(1);
 		test.stream.reset();

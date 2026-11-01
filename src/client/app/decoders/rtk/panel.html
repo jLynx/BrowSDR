@@ -29,8 +29,9 @@
 					NZ acquisition channels: {{ status.scan.priorityFrequenciesMHz.map(f => f.toFixed(3)).join(', ') }} MHz
 				</p>
 				<p v-if="status?.scan?.activityCandidate || status?.scan?.activityCandidatesMHz?.length" class="rtk-caption">
-					Signal activity: {{ status.scan.activityCandidate ? 'checking a detected signal' : 'watching the received spectrum' }} · {{
-					status.scan.activityCandidatesMHz?.length || 0 }} candidate frequencies queued
+					Signal activity: {{ status.scan.activityFrequenciesMHz?.length ? 'checking ' + status.scan.activityFrequenciesMHz.map(f =>
+					f.toFixed(3)).join(', ') + ' MHz ' + (status.scan.historySeconds ? 'alongside the sweep' : 'before resuming the sweep') :
+					'watching the received spectrum' }} · {{ status.scan.activityCandidatesMHz?.length || 0 }} candidate frequencies queued
 				</p>
 				<p class="rtk-caption" aria-label="RTK tracking VFOs">
 					{{ trackingCount }} tracking {{ trackingCount === 1 ? 'VFO' : 'VFOs' }} · Scout keeps searching

@@ -2,6 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { RtkActivityCandidates } from '@/worker/decoders/rtk/discovery/candidates';
 
 describe('RTK spectrum candidate queue', () => {
+	it('avoids duplicating the sweep and other active acquisition channels', () => {
+		const queue = new RtkActivityCandidates();
+		queue.offer([921.11, 922.11, 923.11], 0, 915, 928, 919);
+		expect(queue.take(0, [921.12, 922.12])).toBe(923.11);
+		expect(queue.frequencies(0)).toEqual([]);
+	});
 	it('bounds, deduplicates and clips ranked hints to the requested range', () => {
 		const queue = new RtkActivityCandidates();
 		queue.offer([NaN, 914, 919, 921.111, 921.112, 922, 929], 0, 915, 928, 919);

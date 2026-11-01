@@ -3,7 +3,7 @@ import type { VfoParams } from '@/worker/runtime/types';
 import type { RtkMessage, RtkProfile } from '@/worker/decoders/rtk/types';
 import { RtkChannel } from './channel';
 import { RtkAutoDetection, hopPlanAvailability } from './policy';
-import { timingPpm, RTK_RATE } from './profiles';
+import { timingPpm, RTK_RATE, acquisitionProfiles } from './profiles';
 import { RtkAcquisition } from './acquisition';
 import { errorMessage } from '@/platform/errors';
 import { Rtk3Tracker } from '@/worker/decoders/rtk/rtk3/tracker';
@@ -11,7 +11,6 @@ import { decodeRtk3Frame } from '@/worker/decoders/rtk/rtk3/frame';
 import { decodeRtk2Frame } from '@/worker/decoders/rtk/rtk2/frame';
 import type { RadioObservation } from './types';
 
-const profiles: RtkProfile[] = ['rtk1', 'rtk2'];
 const decisions = {
 	fixed: 'Listening on the tuned channel',
 	checking: 'Checking the NZ hop plan',
@@ -54,7 +53,10 @@ export class RtkAutoReceiver {
 		this.detection = new RtkAutoDetection(params.rtkFollowSource || undefined);
 		if (params.rtk) {
 			try {
-				this.acquisition.configure(rate, center, params.freq);
+				const profiles = acquisitionProfiles(params.rtkFollowSource);
+				const narrow = rate > RTK_RATE && profiles.length === 1 && profiles[0] === 'rtk2';
+				const inputRate = narrow ? 500000 : RTK_RATE;
+				this.acquisition.configure(rate, center, params.freq, inputRate);
 				for (const profile of profiles) {
 					const channel = new RtkChannel(
 						this.Processor,
@@ -63,14 +65,15 @@ export class RtkAutoReceiver {
 						(input) => this.observe(input),
 						{
 							searchBoth250: profile === 'rtk2',
-							filterInput: profile === 'rtk2' && rate > RTK_RATE,
+							filterInput: profile === 'rtk2' && rate > RTK_RATE && !narrow,
+							lowRate250: profile === 'rtk2' && rate > RTK_RATE,
 							invalid: () => this.rtk3Tracker.discontinuity(),
 						},
 					);
 					this.channels.set(profile, channel);
 					channel.configure(
 						{ ...params, rtkProfile: profile, rtkClockPpm: timingPpm[profile], rtkFollowHops: false },
-						RTK_RATE,
+						inputRate,
 						params.freq,
 					);
 				}
@@ -142,7 +145,7 @@ export class RtkAutoReceiver {
 				this.memory,
 				(message) => this.receive('rtk3', message),
 				(input) => this.detection.observe(input),
-				{ takeDdc: () => this.acquisition.take() },
+				{ takeDdc: () => this.acquisition.take(), lowRate250: this.rate > RTK_RATE },
 			);
 			channel.configure({ ...this.params!, rtkProfile: 'rtk3', rtkClockPpm: timingPpm.rtk3, rtkFollowHops: false }, this.rate, this.center);
 			channel.adoptTracker(this.rtk3Tracker, this.time);

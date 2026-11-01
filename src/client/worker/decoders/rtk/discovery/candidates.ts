@@ -21,10 +21,10 @@ export class RtkActivityCandidates {
 		for (const [previous, visited] of this.tried) if (Math.abs(previous - frequency) < 0.05 && time - visited < 30) return true;
 		return false;
 	}
-	take(time: number, nextFrequency?: number): number | undefined {
+	take(time: number, blocked?: number | number[]): number | undefined {
+		const frequencies = blocked === undefined ? [] : typeof blocked === 'number' ? [blocked] : blocked;
 		this.pending = this.pending.filter(
-			(candidate) =>
-				time - candidate.seen <= 30 && (nextFrequency === undefined || Math.abs(candidate.frequencyMHz - nextFrequency) >= 0.05),
+			(candidate) => time - candidate.seen <= 30 && !frequencies.some((frequency) => Math.abs(candidate.frequencyMHz - frequency) < 0.05),
 		);
 		const next = this.pending.shift();
 		if (!next) return;

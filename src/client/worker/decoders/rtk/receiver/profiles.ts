@@ -5,6 +5,17 @@ export function physicalProfile(profile?: RtkProfileMode): RtkProfile {
 }
 
 export const RTK_RATE = 1000000;
+
+export function channelSampleRate(profile: LoraProfile | undefined, lowRate250?: boolean): number {
+	return lowRate250 && profile?.bandwidth === 250000 ? 500000 : RTK_RATE;
+}
+
+/** Verified source keys let a source-locked Auto tracker avoid unrelated PHY work. */
+export function acquisitionProfiles(source?: string): Array<'rtk1' | 'rtk2'> {
+	if (source?.startsWith('rtk2-') || source?.startsWith('rtk3-')) return ['rtk2'];
+	if (source && /^\d+\.\d+\.\d+$/.test(source)) return ['rtk1'];
+	return ['rtk1', 'rtk2'];
+}
 export const RTK_PROFILES: Record<RtkProfile, LoraProfile> = {
 	rtk1: { bandwidth: 500000, oversample: 2, sync: [40, 36], ldro: true },
 	rtk2: { bandwidth: 250000, oversample: 4, sync: [16, 8], alternateSync: [8, 16], ldro: false },

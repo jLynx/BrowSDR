@@ -12,7 +12,7 @@ export function analyseDiscoveryFrame(frame: DiscoveryFrame, tracker: SignalTrac
 			centerMHz: frame.config.centerHz / 1e6,
 			sampleRate: frame.config.sampleRate,
 			// RTK hints are independent of the generic tool's minimum-width setting.
-			signals: detectSignals(frame.data, { ...frame.config, thresholdDb: 8, minWidthHz: 0, excludeDc: true }),
+			signals: detectSignals(frame.rtkData ?? frame.data, { ...frame.config, thresholdDb: 8, minWidthHz: 0, excludeDc: true }),
 		};
 	return result;
 }

@@ -6,13 +6,13 @@ import { RTK_RATE } from './profiles';
 export class RtkAcquisition {
 	private ddc?: DspProcessor;
 	constructor(private Processor: typeof DspProcessor) {}
-	configure(rate: number, center: number, frequency: number): void {
+	configure(rate: number, center: number, frequency: number, outputRate = RTK_RATE): void {
 		if (frequency < 900 || frequency > 930 || rate < RTK_RATE || Math.abs(frequency - center) * 1e6 + 150000 > rate / 2)
 			throw new Error('Tune a 900–930 MHz RTK signal inside the received band, at 1 MSPS or higher.');
-		if (rate === RTK_RATE && Math.abs(frequency - center) < 0.000001) return;
-		this.ddc = new this.Processor(rate, (frequency - center) * 1e6, RTK_RATE);
-		this.ddc.set_if_sample_rate(RTK_RATE);
-		this.ddc.set_bandwidth(600000);
+		if (rate === outputRate && Math.abs(frequency - center) < 0.000001) return;
+		this.ddc = new this.Processor(rate, (frequency - center) * 1e6, outputRate);
+		this.ddc.set_if_sample_rate(outputRate);
+		this.ddc.set_bandwidth(outputRate * 0.6);
 	}
 	process(ptr: number, values: number, floatInput: boolean): IqInput {
 		if (!this.ddc) return { ptr, values, floatInput };
