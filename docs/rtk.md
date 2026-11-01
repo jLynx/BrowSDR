@@ -142,10 +142,11 @@ band** keeps the current tuning. Recordings and remote receive bands stay fixed;
 a range outside them needs a wider recording or a host receiver adjustment.
 
 There is no fixed limit on tracking VFOs. Disable or remove trackers you no longer
-need. Removing a tracker suppresses its automatic recreation for that receive
-session. Restarting reception, restarting or replacing an IQ recording, or changing
-the range or receive band begins a fresh survey and allows removed trackers to be
-created again. Existing trackers, including manually disabled ones, are reused.
+need. Removing a tracker suppresses its automatic recreation for the current
+survey. Toggling the scout's **Decode** off and on, restarting reception, restarting
+or replacing an IQ recording, or changing the range or receive band begins a fresh
+survey and allows removed trackers to be created again. Existing trackers,
+including manually disabled ones, are reused.
 Disabling automatic tracking stops new allocations. Stopping the scout leaves its
 existing trackers running; stop each tracker or reception to stop them all.
 
