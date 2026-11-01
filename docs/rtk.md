@@ -9,6 +9,9 @@ verified Mammotion RTK1 and RTK2 wrappers and an experimental RTK3 / RBS03 decod
 Other RTK radio protocols still need
 their own decoders.
 
+For hardware names, app catalogue mappings and unresolved version associations, see the
+[Mammotion model reference](../src/client/worker/decoders/rtk/receiver/model-reference.md).
+
 ## Automatic and manual reception
 
 Choose **Decoder settings → Auto · detect type and hopping** and tune the VFO to
