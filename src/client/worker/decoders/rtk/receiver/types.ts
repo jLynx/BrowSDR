@@ -19,6 +19,7 @@ export interface IqInput {
 }
 
 export interface ChannelOptions {
+	lowRate250?: boolean;
 	takeDdc?: () => DspProcessor | undefined;
 	searchBoth250?: boolean;
 	filterInput?: boolean;

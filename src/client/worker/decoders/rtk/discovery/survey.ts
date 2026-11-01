@@ -14,6 +14,9 @@ export class RtkSurvey {
 	private channels: RtkChannel[] = [];
 	private epoch = 0;
 	private frequency = 0;
+	get headerDetected(): boolean {
+		return this.channels.some((channel) => channel.headerDetected);
+	}
 	constructor(
 		private Processor: typeof DspProcessor,
 		private memory: { buffer: ArrayBuffer },
@@ -31,7 +34,9 @@ export class RtkSurvey {
 		this.catalog.discontinuity();
 		this.epoch = epoch;
 		this.frequency = frequency;
-		this.acquisition.configure(rate, center, frequency);
+		const narrow = rate > RTK_RATE && this.profiles.length === 1 && this.profiles[0] === 'rtk2';
+		const inputRate = narrow ? 500000 : RTK_RATE;
+		this.acquisition.configure(rate, center, frequency, inputRate);
 		for (const profile of this.profiles) {
 			const channel = new RtkChannel(
 				this.Processor,
@@ -40,11 +45,12 @@ export class RtkSurvey {
 				(radio) => this.observe(radio),
 				{
 					searchBoth250: profile === 'rtk2',
-					filterInput: profile === 'rtk2' && rate > RTK_RATE,
+					lowRate250: profile === 'rtk2' && rate > RTK_RATE,
+					filterInput: profile === 'rtk2' && rate > RTK_RATE && !narrow,
 					observerOnly: true,
 					invalid: () => {
-						this.catalog.discontinuity(profile);
-						if (profile === 'rtk2') this.catalog.discontinuity('rtk3');
+						this.catalog.rejectCandidate(profile);
+						if (profile === 'rtk2') this.catalog.rejectCandidate('rtk3');
 					},
 				},
 			);
@@ -59,7 +65,7 @@ export class RtkSurvey {
 					rtkFollowHops: false,
 					rtkFollowSource: '',
 				},
-				RTK_RATE,
+				inputRate,
 				frequency,
 			);
 		}

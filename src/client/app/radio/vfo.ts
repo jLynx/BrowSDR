@@ -2,6 +2,7 @@ import type { AppInstance } from '@/app/core/receiver.types';
 import type { Vfo } from '@/app/core/types';
 import { makeDefaultVfo, MODE_DEFAULTS } from '@/app/core/constants';
 import { isValidDisplayFrequencyMhz, minimumDisplayFrequencyMhz } from '@/radio/frequency-shift';
+import { resetDiscoveryFollowers } from '@/app/decoders/rtk/discovery/followers';
 
 function rtkEnabled(vfo: Vfo, inBandwidth: boolean): boolean {
 	return !!vfo.rtk && (vfo.rtkProfile === 'scan' || inBandwidth);
@@ -68,8 +69,11 @@ export const vfoMethods = {
 		vfo.highPass = false;
 	},
 	updateBackendVfoParams(this: AppInstance, index: number) {
-		if (this.backend && this.running && index >= 0 && index < this.vfos.length) {
-			const vfo = this.vfos[index];
+		const vfo = this.vfos[index];
+		if (!vfo) return;
+		// Disabling the scout ends its allocation session, including while reception is stopped.
+		if (!vfo.rtk || vfo.rtkProfile !== 'scan') resetDiscoveryFollowers(this, vfo);
+		if (this.backend && this.running) {
 			// Force-disable VFOs that are outside the tunable bandwidth
 			// to prevent the DSP from processing out-of-range frequencies
 			const inBandwidth = this.isFreqInBandwidth(vfo.freq);

@@ -32,7 +32,9 @@ describe('automatic hop probing through the streaming path', () => {
 				this.shift = shift;
 				created++;
 			}
-			set_if_sample_rate() {}
+			set_if_sample_rate(rate) {
+				this.outputRate = rate;
+			}
 			set_bandwidth() {}
 			set_shift(rate, shift) {
 				this.shift = shift;
@@ -43,11 +45,13 @@ describe('automatic hop probing through the streaming path', () => {
 				freed++;
 			}
 			process_iq_only_ptr(ptr, values) {
-				const start = Math.floor((rawOffset + ptr) / 40) * 2,
-					end = Math.floor((rawOffset + ptr + values) / 40) * 2;
-				this.count = end - start;
+				const step = this.outputRate === 500000 ? 2 : 1;
+				const start = Math.floor((rawOffset + ptr) / (40 * step)) * 2 * step,
+					end = Math.floor((rawOffset + ptr + values) / (40 * step)) * 2 * step;
+				this.count = (end - start) / step;
 				const output = new Float32Array(memory.buffer, 327680, this.count);
-				if (hopping || Math.abs(this.shift + 7717000) < 1) output.set(source.subarray(start, end));
+				if (hopping || Math.abs(this.shift + 7717000) < 1)
+					for (let i = 0; i < this.count; i++) output[i] = source[start + Math.floor(i / 2) * 2 * step + (i % 2)];
 				else output.fill(0);
 				return 327680;
 			}
@@ -55,6 +59,16 @@ describe('automatic hop probing through the streaming path', () => {
 				return this.count;
 			}
 			process_iq_only_f32_ptr(ptr, values) {
+				if (this.outputRate === 500000) {
+					const input = new Float32Array(memory.buffer, ptr, values);
+					this.count = Math.floor(values / 4) * 2;
+					const output = new Float32Array(memory.buffer, 491520, this.count);
+					for (let i = 0; i < this.count / 2; i++) {
+						output[i * 2] = input[i * 4];
+						output[i * 2 + 1] = input[i * 4 + 1];
+					}
+					return 491520;
+				}
 				this.count = values;
 				return ptr;
 			}

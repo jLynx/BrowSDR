@@ -5,11 +5,13 @@ import { stationKey } from '@/worker/decoders/rtk/station-key';
 
 const receivers = new WeakMap<AppInstance, Followers>();
 
-/** A fresh input stream can rediscover bases whose trackers were removed earlier. */
-export function resetDiscoveryFollowers(receiver: AppInstance): void {
+/** A fresh input stream or restarted scout can recreate removed tracking VFOs. */
+export function resetDiscoveryFollowers(receiver: AppInstance, vfo?: DiscoveryVfo): void {
 	const state = receivers.get(receiver);
 	// Keep the allocation queue so old in-flight work and new reports remain serialized.
-	if (state) state.scouts = new WeakMap();
+	if (!state) return;
+	if (vfo) state.scouts.delete(vfo);
+	else state.scouts = new WeakMap();
 }
 
 export function trackingVfo(receiver: AppInstance, source: string, profile: RtkProfile): number {

@@ -28,6 +28,11 @@
 				<p v-if="status?.scan?.priorityFrequenciesMHz?.length" class="rtk-caption">
 					NZ acquisition channels: {{ status.scan.priorityFrequenciesMHz.map(f => f.toFixed(3)).join(', ') }} MHz
 				</p>
+				<p v-if="status?.scan?.activityCandidate || status?.scan?.activityCandidatesMHz?.length" class="rtk-caption">
+					Signal activity: {{ status.scan.activityFrequenciesMHz?.length ? 'checking ' + status.scan.activityFrequenciesMHz.map(f =>
+					f.toFixed(3)).join(', ') + ' MHz ' + (status.scan.historySeconds ? 'alongside the sweep' : 'before resuming the sweep') :
+					'watching the received spectrum' }} · {{ status.scan.activityCandidatesMHz?.length || 0 }} candidate frequencies queued
+				</p>
 				<p class="rtk-caption" aria-label="RTK tracking VFOs">
 					{{ trackingCount }} tracking {{ trackingCount === 1 ? 'VFO' : 'VFOs' }} · Scout keeps searching
 				</p>
@@ -276,13 +281,14 @@
 						</p>
 						<p v-if="scanError" class="rtk-caption rtk-estimate" role="alert">{{ scanError }}</p>
 						<p class="rtk-caption">
-							Checks known fixed channels and NZ hop plans, then continues the full range sweep. Creates a muted, source-locked Auto VFO for
-							each discovered base. A tracker may need one 15–18 s hop lap to acquire its base. Broad sweeps can take several minutes.
+							Uses Signal Discovery to prioritise detected activity, while continuing the full range sweep and known-channel checks. Creates
+							a muted, source-locked Auto VFO for each discovered base. A tracker may need one 15–18 s hop lap to acquire its base. Broad
+							sweeps can take several minutes.
 						</p>
 						<p class="rtk-caption">
 							Use Decode to stop the scout. Tracking VFOs keep running until you disable or remove them. Removed trackers stay removed for
-							this receive session; restarting reception or reloading a recording lets the scout add them again. Turning off automatic
-							tracking stops new VFOs being added.
+							this survey; toggling Decode off and on, restarting reception or reloading a recording lets the scout add them again. Turning
+							off automatic tracking stops new VFOs being added.
 						</p>
 					</template>
 					<template v-if="vfo.rtkProfile === 'auto'">

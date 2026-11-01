@@ -9,6 +9,9 @@ verified Mammotion RTK1 and RTK2 wrappers and an experimental RTK3 / RBS03 decod
 Other RTK radio protocols still need
 their own decoders.
 
+For hardware names, app catalogue mappings and unresolved version associations, see the
+[Mammotion model reference](../src/client/worker/decoders/rtk/receiver/model-reference.md).
+
 ## Automatic and manual reception
 
 Choose **Decoder settings → Auto · detect type and hopping** and tune the VFO to
@@ -57,15 +60,67 @@ visits. RTK2 network/address and both RTK3 address words keep overlapping bases
 separate. A base appears once within discovery as its observed channels grow.
 **Hops observed** means that the same verified identity was received on multiple
 distinct channels. **Hopping not yet observed** does not establish a fixed base.
+Rejected LoRa headers discard unsafe correction fragments without erasing
+previously verified identity evidence. Sweep retunes reset pending confirmation
+and correction reassembly. Activity probes can combine distinct verified identity
+frames within 20 seconds across visits; actual IQ gaps clear unconfirmed votes.
 
-The scout first checks the measured RTK1 channel and fixed RTK2 channel at
-915.191 MHz, then visits measured RTK3 acquisition channels for a full lap,
-while a temporary second channel checks the measured RTK2 acquisition channel
-for 18 seconds at sample rates up to 20 MSPS. Higher rates use one sequential
-scout channel to avoid overloading its worker. The second channel is released
-afterward to limit CPU load; the sequential scout also covers a full RTK2 lap.
+The scout first checks the measured RTK1 channel at 923.118 MHz and fixed RTK2
+channel at 915.191 MHz for about 6.37 seconds each, then visits measured RTK3 acquisition channels for a full lap,
+while a temporary helper checks the measured RTK2 acquisition channel
+for 18 seconds at sample rates up to 20 MSPS. Live spectrum candidates replace
+that helper with activity probes, reusing its CPU budget. The sequential scout
+also covers a full RTK2 lap.
 The subsequent sweep uses at most 50 kHz between channel centres and
-about 1.37 seconds per visit. Broad ranges can take several minutes per pass;
+about 1.37 seconds per visit. A checksum-verified data frame from an unconfirmed
+source allows up to 6.37 seconds after that frame is decoded for a second frame
+to confirm that base. This can also extend a known-channel visit when its first
+frame arrives late. Each visit extends only once, by at most 6.37 seconds;
+invalid packets and empty channels retain short visits, and new overlapping
+candidates cannot extend a visit indefinitely.
+While a local or IQ replay scout is enabled, the existing Signal Discovery
+worker also analyses the full received FFT up to four times per second, even
+when its panel is closed or its manual discovery switch is off. It uses an
+independent 8 dB threshold and ranks activity by strength and estimated width.
+The 250/500 kHz PHY widths are hints: short chirps can appear narrow, and wide
+overlapping signals can be missed. Spectrum activity never identifies a base
+without verified RTK frames. RTK hints use per-bin peaks accumulated across the
+intervening display frames, preserving short bursts through subsequent silence.
+The generic Signal Discovery tool still receives the current spectrum.
+
+Detected frequencies inside the requested range enter a bounded queue of 32
+candidate channels. Independent activity probes check candidates alongside the
+range sweep, without waiting for a long sweep visit to end. There are two activity
+slots at sample rates up to 2 MSPS and one from there through 20 MSPS; startup is staggered, and
+only one slot catches up on history at a time. A 30-second retry cooldown and
+stale-candidate expiry keep persistent non-RTK peaks from monopolising acquisition.
+Above 20 MSPS, hints are checked between sequential sweep visits, without extra
+probes or IQ history copying. This keeps the additional acquisition workload
+bounded when input chunks arrive much faster. Use 20 MSPS for full-band NZ
+discovery with concurrent probes and lookback.
+
+The scout retains up to 0.5 seconds of full-band IQ, bounded to 64 MiB, preserving
+the input's byte or float precision. A new probe starts up to 0.25 seconds before
+its hint, so a packet can still be recovered after the spectrum analysis arrives.
+History decoding processes at most two incoming chunks' worth per delivery,
+then switches to live IQ. A probe tries the shared 250 kHz RTK2/RTK3 PHY first;
+without a valid header or frame after 0.25 seconds of decoded IQ, it retries the
+500 kHz RTK1 PHY from history. Ordinary probes last about 0.75 seconds; a verified
+fixed-format frame allows one bounded confirmation extension. Lookback copies
+of the same packet cannot count as two identity votes. Input gaps, format changes
+and overwritten probe cursors retire pending probes and unconfirmed proofs.
+
+Wide-band 250 kHz acquisition uses a 500 kSPS subchannel. Source-locked Auto
+trackers skip unrelated PHYs while still requiring verified radio evidence to
+select a generation. Verified bases retain separate tracking workers; acquisition
+slots are temporary and do not impose a tracking VFO limit.
+
+Known NZ frequencies are optional acquisition shortcuts, not a universal
+Mammotion frequency assignment. The full sweep continues without activity
+hints, including remote-client surveys, whose candidates are not forwarded to
+the host yet. Bursts missed by every display FFT still rely on the sweep.
+
+Broad ranges can take several minutes per pass;
 the panel shows the channel and remaining time. Scanning continues until
 decoding or reception stops. The short evening recording ends before a whole
 915–928 MHz sweep finishes, but its initial visits identify the three targeted
@@ -87,10 +142,11 @@ band** keeps the current tuning. Recordings and remote receive bands stay fixed;
 a range outside them needs a wider recording or a host receiver adjustment.
 
 There is no fixed limit on tracking VFOs. Disable or remove trackers you no longer
-need. Removing a tracker suppresses its automatic recreation for that receive
-session. Restarting reception, restarting or replacing an IQ recording, or changing
-the range or receive band begins a fresh survey and allows removed trackers to be
-created again. Existing trackers, including manually disabled ones, are reused.
+need. Removing a tracker suppresses its automatic recreation for the current
+survey. Toggling the scout's **Decode** off and on, restarting reception, restarting
+or replacing an IQ recording, or changing the range or receive band begins a fresh
+survey and allows removed trackers to be created again. Existing trackers,
+including manually disabled ones, are reused.
 Disabling automatic tracking stops new allocations. Stopping the scout leaves its
 existing trackers running; stop each tracker or reception to stop them all.
 
@@ -103,22 +159,24 @@ must fit inside reception. A centre near 921.4 MHz at 20 MSPS includes it.
 The scout and followers shift their own decoder channels; they do not retune the
 SDR, top VFO or audio channel.
 
-The latest 60-second IQ replay found four targeted identities in about 20 seconds
-and created four independent followers. All four confirmed NZ hopping and
-recovered corrections, with no reported DSP drops or detected input-chunk gaps.
-Three recovered positions; one RTK3 follower recovered corrections but no position
-frame in that replay. Discovery and following do not guarantee every transmitted
-frame is recovered. A separate built-in-browser replay also found four identities.
-Restarting with four existing trackers had 17 dropped IQ buffers early in reception;
-the count stayed unchanged through the rest of the recording. Discovery timing
-and startup drops vary with browser scheduling and competing work.
+An offline replay of the newest 60-second recording confirmed three RTK3 identities
+at about 3.3, 5.5 and 14.8 seconds, and the compact RTK2 identity at 49.3 seconds.
+The isolated scout averaged 4.8 ms of processing per 6.6 ms input chunk at 20 MSPS.
+These timings are specific to that recording and the FFT hint schedule. Browser
+replay also confirmed all four identities and created independent trackers.
+Discovery and following do not guarantee every transmitted frame or position
+correction is recovered. Browser scheduling and competing work can still cause
+IQ drops; an offline replay that feeds every chunk does not measure live loss.
 
-Live LimeSDR testing also kept the fixed RTK1 and RTK2 bases updating their
-positions and satellites while the scout moved on. Narrow-band checks at 1, 2,
-5 and 10 MSPS had no DSP IQ drops. Full-band testing at 20 and 61.44 MSPS showed
-stable DSP after startup; the 61.44 MSPS run still had startup drops and upstream
-LimeSDR sample-counter gaps. Those source gaps are separate from decoder workload.
-20 MSPS is the recommended starting point for this setup.
+Live LimeSDR checks of this acquisition implementation recovered RTK1 corrections
+at 1, 2, 5 and 10 MSPS without reported DSP IQ drops. At 20 MSPS, both local fixed
+RTK1 and RTK2 bases updated their positions and satellites while the scout moved
+on. One run had no DSP drops; another had a small number of dropped buffers.
+The 61.44 MSPS full-band check still lost DSP IQ buffers and did not reliably
+confirm the scout's identities, while existing trackers continued decoding.
+LimeSDR sample counters also reported upstream source gaps, which are separate
+from decoder buffer loss. These are short hardware checks, not a long-duration
+reliability measurement. 20 MSPS remains the recommended rate for this setup.
 
 Discovery searches the supported RTK1/2/3 protocols. Weak signals, simultaneous
 collisions, intermittent transmissions, other spreading factors and unknown
