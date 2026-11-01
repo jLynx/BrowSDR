@@ -43,8 +43,8 @@ export class RtkSurvey {
 					filterInput: profile === 'rtk2' && rate > RTK_RATE,
 					observerOnly: true,
 					invalid: () => {
-						this.catalog.discontinuity(profile);
-						if (profile === 'rtk2') this.catalog.discontinuity('rtk3');
+						this.catalog.rejectCandidate(profile);
+						if (profile === 'rtk2') this.catalog.rejectCandidate('rtk3');
 					},
 				},
 			);

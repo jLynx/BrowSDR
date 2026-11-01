@@ -416,6 +416,18 @@ export class Backend {
 			this.vfoStates[index].rdsDecoder = null;
 		}
 	}
+	setRtkDiscoveryCandidates(frequenciesMHz: number[], centerFreq: number, sampleRate: number): void {
+		if (centerFreq !== this._centerFreq || sampleRate !== this._sampleRate) return;
+		this.vfoParams?.forEach((params, index) => {
+			if (params.rtk && params.rtkProfile === 'scan')
+				this.dspWorkers?.[index]?.postMessage({
+					type: 'rtk_candidates',
+					frequenciesMHz: frequenciesMHz.slice(0, 32),
+					centerFreq,
+					sampleRate,
+				});
+		});
+	}
 
 	addVfo(): number {
 		if (!this.vfoParams) return -1;

@@ -11,6 +11,7 @@ describe('RTK range discovery planning', () => {
 	it('sweeps while concurrent priority lanes cover full measured NZ laps', () => {
 		const plan = surveyPlan(915, 928, 20000000, 923.118);
 		expect(plan.slice(0, 5).map((channel) => channel.frequencyMHz)).toEqual([923.118, 915.191, 915.401, 921.401, 921.791]);
+		expect(plan[0].seconds).toBeGreaterThan(6);
 		expect(plan[1].seconds).toBeGreaterThan(3);
 		expect(plan[2].seconds).toBeGreaterThan(15);
 		expect(plan[3].seconds).toBeGreaterThan(15);

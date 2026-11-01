@@ -8,6 +8,21 @@ import { mockRtk2Compact } from '../../fixtures/rtk/mock-rtk2';
 const radio = (packet, frequencyHz = 915401000, time = 1, profile = 'rtk3') => verifiedObservation({ packet, frequencyHz, time, profile });
 
 describe('RTK discovery inventory', () => {
+	it('clears unconfirmed evidence on retune or a profile discontinuity', () => {
+		const catalog = new RtkDiscoveryCatalog();
+		catalog.observe(radio(mockRtk3Packet(mockRtk3Container(undefined, 1), 4242, 100)));
+		expect(catalog.awaitingConfirmation).toBe(true);
+		catalog.discontinuity('rtk2');
+		expect(catalog.awaitingConfirmation).toBe(true);
+		catalog.rejectCandidate('rtk3');
+		expect(catalog.awaitingConfirmation).toBe(true);
+		catalog.discontinuity('rtk3');
+		expect(catalog.awaitingConfirmation).toBe(false);
+		catalog.observe(radio(mockRtk3Packet(mockRtk3Container(undefined, 2), 4242, 100)));
+		expect(catalog.awaitingConfirmation).toBe(true);
+		catalog.discontinuity();
+		expect(catalog.awaitingConfirmation).toBe(false);
+	});
 	it('merges independent scout lanes without joining fragments or losing positions and latest acquisition channels', () => {
 		const first = new RtkDiscoveryCatalog(),
 			second = new RtkDiscoveryCatalog();
@@ -55,9 +70,12 @@ describe('RTK discovery inventory', () => {
 		const catalog = new RtkDiscoveryCatalog();
 		catalog.observe(radio(mockRtk3Packet(mockRtk3Container(undefined, 1), 4242, 100)));
 		expect(catalog.snapshot()).toEqual([]);
+		expect(catalog.awaitingConfirmation).toBe(true);
 		catalog.observe(radio(mockRtk3Packet(mockRtk3Container(undefined, 2), 4242, 100), 915401000, 2));
+		expect(catalog.awaitingConfirmation).toBe(false);
 		expect(catalog.snapshot()[0]).toMatchObject({ rtcmCount: 2, reference: { latitude: 0, longitude: 0 } });
 		catalog.discontinuity();
+		expect(catalog.awaitingConfirmation).toBe(false);
 		catalog.observe(radio(mockRtk3Beacon(4242, 100, 100), 921401000, 16));
 		expect(catalog.snapshot()[0].reference).toBeDefined();
 		expect(catalog.flush()).toHaveLength(2);

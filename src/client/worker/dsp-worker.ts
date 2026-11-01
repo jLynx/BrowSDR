@@ -152,6 +152,9 @@ self.onmessage = async (e: MessageEvent<DspInput>) => {
 	await startup();
 
 	switch (msg.type) {
+		case 'rtk_candidates':
+			rtk.offerCandidates(msg.frequenciesMHz, msg.sampleRate, msg.centerFreq);
+			break;
 		case 'release_bands':
 			bandPool?.release(msg.batchId);
 			break;

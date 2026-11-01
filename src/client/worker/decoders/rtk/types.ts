@@ -37,6 +37,8 @@ export interface RtkStatus {
 		pass: number;
 		remainingSeconds: number;
 		priorityFrequenciesMHz?: number[];
+		activityCandidate?: boolean;
+		activityCandidatesMHz?: number[];
 	};
 	detectedProfile?: RtkProfile;
 	hopDecision?: RtkHopDecision;

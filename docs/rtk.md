@@ -60,15 +60,41 @@ visits. RTK2 network/address and both RTK3 address words keep overlapping bases
 separate. A base appears once within discovery as its observed channels grow.
 **Hops observed** means that the same verified identity was received on multiple
 distinct channels. **Hopping not yet observed** does not establish a fixed base.
+Rejected LoRa headers discard unsafe correction fragments without erasing
+previously verified identity evidence. Retuning and actual IQ gaps still reset
+unconfirmed identities and correction reassembly.
 
-The scout first checks the measured RTK1 channel and fixed RTK2 channel at
-915.191 MHz, then visits measured RTK3 acquisition channels for a full lap,
+The scout first checks the measured RTK1 channel at 923.118 MHz and fixed RTK2
+channel at 915.191 MHz for about 6.37 seconds each, then visits measured RTK3 acquisition channels for a full lap,
 while a temporary second channel checks the measured RTK2 acquisition channel
 for 18 seconds at sample rates up to 20 MSPS. Higher rates use one sequential
 scout channel to avoid overloading its worker. The second channel is released
 afterward to limit CPU load; the sequential scout also covers a full RTK2 lap.
 The subsequent sweep uses at most 50 kHz between channel centres and
-about 1.37 seconds per visit. Broad ranges can take several minutes per pass;
+about 1.37 seconds per visit. A checksum-verified data frame from an unconfirmed
+source allows up to 6.37 seconds after that frame is decoded for a second frame
+to confirm that base. This can also extend a known-channel visit when its first
+frame arrives late. Each visit extends only once, by at most 6.37 seconds;
+invalid packets and empty channels retain short visits, and new overlapping
+candidates cannot extend a visit indefinitely.
+While a local or IQ replay scout is enabled, the existing Signal Discovery
+worker also analyses the full received FFT up to four times per second, even
+when its panel is closed or its manual discovery switch is off. It uses an
+independent 8 dB threshold and ranks activity by strength and estimated width.
+The 250/500 kHz PHY widths are hints: short chirps can appear narrow, and wide
+overlapping signals can be missed. Spectrum activity never identifies a base
+without verified RTK frames.
+
+Detected frequencies inside the requested range enter a bounded queue of 32
+candidate channels. At a visit boundary, the scout checks one candidate before
+resuming the range sweep, with a 30-second retry cooldown and stale-candidate
+expiry. It uses the existing scout filters; no additional IQ lane is created.
+Known NZ frequencies are optional acquisition shortcuts, not a universal
+Mammotion frequency assignment. The full sweep continues without activity
+hints, including remote-client surveys, whose candidates are not forwarded to
+the host yet. Short bursts missed by the display FFT still rely on the sweep.
+
+Broad ranges can take several minutes per pass;
 the panel shows the channel and remaining time. Scanning continues until
 decoding or reception stops. The short evening recording ends before a whole
 915–928 MHz sweep finishes, but its initial visits identify the three targeted

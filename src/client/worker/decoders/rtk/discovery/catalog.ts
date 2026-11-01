@@ -13,6 +13,10 @@ export class RtkDiscoveryCatalog {
 	private trackers = { rtk1: new RtkTracker(), rtk2: new Rtk2Tracker(), rtk3: new Rtk3Tracker() };
 	private sources = new Map<string, Evidence>();
 	private pending: RtkMessage['rtcm'] = [];
+	get awaitingConfirmation(): boolean {
+		for (const evidence of this.sources.values()) if (evidence.count > 0 && !evidence.confirmed) return true;
+		return false;
+	}
 	observe(radio: VerifiedObservation): void {
 		this.packets++;
 		const key = `${radio.profile}:${radio.source}`;
@@ -55,6 +59,12 @@ export class RtkDiscoveryCatalog {
 		}
 		this.pending.push(...this.trackers[profile].flush());
 		if (this.pending.length > 512) this.pending.splice(0, this.pending.length - 512);
+	}
+	rejectCandidate(profile: RtkProfile): void {
+		// A bad header says nothing about an earlier checksum-verified identity.
+		// Keep its votes while protecting correction fragments as fixed VFOs do.
+		if (profile === 'rtk2') this.trackers.rtk2.rejectCandidate();
+		else this.trackers[profile].discontinuity();
 	}
 	discontinuity(profile?: RtkProfile): void {
 		if (profile) this.trackers[profile].discontinuity();

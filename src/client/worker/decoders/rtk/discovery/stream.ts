@@ -4,9 +4,10 @@ import type { RtkMessage } from '@/worker/decoders/rtk/types';
 import { errorMessage } from '@/platform/errors';
 import { RtkDiscoveryCatalog } from './catalog';
 import { RtkSurvey } from './survey';
-import { surveyPlan, priorityPlan } from './plan';
+import { surveyPlan, priorityPlan, CONFIRMATION_SECONDS } from './plan';
 import { discoveryInventory } from './inventory';
 import type { SurveyChannel } from './types';
+import { RtkActivityCandidates } from './candidates';
 
 export class RtkDiscoveryReceiver {
 	private key = '';
@@ -15,10 +16,14 @@ export class RtkDiscoveryReceiver {
 	private survey?: RtkSurvey;
 	private priorities: Array<{ catalog: RtkDiscoveryCatalog; survey?: RtkSurvey; channel: SurveyChannel; deadline: number }> = [];
 	private plan: SurveyChannel[] = [];
+	private candidates = new RtkActivityCandidates();
+	private currentChannel?: SurveyChannel;
+	private activityCandidate = false;
 	private cursor = 0;
 	private pass = 1;
 	private time = 0;
 	private deadline = 0;
+	private confirmationExtended = false;
 	private rate = 0;
 	private center = 0;
 	private lastEmit = 0;
@@ -85,12 +90,38 @@ export class RtkDiscoveryReceiver {
 			this.totals[name] += Math.max(0, message.status[name] - (previous?.[name] ?? 0));
 		this.previous.set(profile, message.status);
 	}
-	private tune(): void {
+	private tune(channel = this.plan[this.cursor]): void {
 		this.previous.delete('rtk1');
 		this.previous.delete('rtk2');
-		const channel = this.plan[this.cursor];
+		this.currentChannel = channel;
 		this.survey!.tune(channel.frequencyMHz, this.rate, this.center, this.time);
+		this.confirmationExtended = false;
 		this.deadline = this.time + channel.seconds;
+	}
+	offerCandidates(frequenciesMHz: number[], rate: number, center: number): void {
+		if (!this.params?.rtk || this.error || rate !== this.rate || center !== this.center || !this.currentChannel) return;
+		this.candidates.offer(
+			frequenciesMHz,
+			this.time,
+			this.params.rtkScanStart ?? 915,
+			this.params.rtkScanEnd ?? 928,
+			this.currentChannel.frequencyMHz,
+		);
+	}
+	private advance(): void {
+		if (this.activityCandidate) {
+			this.activityCandidate = false;
+			this.tune();
+			return;
+		}
+		this.cursor = (this.cursor + 1) % this.plan.length;
+		if (!this.cursor) this.pass++;
+		const frequencyMHz = this.candidates.take(this.time, this.plan[this.cursor].frequencyMHz);
+		if (frequencyMHz !== undefined) {
+			this.activityCandidate = true;
+			this.tune({ frequencyMHz, seconds: CONFIRMATION_SECONDS });
+		} else if (this.plan.length > 1) this.tune();
+		else this.deadline += this.plan[0].seconds;
 	}
 	process(ptr: number, values: number, floatInput: boolean, chunkId?: number): void {
 		if (!values || !this.params?.rtk || this.error) return;
@@ -104,11 +135,15 @@ export class RtkDiscoveryReceiver {
 			this.survey!.process(ptr, values, floatInput, chunkId);
 			this.processPriorities(ptr, values, floatInput, chunkId);
 			this.time += values / (2 * this.rate);
+			// Allow confirmation after the first verified candidate, even near the
+			// end of a known-channel visit. Extend once so overlapping bases cannot
+			// keep the scout here indefinitely; empty/invalid channels stay short.
+			if (!this.confirmationExtended && this.catalog.awaitingConfirmation) {
+				this.deadline = Math.max(this.deadline, Math.min(this.time, this.deadline) + CONFIRMATION_SECONDS);
+				this.confirmationExtended = true;
+			}
 			if (this.time >= this.deadline) {
-				this.cursor = (this.cursor + 1) % this.plan.length;
-				if (!this.cursor) this.pass++;
-				if (this.plan.length > 1) this.tune();
-				else this.deadline += this.plan[0].seconds;
+				this.advance();
 			}
 			if (performance.now() - this.lastEmit >= 250) this.emit();
 		} catch (error) {
@@ -150,14 +185,17 @@ export class RtkDiscoveryReceiver {
 							scan: {
 								startMHz: this.params.rtkScanStart ?? 915,
 								endMHz: this.params.rtkScanEnd ?? 928,
-								frequencyMHz: this.plan[this.cursor].frequencyMHz,
+								frequencyMHz: this.currentChannel!.frequencyMHz,
 								channel: this.cursor + 1,
 								channels: this.plan.length,
 								pass: this.pass,
 								remainingSeconds:
 									Math.max(0, this.deadline - this.time) +
+									(this.activityCandidate ? this.plan[this.cursor].seconds : 0) +
 									this.plan.slice(this.cursor + 1).reduce((sum, channel) => sum + channel.seconds, 0),
 								priorityFrequenciesMHz: this.priorities.filter((lane) => lane.survey).map((lane) => lane.channel.frequencyMHz),
+								activityCandidate: this.activityCandidate,
+								activityCandidatesMHz: this.candidates.frequencies(this.time),
 							},
 						}),
 			},
@@ -170,9 +208,13 @@ export class RtkDiscoveryReceiver {
 		this.survey = undefined;
 		this.catalog = new RtkDiscoveryCatalog();
 		this.plan = [];
+		this.candidates = new RtkActivityCandidates();
+		this.currentChannel = undefined;
+		this.activityCandidate = false;
 		this.params = undefined;
 		this.key = '';
 		this.time = this.deadline = this.cursor = this.gaps = 0;
+		this.confirmationExtended = false;
 		this.pass = 1;
 		this.lastChunk = undefined;
 		this.error = undefined;

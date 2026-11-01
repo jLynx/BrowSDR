@@ -30,6 +30,8 @@ export interface DiscoveryFrame {
 	data: Float32Array;
 	config: DiscoveryConfig;
 	time: number;
+	discover?: boolean;
+	rtk?: boolean;
 }
 
 export interface DiscoveryResult {
@@ -37,4 +39,5 @@ export interface DiscoveryResult {
 	binHz: number;
 	frames: number;
 	time: number;
+	rtk?: { centerMHz: number; sampleRate: number; signals: DetectedSignal[] };
 }

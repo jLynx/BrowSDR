@@ -35,6 +35,9 @@ export class RtkStream {
 	process(ptr: number, values: number, floatInput: boolean, chunkId?: number): void {
 		this.receiver.process(ptr, values, floatInput, chunkId);
 	}
+	offerCandidates(frequenciesMHz: number[], rate: number, center: number): void {
+		if (this.receiver instanceof RtkDiscoveryReceiver) this.receiver.offerCandidates(frequenciesMHz, rate, center);
+	}
 	reset(): void {
 		this.receiver.reset();
 	}
