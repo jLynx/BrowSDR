@@ -1,3 +1,4 @@
+import type { HdStatus } from '@/worker/decoders/hd-radio/types';
 import type { BleDevice, BleStatus } from '@/worker/decoders/ble/types';
 import type { AisStatus, Vessel } from '@/worker/decoders/ais/types';
 import type { RadiosondeStatus, Radiosonde } from '@/worker/decoders/radiosonde/types';
@@ -177,6 +178,7 @@ function createDecoderAndBookmarkState() {
 		// Per-VFO RDS link status (sync/BER/corrected blocks/pilot).
 		rdsStatus: [] as Array<RdsStatus | null>,
 		_gscPriorMute: new Map<number, { enabled: boolean; squelchEnabled: boolean }>(),
+		hdRadioStatus: [] as Array<HdStatus | null>,
 		dsdStatus: [] as Array<DSDStatus | null>,
 		ble: {
 			panelOpen: false,
@@ -241,6 +243,7 @@ function createBookmarkState() {
 			// individual fields
 			freq: 100.0,
 			mode: 'nfm',
+			hdProgram: 0,
 			bandwidth: 12500,
 			snapInterval: 2500,
 			deEmphasis: 'none',

@@ -25,6 +25,7 @@ export default defineConfig(
 		'**/target/**',
 		'wasm/rtl433/**',
 		'wasm/mbelib/**',
+		'wasm/nrsc5/**',
 		'types/worker.d.ts',
 	]),
 	{

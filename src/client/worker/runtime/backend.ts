@@ -18,10 +18,13 @@ import type {
 	BleCallback,
 	AcarsCallback,
 	AprsCallback,
+	HdRadioCallback,
 	DsdCallback,
 	HostCallback,
 	HostStats,
 } from '@/worker/runtime/callbacks.types';
+import { setRemoteHostHdRadioCallback } from '@/worker/decoders/hd-radio/routing';
+import { hdAudioChanged } from '@/worker/decoders/hd-radio/types';
 import type { DspAudio } from '@/worker/runtime/dsp-messages.types';
 import type { IqDispatcher } from '@/worker/streams/iq-dispatch';
 import type { InitOutput, DspProcessor } from '/wasm/dsp/browsdr_dsp.js';
@@ -211,6 +214,7 @@ export class Backend {
 	_remoteHostAisCb?: HostCallback<Parameters<AisCallback>>;
 	_remoteHostRadiosondeCb?: HostCallback<Parameters<RadiosondeCallback>>;
 	_remoteHostAcarsCb?: HostCallback<Parameters<AcarsCallback>>;
+	_remoteHostHdRadioCb?: HostCallback<Parameters<HdRadioCallback>>;
 	_remoteHostAprsCb?: HostCallback<Parameters<AprsCallback>>;
 	_remoteHostAdsbCb?: HostCallback<Parameters<AdsbCallback>>;
 	_remoteHostRtl433Cb?: HostCallback<Parameters<Rtl433Callback>>;
@@ -294,6 +298,7 @@ export class Backend {
 	setRemoteHostAisCallback = setRemoteHostAisCallback.bind(this);
 	setRemoteHostRadiosondeCallback = setRemoteHostRadiosondeCallback.bind(this);
 	setRemoteHostAcarsCallback = setRemoteHostAcarsCallback.bind(this);
+	setRemoteHostHdRadioCallback = setRemoteHostHdRadioCallback.bind(this);
 	setRemoteHostAprsCallback = setRemoteHostAprsCallback.bind(this);
 	setRemoteHostAdsbCallback = setRemoteHostAdsbCallback.bind(this);
 	setRemoteHostRtl433Callback = setRemoteHostRtl433Callback.bind(this);
@@ -334,6 +339,7 @@ export class Backend {
 		radiosondeCallback: RadiosondeCallback | null = null,
 		rtkCallback: RtkCallback | null = null,
 		aprsCallback: AprsCallback | null = null,
+		hdRadioCallback: HdRadioCallback | null = null,
 	): Promise<void> {
 		this.iqCapture.cancel('Reception restarted during IQ capture');
 		return startRxStream(
@@ -361,6 +367,7 @@ export class Backend {
 			radiosondeCallback,
 			rtkCallback,
 			aprsCallback,
+			hdRadioCallback,
 		);
 	}
 
@@ -398,8 +405,9 @@ export class Backend {
 
 	setVfoParams(index: number, params: Partial<VfoParams>): void {
 		if (!this.vfoParams || index < 0 || index >= this.vfoParams.length) return;
+		const changed = hdAudioChanged(this.vfoParams[index], { ...this.vfoParams[index], ...params });
 		Object.assign(this.vfoParams[index], params);
-		if (params.enabled === false && this.vfoStates?.[index]) this.vfoStates[index].audioQueueLen = 0;
+		if ((params.enabled === false || changed) && this.vfoStates?.[index]) this.vfoStates[index].audioQueueLen = 0;
 
 		if (this.dspWorkers && this.dspWorkers[index]) {
 			this.dspWorkers[index].postMessage({

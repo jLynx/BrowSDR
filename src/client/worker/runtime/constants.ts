@@ -2,6 +2,7 @@
 export const IF_RATES: Record<string, number> = {
 	nfm: 50000,
 	wfm: 250000,
+	hdradio: 744187.5,
 	am: 15000,
 	usb: 24000,
 	lsb: 24000,

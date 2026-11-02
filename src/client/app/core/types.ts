@@ -23,6 +23,7 @@ export interface Vfo {
 	enabled: boolean;
 	freq: number;
 	mode: string;
+	hdProgram?: number;
 	bandwidth: number;
 	snapInterval: number;
 	deEmphasis: string;

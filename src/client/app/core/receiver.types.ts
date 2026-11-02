@@ -1,3 +1,4 @@
+import type { HdMessage } from '@/worker/decoders/hd-radio/types';
 import type { AutoGainMode } from '@/radio/types';
 import type { UiMenuGroup } from '@/ui/menus/types';
 import type { BleMessage } from '@/worker/decoders/ble/types';
@@ -215,6 +216,8 @@ export interface ReceiverMethods {
 	flexGroupSlotTitle(i: number, s: number): string;
 	clearPager(): void;
 	exportPager(): void;
+	_onHdRadioMessage(index: number, frequency: number, message: HdMessage): void;
+	setHdRadioProgram(index: number, value: number): void;
 	_onDsdStatus(vfoIndex: number, status: DSDStatus): void;
 	_rdsStation(vfoIndex: number): AppInstance['rds']['stations'][number];
 	rdsActive(): AppInstance['rds']['stations'][number];

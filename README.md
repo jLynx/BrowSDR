@@ -52,6 +52,9 @@ Enjoy the power of a desktop SDR platform fully within your web browser.
   Supports WFM, NFM, AM, USB, LSB, DSB, CW, and raw IQ modes.
 - **📡 RDS Decoding on the Fly**
   Instantly decode station name, programme type, and radiotext on WFM signals.
+- **📻 FM HD Radio**
+  Listen to digital stereo broadcasts and select HD1–HD8 programs, with station
+  information, song metadata and digital reception status.
 - **🎛️ Full DSP Toolset**
   Control squelch, noise reduction, de-emphasis, and stereo output per VFO.
 - **🌐 Remote Access**

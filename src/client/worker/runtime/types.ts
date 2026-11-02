@@ -50,6 +50,7 @@ export interface VfoParams {
 	audioMuted?: boolean;
 	freq: number;
 	mode: string;
+	hdProgram?: number;
 	enabled: boolean;
 	deEmphasis: string;
 	squelchEnabled: boolean;

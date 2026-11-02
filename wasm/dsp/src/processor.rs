@@ -201,8 +201,10 @@ impl DspProcessor {
     }
 
     fn build_complex_resampler(in_sr: f32, out_sr: f32) -> PolyphaseResamplerComplex {
-        let in_sr_u = in_sr.round() as usize;
-        let out_sr_u = out_sr.round() as usize;
+        // NRSC-5 FM uses exactly 744187.5 Hz. Preserve half-Hz rates while
+        // integer rates reduce to their existing interpolation/decimation ratios.
+        let in_sr_u = (in_sr * 2.0).round() as usize;
+        let out_sr_u = (out_sr * 2.0).round() as usize;
         let d = gcd(in_sr_u, out_sr_u);
         let interp = out_sr_u / d;
         let decim = in_sr_u / d;
@@ -219,8 +221,8 @@ impl DspProcessor {
     }
 
     fn build_f32_resampler(in_sr: f32, out_sr: f32) -> PolyphaseResamplerF32 {
-        let in_sr_u = in_sr.round() as usize;
-        let out_sr_u = out_sr.round() as usize;
+        let in_sr_u = (in_sr * 2.0).round() as usize;
+        let out_sr_u = (out_sr * 2.0).round() as usize;
         let d = gcd(in_sr_u, out_sr_u);
         let interp = out_sr_u / d;
         let decim = in_sr_u / d;
@@ -789,6 +791,22 @@ impl DspProcessor {
 #[cfg(test)]
 mod float_input_tests {
     use super::*;
+
+    #[test]
+    fn hd_radio_resampling_retains_the_exact_half_hz_rate() {
+        // Two seconds at a tractable input rate produce an integral native HD
+        // sample count. Rounding the HD rate would add one output sample.
+        let mut resampler = DspProcessor::build_complex_resampler(750000.0, 744187.5);
+        let input = vec![0.0; 1500000];
+        let mut output_i = Vec::new();
+        let mut output_q = Vec::new();
+        for chunk in input.chunks(32768) {
+            resampler.process(chunk, chunk, &mut output_i, &mut output_q);
+        }
+        assert_eq!(output_i.len(), 1488375);
+        assert_eq!(output_q.len(), 1488375);
+    }
+
 
     #[test]
     fn float_and_byte_inputs_produce_identical_audio_and_iq() {

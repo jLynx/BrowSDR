@@ -1,0 +1,37 @@
+.hd-radio-panel {
+	padding: 6px 8px;
+	margin: 4px 0;
+	border-radius: 4px;
+	background: rgba(0, 0, 0, 0.3);
+	font-size: 11px;
+	line-height: 1.6;
+	overflow-wrap: anywhere;
+}
+.hd-radio-status {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+}
+.hd-radio-indicator {
+	width: 8px;
+	height: 8px;
+	flex-shrink: 0;
+	border-radius: 50%;
+	background: #666;
+}
+.hd-radio-indicator.locked {
+	background: #44cc44;
+}
+.hd-radio-indicator.error {
+	background: #ff6644;
+}
+.hd-radio-station,
+.hd-radio-title {
+	font-weight: 700;
+	color: #fff;
+}
+.hd-radio-details {
+	margin-top: 4px;
+	color: #aaa;
+	font-size: 10px;
+}

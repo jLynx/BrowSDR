@@ -409,6 +409,11 @@ async function installHostStreamCallbacks(this: AppInstance) {
 			this._webrtc?.sendCommandTo(clientId, { type: 'acars', vfoIndex: index, freq, msg });
 		}),
 	);
+	await this.backend.setRemoteHostHdRadioCallback(
+		Comlink.proxy((clientId: string, index: number, freq: number, msg: Parameters<AppInstance['_onHdRadioMessage']>[2]) => {
+			this._webrtc?.sendCommandTo(clientId, { type: 'hd_radio', vfoIndex: index, freq, msg });
+		}),
+	);
 	await this.backend.setRemoteHostAprsCallback(
 		Comlink.proxy((clientId: string, index: number, freq: number, msg: Parameters<AppInstance['_onAprsMessage']>[2]) => {
 			this._webrtc?.sendCommandTo(clientId, { type: 'aprs', vfoIndex: index, freq, msg });
@@ -654,13 +659,14 @@ function validRemoteGain(app: AppInstance, property: string, value: number): boo
 
 /** Decoder snapshots forwarded by a host; only clients apply them. */
 function handlePacketTelemetry(this: AppInstance, cmd: ReceiverCommand): boolean {
-	if (!['radiosonde', 'aprs', 'ais', 'acars', 'ble'].includes(cmd.type)) return false;
+	if (!['radiosonde', 'aprs', 'ais', 'acars', 'ble', 'hd_radio'].includes(cmd.type)) return false;
 	if (this.remoteMode !== 'client') return true;
 	if (cmd.type === 'radiosonde') this._onRadiosondeMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
 	else if (cmd.type === 'aprs') this._onAprsMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
 	else if (cmd.type === 'ais') this._onAisMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
 	else if (cmd.type === 'acars') this._onAcarsMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
 	else if (cmd.type === 'ble') this._onBleMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
+	else if (cmd.type === 'hd_radio') this._onHdRadioMessage(cmd.vfoIndex, cmd.freq, cmd.msg);
 	return true;
 }
 

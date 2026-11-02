@@ -1,3 +1,4 @@
+import type { HdMessage } from '@/worker/decoders/hd-radio/types';
 import type { BleMessage } from '@/worker/decoders/ble/types';
 import type { AisMessage } from '@/worker/decoders/ais/types';
 import type { RadiosondeMessage } from '@/worker/decoders/radiosonde/types';
@@ -18,6 +19,7 @@ export interface SharedBandOutput {
 
 export type DspOutput =
 	| DspAudio
+	| HdMessage
 	| Rtl433Message
 	| AdsbMessage
 	| AisMessage

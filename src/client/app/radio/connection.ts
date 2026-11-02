@@ -335,8 +335,7 @@ export const connectionMethods = {
 		};
 
 		try {
-			if (!usbOnly) await this._prepareAudioWorklet();
-			this._resetAudioPlayback(true);
+			await prepareReceiverAudio(this, usbOnly);
 			await this.backend.startRxStream(
 				opts,
 				Comlink.proxy((spectrumData: Float32Array) => this.drawSpectrum(spectrumData)),
@@ -364,6 +363,7 @@ export const connectionMethods = {
 				Comlink.proxy(this._onRadiosondeMessage.bind(this)),
 				Comlink.proxy(this._onRtkMessage.bind(this)),
 				Comlink.proxy(this._onAprsMessage.bind(this)),
+				Comlink.proxy(this._onHdRadioMessage.bind(this)),
 			);
 		} catch (e) {
 			console.error('Error starting RX stream:', e);
@@ -510,4 +510,9 @@ function updateReceiverActivity(this: AppInstance, now: number) {
 	}
 	// Bump reactive tick so sortedVfoActivity recomputes
 	this.activityNow = now;
+}
+
+async function prepareReceiverAudio(receiver: AppInstance, usbOnly: boolean): Promise<void> {
+	if (!usbOnly) await receiver._prepareAudioWorklet();
+	receiver._resetAudioPlayback(true);
 }

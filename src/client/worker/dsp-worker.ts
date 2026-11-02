@@ -1,3 +1,5 @@
+import { HdRadioStream } from './decoders/hd-radio/stream';
+import { HD_IQ_RATE } from './decoders/hd-radio/types';
 import { BleStream } from './decoders/ble/stream';
 import { AisStream } from './decoders/ais';
 import { RadiosondeStream } from './decoders/radiosonde';
@@ -82,6 +84,7 @@ let channelKey = '';
 let channelChunkId: number | undefined;
 let configuredParams = '';
 const bandPool = typeof SharedArrayBuffer === 'undefined' ? undefined : new SharedBandPool();
+let hdRadio: HdRadioStream;
 let rtl433: Rtl433Stream;
 let adsb: AdsbStream;
 let ais: AisStream;
@@ -94,6 +97,7 @@ let aprs: AprsStream;
 const IF_RATES: Record<string, number> = {
 	nfm: 50000,
 	wfm: 250000,
+	hdradio: HD_IQ_RATE,
 	am: 15000,
 	usb: 24000,
 	lsb: 24000,
@@ -109,6 +113,7 @@ async function startup(): Promise<void> {
 		wasmInitPromise = init()
 			.then((w) => {
 				_wasm = w;
+				hdRadio = new HdRadioStream(DspProcessor, _wasm.memory, (message) => self.postMessage(message));
 				rtl433 = new Rtl433Stream(DspProcessor, _wasm.memory, (message) => self.postMessage(message));
 				adsb = new AdsbStream(DspProcessor, _wasm.memory, (message) => self.postMessage(message));
 				ble = new BleStream(DspProcessor, _wasm.memory, (message) => self.postMessage(message));
@@ -163,6 +168,8 @@ self.onmessage = async (e: MessageEvent<DspInput>) => {
 			break;
 		case 'init':
 			handleDspInit(msg);
+			await hdRadio.ready;
+			self.postMessage({ type: 'init_done' });
 			break;
 		case 'configure':
 			handleDspConfigure(msg);
@@ -207,6 +214,10 @@ function decodeRdsChunk(msg: Extract<DspInput, { type: 'process' }>) {
 function configureDDC(params: VfoParams, systemCenterFreq: number): void {
 	configuredParams = JSON.stringify(params);
 	configurePacketDecoders(params, systemCenterFreq);
+	if (params.mode === 'hdradio') {
+		configureHdAudioMode(params);
+		return;
+	}
 	const ifRate = IF_RATES[params.mode];
 	if (ifRate === undefined) {
 		console.error(`[DSP Worker] Unknown mode "${params.mode}" — no IF rate defined. Skipping DDC config.`);
@@ -240,21 +251,7 @@ function configureDDC(params: VfoParams, systemCenterFreq: number): void {
 		ddc.set_wfm_mode(false);
 	}
 
-	// Initialize or destroy DSD decoder based on mode
-	if (params.mode === 'dsd') {
-		if (!dsdStream) {
-			dsdStream = new DSDStream((status: DSDStatus) => {
-				// Post DSD status to main thread
-				dsdStatus.push(status);
-			});
-		}
-		dsdStream.configure(params.freq, params.bandwidth, params.enabled, systemSampleRate);
-	} else {
-		if (dsdStream) {
-			dsdStream.reset();
-			dsdStream = null;
-		}
-	}
+	configureDsd(params);
 
 	// Apply UI audio filters (High Pass 300Hz, Low Pass BW/2)
 	ddc.set_audio_filters(params.lowPass || false, params.highPass || false);
@@ -286,6 +283,39 @@ function configureDDC(params: VfoParams, systemCenterFreq: number): void {
 	}
 
 	pagerLegs?.configure(params, systemSampleRate, offsetFreq);
+}
+
+function configureHdAudioMode(params: VfoParams): void {
+	vfoState.audioResampler = null;
+	vfoState.currentIfRate = 0;
+	vfoState.lastMode = 'hdradio';
+	rdsDdc?.free();
+	rdsDdc = null;
+	rdsDecoder = null;
+	dsdStream?.reset();
+	dsdStream = null;
+	pagerLegs?.freeAll();
+	vfoState.squelchOpen = false;
+	vfoState.squelchDb = -120;
+	ddc.set_shift(systemSampleRate, (params.freq - inputCenterFreq) * 1e6);
+}
+
+function configureDsd(params: VfoParams): void {
+	// Initialize or destroy DSD decoder based on mode
+	if (params.mode === 'dsd') {
+		if (!dsdStream) {
+			dsdStream = new DSDStream((status: DSDStatus) => {
+				// Post DSD status to main thread
+				dsdStatus.push(status);
+			});
+		}
+		dsdStream.configure(params.freq, params.bandwidth, params.enabled, systemSampleRate);
+	} else {
+		if (dsdStream) {
+			dsdStream.reset();
+			dsdStream = null;
+		}
+	}
 }
 
 function configureStereo(params: VfoParams) {
@@ -461,7 +491,7 @@ function handleDspChannelize(msg: Extract<DspInput, { type: 'channelize' }>) {
 }
 
 function handleDspInit(msg: Extract<DspInput, { type: 'init' }>) {
-	for (const decoder of [rtl433, adsb, ais, radiosonde, rtk, ble, acars, aprs]) decoder.reset();
+	for (const decoder of [hdRadio, rtl433, adsb, ais, radiosonde, rtk, ble, acars, aprs]) decoder.reset();
 	inputIsFloat = false;
 	inputUsesBandCenter = false;
 	dsdStatus.reset();
@@ -490,8 +520,6 @@ function handleDspInit(msg: Extract<DspInput, { type: 'init' }>) {
 	sharedSabViews = msg.sabs ? msg.sabs.map((s: SharedArrayBuffer) => new Int8Array(s)) : null;
 
 	configureDDC(msg.params, msg.centerFreq);
-
-	self.postMessage({ type: 'init_done' });
 }
 
 function handleDspConfigure(msg: Extract<DspInput, { type: 'configure' }>) {
@@ -522,7 +550,7 @@ function handleDspProcess(msg: Extract<DspInput, { type: 'process' }>) {
 		rtl433.process(input, msg.chunkLen, inputIsFloat);
 		const sequence = msg.sequence ?? msg.chunkId;
 		for (const decoder of [adsb, ais, radiosonde, rtk, ble, acars, aprs]) decoder.process(input, msg.chunkLen, inputIsFloat, sequence);
-		const audioOut = decodeVfoAudio(msg.chunkLen, msg.params);
+		const audioOut = processReceiveAudio(input, msg, sequence);
 		// Complete decoder work before acknowledging the input. Otherwise replies
 		// let the sender queue more input while RDS is still using this worker.
 		decodeRdsChunk(msg);
@@ -538,7 +566,7 @@ function handleDspProcess(msg: Extract<DspInput, { type: 'process' }>) {
 				{
 					type: 'audio',
 					samples: cloneOut.buffer,
-					channels: msg.params.mode === 'wfm' && msg.params.stereo ? 2 : 1,
+					channels: vfoAudioChannels(msg.params),
 					chunkId: msg.chunkId,
 					squelchOpen: vfoState.squelchOpen,
 					squelchDb: vfoState.squelchDb ?? -120,
@@ -628,6 +656,7 @@ function decodeDigitalAudio(iq: Float32Array, squelched: boolean, count: number)
 function needsVfoInput(params: VfoParams): boolean {
 	return (
 		params.enabled ||
+		params.mode === 'hdradio' ||
 		params.pocsag ||
 		params.gsc === true ||
 		params.flex === true ||
@@ -638,7 +667,19 @@ function needsVfoInput(params: VfoParams): boolean {
 }
 
 function configurePacketDecoders(params: VfoParams, center: number): void {
-	for (const decoder of [rtl433, adsb, ais, radiosonde, rtk, ble, acars, aprs]) decoder.configure(params, systemSampleRate, center);
+	for (const decoder of [hdRadio, rtl433, adsb, ais, radiosonde, rtk, ble, acars, aprs])
+		decoder.configure(params, systemSampleRate, center);
+}
+
+function processReceiveAudio(input: number, msg: Extract<DspInput, { type: 'process' }>, sequence: number): Float32Array | null {
+	const audio = hdRadio.process(input, msg.chunkLen, inputIsFloat, sequence);
+	if (msg.params.mode !== 'hdradio') return decodeVfoAudio(msg.chunkLen, msg.params);
+	vfoState.squelchOpen = hdRadio.audioActive;
+	return msg.params.enabled ? audio : null;
+}
+
+function vfoAudioChannels(params: VfoParams): 1 | 2 {
+	return params.mode === 'hdradio' || (params.mode === 'wfm' && params.stereo) ? 2 : 1;
 }
 
 function decodeVfoAudio(length: number, params: VfoParams): Float32Array | null {

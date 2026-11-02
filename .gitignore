@@ -13,6 +13,8 @@ node_modules/
 /wasm/rtl433/test-data/
 
 # Rust build artifacts
+/wasm/nrsc5/vendor/
+/wasm/nrsc5/build/
 wasm/dsp/target/
 
 # Logs

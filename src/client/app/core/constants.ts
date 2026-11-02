@@ -12,6 +12,7 @@ export const makeDefaultVfo = (freq = 100.0) => ({
 	enabled: false,
 	freq: freq,
 	mode: 'wfm',
+	hdProgram: 0,
 	bandwidth: 150000,
 	snapInterval: 100000,
 	deEmphasis: '50us',
@@ -75,6 +76,7 @@ export const BOOKMARK_CATEGORIES: BookmarkCategory[] = [
 
 // SDR++ mode defaults
 export const MODE_DEFAULTS: Record<string, { bandwidth: number; snapInterval: number; deEmphasis: string; lowPass: boolean }> = {
+	hdradio: { bandwidth: 400000, snapInterval: 100000, deEmphasis: 'none', lowPass: false },
 	wfm: { bandwidth: 150000, snapInterval: 100000, deEmphasis: '50us', lowPass: true },
 	nfm: { bandwidth: 12500, snapInterval: 2500, deEmphasis: 'none', lowPass: true },
 	am: { bandwidth: 10000, snapInterval: 1000, deEmphasis: 'none', lowPass: false },
