@@ -807,7 +807,6 @@ mod float_input_tests {
         assert_eq!(output_q.len(), 1488375);
     }
 
-
     #[test]
     fn float_and_byte_inputs_produce_identical_audio_and_iq() {
         let input: Vec<i8> = (0..65536).map(|index| ((index * 37) % 255 - 127) as i8).collect();

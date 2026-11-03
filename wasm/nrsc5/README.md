@@ -16,9 +16,14 @@ higher than nrsc5's zero-based program index. A station may transmit only HD1.
 The shared Rust DDC tunes and filters each VFO, resampling IQ to **744187.5 SPS**
 exactly. nrsc5 receives normalized interleaved floats. Its 44.1 kHz stereo PCM is
 resampled independently per channel to the app's 48 kHz mixer. Decoder work
-stays in the VFO worker. Dropped input, tuning changes and replay boundaries
-reset acquisition; lost lock does not play analog audio. Subchannel switching
-keeps RF lock while clearing the previous program's PCM resampler history.
+stays in the VFO worker. A bounded PCM queue paces nrsc5's approximately 93 ms
+audio bursts by IQ sample time, with 100 ms of initial buffering, so those
+bursts do not overflow the shared playback buffer. Dropped input, tuning
+changes and replay boundaries reset acquisition; lost lock does not play
+analog audio. Valid digital audio
+already in nrsc5's delayed buffer continues across RF lock loss, with native
+silence for unavailable packets. Subchannel switching keeps RF lock while
+clearing the previous program's PCM resampler history.
 
 ## Rebuilding
 

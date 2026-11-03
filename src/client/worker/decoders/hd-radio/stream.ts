@@ -3,6 +3,7 @@ import type { VfoParams } from '@/worker/runtime/types';
 import { RationalResampler } from '@/worker/streams/dsp-pipeline';
 import { errorMessage } from '@/platform/errors';
 import { HdDecoder } from './decoder';
+import { HdAudioPacer } from './audio';
 import { HD_BANDWIDTH, HD_IQ_RATE, emptyHdStatus, hdProgram, type HdMessage, type HdProgram, type HdStatus } from './types';
 
 export class HdRadioStream {
@@ -18,7 +19,7 @@ export class HdRadioStream {
 	private lastAudioSample = -Infinity;
 	private left = new RationalResampler(44100, 48000);
 	private right = new RationalResampler(44100, 48000);
-	private audio: Float32Array[] = [];
+	private audio = new HdAudioPacer();
 	ready: Promise<void> = Promise.resolve();
 	audioActive = false;
 
@@ -118,15 +119,7 @@ export class HdRadioStream {
 			if (count) this.decoder.process(new Float32Array(this.memory.buffer, output, count));
 			if (this.samples - this.lastAudioSample > HD_IQ_RATE) this.audioActive = false;
 			if (performance.now() - this.lastEmit >= 500) this.emit();
-			if (!this.audio.length) return null;
-			const result = new Float32Array(this.audio.reduce((sum, block) => sum + block.length, 0));
-			let offset = 0;
-			for (const block of this.audio) {
-				result.set(block, offset);
-				offset += block.length;
-			}
-			this.audio = [];
-			return result;
+			return this.audio.read(count / 2);
 		} catch (error) {
 			this.fail(errorMessage(error));
 			return null;
@@ -147,7 +140,7 @@ export class HdRadioStream {
 	}
 
 	private resetAudio(): void {
-		this.audio = [];
+		this.audio = new HdAudioPacer();
 		this.left = new RationalResampler(44100, 48000);
 		this.right = new RationalResampler(44100, 48000);
 		this.audioActive = false;
@@ -219,7 +212,7 @@ export class HdRadioStream {
 			output[i * 2] = Math.max(-1, Math.min(1, left[i]));
 			output[i * 2 + 1] = Math.max(-1, Math.min(1, right[i]));
 		}
-		if (output.length) this.audio.push(output);
+		this.audio.push(output);
 	}
 
 	private fail(message: string): void {

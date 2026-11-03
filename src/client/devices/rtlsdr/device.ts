@@ -1,4 +1,3 @@
-import { errorMessage } from '@/platform/errors';
 /*
 RTL-SDR WebUSB driver for BrowSDR
 Copyright (c) 2026, jLynx <https://github.com/jLynx>
@@ -23,8 +22,9 @@ HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABI
 ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
-import { XTAL_FREQ, IF_FREQ, TRANSFER_BUFFER_SIZE, BLOCK, REG } from './protocol';
+import { XTAL_FREQ, IF_FREQ, BLOCK, REG } from './protocol';
 import { RtlCom } from './usb';
+import { receiveRtlIq } from './receive';
 import { BIT_REVS, R820T } from './tuners/r820t';
 import { FC0012 } from './tuners/fc0012';
 import { E4000 } from './tuners/e4000';
@@ -34,7 +34,6 @@ import { isNextrtl, Nextrtl } from './nextrtl';
 import type { TunerDriver } from './tuners/types';
 import { registerDriver } from '@/radio/sdr-device';
 import type { SdrDevice, SdrDeviceInfo, GainControl } from '@/radio/types';
-import { receiveTransferSize } from '@/radio/receive-transfer';
 
 // ── RTL-SDR Device ────────────────────────────────────────────────
 export class RtlSdrDevice implements SdrDevice {
@@ -505,42 +504,10 @@ export class RtlSdrDevice implements SdrDevice {
 	}
 
 	private launchBulkLoops(callback: (data: ArrayBufferView) => void): void {
-		console.log('RTL-SDR: startRx — bulk transfer loops starting');
-		const transferSize = receiveTransferSize(this.sampleRate, TRANSFER_BUFFER_SIZE, 2);
+		console.log('RTL-SDR: startRx — ordered bulk transfer queue starting');
 		const session: Array<Promise<void>> = [];
 		this.rxRunning = session;
-		let rxCount = 0;
-		const transfer = async (): Promise<void> => {
-			await Promise.resolve();
-			while (this.rxRunning === session) {
-				try {
-					const buf = await this.com.readBulk(transferSize);
-					if (this.rxRunning !== session) break;
-					rxCount++;
-					if (rxCount <= 3) console.log(`RTL-SDR: bulk read #${rxCount}, ${buf.byteLength} bytes`);
-					const uint8Data = new Uint8Array(buf);
-					const int8Data = new Int8Array(uint8Data.length);
-					if (this.conjugateIq) {
-						for (let i = 0; i < uint8Data.length; i += 2) {
-							int8Data[i] = uint8Data[i] - 128;
-							int8Data[i + 1] = 128 - uint8Data[i + 1];
-						}
-					} else {
-						for (let i = 0; i < uint8Data.length; i++) {
-							int8Data[i] = uint8Data[i] - 128;
-						}
-					}
-					callback(new Uint8Array(int8Data.buffer));
-				} catch (e: unknown) {
-					if (this.rxRunning === session) {
-						const msg = e instanceof Error ? errorMessage(e) : String(e);
-						console.error('RTL-SDR: transfer error:', msg);
-					}
-					break;
-				}
-			}
-		};
-		session.push(...Array.from({ length: 4 }, transfer));
+		session.push(receiveRtlIq(this.com, this.sampleRate, this.conjugateIq, () => this.rxRunning === session, callback));
 	}
 
 	async stopRx(): Promise<void> {

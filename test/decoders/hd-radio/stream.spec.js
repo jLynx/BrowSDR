@@ -4,7 +4,7 @@ import { HdRadioStream } from '@/worker/decoders/hd-radio/stream';
 import { planSharedBands } from '@/worker/streams/channel-plan';
 import { routeHdRadioMessage, forwardHdRadioMessage } from '@/worker/decoders/hd-radio/routing';
 
-const mocks = vi.hoisted(() => ({ instances: [], pending: null, emit: null }));
+const mocks = vi.hoisted(() => ({ instances: [], pending: null, emit: null, values: 100 }));
 vi.mock('@/worker/decoders/hd-radio/decoder', () => ({
 	HdDecoder: {
 		create: vi.fn((callbacks) => {
@@ -31,7 +31,7 @@ class Processor {
 		return 0;
 	}
 	get_iq_output_len() {
-		return 100;
+		return mocks.values;
 	}
 }
 
@@ -39,6 +39,7 @@ afterEach(() => {
 	mocks.instances = [];
 	mocks.pending = null;
 	mocks.emit = null;
+	mocks.values = 100;
 	vi.clearAllMocks();
 });
 const params = { freq: 105.3, mode: 'hdradio', bandwidth: 400000, enabled: false, hdProgram: 0 };
@@ -72,7 +73,8 @@ describe('HD Radio stream lifecycle', () => {
 
 	it('selects HD subchannels without losing RF lock and resets PCM on input gaps', async () => {
 		const messages = [];
-		const stream = new HdRadioStream(Processor, { buffer: new ArrayBuffer(400) }, (message) => messages.push(message));
+		mocks.values = 74418;
+		const stream = new HdRadioStream(Processor, { buffer: new ArrayBuffer(mocks.values * 4) }, (message) => messages.push(message));
 		stream.configure(params, 2048000, params.freq);
 		await stream.ready;
 		mocks.emit = (callbacks) => {
@@ -81,7 +83,7 @@ describe('HD Radio stream lifecycle', () => {
 			callbacks.onText(0, 1, 'HD2 title', 'Artist', '', '');
 			callbacks.onAudio(
 				1,
-				Int16Array.from({ length: 4096 }, (_, i) => (i % 2 ? -16000 : 8000)),
+				Int16Array.from({ length: 16384 }, (_, i) => (i % 2 ? -16000 : 8000)),
 				0,
 			);
 		};
@@ -127,10 +129,11 @@ describe('HD Radio stream lifecycle', () => {
 
 	it('plays validated buffered digital PCM across RF lock loss without discarding the current block', async () => {
 		const messages = [];
-		const stream = new HdRadioStream(Processor, { buffer: new ArrayBuffer(400) }, (message) => messages.push(message));
+		mocks.values = 74418;
+		const stream = new HdRadioStream(Processor, { buffer: new ArrayBuffer(mocks.values * 4) }, (message) => messages.push(message));
 		stream.configure(params, 2048000, params.freq);
 		await stream.ready;
-		const pcm = new Int16Array(4096).fill(8000);
+		const pcm = new Int16Array(8820).fill(8000);
 		mocks.emit = (callbacks) => {
 			callbacks.onNumbers(0, 0, 0, 0);
 			callbacks.onAudio(0, pcm, 0);
@@ -138,7 +141,7 @@ describe('HD Radio stream lifecycle', () => {
 			callbacks.onAudio(0, pcm, 0);
 		};
 		const output = stream.process(0, 100, true, 1);
-		expect(output.length).toBeGreaterThan(8800);
+		expect(output.length).toBeGreaterThan(4700);
 		expect(messages.at(-1).status.state).toBe('searching');
 		expect(stream.audioActive).toBe(true);
 		mocks.emit = (callbacks) => callbacks.onAudio(0, pcm, 0);

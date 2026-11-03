@@ -93,8 +93,11 @@ export class RtlCom {
 
 	async readBulk(length: number): Promise<ArrayBuffer> {
 		const result = await this.dev.transferIn(1, length);
-		if (result.status !== 'ok') throw new Error('RTL-SDR bulk read failed: ' + result.status);
-		return new Uint8Array(result.data.buffer).buffer as ArrayBuffer;
+		if (result.status !== 'ok' || !result.data) throw new Error('RTL-SDR bulk read failed: ' + result.status);
+		const { buffer, byteOffset, byteLength } = result.data;
+		return (
+			byteOffset === 0 && byteLength === buffer.byteLength ? buffer : buffer.slice(byteOffset, byteOffset + byteLength)
+		) as ArrayBuffer;
 	}
 
 	async setGpioOutput(gpio: number): Promise<void> {
