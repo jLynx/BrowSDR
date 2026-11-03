@@ -234,7 +234,25 @@ describe('PlutoSDR streaming', () => {
 		expect(state.controls.slice(connectControls)).toEqual([]);
 	});
 
-	it('retires a pipe after a failed stream and continues on the spare one', async () => {
+	const resumed = 'PlutoSDR: receive stream failed (PlutoSDR READBUF failed: ETIMEDOUT (-110)); resuming on a spare USB pipe';
+
+	it('resumes on the spare pipe when a stream fails after it started', async () => {
+		const warned = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const failed = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { state, device } = await connected({ failReadbuf: [3] });
+		await device.setSampleRate(2400000);
+		// At most two blocks arrive on pipe 1 before its third READBUF fails.
+		await receive(device, 5);
+		expect(warned).toHaveBeenCalledWith(resumed);
+		expect(failed).not.toHaveBeenCalled();
+		expect(state.opened.pipe).toBe(2);
+		expect(state.controls.filter((control) => control.request === 2)).toEqual([pipeRequest(2, 1)]);
+		expect(state.commands.at(-1)).toEqual({ pipe: 2, line: 'CLOSE iio:device3' });
+		vi.restoreAllMocks();
+	});
+
+	it('reports a stream failure once no spare pipe is left', async () => {
+		const warned = vi.spyOn(console, 'warn').mockImplementation(() => {});
 		const failed = vi.spyOn(console, 'error').mockImplementation(() => {});
 		const { state, device } = await connected({ failReadbuf: [2, 5] });
 		await device.setSampleRate(2400000);
@@ -242,15 +260,24 @@ describe('PlutoSDR streaming', () => {
 		await vi.waitFor(() =>
 			expect(failed).toHaveBeenCalledWith('PlutoSDR: receive stream stopped:', 'PlutoSDR READBUF failed: ETIMEDOUT (-110)'),
 		);
+		expect(warned).toHaveBeenCalledWith(resumed);
 		await device.stopRx();
-		expect(state.controls.at(-1)).toEqual(pipeRequest(2, 1));
-
-		await device.startRx(vi.fn());
-		expect(state.opened.pipe).toBe(2);
-		await vi.waitFor(() => expect(failed).toHaveBeenCalledTimes(2));
-		await device.stopRx();
+		expect(state.controls.filter((control) => control.request === 2)).toEqual([pipeRequest(2, 1), pipeRequest(2, 2)]);
 		await expect(device.startRx(vi.fn())).rejects.toThrow('USB streaming failed earlier in this session. Reconnect the PlutoSDR.');
-		failed.mockRestore();
+		vi.restoreAllMocks();
+	});
+
+	it('rejects startRx without failing over when the first block never arrives', async () => {
+		const warned = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { state, device } = await connected({ failReadbuf: [1] });
+		await device.setSampleRate(2400000);
+		await expect(device.startRx(vi.fn())).rejects.toThrow('PlutoSDR READBUF failed: ETIMEDOUT (-110)');
+		expect(warned).not.toHaveBeenCalled();
+		expect(state.controls.at(-1)).toEqual(pipeRequest(2, 1));
+		await receive(device, 1);
+		expect(state.opened.pipe).toBe(2);
+		vi.restoreAllMocks();
 	});
 
 	it('rejects READBUF replies split into pieces, which read-ahead cannot frame', async () => {

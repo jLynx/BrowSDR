@@ -264,20 +264,67 @@ export class PlutoSdrDevice implements SdrDevice {
 		this.session = session;
 		try {
 			const samples = plutoBlockSamples(this.sampleRate);
-			// Older iiod builds answer unknown commands with -EINVAL; the default of four blocks still works.
-			await pipe.command(`SET ${this.rx.id} BUFFERS_COUNT ${KERNEL_BUFFERS}\r\n`);
-			const opened = await pipe.command(`OPEN ${this.rx.id} ${samples} ${bufferMask(this.rx, this.rxChannels)}\r\n`);
-			if (opened < 0) throw new Error(`PlutoSDR could not start receiving (error ${opened}). Close other applications using it.`);
+			await this.openBuffer(pipe, samples);
 			let firstBlock!: () => void;
 			const started = new Promise<void>((resolve) => (firstBlock = resolve));
-			session.done = this.stream(session, samples, callback, () => firstBlock()).catch((error: unknown) => {
-				session.error = error instanceof Error ? error : new Error(errorMessage(error));
-				if (this.session === session) console.error('PlutoSDR: receive stream stopped:', errorMessage(error));
-			});
+			session.done = this.receive(session, samples, callback, () => firstBlock());
 			await this.awaitFirstBlock(session, started);
 		} catch (error) {
 			await this.stopRx();
 			throw error;
+		}
+	}
+
+	private async openBuffer(pipe: IiodPipe, samples: number): Promise<void> {
+		// Older iiod builds answer unknown commands with -EINVAL; the default of four blocks still works.
+		await pipe.command(`SET ${this.rx.id} BUFFERS_COUNT ${KERNEL_BUFFERS}\r\n`);
+		const opened = await pipe.command(`OPEN ${this.rx.id} ${samples} ${bufferMask(this.rx, this.rxChannels)}\r\n`);
+		if (opened < 0) throw new Error(`PlutoSDR could not start receiving (error ${opened}). Close other applications using it.`);
+	}
+
+	/**
+	 * Stream until stopped. startRx has resolved once samples flow, so a pipe that fails
+	 * after delivering them is retired and reception resumes on a spare. Earlier failures
+	 * reject startRx instead: they are often not specific to the pipe.
+	 */
+	private async receive(
+		session: PlutoRxSession,
+		samples: number,
+		callback: (data: ArrayBufferView) => void,
+		started: () => void,
+	): Promise<void> {
+		let delivered = false;
+		while (this.session === session) {
+			try {
+				await this.stream(session, samples, callback, () => {
+					delivered = true;
+					started();
+				});
+				return;
+			} catch (error) {
+				session.error = error instanceof Error ? error : new Error(errorMessage(error));
+				if (this.session !== session) return;
+				const spare = delivered ? this.streamPipes.find((pipe) => pipe !== session.pipe) : undefined;
+				if (!spare || !(await this.failOver(session, spare, samples))) {
+					console.error('PlutoSDR: receive stream stopped:', errorMessage(session.error));
+					return;
+				}
+			}
+		}
+	}
+
+	/** Retire the session's failed pipe and reopen the receive buffer on `spare`. */
+	private async failOver(session: PlutoRxSession, spare: IiodPipe, samples: number): Promise<boolean> {
+		console.warn(`PlutoSDR: receive stream failed (${errorMessage(session.error)}); resuming on a spare USB pipe`);
+		await this.retire(session.pipe);
+		session.pipe = spare;
+		try {
+			await this.openBuffer(spare, samples);
+			session.error = undefined;
+			return true;
+		} catch (error) {
+			session.error = error instanceof Error ? error : new Error(errorMessage(error));
+			return false;
 		}
 	}
 
