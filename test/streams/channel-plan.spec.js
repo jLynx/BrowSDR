@@ -8,16 +8,19 @@ const frequencies = [
 const params = frequencies.map((freq) => ({ freq, enabled: true, mode: 'wfm', bandwidth: 150000, pocsag: false }));
 
 describe('shared VFO band planning', () => {
-	it('keeps an RTK hop follower on full-band IQ while sharing neighbouring fixed VFOs', () => {
-		const values = [
-			...Array.from({ length: 3 }, (_, i) => ({ freq: 923 + i * 0.05, mode: 'nfm', bandwidth: 12500, enabled: true })),
-			{ freq: 923.118, mode: 'nfm', bandwidth: 12500, enabled: false, rtk: true, rtkFollowHops: true },
-		];
-		const plan = planSharedBands(20000000, 923.118, values, true);
-		expect(plan.direct).toContain(3);
-		expect(plan.bands.flatMap((band) => band.vfos)).not.toContain(3);
-		expect(plan.bands.flatMap((band) => band.vfos)).toHaveLength(3);
-	});
+	it.each([{ rtkFollowHops: true }, { rtkProfile: 'auto' }, { rtkProfile: 'scan' }])(
+		'keeps RTK reception %j on full-band IQ while sharing neighbouring fixed VFOs',
+		(rtk) => {
+			const values = [
+				...Array.from({ length: 3 }, (_, i) => ({ freq: 923 + i * 0.05, mode: 'nfm', bandwidth: 12500, enabled: true })),
+				{ freq: 923.118, mode: 'nfm', bandwidth: 12500, enabled: false, rtk: true, ...rtk },
+			];
+			const plan = planSharedBands(20000000, 923.118, values, true);
+			expect(plan.direct).toContain(3);
+			expect(plan.bands.flatMap((band) => band.vfos)).not.toContain(3);
+			expect(plan.bands.flatMap((band) => band.vfos)).toHaveLength(3);
+		},
+	);
 	it.each([false, true])('keeps muted WFM RDS reception active with shared DSP %s', (shared) => {
 		const values = params.slice(0, 3).map((value) => ({ ...value, enabled: false, rds: true }));
 		const plan = planSharedBands(61440000, 95, values, shared);

@@ -3,8 +3,24 @@ import { RtkHopFollower } from '@/worker/decoders/rtk/hopping/follower';
 import { RtkStream } from '@/worker/decoders/rtk/stream';
 import { mockRtkIq } from '../fixtures/rtk/mock-iq';
 import { mockRtk3Beacon, mockRtk3Packet, mockRtk3Container, mockRtk3Options } from '../fixtures/rtk/mock-rtk3';
+import { mockRtk2Compact, mockRtk2Options } from '../fixtures/rtk/mock-rtk2';
+import { mockRtcmReference } from '../fixtures/rtk/mock-rtk3';
+import { stationKey } from '@/worker/decoders/rtk/station-key';
+import { decodeRtk2Frame } from '@/worker/decoders/rtk/rtk2/frame';
 
 describe('recorded NZ RTK3 hop following', () => {
+	it('waits for the selected base and retains that choice after reacquisition', () => {
+		const hop = new RtkHopFollower('rtk3', 915401000, 'rtk3-100-4242');
+		hop.beacon('rtk3-101-4242', 1.010368);
+		expect(hop.tracking).toBe(false);
+		hop.beacon('rtk3-100-4242', 2.010368);
+		expect(hop.tracking).toBe(true);
+		hop.reset();
+		hop.beacon('rtk3-101-4242', 3.010368);
+		expect(hop.tracking).toBe(false);
+		hop.beacon('rtk3-100-4242', 4.010368);
+		expect(hop.tracking).toBe(true);
+	});
 	it('follows the nonascending RTK2 plan, including the extra lowest slot and lap wrap', () => {
 		const hop = new RtkHopFollower('rtk2', 921791000);
 		hop.beacon('TESTNET1-4242', 1.010368);
@@ -18,56 +34,75 @@ describe('recorded NZ RTK3 hop following', () => {
 		expect(frequencies.slice(6, 9)).toEqual([927391000, 915491000, 919691000]);
 		expect(frequencies.at(-1)).toBe(921791000);
 	});
-	it('retunes the DDC between synthetic bursts while preserving a container across hops', () => {
-		const memory = { buffer: new ArrayBuffer(655360) };
-		const channel = new Float32Array(2200000);
-		const container = mockRtk3Container();
-		for (const [start, packet] of [
-			[100000, mockRtk3Beacon()],
-			[200000, mockRtk3Packet(container.slice(0, 18))],
-			[800000, mockRtk3Packet(container.slice(18))],
-		]) {
-			const bytes = mockRtkIq(packet.data, mockRtk3Options);
-			channel.set(
-				Float32Array.from(new Int8Array(bytes.buffer), (value) => value / 128),
-				start * 2,
-			);
-		}
-		const shifts = [],
-			messages = [];
-		let emitted = 0,
-			count = 0;
-		class Ddc {
-			set_if_sample_rate() {}
-			set_bandwidth() {}
-			set_shift(rate, shift) {
-				shifts.push([rate, shift]);
+	it.each([
+		{ profile: 'rtk3', prefix: 0, preferred: false, frequency: 915.401, next: 915.901, second: 800000 },
+		{ profile: 'rtk3', prefix: 100, preferred: true, frequency: 915.401, next: 915.901, second: 800000 },
+		{ profile: 'rtk2', prefix: 0, preferred: false, frequency: 921.791, next: 925.991, second: 1200000 },
+		{ profile: 'rtk2', prefix: 0, preferred: true, frequency: 921.791, next: 925.991, second: 1200000 },
+	])(
+		'follows $profile beacons with prefix $prefix and preference $preferred',
+		({ profile, prefix, preferred, frequency, next, second }) => {
+			const memory = { buffer: new ArrayBuffer(655360) };
+			const channel = new Float32Array(3200000);
+			const container = profile === 'rtk3' ? mockRtk3Container() : mockRtcmReference();
+			const options = profile === 'rtk3' ? mockRtk3Options : { ...mockRtk2Options, sync: [8, 16] };
+			const makePacket = (body, slot) => (profile === 'rtk3' ? mockRtk3Packet(body, 4242, prefix) : mockRtk2Compact(body, slot));
+			for (const [start, packet] of [
+				[100000, profile === 'rtk3' ? mockRtk3Beacon(4242, 15000, prefix) : mockRtk2Compact(new Uint8Array(), 9)],
+				[200000, makePacket(container.slice(0, 18), 9)],
+				[second, makePacket(container.slice(18), 15)],
+			]) {
+				const bytes = mockRtkIq(packet.data, options);
+				channel.set(
+					Float32Array.from(new Int8Array(bytes.buffer), (value) => value / 128),
+					start * 2,
+				);
 			}
-			reset() {}
-			free() {}
-			process_iq_only_ptr(ptr, values) {
-				count = Math.floor(values / 40) * 2;
-				new Float32Array(memory.buffer, 327680, count).set(channel.subarray(emitted, emitted + count));
-				emitted += count;
-				return 327680;
+			const shifts = [],
+				messages = [];
+			let emitted = 0,
+				count = 0;
+			class Ddc {
+				set_if_sample_rate() {}
+				set_bandwidth() {}
+				set_shift(rate, shift) {
+					shifts.push([rate, shift]);
+				}
+				reset() {}
+				free() {}
+				process_iq_only_ptr(ptr, values) {
+					count = Math.floor(values / 40) * 2;
+					new Float32Array(memory.buffer, 327680, count).set(channel.subarray(emitted, emitted + count));
+					emitted += count;
+					return 327680;
+				}
+				get_iq_output_len() {
+					return count;
+				}
 			}
-			get_iq_output_len() {
-				return count;
+			let now = performance.now() + 1000;
+			const clock = vi.spyOn(performance, 'now').mockImplementation(() => (now += 300));
+			try {
+				const stream = new RtkStream(Ddc, memory, (message) => messages.push(message));
+				const identity =
+					profile === 'rtk3'
+						? { address: 4242, addressPrefix: prefix, netId: 4242 }
+						: { protocol: 'rtk2', netId: 4242, ...decodeRtk2Frame(makePacket(container, 9)) };
+				stream.configure(
+					{ freq: frequency, rtk: true, rtkProfile: profile, rtkFollowHops: true, rtkFollowSource: preferred ? stationKey(identity) : '' },
+					20000000,
+					923.118,
+				);
+				for (let at = 0, id = 0; at < 64000000; at += 327680) stream.process(0, Math.min(327680, 64000000 - at), false, ++id);
+				expect(shifts[0][0]).toBe(20000000);
+				expect(shifts[0][1]).toBeCloseTo((next - 923.118) * 1e6);
+				expect(messages.flatMap((message) => message.rtcm).map((frame) => frame.type)).toEqual([1006]);
+				expect(messages.at(-1).status.hopTracking).toBe(true);
+			} finally {
+				clock.mockRestore();
 			}
-		}
-		let now = performance.now() + 1000;
-		const clock = vi.spyOn(performance, 'now').mockImplementation(() => (now += 300));
-		try {
-			const stream = new RtkStream(Ddc, memory, (message) => messages.push(message));
-			stream.configure({ freq: 915.401, rtk: true, rtkProfile: 'rtk3', rtkFollowHops: true }, 20000000, 923.118);
-			for (let at = 0, id = 0; at < 44000000; at += 327680) stream.process(0, Math.min(327680, 44000000 - at), false, ++id);
-			expect(shifts[0]).toEqual([20000000, -7217000]);
-			expect(messages.flatMap((message) => message.rtcm).map((frame) => frame.type)).toEqual([1006]);
-			expect(messages.at(-1).status.hopTracking).toBe(true);
-		} finally {
-			clock.mockRestore();
-		}
-	});
+		},
+	);
 	it('anchors only on beacons, wraps all 25 slots and retains timing through missed beacons', () => {
 		const hop = new RtkHopFollower('rtk3', 927401000);
 		expect(hop.advance(100)).toBe(false);

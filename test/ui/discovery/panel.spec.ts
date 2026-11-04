@@ -9,6 +9,57 @@ import type { DiscoveryResult } from '@/worker/discovery/types';
 
 afterEach(() => vi.unstubAllGlobals());
 describe('signal discovery lifecycle', () => {
+	it('shares analysis with a closed RTK scout, preserves paused generic history and stops when the scout stops', () => {
+		const workers: FakeWorker[] = [];
+		class FakeWorker {
+			onmessage?: (event: { data: DiscoveryResult }) => void;
+			postMessage = vi.fn();
+			terminate = vi.fn();
+			constructor() {
+				workers.push(this);
+			}
+		}
+		vi.stubGlobal('Worker', FakeWorker);
+		const send = vi.fn();
+		const receiver = reactive({
+			...createAppData(),
+			connected: true,
+			running: true,
+			backend: { setRtkDiscoveryCandidates: send },
+		}) as unknown as AppInstance;
+		receiver.radio.centerFreq = 921.5;
+		receiver.vfos[0].rtk = true;
+		receiver.vfos[0].rtkProfile = 'scan';
+		receiver.discovery.enabled = false;
+		receiver.discovery.panelOpen = false;
+		const wrapper = mount(DiscoveryPanel, { global: { provide: { receiver } } });
+		const input = new Float32Array(65536).fill(-100);
+		submitDiscovery(receiver, input);
+		submitDiscovery(receiver, input);
+		expect(workers).toHaveLength(1);
+		expect(workers[0].postMessage).toHaveBeenCalledTimes(1);
+		expect(workers[0].postMessage.mock.calls[0][0]).toMatchObject({ discover: false, rtk: true });
+		expect(input.byteLength).toBe(65536 * 4);
+		workers[0].onmessage?.({
+			data: {
+				signals: [],
+				binHz: 305,
+				frames: 0,
+				time: Date.now(),
+				rtk: {
+					centerMHz: 921.5,
+					sampleRate: receiver.radio.sampleRate,
+					signals: [{ frequencyHz: 919.173e6, widthHz: 250000, aboveNoiseDb: 20 }],
+				},
+			},
+		});
+		expect(send).toHaveBeenCalledWith([919.173], 921.5, receiver.radio.sampleRate);
+		receiver.running = false;
+		submitDiscovery(receiver, input);
+		expect(workers[0].postMessage).toHaveBeenCalledTimes(1);
+		wrapper.unmount();
+		expect(workers[0].terminate).toHaveBeenCalled();
+	});
 	it('bounds in-flight work, preserves the input and retains discovery when closed', async () => {
 		class FakeWorker {
 			onmessage?: (event: { data: DiscoveryResult }) => void;

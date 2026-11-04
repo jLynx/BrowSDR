@@ -7,7 +7,11 @@ export class RtkHopFollower {
 	private phase?: number;
 	private lastBeacon = 0;
 	private address?: string | number;
-	constructor(profile: 'rtk2' | 'rtk3', frequencyHz: number) {
+	constructor(
+		profile: 'rtk2' | 'rtk3',
+		frequencyHz: number,
+		private preferredAddress?: string | number,
+	) {
 		this.plan = RTK_HOP_PLANS[profile];
 		const slot = this.plan.frequencies.findIndex((frequency) => Math.abs(frequencyHz - frequency) < 50000);
 		if (slot >= 0) this.slot = slot;
@@ -28,6 +32,7 @@ export class RtkHopFollower {
 		return this.phase !== undefined;
 	}
 	beacon(address: string | number, headerTime: number): void {
+		if (this.preferredAddress !== undefined && address !== this.preferredAddress) return;
 		if (this.address !== undefined && address !== this.address) return;
 		this.address = address;
 		// Header follows 16 preamble, two sync and 2.25 delimiter symbols at SF7/BW250.
