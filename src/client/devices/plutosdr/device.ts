@@ -1,5 +1,6 @@
 import { errorMessage } from '@/platform/errors';
 import { iqPrecisionControl, selectedIqBits } from '@/radio/iq/format';
+import { receiveTransferSize } from '@/radio/receive-transfer';
 import { registerDriver } from '@/radio/sdr-device';
 import type { GainControl, SdrDevice, SdrDeviceInfo } from '@/radio/types';
 import { bufferMask, findChannel, findDevice, parseIioContext, parseSampleFormat } from './context';
@@ -26,12 +27,14 @@ const MIN_RATE_WITHOUT_FIR = 25e6 / 12;
 const RF_BANDWIDTH_RANGE: [number, number] = [200e3, 56e6];
 /** AD9364 range; AD9363 firmware reports 325-3800 MHz through frequency_available. */
 const DEFAULT_LO_RANGE: [number, number] = [70e6, 6e9];
-/** ~20 ms per READBUF, rounded to whole kilo-samples. */
-const BLOCK_SECONDS = 0.02;
-/** Kernel DMA blocks queued on the device: about 160 ms of slack for browser pauses. */
-const KERNEL_BUFFERS = 8;
+/** One USB transfer per READBUF at the listed rates. */
+const MAX_BLOCK_BYTES = 1 << 20;
+/** I and Q travel as 16-bit words. */
+const WIRE_BYTES_PER_SAMPLE = 4;
+/** Kernel DMA blocks queued on the device: about 128 ms of slack for browser pauses. */
+const KERNEL_BUFFERS = 16;
 /** READBUF replies kept queued on USB while a block is processed, so the device never waits for the host. */
-const READ_AHEAD_BLOCKS = 2;
+const READ_AHEAD_BLOCKS = 4;
 const FIRST_BLOCK_TIMEOUT_MS = 5000;
 const STOP_TIMEOUT_MS = 2000;
 
@@ -41,8 +44,9 @@ export function parseIioRange(value: string): [number, number] | null {
 	return parts.length === 3 && parts.every(Number.isFinite) ? [parts[0], parts[2]] : null;
 }
 
+/** Samples per READBUF, which is also the kernel buffer size: about 8 ms, like other receivers' reads. */
 export function plutoBlockSamples(sampleRate: number): number {
-	return Math.max(1024, Math.ceil((sampleRate * BLOCK_SECONDS) / 1024) * 1024);
+	return receiveTransferSize(sampleRate, MAX_BLOCK_BYTES, WIRE_BYTES_PER_SAMPLE) / WIRE_BYTES_PER_SAMPLE;
 }
 
 function clamp(value: number, [min, max]: [number, number]): number {
@@ -81,10 +85,27 @@ export class PlutoSdrDevice implements SdrDevice {
 	private rxFormat!: IioSampleFormat;
 	private loRange = DEFAULT_LO_RANGE;
 	private gainRange: [number, number] | null = null;
-	private gainMode = 0;
+	/** Null until a Gain Mode is set: the firmware's own mode stays in effect until then. */
+	private gainMode: number | null = null;
 	private gain = 40;
 	private sampleRate = this.sampleRates[0];
 	private session: PlutoRxSession | null = null;
+	private operations: Promise<unknown> = Promise.resolve();
+
+	/** Tunable LO range in Hz, as the firmware reports it once open. */
+	get frequencyRange(): [number, number] {
+		return this.loRange;
+	}
+
+	/**
+	 * Run device operations one at a time. Each spans several IIOD commands, so a retune
+	 * could otherwise interleave with a gain update, or a stop with a pending OPEN.
+	 */
+	private serialized<T>(task: () => Promise<T>): Promise<T> {
+		const run = this.operations.then(task);
+		this.operations = run.catch(() => {});
+		return run;
+	}
 
 	async open(device: USBDevice): Promise<void> {
 		this.usb = device;
@@ -148,8 +169,12 @@ export class PlutoSdrDevice implements SdrDevice {
 		return this.pipe.writeAttribute({ device: this.phy, channel, attribute }, value);
 	}
 
-	async close(): Promise<void> {
-		await this.stopRx();
+	close(): Promise<void> {
+		return this.serialized(() => this.shutDown());
+	}
+
+	private async shutDown(): Promise<void> {
+		await this.stop();
 		const { usb, usbInterface } = this;
 		if (usb && usbInterface) {
 			await resetPipes(usb, usbInterface).catch(() => {});
@@ -182,11 +207,13 @@ export class PlutoSdrDevice implements SdrDevice {
 		});
 	}
 
-	async setSampleRate(rate: number): Promise<void> {
-		await this.disableFir();
-		await this.write(this.rxPath, 'sampling_frequency', Math.round(rate));
-		await this.write(this.rxPath, 'rf_bandwidth', Math.round(clamp(rate, RF_BANDWIDTH_RANGE)));
-		this.sampleRate = rate;
+	setSampleRate(rate: number): Promise<void> {
+		return this.serialized(async () => {
+			await this.disableFir();
+			await this.write(this.rxPath, 'sampling_frequency', Math.round(rate));
+			await this.write(this.rxPath, 'rf_bandwidth', Math.round(clamp(rate, RF_BANDWIDTH_RANGE)));
+			this.sampleRate = rate;
+		});
 	}
 
 	/** A FIR left by other software constrains rates and shapes the passband; the listed rates need none. */
@@ -204,17 +231,25 @@ export class PlutoSdrDevice implements SdrDevice {
 		await this.pipe.writeAttribute(target, 0);
 	}
 
-	async setFrequency(freqHz: number): Promise<void> {
-		const hz = Math.round(freqHz);
-		const [min, max] = this.loRange;
-		if (hz < min || hz > max)
-			throw new Error(`PlutoSDR tunes ${formatMhz(min)}-${formatMhz(max)} MHz; ${formatMhz(hz)} MHz is out of range`);
-		await this.write(this.rxLo, 'frequency', hz);
-		// AD936x gain tables, and so the manual gain range, change with the LO band.
-		this.gainRange = null;
+	setFrequency(freqHz: number): Promise<void> {
+		return this.serialized(async () => {
+			const hz = Math.round(freqHz);
+			const [min, max] = this.loRange;
+			if (hz < min || hz > max)
+				throw new Error(`PlutoSDR tunes ${formatMhz(min)}-${formatMhz(max)} MHz; ${formatMhz(hz)} MHz is out of range`);
+			await this.write(this.rxLo, 'frequency', hz);
+			// AD936x gain tables, and so the manual gain range, change with the LO band. The firmware
+			// keeps the current gain clamped to the new band's limit, so reapply the requested gain.
+			this.gainRange = null;
+			if (this.gainMode === 0) await this.applyManualGain();
+		});
 	}
 
-	async setGain(name: string, value: number): Promise<void> {
+	setGain(name: string, value: number): Promise<void> {
+		return this.serialized(() => this.applyGain(name, value));
+	}
+
+	private async applyGain(name: string, value: number): Promise<void> {
 		switch (name) {
 			case 'IQ Precision':
 				this.setIqPrecision(value);
@@ -235,11 +270,13 @@ export class PlutoSdrDevice implements SdrDevice {
 		}
 	}
 
-	async setGains(gains: Record<string, number>): Promise<void> {
-		if (gains['IQ Precision'] !== undefined) this.setIqPrecision(gains['IQ Precision']);
-		if (gains.RF !== undefined) this.gain = gains.RF;
-		if (gains['Gain Mode'] !== undefined) await this.setGain('Gain Mode', gains['Gain Mode']);
-		else if (this.gainMode === 0) await this.applyManualGain();
+	setGains(gains: Record<string, number>): Promise<void> {
+		return this.serialized(async () => {
+			if (gains['IQ Precision'] !== undefined) this.setIqPrecision(gains['IQ Precision']);
+			if (gains.RF !== undefined) this.gain = gains.RF;
+			if (gains['Gain Mode'] !== undefined) await this.applyGain('Gain Mode', gains['Gain Mode']);
+			else if (this.gainMode === 0) await this.applyManualGain();
+		});
 	}
 
 	/** Host-side only: USB always carries 16-bit words, and the DSP format is fixed while receiving. */
@@ -255,8 +292,16 @@ export class PlutoSdrDevice implements SdrDevice {
 		await this.write(this.rxPath, 'hardwaregain', Math.round(clamp(this.gain, range)));
 	}
 
-	async startRx(callback: (data: ArrayBufferView) => void): Promise<void> {
-		if (this.session) await this.stopRx();
+	startRx(callback: (data: ArrayBufferView) => void): Promise<void> {
+		return this.serialized(() => this.start(callback));
+	}
+
+	stopRx(): Promise<void> {
+		return this.serialized(() => this.stop());
+	}
+
+	private async start(callback: (data: ArrayBufferView) => void): Promise<void> {
+		if (this.session) await this.stop();
 		if (!this.control) throw new Error('PlutoSDR is not connected');
 		const pipe = this.streamPipes[0];
 		if (!pipe) throw new Error('PlutoSDR: USB streaming failed earlier in this session. Reconnect the PlutoSDR.');
@@ -270,7 +315,7 @@ export class PlutoSdrDevice implements SdrDevice {
 			session.done = this.receive(session, samples, callback, () => firstBlock());
 			await this.awaitFirstBlock(session, started);
 		} catch (error) {
-			await this.stopRx();
+			await this.stop();
 			throw error;
 		}
 	}
@@ -391,7 +436,7 @@ export class PlutoSdrDevice implements SdrDevice {
 		return iq;
 	}
 
-	async stopRx(): Promise<void> {
+	private async stop(): Promise<void> {
 		const session = this.session;
 		if (!session) return;
 		this.session = null;

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { streamSamplesPerPacket, streamTransferSize } from '@/devices/limesdr/stream-pcm';
 import { receiveTransferSize } from '@/radio/receive-transfer';
+import { plutoBlockSamples } from '@/devices/plutosdr/device';
 import { MockHackRF } from '@/worker/runtime/mock-hackrf';
 
 const instances = vi.hoisted(() => []);
@@ -115,8 +116,11 @@ describe('spectrum cadence across receiver formats', () => {
 		['Airspy', 2.5e6, 262144, 4],
 		['Airspy HF+', 192000, 65536, 8],
 		['Airspy HF+', 912000, 65536, 8],
-	])('sustains 60 FPS on %s at %i Sa/s without reducing the FFT size', (_, rate, maximum, sampleBytes) => {
-		const samples = receiveTransferSize(rate, maximum, sampleBytes) / sampleBytes;
+		['PlutoSDR', 2.4e6, 1 << 20, 4],
+		['PlutoSDR', 6e6, 1 << 20, 4],
+	])('sustains 60 FPS on %s at %i Sa/s without reducing the FFT size', (receiver, rate, maximum, sampleBytes) => {
+		// PlutoSDR rows use the driver's own READBUF size.
+		const samples = receiver === 'PlutoSDR' ? plutoBlockSamples(rate) : receiveTransferSize(rate, maximum, sampleBytes) / sampleBytes;
 		const interval = (samples * 1000) / rate;
 		const chunk = new Int8Array(samples * 2);
 		const { stream, callback } = createStream(65536, 60);

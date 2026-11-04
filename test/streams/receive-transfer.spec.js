@@ -6,6 +6,7 @@ import { RtlSdrDevice } from '@/devices/rtlsdr/device';
 import { RtlCom } from '@/devices/rtlsdr/usb';
 import { AirspyDevice } from '@/devices/airspy';
 import { AirspyHfDevice } from '@/devices/airspyhf';
+import { PlutoSdrDevice } from '@/devices/plutosdr/device';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -46,6 +47,7 @@ describe('receive transfer latency for advertised device rates', () => {
 		['RTL-SDR', new RtlSdrDevice().sampleRates, 65536, 2],
 		['Airspy', new AirspyDevice().sampleRates, 262144, 4],
 		['Airspy HF+', new AirspyHfDevice().sampleRates, 65536, 8],
+		['PlutoSDR', new PlutoSdrDevice().sampleRates, 1 << 20, 4],
 	])('bounds %s reads to 8ms without splitting USB packets or IQ samples', (_, rates, maximum, sampleBytes) => {
 		for (const rate of rates) {
 			const bytes = receiveTransferSize(rate, maximum, sampleBytes);

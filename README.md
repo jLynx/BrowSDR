@@ -93,7 +93,7 @@ BrowSDR includes receive drivers for the following device families. Driver avail
 | **Airspy**     | Airspy One, R2, Mini                                                    | Includes an Airspy receive driver with device-reported sample rates.                                                                                                                                  |
 | **Airspy HF+** | Airspy HF+ family                                                       | Includes a separate HF+ receive driver; individual variants still require hardware verification.                                                                                                      |
 | **LimeSDR**    | LimeSDR-USB                                                             | Uses the LimeSDR WebUSB receive driver with gain and antenna controls. See the Windows setup below.                                                                                                   |
-| **PlutoSDR**   | ADALM-PLUTO and Pluto firmware clones using USB ID `0456:b673`          | Speaks libiio's IIO-over-USB protocol to the firmware's iiod; 2.4–6 MSPS with manual or AGC gain. Not yet hardware-tested. See the PlutoSDR notes below.                                              |
+| **PlutoSDR**   | ADALM-PLUTO and compatible clones                                       | Uses the PlutoSDR WebUSB receive driver with gain controls. See the Windows setup below.                                                                                                              |
 
 Use a WebUSB-capable browser such as Chrome or Edge, over HTTPS or `localhost`. On Windows, the SDR's USB interface may need **WinUSB** instead of a vendor or DVB-T driver. Close other applications using the device before connecting.
 
@@ -151,28 +151,9 @@ Run `npm run test:ui` for component tests. After `npx playwright install chromiu
 run `npm run test:storybook` to render the catalog and check story interactions.
 `npm run build:storybook` creates a standalone catalog in `storybook-static/`.
 
-### LimeSDR-USB on Windows
+### LimeSDR-USB and PlutoSDR on Windows
 
-WebUSB requires the LimeSDR-USB to use **WinUSB**, rather than the native Cypress **CYUSB3** driver. If connecting fails with **Access denied**, check the driver for the LimeSDR in Device Manager and close other SDR applications or browser tabs using it.
-
-Use Device Manager to select an already-installed WinUSB driver, or install one for **LimeSDR-USB only** using [Zadig](https://zadig.akeo.ie/). Do not replace drivers for USB hubs or unrelated devices. Reconnect the device and select it again in Chrome or Edge after changing the driver.
-
-Changing to WinUSB can affect native SDR applications that require CYUSB3; switch back to the previous driver when those applications need it. See [Chrome's Windows WebUSB requirements](https://developer.chrome.com/docs/capabilities/build-for-webusb#windows).
-
-LimeSDR-USB reception supports sample rates up to **61.44 MSPS**.
-
-Choose **RX1** or **RX2** using **RX Channel** in the Radio panel, then select **LNAH**, **LNAL**, or **LNAW** under **Antenna** to match the H, L, or W connector in that receiver's antenna group. One receiver is streamed at a time; switching briefly restarts reception while retaining the current frequency, gains, and antenna path. The receiver and antenna selections are saved locally.
-
-### PlutoSDR
-
-BrowSDR talks to the PlutoSDR's own **IIO** USB interface, the one libiio uses; the network, storage and serial interfaces stay with the operating system. It controls `ad9361-phy` and streams `cf-ad9361-lpc`, so Pluto firmware clones with the same IIO devices should also work.
-
-- **Sample rates:** 2.4–6 MSPS; each sample takes 4 bytes over USB 2.0, which limits continuous reception to about 6 MSPS. The AD936x's 12-bit samples are kept in 16-bit containers unless a lower **IQ Precision** is selected. A programmable FIR left enabled by other software is turned off, since these rates do not need it.
-- **Dropped samples:** IIO buffers carry no sample counters, so BrowSDR compares the received rate with the configured one every 10 seconds. A shortfall is logged as a browser console warning; development builds also log each measurement.
-- **Tuning range:** whatever the firmware reports, typically 325–3800 MHz, or 70–6000 MHz on firmware switched to AD9364 mode.
-- **Gain:** **Gain Mode** selects manual gain or one of the AD936x AGC modes; **RF Gain** applies in manual mode and is limited to the range for the current band.
-- **Linux:** install the [PlutoSDR udev rules](https://github.com/analogdevicesinc/plutosdr-fw/blob/master/scripts/53-adi-plutosdr-usb.rules) so the browser can open the device without root.
-- **Windows:** Chrome needs **WinUSB** on the Pluto's **IIO** interface. If connecting fails with **Access denied**, install WinUSB for that interface only with [Zadig](https://zadig.akeo.ie/) (enable _List All Devices_ and pick the PlutoSDR entry ending in _Interface 5_ or named _IIO_).
+WebUSB needs these devices to use the **WinUSB** driver. If connecting fails with **Access denied**, install WinUSB with [Zadig](https://zadig.akeo.ie/): for **LimeSDR-USB**, replace the Cypress **CYUSB3** driver; for **PlutoSDR**, replace the driver on its **IIO** interface only (enable _List All Devices_). Do not replace drivers for USB hubs or unrelated devices, and switch back when native SDR applications need the original driver. See [Chrome's Windows WebUSB requirements](https://developer.chrome.com/docs/capabilities/build-for-webusb#windows) and the notes in [`limesdr`](src/client/devices/limesdr/README.md) and [`plutosdr`](src/client/devices/plutosdr/README.md).
 
 ### IQ precision and recording size
 

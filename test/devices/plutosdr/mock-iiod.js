@@ -99,6 +99,7 @@ export function createPluto({
 	replies = {},
 	failReadbuf = [],
 	loRange = '[70000000 1 6000000000]',
+	gainRanges = null,
 } = {}) {
 	const attributes = new Map([
 		['iio:device0 OUTPUT altvoltage0 frequency_available', loRange],
@@ -110,10 +111,23 @@ export function createPluto({
 		['iio:device0 INPUT voltage0 rf_bandwidth', '18000000'],
 		['iio:device0 INPUT out voltage_filter_fir_en', '1'],
 	]);
+	// Gain tables, and so hardwaregain_available, depend on the RX LO band.
+	const gainRange = () =>
+		gainRanges
+			? gainRanges(Number(attributes.get('iio:device0 OUTPUT altvoltage0 frequency')))
+			: attributes.get('iio:device0 INPUT voltage0 hardwaregain_available');
 	const state = { attributes, controls: [], commands: [], writes: [], opened: null, sampleCounter: 0, readbufs: 0, pipes: new Map() };
 	const pipe = (id) => {
 		if (!state.pipes.has(id))
-			state.pipes.set(id, { open: false, stale: { in: false, out: false }, packets: [], requests: [], pendingWrite: null });
+			state.pipes.set(id, {
+				open: false,
+				stale: { in: false, out: false },
+				packets: [],
+				requests: [],
+				pendingWrite: null,
+				readbufs: 0,
+				bufferOpen: false,
+			});
 		return state.pipes.get(id);
 	};
 
@@ -145,8 +159,11 @@ export function createPluto({
 		pump(id);
 	}
 
+	// failReadbuf: READBUF numbers across all pipes, or a predicate on (pipe, nth READBUF on that pipe).
 	function readbuf(id, bytes) {
-		if (failReadbuf.includes(++state.readbufs)) return send(id, '-110\n');
+		const nth = ++pipe(id).readbufs;
+		const fail = typeof failReadbuf === 'function' ? failReadbuf(id, nth) : failReadbuf.includes(++state.readbufs);
+		if (fail) return send(id, '-110\n');
 		for (let sent = 0; sent < bytes;) {
 			const length = Math.min(chunkBytes, bytes - sent);
 			const data = new Int16Array(length / 2);
@@ -169,6 +186,9 @@ export function createPluto({
 		if (key.endsWith('sampling_frequency') && fir === '0' && Number(parsed) < 25e6 / 12) return send(id, '-22\n');
 		if (key.endsWith('voltage_filter_fir_en') && Number(attributes.get('iio:device0 INPUT voltage0 sampling_frequency')) < 25e6 / 12)
 			return send(id, '-22\n');
+		// The AD936x rejects a manual gain outside the current band's gain table.
+		const [low, , high] = gainRange().replace(/[[\]]/g, '').trim().split(/\s+/).map(Number);
+		if (key.endsWith('hardwaregain') && (Number(parsed) < low || Number(parsed) > high)) return send(id, '-22\n');
 		attributes.set(key, parsed);
 		send(id, `${value.length}\n`);
 	}
@@ -186,7 +206,8 @@ export function createPluto({
 				send(id, xml);
 				return send(id, '\n');
 			case 'READ': {
-				const value = attributes.get(words.slice(1).join(' '));
+				const key = words.slice(1).join(' ');
+				const value = key.endsWith('hardwaregain_available') ? gainRange() : attributes.get(key);
 				if (value === undefined) return send(id, '-2\n');
 				send(id, `${value.length + 1}\n`);
 				return send(id, `${value}\0\n`);
@@ -195,12 +216,17 @@ export function createPluto({
 				pipe(id).pendingWrite = { key: words.slice(1, -1).join(' '), length: Number(words.at(-1)) };
 				return;
 			case 'OPEN':
+				// iiod refuses a second OPEN of the same device on one pipe until CLOSE.
+				if (pipe(id).bufferOpen) return send(id, '-16\n');
+				pipe(id).bufferOpen = true;
 				state.opened = { pipe: id, device: words[1], samples: Number(words[2]), mask: words[3] };
 				return send(id, '0\n');
 			case 'READBUF':
 				return readbuf(id, Number(words[2]));
-			case 'SET':
 			case 'CLOSE':
+				pipe(id).bufferOpen = false;
+				return send(id, '0\n');
+			case 'SET':
 				return send(id, '0\n');
 			default:
 				return send(id, '-22\n');

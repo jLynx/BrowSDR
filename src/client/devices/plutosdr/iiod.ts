@@ -103,10 +103,9 @@ export class IiodPipe {
 		// Whole packets only: a shorter request overflows when the device sends a full packet.
 		const aligned = Math.min(MAX_TRANSFER_BYTES, Math.ceil(length / packetSize) * packetSize);
 		const result = await this.usb.transferIn(inEndpoint, aligned);
-		if (result.status === 'stall') {
-			await this.usb.clearHalt('in', inEndpoint).catch(() => {});
-			throw new Error('PlutoSDR: USB endpoint stalled');
-		}
+		// No clearHalt here: on macOS it aborts transfers on the other pipes. A stalled stream
+		// pipe is retired instead; endpoint resets stay confined to connection setup.
+		if (result.status === 'stall') throw new Error('PlutoSDR: USB endpoint stalled. Reconnect the PlutoSDR.');
 		if (result.status !== 'ok' || !result.data) throw new Error(`PlutoSDR: USB read failed (${result.status})`);
 		return new Uint8Array(result.data.buffer, result.data.byteOffset, result.data.byteLength);
 	}

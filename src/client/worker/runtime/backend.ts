@@ -276,6 +276,7 @@ export class Backend {
 			gainControls: this.device.gainControls,
 			sampleFormat: this.device.sampleFormat,
 			nativeIqBits: this.device.nativeIqBits,
+			frequencyRange: this.device.frequencyRange,
 		};
 	}
 
