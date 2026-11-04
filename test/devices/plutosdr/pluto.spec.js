@@ -1,0 +1,390 @@
+import { describe, expect, it, vi } from 'vitest';
+import { PlutoSdrDevice, parseIioRange, plutoBlockSamples } from '@/devices/plutosdr/device';
+import { bufferMask, findDevice, parseIioContext, parseSampleFormat } from '@/devices/plutosdr/context';
+import { IiodPipe } from '@/devices/plutosdr/iiod';
+import { convertIq } from '@/devices/plutosdr/samples';
+import { PlutoThroughput } from '@/devices/plutosdr/throughput';
+import { findIiodInterface, openPipe } from '@/devices/plutosdr/usb';
+import { detectDevice } from '@/radio/sdr-device';
+import { lookupDevice } from '@/radio/device-catalog';
+import { receiveTransferSize } from '@/radio/receive-transfer';
+import { createPluto, plutoXml, rawSample } from './mock-iiod.js';
+
+async function connected(options) {
+	const fixture = createPluto(options);
+	const device = new PlutoSdrDevice();
+	await device.open(fixture.usb);
+	return { ...fixture, device };
+}
+
+function writesTo(state, attribute) {
+	return state.writes
+		.filter(({ key }) => key.endsWith(` ${attribute}`))
+		.map(({ value }) => new TextDecoder().decode(value).replace(/\0$/, ''));
+}
+
+async function receive(device, blocks, onBlock = () => {}) {
+	const received = [];
+	let done;
+	const finished = new Promise((resolve) => (done = resolve));
+	await device.startRx((data) => {
+		// Stopping is queued behind other device operations, so later blocks may still arrive.
+		if (received.length === blocks) return;
+		received.push(data.slice());
+		onBlock(received.length);
+		if (received.length === blocks) done();
+	});
+	await finished;
+	await device.stopRx();
+	return received;
+}
+
+const pipeRequest = (request, value) => ({ requestType: 'vendor', recipient: 'interface', request, value, index: 5 });
+
+describe('PlutoSDR device detection', () => {
+	it('maps the ADALM-PLUTO USB ID to the plutosdr driver on both threads', () => {
+		const usb = { vendorId: 0x0456, productId: 0xb673 };
+		expect(lookupDevice(usb)?.type).toBe('plutosdr');
+		expect(detectDevice(usb)?.type).toBe('plutosdr');
+		// DFU mode exposes no IIO interface.
+		expect(lookupDevice({ vendorId: 0x0456, productId: 0xb674 })).toBeNull();
+	});
+
+	it('finds the IIO interface by name or, without strings, by its descriptor shape', () => {
+		for (const named of [true, false]) {
+			const { usb } = createPluto({ named });
+			expect(findIiodInterface(usb)).toEqual({
+				interfaceNumber: 5,
+				pipes: [1, 2, 3].map((n, pipeId) => ({ pipeId, inEndpoint: n, outEndpoint: n, packetSize: 512 })),
+			});
+		}
+	});
+});
+
+describe('IIO context XML', () => {
+	const context = parseIioContext(plutoXml());
+
+	it('reads context attributes, devices and channels, skipping the DTD', () => {
+		expect(context.description).toBe('Linux (none) 5.15.0 "pluto" & friends');
+		expect(context.attributes.fw_version).toBe('v0.38');
+		expect(context.devices.map((device) => device.name)).toEqual(['ad9361-phy', 'xadc', 'cf-ad9361-lpc']);
+		const phy = findDevice(context, 'ad9361-phy');
+		expect(phy.attributes).toEqual(['filter_fir_config', 'ensm_mode']);
+		expect(phy.channels.find((channel) => channel.id === 'altvoltage0')).toMatchObject({ name: 'RX_LO', output: true, scanIndex: null });
+	});
+
+	it('numbers buffer mask bits by scan index, as libiio does', () => {
+		const rx = findDevice(context, 'iio:device3');
+		expect(rx.channels.map(({ id, maskBit }) => [id, maskBit])).toEqual([
+			['voltage1', 1],
+			['voltage0', 0],
+		]);
+		expect(bufferMask(rx, rx.channels)).toBe('00000003');
+		expect(bufferMask(rx, [rx.channels[0]])).toBe('00000002');
+		expect(parseSampleFormat(rx.channels[0].format)).toEqual({ littleEndian: true, signed: true, bits: 12, storageBits: 16, shift: 0 });
+	});
+
+	it('writes multi-word masks most significant word first', () => {
+		const device = { channels: Array.from({ length: 40 }, (_, i) => ({ maskBit: i })) };
+		expect(bufferMask(device, [device.channels[0], device.channels[33]])).toBe('0000000200000001');
+	});
+});
+
+describe('PlutoSDR sample conversion', () => {
+	it('left-aligns twelve bits in int16 or keeps the top eight, including from unaligned USB data', () => {
+		const words = new Int16Array([2047, -2048, 16 + 15, -16, 0, -1]);
+		const unaligned = new Uint8Array(words.byteLength + 1);
+		unaligned.set(new Uint8Array(words.buffer), 1);
+		const format = parseSampleFormat('le:S12/16>>0');
+		const full = new Int16Array(words.length + 2);
+		convertIq(unaligned.subarray(1), format, full, 2);
+		expect(Array.from(full)).toEqual([0, 0, 32752, -32768, 496, -256, 0, -16]);
+		const small = new Int8Array(words.length + 2);
+		convertIq(unaligned.subarray(1), format, small, 2);
+		expect(Array.from(small)).toEqual([0, 0, 127, -128, 1, -1, 0, -1]);
+	});
+
+	it('sizes reads like other receivers: about 8 ms of whole USB packets', () => {
+		expect(plutoBlockSamples(2400000)).toBe(19200);
+		expect(plutoBlockSamples(5000000)).toBe(39936);
+		expect(plutoBlockSamples(6000000)).toBe(48000);
+		for (const rate of new PlutoSdrDevice().sampleRates) expect(plutoBlockSamples(rate) * 4).toBe(receiveTransferSize(rate, 1 << 20, 4));
+		expect(parseIioRange('[325000000 1 3800000000]')).toEqual([325000000, 3800000000]);
+		expect(parseIioRange('manual')).toBeNull();
+	});
+});
+
+describe('PlutoSDR control over iiod', () => {
+	it('opens every pipe once and resets its data toggles, without changing the active configuration', async () => {
+		const { usb, state, device } = await connected();
+		expect(state.controls.slice(0, 11)).toEqual([
+			{ claim: 5 },
+			pipeRequest(0, 0),
+			...[0, 1, 2].flatMap((pipe) => [
+				pipeRequest(1, pipe),
+				{ clearHalt: 'in', endpoint: pipe + 1 },
+				{ clearHalt: 'out', endpoint: pipe + 1 },
+			]),
+		]);
+		expect(state.commands.slice(0, 2).map(({ line }) => line)).toEqual(['VERSION', 'PRINT']);
+		expect(await device.getInfo()).toMatchObject({
+			name: 'PlutoSDR',
+			hardware: 'Analog Devices PlutoSDR Rev.C (Z7010-AD9363A)',
+			firmware: 'v0.38',
+			serial: '104473b04a0600120c00f5ff2b0ade5a57',
+			tuner: 'AD9363A',
+			protocol: 'IIOD 0.25 (b6028fd)',
+			product: 'PlutoSDR (ADALM-PLUTO)',
+		});
+		await device.close();
+		expect(state.controls.slice(-2)).toEqual([pipeRequest(0, 0), { release: 5 }]);
+		expect(usb.configuration.configurationValue).toBe(1);
+	});
+
+	it('skips stale reply lines from an interrupted session before the version', async () => {
+		const { device } = await connected({ staleLines: ['48128\n', '00000003\n', 'garbage'] });
+		expect((await device.getInfo()).protocol).toBe('IIOD 0.25 (b6028fd)');
+	});
+
+	it('leaves FIR-only rates before disabling the FIR, then sets rate and analog bandwidth', async () => {
+		const { state, device } = await connected();
+		await device.setSampleRate(2400000);
+		expect(writesTo(state, 'sampling_frequency')).toEqual(['3000000', '2400000']);
+		expect(writesTo(state, 'voltage_filter_fir_en')).toEqual(['0']);
+		expect(writesTo(state, 'rf_bandwidth')).toEqual(['2400000']);
+		// WRITE announces the value length including libiio's terminating NUL.
+		expect(state.commands.find(({ line }) => line.includes('rf_bandwidth'))?.line).toBe('WRITE iio:device0 INPUT voltage0 rf_bandwidth 8');
+
+		await device.setSampleRate(5000000);
+		expect(writesTo(state, 'voltage_filter_fir_en')).toEqual(['0']);
+		expect(writesTo(state, 'sampling_frequency').at(-1)).toBe('5000000');
+	});
+
+	it('tunes the RX LO within the range the firmware reports', async () => {
+		const { state, device } = await connected({ loRange: '[325000000 1 3800000000]' });
+		expect(device.frequencyRange).toEqual([325000000, 3800000000]);
+		await device.setFrequency(433920000.4);
+		expect(state.attributes.get('iio:device0 OUTPUT altvoltage0 frequency')).toBe('433920000');
+		await expect(device.setFrequency(100e6)).rejects.toThrow('PlutoSDR tunes 325-3800 MHz; 100 MHz is out of range');
+	});
+
+	it('reports iiod errors with the errno name', async () => {
+		const { device } = await connected({ replies: { 'WRITE iio:device0 OUTPUT altvoltage0 frequency 1000000000': -22 } });
+		await expect(device.setFrequency(1e9)).rejects.toThrow('PlutoSDR setting frequency to 1000000000 failed: EINVAL (-22)');
+	});
+
+	it('applies manual gain within the band range and leaves AGC modes alone', async () => {
+		const { state, device } = await connected();
+		await device.setGains({ 'Gain Mode': 0, RF: 90 });
+		expect(state.attributes.get('iio:device0 INPUT voltage0 gain_control_mode')).toBe('manual');
+		expect(writesTo(state, 'hardwaregain')).toEqual(['73']);
+
+		await device.setGain('Gain Mode', 1);
+		await device.setGain('RF', 20);
+		expect(state.attributes.get('iio:device0 INPUT voltage0 gain_control_mode')).toBe('slow_attack');
+		expect(writesTo(state, 'hardwaregain')).toEqual(['73']);
+
+		await device.setGain('Gain Mode', 0);
+		expect(writesTo(state, 'hardwaregain')).toEqual(['73', '20']);
+	});
+
+	const bandGains = (hz) => (hz > 4e9 ? '[-10 1 62]' : '[-1 1 73]');
+
+	it('reapplies the requested manual gain after a band change, but leaves the firmware mode alone until one is set', async () => {
+		const { state, device } = await connected({ gainRanges: bandGains });
+		await device.setFrequency(5.5e9);
+		expect(writesTo(state, 'hardwaregain')).toEqual([]);
+		await device.setGains({ 'Gain Mode': 0, RF: 70 });
+		await device.setFrequency(1e9);
+		expect(writesTo(state, 'hardwaregain')).toEqual(['62', '70']);
+	});
+
+	it('serializes retuning with gain updates, so a band change cannot leave a stale gain range', async () => {
+		const { state, device } = await connected({ gainRanges: bandGains });
+		await device.setGains({ 'Gain Mode': 0, RF: 70 });
+		await Promise.all([device.setFrequency(5.5e9), device.setGain('RF', 72)]);
+		await device.setFrequency(1e9);
+		expect(writesTo(state, 'hardwaregain')).toEqual(['70', '62', '62', '72']);
+	});
+
+	it('reports a stalled endpoint without resetting it, which would disturb the other pipes', async () => {
+		const usb = {
+			transferOut: vi.fn().mockResolvedValue({ status: 'ok', bytesWritten: 9 }),
+			transferIn: vi.fn().mockResolvedValue({ status: 'stall' }),
+			clearHalt: vi.fn(),
+		};
+		const pipe = new IiodPipe(usb, { pipeId: 1, inEndpoint: 2, outEndpoint: 2, packetSize: 512 });
+		await expect(pipe.command('VERSION\r\n')).rejects.toThrow('PlutoSDR: USB endpoint stalled. Reconnect the PlutoSDR.');
+		expect(usb.clearHalt).not.toHaveBeenCalled();
+	});
+});
+
+describe('PlutoSDR streaming', () => {
+	it('streams 12-bit IQ with replies queued ahead and leaves nothing unread on stop', async () => {
+		const { state, device, unread, pendingReads } = await connected();
+		await device.setSampleRate(2400000);
+		const samples = plutoBlockSamples(2400000);
+		const readbufs = () => state.commands.filter(({ line }) => line.startsWith('READBUF')).length;
+		const requestedAtDelivery = [];
+		const blocks = await receive(device, 3, () => requestedAtDelivery.push(readbufs()));
+		expect(state.opened).toEqual({ pipe: 1, device: 'iio:device3', samples, mask: '00000003' });
+		expect(state.commands.find(({ line }) => line.startsWith('READBUF'))?.line).toBe(`READBUF iio:device3 ${samples * 4}`);
+		// Two more blocks are already requested whenever one is handed to the DSP.
+		expect(requestedAtDelivery).toEqual([5, 6, 7]);
+		expect(blocks.map((block) => [block.constructor, block.length])).toEqual(Array(3).fill([Int16Array, samples * 2]));
+		const all = blocks.flatMap((block) => Array.from(block));
+		for (const k of [0, 1, 255, 256, samples + 7]) expect(all.slice(k * 2, k * 2 + 2)).toEqual(rawSample(k).map((v) => v << 4));
+		// The replies requested ahead were consumed before CLOSE; the pipe stays open.
+		expect(state.commands.at(-1)).toEqual({ pipe: 1, line: 'CLOSE iio:device3' });
+		expect([unread(1), pendingReads(1)]).toEqual([0, 0]);
+		expect(state.controls.filter((control) => control.request === 2)).toEqual([]);
+		await device.close();
+	});
+
+	it('narrows to 8-bit IQ when selected, and changes precision only while stopped', async () => {
+		const { device } = await connected();
+		await device.setSampleRate(2400000);
+		await device.setGains({ 'IQ Precision': 1 });
+		expect(device.sampleFormat).toBe('int8');
+		let rejected;
+		const [block] = await receive(device, 1, () => {
+			rejected = device.setGain('IQ Precision', 0).catch((error) => error.message);
+		});
+		expect(block).toBeInstanceOf(Int8Array);
+		expect(Array.from(block.slice(0, 4))).toEqual([...rawSample(0), ...rawSample(1)].map((v) => v >> 4));
+		expect(await rejected).toBe('Stop reception before changing IQ precision');
+		await device.setGain('IQ Precision', 0);
+		expect(device.sampleFormat).toBe('int16');
+		await device.close();
+	});
+
+	it('restarts with OPEN and CLOSE only, never resetting endpoints while running', async () => {
+		const { state, device } = await connected();
+		await device.setSampleRate(2400000);
+		const connectControls = state.controls.length;
+		await receive(device, 2);
+		await device.setSampleRate(5000000);
+		await receive(device, 2);
+		expect(state.opened).toMatchObject({ pipe: 1, samples: plutoBlockSamples(5000000) });
+		expect(state.controls.slice(connectControls)).toEqual([]);
+	});
+
+	const resumed = 'PlutoSDR: receive stream failed (PlutoSDR READBUF failed: ETIMEDOUT (-110)); resuming on a spare USB pipe';
+
+	it('resumes on the spare pipe when a stream fails after it started', async () => {
+		const warned = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const failed = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { state, device } = await connected({ failReadbuf: (pipe, nth) => pipe === 1 && nth === 3 });
+		await device.setSampleRate(2400000);
+		// Two blocks arrive on pipe 1 before its third READBUF fails.
+		await receive(device, 5);
+		expect(warned).toHaveBeenCalledWith(resumed);
+		expect(failed).not.toHaveBeenCalled();
+		expect(state.opened.pipe).toBe(2);
+		expect(state.controls.filter((control) => control.request === 2)).toEqual([pipeRequest(2, 1)]);
+		expect(state.commands.at(-1)).toEqual({ pipe: 2, line: 'CLOSE iio:device3' });
+		vi.restoreAllMocks();
+	});
+
+	it('reports a stream failure once no spare pipe is left', async () => {
+		const warned = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		const failed = vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { state, device } = await connected({ failReadbuf: (_, nth) => nth === 2 });
+		await device.setSampleRate(2400000);
+		await device.startRx(vi.fn());
+		await vi.waitFor(() =>
+			expect(failed).toHaveBeenCalledWith('PlutoSDR: receive stream stopped:', 'PlutoSDR READBUF failed: ETIMEDOUT (-110)'),
+		);
+		expect(warned).toHaveBeenCalledWith(resumed);
+		await device.stopRx();
+		expect(state.controls.filter((control) => control.request === 2)).toEqual([pipeRequest(2, 1), pipeRequest(2, 2)]);
+		await expect(device.startRx(vi.fn())).rejects.toThrow('USB streaming failed earlier in this session. Reconnect the PlutoSDR.');
+		vi.restoreAllMocks();
+	});
+
+	it('rejects startRx without failing over when the first block never arrives', async () => {
+		const warned = vi.spyOn(console, 'warn').mockImplementation(() => {});
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { state, device } = await connected({ failReadbuf: [1] });
+		await device.setSampleRate(2400000);
+		await expect(device.startRx(vi.fn())).rejects.toThrow('PlutoSDR READBUF failed: ETIMEDOUT (-110)');
+		expect(warned).not.toHaveBeenCalled();
+		expect(state.controls.at(-1)).toEqual(pipeRequest(2, 1));
+		await receive(device, 1);
+		expect(state.opened.pipe).toBe(2);
+		vi.restoreAllMocks();
+	});
+
+	it('finishes a pending start before stopping, so no receive buffer stays open', async () => {
+		const { state, device } = await connected();
+		await device.setSampleRate(2400000);
+		const starting = device.startRx(vi.fn());
+		await device.stopRx();
+		await starting;
+		const lines = state.commands.filter(({ pipe }) => pipe === 1).map(({ line }) => line.split(' ')[0]);
+		expect(lines.filter((line) => line !== 'READBUF')).toEqual(['SET', 'OPEN', 'CLOSE']);
+		await receive(device, 1);
+		expect(state.opened.pipe).toBe(1);
+	});
+
+	it('rejects READBUF replies split into pieces, which read-ahead cannot frame', async () => {
+		vi.spyOn(console, 'error').mockImplementation(() => {});
+		const { device } = await connected({ chunkBytes: 8192 });
+		await device.setSampleRate(3000000);
+		await expect(device.startRx(vi.fn())).rejects.toThrow(`READBUF returned 8192 of ${plutoBlockSamples(3000000) * 4} bytes in one piece`);
+		vi.restoreAllMocks();
+	});
+
+	it('explains when the receive buffer is busy and keeps the pipe for a retry', async () => {
+		const open = `OPEN iio:device3 ${plutoBlockSamples(2400000)} 00000003`;
+		const replies = { [open]: -16 };
+		const { state, device } = await connected({ replies });
+		await device.setSampleRate(2400000);
+		await expect(device.startRx(vi.fn())).rejects.toThrow(
+			'PlutoSDR could not start receiving (error -16). Close other applications using it.',
+		);
+		delete replies[open];
+		await receive(device, 1);
+		expect(state.opened.pipe).toBe(1);
+	});
+
+	it('splits sample reads larger than 1 MiB across queued transfers', async () => {
+		const { usb, state } = createPluto();
+		const usbInterface = findIiodInterface(usb);
+		await openPipe(usb, usbInterface, usbInterface.pipes[1]);
+		const pipe = new IiodPipe(usb, usbInterface.pipes[1]);
+		expect(await pipe.command('OPEN iio:device3 393216 00000003\r\n')).toBe(0);
+		const chunks = await pipe.readbufAhead('iio:device3', 393216 * 4, 1);
+		expect(chunks.map((chunk) => chunk.byteLength)).toEqual([1 << 20, 1 << 19]);
+		expect(state.commands.at(-1)).toEqual({ pipe: 1, line: 'READBUF iio:device3 1572864' });
+	});
+
+	it('needs a second pipe for streaming', async () => {
+		const device = new PlutoSdrDevice();
+		await expect(device.open(createPluto({ pipes: 1 }).usb)).rejects.toThrow('needs at least two pipes');
+	});
+});
+
+describe('PlutoSDR throughput check', () => {
+	function measure(intervalMs) {
+		const reports = [];
+		const meter = new PlutoThroughput(6000000, (summary, shortfall) => reports.push({ summary, shortfall }), 1000);
+		meter.block(120000, 9, 3, 0);
+		for (let now = intervalMs; now <= 1000; now += intervalMs) meter.block(120000, now === 100 ? 7.5 : 2, 4, now);
+		return reports;
+	}
+
+	it('reports the received rate against the configured rate', () => {
+		expect(measure(20)).toEqual([
+			{
+				summary: 'PlutoSDR: received 6.00 of 6.00 MSPS (100.0%); longest wait for USB 7.5 ms, longest processing 4.0 ms',
+				shortfall: false,
+			},
+		]);
+	});
+
+	it('flags a shortfall, which means the device dropped samples', () => {
+		expect(measure(25)).toEqual([expect.objectContaining({ shortfall: true })]);
+		expect(measure(25)[0].summary).toContain('received 4.80 of 6.00 MSPS (80.0%)');
+	});
+});

@@ -5,7 +5,7 @@
 [![WebAssembly](https://img.shields.io/badge/Wasm-Powered-blue?style=for-the-badge&logo=webassembly)](https://webassembly.org/)
 [![Discord](https://img.shields.io/badge/Discord-Join%20the%20Community-5865F2?style=for-the-badge&logo=discord&logoColor=white)](https://discord.gg/m8BtU4ebSH)
 
-A blazing fast, next-generation browser-based Software Defined Radio (SDR) receiver for HackRF, HackRF Pro, RTL-SDR, Airspy, and LimeSDR devices. Connect a compatible SDR directly to your browser via WebUSB and tune into FM, AM, SSB, CW, and more — **no drivers, no native software, no hassle.**
+A blazing fast, next-generation browser-based Software Defined Radio (SDR) receiver for HackRF, HackRF Pro, RTL-SDR, Airspy, LimeSDR, and PlutoSDR devices. Connect a compatible SDR directly to your browser via WebUSB and tune into FM, AM, SSB, CW, and more — **no drivers, no native software, no hassle.**
 
 ---
 
@@ -93,6 +93,7 @@ BrowSDR includes receive drivers for the following device families. Driver avail
 | **Airspy**     | Airspy One, R2, Mini                                                    | Includes an Airspy receive driver with device-reported sample rates.                                                                                                                                  |
 | **Airspy HF+** | Airspy HF+ family                                                       | Includes a separate HF+ receive driver; individual variants still require hardware verification.                                                                                                      |
 | **LimeSDR**    | LimeSDR-USB                                                             | Uses the LimeSDR WebUSB receive driver with gain and antenna controls. See the Windows setup below.                                                                                                   |
+| **PlutoSDR**   | ADALM-PLUTO and compatible clones                                       | Uses the PlutoSDR WebUSB receive driver with gain controls. See the Windows setup below.                                                                                                              |
 
 Use a WebUSB-capable browser such as Chrome or Edge, over HTTPS or `localhost`. On Windows, the SDR's USB interface may need **WinUSB** instead of a vendor or DVB-T driver. Close other applications using the device before connecting.
 
@@ -150,22 +151,14 @@ Run `npm run test:ui` for component tests. After `npx playwright install chromiu
 run `npm run test:storybook` to render the catalog and check story interactions.
 `npm run build:storybook` creates a standalone catalog in `storybook-static/`.
 
-### LimeSDR-USB on Windows
+### LimeSDR-USB and PlutoSDR on Windows
 
-WebUSB requires the LimeSDR-USB to use **WinUSB**, rather than the native Cypress **CYUSB3** driver. If connecting fails with **Access denied**, check the driver for the LimeSDR in Device Manager and close other SDR applications or browser tabs using it.
-
-Use Device Manager to select an already-installed WinUSB driver, or install one for **LimeSDR-USB only** using [Zadig](https://zadig.akeo.ie/). Do not replace drivers for USB hubs or unrelated devices. Reconnect the device and select it again in Chrome or Edge after changing the driver.
-
-Changing to WinUSB can affect native SDR applications that require CYUSB3; switch back to the previous driver when those applications need it. See [Chrome's Windows WebUSB requirements](https://developer.chrome.com/docs/capabilities/build-for-webusb#windows).
-
-LimeSDR-USB reception supports sample rates up to **61.44 MSPS**.
-
-Choose **RX1** or **RX2** using **RX Channel** in the Radio panel, then select **LNAH**, **LNAL**, or **LNAW** under **Antenna** to match the H, L, or W connector in that receiver's antenna group. One receiver is streamed at a time; switching briefly restarts reception while retaining the current frequency, gains, and antenna path. The receiver and antenna selections are saved locally.
+WebUSB needs these devices to use the **WinUSB** driver. If connecting fails with **Access denied**, install WinUSB with [Zadig](https://zadig.akeo.ie/): for **LimeSDR-USB**, replace the Cypress **CYUSB3** driver; for **PlutoSDR**, replace the driver on its **IIO** interface only (enable _List All Devices_). Do not replace drivers for USB hubs or unrelated devices, and switch back when native SDR applications need the original driver. See [Chrome's Windows WebUSB requirements](https://developer.chrome.com/docs/capabilities/build-for-webusb#windows) and the notes in [`limesdr`](src/client/devices/limesdr/README.md) and [`plutosdr`](src/client/devices/plutosdr/README.md).
 
 ### IQ precision and recording size
 
 Reception retains each driver's native sample precision: HackRF and RTL-SDR use
-8-bit IQ, LimeSDR and Airspy retain their 12-bit sources in 16-bit containers, and
+8-bit IQ, LimeSDR, Airspy and PlutoSDR retain their 12-bit sources in 16-bit containers, and
 Airspy HF+ retains its delivered 16-bit samples. Stop reception to select a lower
 **IQ Precision** under **Radio → Advanced** on higher-resolution radios. This
 reduces sample detail and internal memory traffic. LimeSDR's separate **USB Format**

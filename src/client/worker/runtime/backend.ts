@@ -56,6 +56,7 @@ import '@/devices/rtlsdr/device';
 import '@/devices/airspy';
 import '@/devices/airspyhf';
 import '@/devices/limesdr/device';
+import '@/devices/plutosdr/device';
 import {
 	setRemoteHostCallback,
 	setRemoteHostFftCallback,
@@ -275,6 +276,7 @@ export class Backend {
 			gainControls: this.device.gainControls,
 			sampleFormat: this.device.sampleFormat,
 			nativeIqBits: this.device.nativeIqBits,
+			frequencyRange: this.device.frequencyRange,
 		};
 	}
 

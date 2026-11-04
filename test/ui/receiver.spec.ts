@@ -54,6 +54,32 @@ describe('receiver uses the shared UI', () => {
 		settingsMethods.loadSetting.call(wrapper.vm as unknown as AppInstance);
 		expect(wrapper.vm.deviceInfoCollapsed).toBe(true);
 	});
+	it.each([
+		{ saved: 100, vfo: 100.1, center: 325, vfoFreq: 325.1, note: 'tuned to 325 MHz' },
+		{ saved: 433.92, vfo: 434, center: 433.92, vfoFreq: 434, note: null },
+	])('starts a new connection at $center MHz when $saved MHz was saved', async ({ saved, vfo, center, vfoFreq, note }) => {
+		wrapper = mount(ReceiverView);
+		const backend = {
+			open: vi.fn().mockResolvedValue(true),
+			info: vi.fn().mockResolvedValue({ name: 'PlutoSDR' }),
+			getDeviceCapabilities: vi.fn().mockResolvedValue({
+				deviceType: 'plutosdr',
+				sampleRates: [2400000],
+				gainControls: [],
+				sampleFormat: 'int16',
+				frequencyRange: [325e6, 3.8e9],
+			}),
+		};
+		await wrapper.setData({ backend, radio: { ...wrapper.vm.radio, centerFreq: saved, frequencyShift: 0 }, vfos: [makeDefaultVfo(vfo)] });
+		vi.spyOn(wrapper.vm, '_initAudioCtx').mockImplementation(() => {});
+		const startStream = vi.spyOn(wrapper.vm, 'startStream').mockResolvedValue(undefined);
+		await wrapper.vm._connectToDevice({ vendorId: 0x0456, productId: 0xb673 } as USBDevice);
+		expect(wrapper.vm.radio.centerFreq).toBe(center);
+		expect(wrapper.vm.vfos[0].freq).toBe(vfoFreq);
+		expect(startStream).toHaveBeenCalled();
+		if (note) expect(wrapper.vm.snackbar.message).toContain(note);
+		else expect(wrapper.vm.snackbar.message).toBe('Connected to PlutoSDR');
+	});
 	it('reveals selected header VFOs without moving the page or scrolling visible tabs', async () => {
 		wrapper = mount(ReceiverView);
 		await wrapper.setData({ connected: true, vfos: Array.from({ length: 10 }, (_, i) => makeDefaultVfo(130 + i)) });

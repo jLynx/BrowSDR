@@ -43,6 +43,8 @@ export interface SdrDevice {
 	readonly nativeIqBits?: number;
 	readonly gainControls: GainControl[];
 	readonly sampleFormat: 'int8' | 'uint8' | 'int16' | 'float32';
+	/** Tunable hardware frequency range in Hz, when the driver knows it after opening. */
+	readonly frequencyRange?: [number, number];
 
 	open(device: USBDevice): Promise<void>;
 	close(): Promise<void>;
@@ -89,6 +91,7 @@ export interface DeviceCapabilities {
 	sampleRates: number[];
 	gainControls: GainControl[];
 	sampleFormat: 'int8' | 'uint8' | 'int16' | 'float32';
+	frequencyRange?: [number, number];
 }
 
 export interface SdrDriverEntry {
