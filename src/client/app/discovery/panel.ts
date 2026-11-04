@@ -6,6 +6,7 @@ import { registerDiscovery } from './bridge';
 import template from './panel.html?raw';
 import { createAnalysis } from './analysis';
 import { focusSpectrumFrequency } from '@/app/display/zoom';
+import { feedRtkCandidates } from './rtk';
 
 export default defineComponent({
 	name: 'DiscoveryPanel',
@@ -20,7 +21,8 @@ export default defineComponent({
 		const analysis = createAnalysis(
 			receiver,
 			(value) => {
-				result.value = value;
+				if (receiver.discovery.enabled) result.value = value;
+				feedRtkCandidates(receiver, value);
 			},
 			() => {
 				error.value = 'Signal analysis could not start. Clear history to retry.';

@@ -14,16 +14,17 @@ export function crc16Modbus(data: Uint8Array): number {
 export function decodeRtk3Frame(packet: LoraPacket): Rtk3Frame | undefined {
 	const data = packet.data;
 	if (packet.hasCrc || packet.codingRate !== 1 || packet.codingErrors) return;
-	if (data.length < 7 || data.length > 231 || data[0] !== 0 || data[1] !== 0) return;
+	if (data.length < 7 || data.length > 231) return;
 	const trailer = data.length - 2;
 	if (crc16Modbus(data.subarray(0, trailer)) !== (data[trailer] | (data[trailer + 1] << 8))) return;
 	const address = data[2] | (data[3] << 8);
+	const addressPrefix = data[0] | (data[1] << 8) || undefined;
 	const body = data.subarray(4, trailer);
 	if (body[0] === 0x55 && body[1] === 0x55) {
 		if (data.length !== 21 || body[2] !== 0 || body[3] !== 0x40) return;
 		if (body.subarray(8, 13).some((byte) => byte !== 0) || body[13] !== 0xaa || body[14] !== 0xaa) return;
 		const beaconMs = new DataView(body.buffer, body.byteOffset, body.byteLength).getUint32(4, true);
-		return { address, body, beaconMs };
+		return { address, addressPrefix, body, beaconMs };
 	}
-	return { address, body };
+	return { address, addressPrefix, body };
 }

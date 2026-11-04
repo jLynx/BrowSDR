@@ -48,6 +48,7 @@ export type DspOutput =
 
 export type DspInput =
 	| { type: 'release_bands'; batchId: number }
+	| { type: 'rtk_candidates'; frequenciesMHz: number[]; centerFreq: number; sampleRate: number }
 	| {
 			type: 'channelize';
 			iqFormat?: 'int8' | 'int16' | 'float32';

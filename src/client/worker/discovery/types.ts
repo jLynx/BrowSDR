@@ -28,8 +28,12 @@ export interface TrackedDiscoverySignal extends DiscoverySignal {
 
 export interface DiscoveryFrame {
 	data: Float32Array;
+	/** Peak spectrum across intervening display frames, so short bursts survive the 4 Hz analysis cadence. */
+	rtkData?: Float32Array;
 	config: DiscoveryConfig;
 	time: number;
+	discover?: boolean;
+	rtk?: boolean;
 }
 
 export interface DiscoveryResult {
@@ -37,4 +41,5 @@ export interface DiscoveryResult {
 	binHz: number;
 	frames: number;
 	time: number;
+	rtk?: { centerMHz: number; sampleRate: number; signals: DetectedSignal[] };
 }

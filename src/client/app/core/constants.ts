@@ -2,7 +2,7 @@ import type { BookmarkCategory } from '@/app/workspace/types';
 
 // Color palette for N VFOs
 import type { PocsagMode } from '@/worker/decoders/types';
-import type { RtkProfile } from '@/worker/decoders/rtk/types';
+import type { RtkProfileMode } from '@/worker/decoders/rtk/types';
 
 export const DISCORD_INVITE_URL = 'https://discord.gg/m8BtU4ebSH';
 
@@ -37,9 +37,13 @@ export const makeDefaultVfo = (freq = 100.0) => ({
 	ais: false,
 	radiosonde: false,
 	rtk: false,
-	rtkProfile: 'rtk1' as RtkProfile,
+	rtkProfile: 'rtk1' as RtkProfileMode,
 	rtkClockPpm: 20,
 	rtkFollowHops: false,
+	rtkFollowSource: '',
+	rtkScanStart: 915,
+	rtkScanEnd: 928,
+	rtkAutoTrack: true,
 	ble: false,
 	acars: false,
 	aprs: false,

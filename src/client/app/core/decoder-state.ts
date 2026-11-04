@@ -1,7 +1,9 @@
 import type { AppInstance } from './receiver.types';
+import { resetDiscoveryFollowers } from '@/app/decoders/rtk/discovery/followers';
 
 /** Drop telemetry tied to an old input stream while retaining decoder settings. */
 export function clearDecoderSources(receiver: AppInstance): void {
+	resetDiscoveryFollowers(receiver);
 	receiver.adsb.sources = [];
 	receiver.adsb.status = [];
 	receiver.ais.sources = [];
