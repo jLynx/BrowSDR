@@ -39,6 +39,8 @@ describe('HD Radio browser WASM', () => {
 		const decoder = await HdDecoder.create({ onNumbers: (...args) => numbers.push(args), onText: () => {}, onAudio: () => {} });
 		try {
 			expect(() => decoder.process(new Float32Array(3))).toThrow('IQ pairs');
+			for (let program = 0; program < 8; program++) decoder.setProgram(program);
+			expect(() => decoder.setProgram(8)).toThrow('rejected the program');
 			for (let i = 0; i < 24; i++) decoder.process(new Float32Array(65536));
 			expect(numbers.some(([type]) => type === 0)).toBe(false);
 			decoder.reset();
@@ -58,8 +60,12 @@ describe('HD Radio browser WASM', () => {
 	});
 
 	it.skipIf(!process.env.HD_RADIO_IQ)(
-		'decodes the supplied 105.3 MHz ci8 SigMF recording through the shared Rust DDC',
+		'decodes a supplied ci8 SigMF recording through the shared Rust DDC',
 		async () => {
+			const metadata = JSON.parse(readFileSync(process.env.HD_RADIO_IQ.replace(/\.sigmf-data$/, '.sigmf-meta'), 'utf8'));
+			expect(metadata.global['core:datatype']).toBe('ci8');
+			const rate = metadata.global['core:sample_rate'];
+			const frequency = metadata.captures[0]['core:frequency'] / 1e6;
 			const wasm = await init({ module_or_path: readFileSync(new URL('../../../wasm/dsp/pkg/browsdr_dsp_bg.wasm', import.meta.url)) });
 			const messages = [],
 				audio = [];
@@ -74,11 +80,11 @@ describe('HD Radio browser WASM', () => {
 				energy = 0,
 				values = 0;
 			try {
-				stream.configure({ freq: 105.3, mode: 'hdradio', hdProgram: Number(process.env.HD_RADIO_PROGRAM || 0) }, 2048000, 105.3);
+				stream.configure({ freq: frequency, mode: 'hdradio', hdProgram: Number(process.env.HD_RADIO_PROGRAM || 0) }, rate, frequency);
 				await stream.ready;
 				expect(messages.at(-1).status.state).toBe('searching');
 				const seconds = Number(process.env.HD_RADIO_SECONDS || 60);
-				while (offset < seconds * 2048000 * 2) {
+				while (offset < seconds * rate * 2) {
 					const count = readSync(fd, bytes, 0, bytes.length, offset);
 					if (!count) break;
 					new Uint8Array(wasm.memory.buffer, ptr, count).set(bytes.subarray(0, count));
@@ -96,7 +102,7 @@ describe('HD Radio browser WASM', () => {
 				const last = messages.at(-1).status;
 				const result = {
 					status: last,
-					inputSeconds: offset / (2048000 * 2),
+					inputSeconds: offset / (rate * 2),
 					audioSeconds: values / 96000,
 					peak,
 					rms: Math.sqrt(energy / values),

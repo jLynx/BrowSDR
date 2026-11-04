@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({ instances: [], pending: null, emit: null, valu
 vi.mock('@/worker/decoders/hd-radio/decoder', () => ({
 	HdDecoder: {
 		create: vi.fn((callbacks) => {
-			const decoder = { callbacks, destroy: vi.fn(), reset: vi.fn(), process: vi.fn(() => mocks.emit?.(callbacks)) };
+			const decoder = { callbacks, destroy: vi.fn(), reset: vi.fn(), setProgram: vi.fn(), process: vi.fn(() => mocks.emit?.(callbacks)) };
 			mocks.instances.push(decoder);
 			return mocks.pending
 				? new Promise((resolve) => {
@@ -89,6 +89,8 @@ describe('HD Radio stream lifecycle', () => {
 		};
 		expect(stream.process(0, 100, true, 1)).toBeNull();
 		stream.configure({ ...params, hdProgram: 1 }, 2048000, params.freq);
+		expect(mocks.instances[0].setProgram.mock.calls).toEqual([[0], [1]]);
+		expect(mocks.instances[0].reset).not.toHaveBeenCalled();
 		const output = stream.process(0, 100, true, 2);
 		expect(output.length).toBeGreaterThan(4000);
 		expect(output[output.length - 2]).toBeGreaterThan(0);
@@ -100,6 +102,17 @@ describe('HD Radio stream lifecycle', () => {
 		expect(mocks.instances[0].reset).toHaveBeenCalledOnce();
 		expect(stream.audioActive).toBe(false);
 		expect(messages.at(-1).status).toMatchObject({ state: 'searching', station: '', frames: 0 });
+		stream.reset();
+	});
+
+	it('uses the latest selected program when the decoder finishes loading', async () => {
+		mocks.pending = {};
+		const stream = new HdRadioStream(Processor, { buffer: new ArrayBuffer(400) }, () => {});
+		stream.configure({ ...params, hdProgram: 2 }, 2048000, params.freq);
+		stream.configure({ ...params, hdProgram: 7 }, 2048000, params.freq);
+		mocks.pending.resolve();
+		await stream.ready;
+		expect(mocks.instances[0].setProgram).toHaveBeenCalledExactlyOnceWith(7);
 		stream.reset();
 	});
 

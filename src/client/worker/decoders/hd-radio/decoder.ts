@@ -58,4 +58,8 @@ export class HdDecoder {
 	reset(): void {
 		this.module._hd_reset();
 	}
+
+	setProgram(program: number): void {
+		if (this.module._hd_set_program(program) !== 0) throw new Error('HD Radio rejected the program');
+	}
 }

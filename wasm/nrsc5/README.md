@@ -23,7 +23,9 @@ changes and replay boundaries reset acquisition; lost lock does not play
 analog audio. Valid digital audio
 already in nrsc5's delayed buffer continues across RF lock loss, with native
 silence for unavailable packets. Subchannel switching keeps RF lock while
-clearing the previous program's PCM resampler history.
+clearing the previous program's PCM resampler history. Only the selected program
+runs an HDC codec; switching releases the previous codec while retaining RF lock,
+packet timing and metadata for every program.
 
 ## Rebuilding
 
@@ -42,15 +44,26 @@ Use a fresh build directory after moving the checkout, since CMake caches
 absolute paths.
 
 `prepare.py` keeps upstream event reporting while replacing native device/session
-plumbing with the synchronous FM IQ adapter in `wrapper.c`. The RF/FEC code and
-HDC codec implementation are unchanged. The nrsc5 HDC patch is applied with
+plumbing with the synchronous FM IQ adapter in `wrapper.c`. It generates
+`browser_output.c` to decode only the selected audio program and removes packet
+buffers for enhanced streams that nrsc5 already ignores. All eight program
+buffers and metadata remain available. The RF/FEC code and HDC codec
+implementation are unchanged. The nrsc5 HDC patch is applied with
 failure checking. No native USB/audio drivers or network/file inputs are linked.
 Licenses and corresponding-source notices ship beside the JS/WASM assets.
+
+The module reserves a 1 MiB stack with overflow checks. HDC parametric stereo
+needs more than Emscripten's default 64 KiB stack, even before nested RF decoding.
+Growing the WASM heap does not increase that stack. In the supplied 30-second
+KSMG replay, WASM memory decreased from 49.4 MiB to 38.4 MiB after removing unused
+buffers and limiting active codecs. This measures the decoder's linear memory,
+not total browser RAM, and has not been tested on Chromebook hardware.
 
 ## Verification
 
 ```sh
 npx vitest run --project client test/decoders/hd-radio
+npm run test:nrsc5
 npm run test:ui -- test/ui/decoders/hd-radio.spec.ts
 npm run test:storybook
 npm run check
@@ -62,8 +75,16 @@ program switching, stereo PCM, gaps, muted channel plans, remote telemetry,
 and the UI. Lifecycle tests simulate receiver rates; they are not hardware tests.
 The Rust regression checks the exact fractional resampling ratio.
 
-To run the optional integration test against the supplied 105.3 MHz, 2.048 MSPS,
-signed-8-bit recording in PowerShell:
+`build:nrsc5` also builds and runs `tests/memory.c` with the production stack
+settings. `test:nrsc5` reruns that generated test module; rebuild first when C
+sources or build flags change. It exercises the actual HDC parametric-stereo
+codec, selection through all eight programs, ignored enhanced streams and codec
+cleanup on switching/reset. It primes codec state and feeds synthetic silent HDC
+frames; it is not an RF or live hardware test. The same test traps with a 64 KiB
+stack.
+
+To run the optional integration test against a signed-8-bit SigMF recording in
+PowerShell (sample rate and centre frequency come from its matching metadata):
 
 ```powershell
 $env:HD_RADIO_IQ = 'C:\path\FM Radio HD IQ Recording.sigmf-data'

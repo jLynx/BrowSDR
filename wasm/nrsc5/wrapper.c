@@ -4,6 +4,30 @@
 
 pthread_mutex_t fftw_mutex = PTHREAD_MUTEX_INITIALIZER;
 static nrsc5_t *session;
+static unsigned int audio_program;
+
+unsigned int hd_audio_program(void)
+{
+    return audio_program;
+}
+
+int hd_set_program(unsigned int program)
+{
+    if (program >= MAX_PROGRAMS) return -1;
+    audio_program = program;
+    if (session)
+    {
+        for (unsigned int i = 0; i < MAX_PROGRAMS; i++)
+        {
+            if (i != program && session->output.aacdec[i])
+            {
+                NeAACDecClose(session->output.aacdec[i]);
+                session->output.aacdec[i] = NULL;
+            }
+        }
+    }
+    return 0;
+}
 
 EM_JS(void, hd_numbers, (int type, int program, double a, double b), {
     Module.onNumbers(type, program, a, b);
@@ -43,6 +67,7 @@ int hd_init(void)
     if (session) return -1;
     session = calloc(1, sizeof(*session));
     if (!session) return -1;
+    audio_program = 0;
     session->mode = NRSC5_MODE_FM;
     session->callback = callback;
     output_init(&session->output, session);

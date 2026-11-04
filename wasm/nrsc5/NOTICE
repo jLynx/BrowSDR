@@ -13,6 +13,8 @@ Compiler: Emscripten 4.0.7.
 Corresponding source: pinned archives in upstream.json, upstream nrsc5 codec
 patch, wasm/nrsc5/wrapper.c, prepare.py, CMakeLists.txt, build.sh and build.mjs
 in the BrowSDR repository. The browser adapter replaces native device/session
-plumbing with a synchronous FM IQ pipe. RF, FEC and codec algorithms are unchanged.
+plumbing with a synchronous FM IQ pipe. Its generated output adapter decodes only
+the selected audio program and omits unused enhanced-stream packet buffers.
+RF, FEC and codec algorithms are unchanged.
 No native SDR drivers, sockets, filesystem input, or native audio output is used.
 HD Radio is a trademark of its respective owner; this project is unaffiliated.

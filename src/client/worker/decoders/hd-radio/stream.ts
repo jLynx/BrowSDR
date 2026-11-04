@@ -43,6 +43,7 @@ export class HdRadioStream {
 		if (key === this.key) {
 			if (program !== this.status.program) {
 				this.status.program = program;
+				this.decoder?.setProgram(program);
 				this.status.frames = 0;
 				this.resetAudio();
 				this.emit();
@@ -93,6 +94,7 @@ export class HdRadioStream {
 					return;
 				}
 				this.decoder = decoder;
+				decoder.setProgram(this.status.program);
 				this.status.state = 'searching';
 				this.status.message = 'Searching for HD Radio';
 				this.emit();

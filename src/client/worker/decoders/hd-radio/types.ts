@@ -35,6 +35,7 @@ export interface HdModule {
 	HEAPF32: Float32Array;
 	_hd_init(): number;
 	_hd_process(ptr: number, count: number): number;
+	_hd_set_program(program: number): number;
 	_hd_destroy(): void;
 	_hd_reset(): void;
 	_malloc(bytes: number): number;

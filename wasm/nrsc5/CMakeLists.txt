@@ -9,7 +9,7 @@ add_subdirectory(vendor/faad2 faad2)
 set(NRSC vendor/nrsc5)
 add_library(hd_decoder STATIC
     ${NRSC}/src/acquire.c ${NRSC}/src/decode.c ${NRSC}/src/frame.c
-    ${NRSC}/src/here_images.c ${NRSC}/src/input.c ${NRSC}/src/output.c
+    ${NRSC}/src/here_images.c ${NRSC}/src/input.c ${NRSC}/src/browser_output.c
     ${NRSC}/src/pids.c ${NRSC}/src/sync.c ${NRSC}/src/firdecim_cf32.c
     ${NRSC}/src/conv_dec.c ${NRSC}/src/rs_init.c ${NRSC}/src/rs_decode.c
     ${NRSC}/src/unicode.c ${NRSC}/src/browser_events.c wrapper.c)

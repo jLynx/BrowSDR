@@ -16,6 +16,7 @@
 		"build:dsp:node": "wasm-pack build wasm/dsp --target nodejs --out-dir node",
 		"test:dsp:bindings": "npm run build:dsp:node && node wasm/dsp/test-js-binding.mjs",
 		"build:nrsc5": "node wasm/nrsc5/build.mjs",
+		"test:nrsc5": "node wasm/nrsc5/tests/memory.mjs",
 		"build:mbelib": "bash wasm/mbelib/build.sh",
 		"build:rtl433": "node scripts/update-rtl433.mjs --build",
 		"check:rtl433": "node scripts/update-rtl433.mjs --check",

@@ -32,7 +32,16 @@ if (process.platform === 'win32') {
 	if (!drive) throw new Error('Use a checkout on a drive accessible from WSL.');
 	const wslRoot = `/mnt/${drive[1].toLowerCase()}/${drive[2].replaceAll('\\', '/')}`;
 	const quoted = "'" + wslRoot.replaceAll("'", "'\\''") + "'";
-	await run('wsl.exe', ['-d', process.env.NRSC5_WSL_DISTRO || 'Ubuntu', '--', 'bash', '-lc', `source ~/emsdk/emsdk_env.sh >/dev/null 2>&1 && bash ${quoted}build.sh`]);
+	await run('wsl.exe', [
+		'-d',
+		process.env.NRSC5_WSL_DISTRO || 'Ubuntu',
+		'--',
+		'bash',
+		'-lc',
+		`source ~/emsdk/emsdk_env.sh >/dev/null 2>&1 && bash ${quoted}build.sh`,
+	]);
 } else {
 	await run('bash', ['build.sh']);
 }
+
+await import('./tests/memory.mjs');
