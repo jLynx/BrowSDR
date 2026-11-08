@@ -2,6 +2,7 @@ import { markRaw } from 'vue';
 import { restoreDeviceGains } from './gain-settings';
 import type { PairedSdr } from './types';
 import { errorMessage, errorName } from '@/platform/errors';
+import { normalizeFrequencyShiftMhz } from '@/radio/frequency-shift';
 import type { AppInstance } from '@/app/core/receiver.types';
 import * as Comlink from 'comlink';
 import { restoreReplaySettings } from '@/app/replay/connection';
@@ -126,6 +127,7 @@ export const connectionMethods = {
 				// Populate device capabilities for dynamic UI
 				const caps = await this.backend.getDeviceCapabilities();
 				this.deviceCapabilities = caps;
+				let retuned = '';
 				if (caps) {
 					const saved = !this.gainDeviceType || this.gainDeviceType === caps.deviceType ? this.gains : {};
 					this.gains = restoreDeviceGains(caps, saved);
@@ -135,9 +137,10 @@ export const connectionMethods = {
 					if (!caps.sampleRates.includes(this.radio.sampleRate)) {
 						this.radio.sampleRate = caps.sampleRates[caps.sampleRates.length - 1];
 					}
+					retuned = fitTuningToDevice(this, caps.frequencyRange);
 				}
 
-				this.showMsg('Connected to ' + this.info.boardName);
+				this.showMsg('Connected to ' + this.info.boardName + retuned);
 				await this.startStream();
 			} else {
 				this.showMsg('Failed to open device.');
@@ -440,6 +443,26 @@ function restoreStartupTuning(receiver: AppInstance, requested: { centerFreq: nu
 		restored = true;
 	}
 	receiver.showMsg('Error starting stream: ' + errorMessage(error) + (restored ? '. Restored the previous frequency.' : ''));
+}
+
+/**
+ * Start a new connection inside the receiver's tunable range, moving the VFOs with the
+ * center so they stay in band. Supported saved frequencies are kept.
+ */
+function fitTuningToDevice(receiver: AppInstance, range: [number, number] | undefined): string {
+	if (!range) return '';
+	const shift = normalizeFrequencyShiftMhz(receiver.radio.frequencyShift);
+	const tuned = receiver.radio.centerFreq - shift;
+	if (tuned >= range[0] / 1e6 && tuned <= range[1] / 1e6) return '';
+	const [min, max] = [Math.ceil(range[0] / 1e6), Math.floor(range[1] / 1e6)];
+	const delta = Math.min(max, Math.max(min, tuned)) - tuned;
+	const move = (mhz: number) => Math.round((mhz + delta) * 1e6) / 1e6;
+	receiver.radio.centerFreq = move(receiver.radio.centerFreq);
+	for (const vfo of receiver.vfos) {
+		vfo.freq = move(vfo.freq);
+		vfo.displayFreq = receiver.formatFreq(vfo.freq);
+	}
+	return `; tuned to ${receiver.radio.centerFreq} MHz, inside its ${min}-${max} MHz range`;
 }
 
 function isUsbOnlyDiagnostic(receiver: AppInstance) {

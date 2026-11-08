@@ -56,7 +56,8 @@ function receiver(rate, frequency, center, floats, source = '') {
 	};
 }
 
-describe('250 kHz Auto acquisition and promotion with browser WASM', () => {
+// Each case pushes up to 0.8 s of 20 MSPS IQ through WASM: about 3 s locally, over 6 s on CI runners.
+describe('250 kHz Auto acquisition and promotion with browser WASM', { timeout: 30_000 }, () => {
 	it.each([
 		['container', false, ''],
 		['container', true, networkSource],
