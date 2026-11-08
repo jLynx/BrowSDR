@@ -21,8 +21,11 @@ jobs:
 
   ui:
     name: Components and Storybook
-    # Playwright 1.58.2 supports Ubuntu 24.04, but not the Ubuntu 26.04 latest runner.
     runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      # Use the runner's preinstalled Chrome to avoid hanging on apt/browser downloads.
+      PLAYWRIGHT_CHANNEL: chrome
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -30,7 +33,6 @@ jobs:
           node-version: lts/*
           cache: npm
       - run: npm ci
-      - run: npx playwright install --with-deps chromium
       - run: npm run typecheck
       - run: npm run test:ui
       - run: npm run test:storybook
