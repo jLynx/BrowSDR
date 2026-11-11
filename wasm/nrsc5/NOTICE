@@ -1,0 +1,20 @@
+HD Radio browser decoder for BrowSDR
+
+nrsc5: https://github.com/theori-io/nrsc5
+Revision: 631abc16f0c09537c3acedba65dd18a7d0c15866
+License: GPL-3.0-or-later (including upstream per-file notices).
+FAAD2: https://github.com/knik0/faad2, 2.11.2
+Revision: 673a22a3c7c33e96e2ff7aae7c4d2bc190dfbf92
+License: GPL-2.0-or-later. Uses nrsc5's faad2-hdc-support.patch.
+FFTW: https://www.fftw.org, 3.3.10
+License: GPL-2.0-or-later.
+Compiler: Emscripten 4.0.7.
+
+Corresponding source: pinned archives in upstream.json, upstream nrsc5 codec
+patch, wasm/nrsc5/wrapper.c, prepare.py, CMakeLists.txt, build.sh and build.mjs
+in the BrowSDR repository. The browser adapter replaces native device/session
+plumbing with a synchronous FM IQ pipe. Its generated output adapter decodes only
+the selected audio program and omits unused enhanced-stream packet buffers.
+RF, FEC and codec algorithms are unchanged.
+No native SDR drivers, sockets, filesystem input, or native audio output is used.
+HD Radio is a trademark of its respective owner; this project is unaffiliated.

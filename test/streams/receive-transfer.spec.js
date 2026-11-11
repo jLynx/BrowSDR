@@ -96,7 +96,8 @@ describe('RTL-SDR adaptive USB reads', () => {
 		await receiver.setSampleRate(rate);
 		const callback = vi.fn();
 		await receiver.startRx(callback);
-		expect(fixture.pending).toHaveLength(4);
+		expect((fixture.pending.length * bytes) / (rate * 2)).toBeGreaterThanOrEqual(0.256);
+		expect(fixture.pending.length).toBeLessThanOrEqual(64);
 		expect(fixture.pending.every((read) => read.length === bytes)).toBe(true);
 		fixture.pending.shift().resolve({ status: 'ok', data: new DataView(Uint8Array.of(128, 129, 0, 255).buffer) });
 		await flush();

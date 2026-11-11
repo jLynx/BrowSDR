@@ -96,8 +96,14 @@
 			<div class="bm-edit-row">
 				<label class="bm-edit-label">Mode</label>
 				<div class="mode-grid bm-mode-grid">
-					<UiRadio v-for="m in ['nfm','am','usb','lsb','wfm','dsb','cw','raw','dsd']" :key="m" :value="m" v-model="bookmarkEdit.mode" :name="receiverId + '-bm-edit-mode'">{{ m.toUpperCase() }}</UiRadio>
+					<UiRadio v-for="m in ['nfm','am','usb','lsb','wfm','dsb','cw','raw','dsd','hdradio']" :key="m" :value="m" v-model="bookmarkEdit.mode" :name="receiverId + '-bm-edit-mode'">{{ m === 'hdradio' ? 'HD Radio' : m.toUpperCase() }}</UiRadio>
 				</div>
+			</div>
+			<div class="bm-edit-row" v-if="bookmarkEdit.mode === 'hdradio'">
+				<label class="bm-edit-label">Program</label>
+				<UiSelect v-model.number="bookmarkEdit.hdProgram" aria-label="Bookmark HD Radio program" class="bm-edit-select">
+					<option v-for="program in 8" :key="program" :value="program - 1">HD{{ program }}</option>
+				</UiSelect>
 			</div>
 			<div class="bm-edit-row">
 				<label class="bm-edit-label">Bandwidth</label>
@@ -156,7 +162,7 @@
 					<UiInput type="number" v-model.number="v.freq" step="0.001" class="bm-edit-input" style="width:90px" placeholder="MHz"></UiInput>
 					<span style="opacity:0.5;font-size:11px">MHz</span>
 					<UiSelect v-model="v.mode" class="bm-edit-select" style="width:60px">
-						<option v-for="m in ['nfm','am','usb','lsb','wfm','dsb','cw','raw']" :key="m" :value="m">{{ m.toUpperCase() }}</option>
+						<option v-for="m in ['nfm','am','usb','lsb','wfm','dsb','cw','raw','hdradio']" :key="m" :value="m">{{ m === 'hdradio' ? 'HD Radio' : m.toUpperCase() }}</option>
 					</UiSelect>
 					<UiButton variant="delete" style="flex-shrink:0" @click="bookmarkEdit.vfos.splice(vi,1)" :disabled="bookmarkEdit.vfos.length <= 1" title="Remove VFO">&times;</UiButton>
 				</div>

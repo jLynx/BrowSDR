@@ -36,6 +36,7 @@ export const bookmarkMethods = {
 				name: name.trim(),
 				freq: vfo.freq,
 				mode: vfo.mode,
+				hdProgram: vfo.hdProgram,
 				bandwidth: vfo.bandwidth,
 				snapInterval: vfo.snapInterval,
 				deEmphasis: vfo.deEmphasis,
@@ -147,7 +148,8 @@ export const bookmarkMethods = {
 		if (e.type === 'individual') {
 			bm.freq = Number(e.freq) || bm.freq;
 			bm.mode = e.mode;
-			bm.bandwidth = e.bandwidth;
+			bm.hdProgram = e.hdProgram ?? 0;
+			bm.bandwidth = e.mode === 'hdradio' ? 400000 : e.bandwidth;
 			bm.snapInterval = e.snapInterval;
 			bm.deEmphasis = e.deEmphasis;
 			bm.squelchEnabled = e.squelchEnabled;
@@ -279,6 +281,7 @@ function applyIndividualBookmark(this: AppInstance, bm: Bookmark) {
 		rds: bm.rds ?? false,
 		rdsRegion: bm.rdsRegion ?? 'eu',
 		...bookmarkPacketDecoders(bm),
+		hdProgram: bm.hdProgram ?? 0,
 		rtl433: bm.rtl433 ?? false,
 		rtl433SampleRate: bm.rtl433SampleRate ?? 250000,
 		rtl433Protocols: bm.rtl433Protocols ?? '',
@@ -293,6 +296,7 @@ function editIndividualBookmark(this: AppInstance, bm: Bookmark) {
 	const e = this.bookmarkEdit;
 	e.freq = bm.freq ?? 100;
 	e.mode = bm.mode ?? 'wfm';
+	e.hdProgram = bm.hdProgram ?? 0;
 	e.bandwidth = bm.bandwidth ?? 150000;
 	e.snapInterval = bm.snapInterval ?? 100000;
 	e.deEmphasis = bm.deEmphasis ?? 'none';

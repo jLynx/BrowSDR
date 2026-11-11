@@ -1,0 +1,28 @@
+<div class="hd-radio-panel">
+	<UiFormRow label="Program">
+		<UiSelect :model-value="vfo.hdProgram ?? 0" @update:model-value="$emit('program', Number($event))" aria-label="HD Radio program">
+			<option v-for="program in 8" :key="program" :value="program - 1">HD{{ program }}</option>
+		</UiSelect>
+	</UiFormRow>
+	<div class="hd-radio-status" role="status">
+		<span class="hd-radio-indicator" :class="{ locked: status?.state === 'locked', error: status?.state === 'error' }"></span>
+		{{ status?.message || 'Start reception to decode HD Radio' }}
+	</div>
+	<div v-if="status?.station" class="hd-radio-station">{{ status.station }}</div>
+	<div v-if="status?.slogan">{{ status.slogan }}</div>
+	<div v-if="selected?.restricted">This program has restricted access.</div>
+	<div v-if="status?.programs.length && !selected">HD{{ (vfo.hdProgram ?? 0) + 1 }} has not been advertised by this station.</div>
+	<div v-if="selected?.title" class="hd-radio-title">{{ selected.title }}</div>
+	<div v-if="selected?.artist">{{ selected.artist }}</div>
+	<div v-if="selected?.album">{{ selected.album }}</div>
+	<div v-if="status?.stationMessage" class="hd-radio-message">{{ status.stationMessage }}</div>
+	<div v-if="status?.programs.length" class="hd-radio-details">
+		Detected: {{ status.programs.map(program => 'HD' + (program.program + 1)).join(', ') }}
+	</div>
+	<div v-if="status?.state === 'locked'" class="hd-radio-details">
+		<span v-if="status?.ber != null">BER {{ (status.ber * 100).toFixed(2) }}% · </span>
+		<span v-if="status?.merLower != null">MER {{ status.merLower.toFixed(1) }} / {{ status.merUpper.toFixed(1) }} dB · </span>
+		{{ status?.frames || 0 }} decoded audio frames
+	</div>
+	<div class="hd-radio-details">FM HD Radio · digital stereo. Allow several seconds to acquire a station.</div>
+</div>

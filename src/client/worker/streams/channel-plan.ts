@@ -10,6 +10,7 @@ export function planSharedBands(sampleRate: number, centerFreq: number, params: 
 		.filter(
 			({ value }) =>
 				value.enabled ||
+				value.mode === 'hdradio' ||
 				value.pocsag ||
 				value.gsc ||
 				value.flex ||

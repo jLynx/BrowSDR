@@ -1,3 +1,4 @@
+import type { HdMessage } from '@/worker/decoders/hd-radio/types';
 import type { BleMessage } from '@/worker/decoders/ble/types';
 import type { AisMessage } from '@/worker/decoders/ais/types';
 import type { RadiosondeMessage } from '@/worker/decoders/radiosonde/types';
@@ -49,6 +50,7 @@ export type AcarsCallback = DecoderCallback<AcarsMessage>;
 export type AprsCallback = DecoderCallback<AprsMessage>;
 export type AdsbCallback = DecoderCallback<AdsbMessage>;
 export type Rtl433Callback = DecoderCallback<Rtl433Message>;
+export type HdRadioCallback = DecoderCallback<HdMessage>;
 export type DsdCallback = (index: number, status: DSDStatus) => void;
 export type HostCallback<T extends unknown[]> = (clientId: string, ...args: T) => void;
 export type HostStats = PerfReport & { source: string; channelization: { bands: number; vfos: number; sampleRate: number } };

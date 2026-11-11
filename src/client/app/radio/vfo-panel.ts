@@ -3,12 +3,13 @@ import type { AppInstance } from '@/app/core/receiver.types';
 import type { Vfo } from '@/app/core/types';
 import template from '@/app/templates/vfo-panel.html?raw';
 import * as components from '@/ui';
+import HdRadioPanel from '@/app/decoders/hd-radio/panel';
 
 /** Keep decoder telemetry in the affected panel's render effect. */
 export default defineComponent({
 	name: 'VfoPanel',
 	template,
-	components,
+	components: { ...components, HdRadioPanel },
 	props: { vfo: { type: Object as PropType<Vfo>, required: true }, i: { type: Number, required: true } },
 	setup() {
 		const receiver = inject<AppInstance>('receiver');

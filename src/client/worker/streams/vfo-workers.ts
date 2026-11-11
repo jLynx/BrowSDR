@@ -10,7 +10,9 @@ import type {
 	BleCallback,
 	AcarsCallback,
 	AprsCallback,
+	HdRadioCallback,
 } from '@/worker/runtime/callbacks.types';
+import { routeHdRadioMessage } from '@/worker/decoders/hd-radio/routing';
 import type { DspOutput } from '@/worker/runtime/dsp-messages.types';
 import type { VfoParams, VfoState } from '@/worker/runtime/types';
 import type { Backend } from '@/worker/runtime/backend';
@@ -33,6 +35,7 @@ export function initializeVfoWorkers(
 	radiosondeCallback: RadiosondeCallback | null = null,
 	rtkCallback: RtkCallback | null = null,
 	aprsCallback: AprsCallback | null = null,
+	hdRadioCallback: HdRadioCallback | null = null,
 ) {
 	// Free any existing DDCs and timers
 	if (backend.ddcs)
@@ -97,6 +100,7 @@ export function initializeVfoWorkers(
 				radiosondeCallback,
 				rtkCallback,
 				aprsCallback,
+				hdRadioCallback,
 			);
 		worker.postMessage({
 			type: 'init',
@@ -131,6 +135,7 @@ export function routeLocalWorkerMessage(
 	radiosondeCallback: RadiosondeCallback | null = null,
 	rtkCallback: RtkCallback | null = null,
 	aprsCallback: AprsCallback | null = null,
+	hdRadioCallback: HdRadioCallback | null = null,
 ) {
 	if (
 		routePacketMessage(
@@ -151,6 +156,7 @@ export function routeLocalWorkerMessage(
 		routeSensorMessage(backend, worker, msg, rtl433Callback);
 		return;
 	}
+	if (routeHdRadioMessage(backend, worker, msg, hdRadioCallback)) return;
 	if (msg.type === 'audio') {
 		const currentIndex = backend.dspWorkers!.indexOf(worker);
 		if (currentIndex === -1) return;

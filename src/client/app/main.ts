@@ -38,6 +38,7 @@ import { pagerMethods } from './decoders/pager';
 import { pocsagMethods } from './decoders/pocsag';
 import { gscMethods } from './decoders/gsc';
 import { flexMethods } from './decoders/flex';
+import { hdRadioMethods } from './decoders/hd-radio/feature';
 import { dsdMethods } from './decoders/dsd';
 import { rdsMethods } from './decoders/rds';
 import { zoomMethods } from './display/zoom';
@@ -106,6 +107,7 @@ const Receiver = {
 		...gscMethods,
 		...flexMethods,
 		...dsdMethods,
+		...hdRadioMethods,
 		...rdsMethods,
 		...zoomMethods,
 		...remoteMethods,

@@ -12,6 +12,8 @@ vi.mock('@/remote/webrtc', () => ({
 
 import * as remoteBackend from '@/worker/streams/remote-clients';
 import { remoteMethods } from '@/app/workspace/remote';
+import { hdRadioMethods } from '@/app/decoders/hd-radio/feature';
+import { emptyHdStatus } from '@/worker/decoders/hd-radio/types';
 import { rdsMethods } from '@/app/decoders/rds';
 import { rtl433Methods } from '@/app/decoders/rtl433';
 import { AUDIO_QUEUE_CAPACITY } from '@/worker/streams/audio-queue';
@@ -52,6 +54,39 @@ function makeClient(frequency = 106.2) {
 }
 
 describe('remote RDS delivery', () => {
+	it('delivers HD Radio station information only to the matching remote receiver and program', async () => {
+		vi.stubGlobal('window', { location: { origin: 'http://localhost:5173' } });
+		vi.stubGlobal('localStorage', { getItem: () => null });
+		const backend = makeBackend();
+		const host = { connected: true, running: true, remoteMode: 'none', locks: {}, backend, radio: {}, gains: {} };
+		await remoteMethods.startRemoteHost.call(host);
+		const hdParams = { ...params, freq: 105.3, mode: 'hdradio', hdProgram: 0, rds: false };
+		const listeners = Object.fromEntries(
+			['alice', 'bob'].map((id) => [
+				id,
+				{
+					remoteMode: 'client',
+					vfos: [{ ...hdParams }],
+					hdRadioStatus: [],
+					...hdRadioMethods,
+				},
+			]),
+		);
+		host._webrtc.sendCommandTo.mockImplementation((id, command) => {
+			remoteMethods.handleRemoteCommand.call(listeners[id], JSON.parse(JSON.stringify(command)));
+		});
+		await backend.addRemoteClient('alice');
+		await backend.setRemoteVfoParams('alice', 0, hdParams);
+		const worker = backend._remoteClients.get('alice').workers[0];
+		const message = { type: 'hd_radio', freq: 105.3, status: { ...emptyHdStatus(), station: 'KSMG' } };
+		worker.onmessage({ data: message });
+		expect(listeners.alice.hdRadioStatus[0].station).toBe('KSMG');
+		expect(listeners.bob.hdRadioStatus).toHaveLength(0);
+		await backend.setRemoteVfoParams('alice', 0, { ...hdParams, freq: 104.5 });
+		worker.onmessage({ data: message });
+		expect(host._webrtc.sendCommandTo).toHaveBeenCalledOnce();
+	});
+
 	it('forwards muted sensor events and status only to the matching remote client', async () => {
 		vi.stubGlobal('window', { location: { origin: 'http://localhost:5173' } });
 		vi.stubGlobal('localStorage', { getItem: () => null });

@@ -31,7 +31,7 @@ export const computedProperties = {
 		for (let i = 0; i < this.vfos.length; i++) {
 			const vfo = this.vfos[i];
 			if (vfo.enabled) {
-				if (vfo.mode === 'dsd' ? this.vfoSquelchOpen[i] : !vfo.squelchEnabled || this.vfoSquelchOpen[i]) {
+				if (['dsd', 'hdradio'].includes(vfo.mode) ? this.vfoSquelchOpen[i] : !vfo.squelchEnabled || this.vfoSquelchOpen[i]) {
 					active.push({ index: i, vfo });
 				}
 			}
@@ -43,7 +43,7 @@ export const computedProperties = {
 		const now = this.activityNow || Date.now();
 		const items = this.vfos
 			.map((vfo, i) => {
-				if (vfo.mode !== 'dsd' && !vfo.squelchEnabled) return null;
+				if (!['dsd', 'hdradio'].includes(vfo.mode) && !vfo.squelchEnabled) return null;
 				const stat = this.vfoActivityStats[i] || { count: 0, totalMs: 0, squelchOpenSince: null };
 				const liveMs = stat.squelchOpenSince !== null ? now - stat.squelchOpenSince : 0;
 				const totalMs = stat.totalMs + liveMs;

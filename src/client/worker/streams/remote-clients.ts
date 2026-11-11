@@ -18,6 +18,9 @@ import type {
 	HostCallback,
 	HostStats,
 } from '@/worker/runtime/callbacks.types';
+import { forwardHdRadioMessage } from '@/worker/decoders/hd-radio/routing';
+import { hdAudioChanged } from '@/worker/decoders/hd-radio/types';
+export { setRemoteHostHdRadioCallback } from '@/worker/decoders/hd-radio/routing';
 import type { DspAudio, DspOutput } from '@/worker/runtime/dsp-messages.types';
 /*
 Copyright (c) 2026, jLynx <https://github.com/jLynx>
@@ -255,9 +258,10 @@ export function setRemoteVfoParams(this: Backend, clientId: string, index: numbe
 	const state = this._remoteClients?.get(clientId);
 	if (!state || !Number.isSafeInteger(index) || index < 0 || index >= state.workers.length) return Promise.resolve(false);
 	const wasEnabled = state.params[index] && state.params[index].enabled;
+	const changed = hdAudioChanged(state.params[index] ?? {}, params);
 	state.params[index] = params;
 
-	if (state.audioQueues[index] && (!params.enabled || (params.enabled && !wasEnabled))) {
+	if (state.audioQueues[index] && (!params.enabled || (params.enabled && !wasEnabled) || changed)) {
 		state.audioQueues[index].len = 0;
 	}
 
@@ -676,6 +680,7 @@ function forwardAcars(
 }
 
 function forwardPacketMessage(backend: Backend, clientId: string, state: RemoteClientState, index: number, msg: DspOutput): boolean {
+	if (forwardHdRadioMessage(backend, clientId, state, index, msg)) return true;
 	if (msg.type === 'ble') {
 		forwardBle(backend, clientId, state, index, msg);
 		return true;

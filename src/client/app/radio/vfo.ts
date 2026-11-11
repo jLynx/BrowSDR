@@ -80,6 +80,7 @@ export const vfoMethods = {
 			const params = {
 				freq: vfo.freq,
 				mode: vfo.mode,
+				hdProgram: vfo.hdProgram,
 				enabled: vfo.enabled && inBandwidth,
 				bandwidth: vfo.bandwidth,
 				deEmphasis: vfo.deEmphasis,
@@ -389,6 +390,7 @@ async function appendVfo(receiver: AppInstance, vfo: ReturnType<typeof makeDefau
 
 /** Per-VFO decoder telemetry is index-aligned with `vfos`. */
 function removeDecoderState(receiver: AppInstance, index: number): void {
+	receiver.hdRadioStatus?.splice(index, 1);
 	receiver.rtl433?.status.splice(index, 1);
 	receiver.ble?.status.splice(index, 1);
 	receiver.rtk.frames.splice(index, 1);

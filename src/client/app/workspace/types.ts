@@ -69,6 +69,7 @@ export interface BookmarkEdit {
 	category: string;
 	freq: number;
 	mode: string;
+	hdProgram?: number;
 	bandwidth: number;
 	snapInterval: number;
 	deEmphasis: string;
@@ -93,6 +94,7 @@ export interface BookmarkCategory {
 }
 
 export interface Bookmark {
+	hdProgram?: number;
 	type: string;
 	name: string;
 	category?: string;
