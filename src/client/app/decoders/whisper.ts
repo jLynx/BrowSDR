@@ -1,4 +1,3 @@
-import { appPath } from '@/platform/urls';
 import type { WhisperMessage } from '@/transcription/types';
 import type { AppInstance } from '@/app/core/receiver.types';
 
@@ -40,7 +39,7 @@ export const whisperMethods = {
 
 		// Create worker if not yet alive
 		if (!this._whisperWorker) {
-			this._whisperWorker = new Worker(appPath(import.meta.env.DEV ? 'transcription/whisper-worker.ts' : 'whisper-worker.js'), {
+			this._whisperWorker = new Worker(import.meta.env.DEV ? '/transcription/whisper-worker.ts' : './whisper-worker.js', {
 				type: 'module',
 			});
 			this._whisperWorker.addEventListener('message', (e: MessageEvent<WhisperMessage>) => this._onWhisperMessage(e));

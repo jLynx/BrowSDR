@@ -1,11 +1,9 @@
-import { appPath } from '@/platform/urls';
 import { isRecord } from '@/platform/data';
 import type { HdFactory, HdModule, HdOptions } from './types';
 
 let factoryPromise: Promise<HdFactory> | undefined;
 async function loadFactory(): Promise<HdFactory> {
-	const url =
-		typeof location === 'undefined' ? appPath('wasm/nrsc5/nrsc5.js') : new URL(appPath('wasm/nrsc5/nrsc5.js'), location.origin).href;
+	const url = typeof location === 'undefined' ? '/wasm/nrsc5/nrsc5.js' : new URL('/wasm/nrsc5/nrsc5.js', location.origin).href;
 	factoryPromise ??= import(/* @vite-ignore */ url)
 		.then((module: unknown) => {
 			if (!isRecord(module) || typeof module.default !== 'function') throw new Error('Missing HD Radio decoder factory');
@@ -32,7 +30,7 @@ export class HdDecoder {
 		const factory = await loadFactory();
 		const module = await factory({
 			...callbacks,
-			locateFile: (file) => appPath('wasm/nrsc5/' + file),
+			locateFile: (file) => '/wasm/nrsc5/' + file,
 			print: () => {},
 			printErr: () => {},
 		});

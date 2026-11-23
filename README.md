@@ -143,10 +143,6 @@ npm run dev
 
 Then open **[http://localhost:5173](http://localhost:5173)** in Google Chrome or any WebUSB-supported browser.
 
-To host in a directory such as `https://example.org/sdr/`, build with
-`npm run build -- --base=/sdr/`. See [self-hosting](docs/self-hosting.md) for
-environment settings, server headers and backend configuration.
-
 ### Shared UI and Storybook
 
 Run `npm run storybook` to browse existing component variants at

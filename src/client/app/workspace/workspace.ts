@@ -1,4 +1,3 @@
-import { appPath, backendPath } from '@/platform/urls';
 const workspaceTemplate = `
 			<div class="receiver-workspace">
 				<nav v-if="receivers.filter(receiver => receiver.status === 'Receiving' || receiver.status === 'Paused').length > 1" class="receiver-tabs" aria-label="SDR receivers">
@@ -401,7 +400,7 @@ async function startSharing(this: WorkspaceInstance, runtime: WorkspaceRuntime) 
 		if (status.status === 'ready') {
 			const code = status.id.replace(PEER_ID_PREFIX, '');
 			localStorage.setItem('browsdr-share-code', code);
-			this.shareLink = `${window.location.origin}${appPath()}?connect=${code}`;
+			this.shareLink = `${window.location.origin}/?connect=${code}`;
 		}
 		if (status.status === 'client-connected') this.broadcastReceivers(status.clientId);
 		for (const app of runtime.instances.values()) {
@@ -513,7 +512,7 @@ async function connectRemote(this: WorkspaceInstance, runtime: WorkspaceRuntime,
 				deviceId = crypto.randomUUID();
 				localStorage.setItem('browsdr-device-id', deviceId);
 			}
-			fetch(backendPath('api/geo'))
+			fetch('/api/geo')
 				.then((response) => response.json())
 				.then((data: unknown) =>
 					connection.sendCommand({
@@ -583,7 +582,7 @@ async function disconnectRemote(this: WorkspaceInstance, runtime: WorkspaceRunti
 	previous?.close();
 	for (const entry of [...this.receivers]) await this.removeReceiver(entry.id);
 	this.mode = 'none';
-	window.history.replaceState({}, document.title, appPath());
+	window.history.replaceState({}, document.title, '/');
 	await this.newReceiver();
 	this._disconnecting = false;
 }

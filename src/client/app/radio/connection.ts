@@ -1,4 +1,3 @@
-import { appPath } from '@/platform/urls';
 import { markRaw } from 'vue';
 import { restoreDeviceGains } from './gain-settings';
 import type { PairedSdr } from './types';
@@ -391,9 +390,9 @@ export const connectionMethods = {
 				title: 'BrowSDR',
 				artist: 'Receiving',
 				artwork: [
-					{ src: appPath('icon-96.png'), sizes: '96x96', type: 'image/png' },
-					{ src: appPath('icon-192.png'), sizes: '192x192', type: 'image/png' },
-					{ src: appPath('icon-512.png'), sizes: '512x512', type: 'image/png' },
+					{ src: '/icon-96.png', sizes: '96x96', type: 'image/png' },
+					{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+					{ src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
 				],
 			});
 			navigator.mediaSession.playbackState = 'playing';

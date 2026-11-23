@@ -1,4 +1,3 @@
-import { backendPath } from '@/platform/urls';
 import type {
 	ClientEntry,
 	StatusChangeCallback,
@@ -73,7 +72,7 @@ export class WebRTCHandler {
 		// Fetch TURN credentials from our Cloudflare Worker endpoint
 		let peerConfig: { iceServers: RTCIceServer[] } | undefined = undefined;
 		try {
-			const turnResp = await fetch(backendPath('api/turn'));
+			const turnResp = await fetch('/api/turn');
 			const turnData: unknown = await turnResp.json();
 			if (isRecord(turnData) && Array.isArray(turnData.iceServers) && turnData.iceServers.length > 0) {
 				const iceServers: RTCIceServer[] = turnData.iceServers.filter(

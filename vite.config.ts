@@ -1,6 +1,5 @@
 import { sourceAlias } from './source-alias.mjs';
-import { defineConfig, build, loadEnv, type Plugin } from 'vite';
-import { normalizeBasePath } from './src/client/platform/base-path';
+import { defineConfig, build, type Plugin } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import path from 'path';
 import fs from 'fs';
@@ -10,18 +9,10 @@ import fs from 'fs';
 // 2. Copy WASM files to dist
 // 3. Fix .ts → .js extensions in output filenames and references
 function postBuildPlugin(): Plugin {
-	let base = '/';
-	let backendUrl: string | undefined;
-	let distDir = '';
 	return {
 		name: 'post-build',
-		apply: 'build',
-		configResolved(config) {
-			base = config.base;
-			backendUrl = config.env.VITE_BACKEND_URL as string | undefined;
-			distDir = path.resolve(config.root, config.build.outDir);
-		},
 		async closeBundle() {
+			const distDir = path.resolve(__dirname, 'dist');
 			const assetsDir = path.join(distDir, 'assets');
 
 			// Track all .ts → .js renames for reference updates
@@ -39,18 +30,18 @@ function postBuildPlugin(): Plugin {
 					renames.set(file, jsName);
 
 					await build({
-						base,
-						plugins: [wasmAssetsPlugin()],
 						configFile: false,
 						root: path.resolve(__dirname, 'src/client'),
 						build: {
 							outDir: assetsDir,
 							emptyOutDir: false,
-							rollupOptions: { external: [/^\/wasm\//] },
 							lib: {
 								entry: path.resolve(__dirname, 'src/client/worker/dsp-worker.ts'),
 								formats: ['es'],
 								fileName: () => jsName,
+							},
+							rollupOptions: {
+								external: [/^\/wasm\//],
 							},
 							minify: true,
 						},
@@ -84,8 +75,6 @@ function postBuildPlugin(): Plugin {
 			if (fs.existsSync(whisperEntry)) {
 				console.log('[post-build] Bundling whisper-worker');
 				await build({
-					base,
-					define: { 'import.meta.env.VITE_BACKEND_URL': JSON.stringify(backendUrl ?? '') },
 					resolve: { alias: sourceAlias },
 					configFile: false,
 					root: path.resolve(__dirname, 'src/client'),
@@ -114,76 +103,78 @@ function postBuildPlugin(): Plugin {
 	};
 }
 
-export default defineConfig(({ mode }) => {
-	const env = loadEnv(mode, process.cwd(), 'VITE_');
-	const base = normalizeBasePath(env.VITE_BASE_PATH ?? '/');
-	return {
-		base,
-		envDir: process.cwd(),
-		root: 'src/client',
-		build: {
-			outDir: path.resolve(__dirname, 'dist'),
-			emptyOutDir: true,
-			rollupOptions: { external: [/^\/wasm\//] },
+export default defineConfig({
+	root: 'src/client',
+	build: {
+		outDir: path.resolve(__dirname, 'dist'),
+		emptyOutDir: true,
+		rollupOptions: {
+			external: [/^\/wasm\//],
 		},
-		worker: {
-			format: 'es',
-			rollupOptions: { external: [/^\/wasm\//] },
-			plugins: () => [wasmAssetsPlugin()],
+	},
+	worker: {
+		format: 'es',
+		rollupOptions: {
+			external: [/^\/wasm\//],
 		},
-		plugins: [
-			wasmAssetsPlugin(),
-			VitePWA({
-				registerType: 'autoUpdate',
-				injectRegister: 'script',
-				workbox: {
-					skipWaiting: true,
-					clientsClaim: true,
-					globPatterns: ['**/*.{js,css,html,wasm}'],
-					navigateFallback: null,
-					runtimeCaching: [
-						{
-							// API routes: network-first (only works online)
-							urlPattern: /^.*\/api\/.*/i,
-							handler: 'NetworkFirst',
-							options: {
-								cacheName: 'api-cache',
-								networkTimeoutSeconds: 5,
-								expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 },
-							},
+	},
+	plugins: [
+		wasmAssetsPlugin(),
+		VitePWA({
+			registerType: 'autoUpdate',
+			injectRegister: 'script',
+			workbox: {
+				skipWaiting: true,
+				clientsClaim: true,
+				globPatterns: ['**/*.{js,css,html,wasm}'],
+				navigateFallback: null,
+				runtimeCaching: [
+					{
+						// API routes: network-first (only works online)
+						urlPattern: /^.*\/api\/.*/i,
+						handler: 'NetworkFirst',
+						options: {
+							cacheName: 'api-cache',
+							networkTimeoutSeconds: 5,
+							expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 },
 						},
-					],
-				},
-				manifest: {
-					name: 'BrowSDR – Web SDR Receiver',
-					short_name: 'BrowSDR',
-					description: 'A blazing-fast browser-based Software Defined Radio receiver.',
-					theme_color: '#0f0f1a',
-					background_color: '#0f0f1a',
-					display: 'standalone',
-					start_url: './',
-					scope: './',
-					icons: [
-						{ src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
-						{ src: 'icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
-					],
-				},
-			}),
-			postBuildPlugin(),
-		],
-		publicDir: path.resolve(__dirname, 'public'),
-		define: {
-			__VUE_OPTIONS_API__: true,
-			__VUE_PROD_DEVTOOLS__: false,
-			__VUE_PROD_HYDRATION_MISMATCH_DETAILS__: false,
-		},
-		resolve: {
-			alias: {
-				...sourceAlias,
-				vue: 'vue/dist/vue.esm-bundler.js',
+					},
+				],
 			},
+			manifest: {
+				name: 'BrowSDR – Web SDR Receiver',
+				short_name: 'BrowSDR',
+				description: 'A blazing-fast browser-based Software Defined Radio receiver.',
+				theme_color: '#0f0f1a',
+				background_color: '#0f0f1a',
+				display: 'standalone',
+				start_url: '/',
+				icons: [
+					{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+					{ src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+				],
+			},
+		}),
+		postBuildPlugin(),
+	],
+	publicDir: path.resolve(__dirname, 'public'),
+	define: {
+		__VUE_OPTIONS_API__: true,
+		__VUE_PROD_DEVTOOLS__: false,
+		__VUE_PROD_HYDRATION_MISMATCH_DETAILS__: false,
+	},
+	resolve: {
+		alias: {
+			...sourceAlias,
+			vue: 'vue/dist/vue.esm-bundler.js',
 		},
-	};
+	},
+	server: {
+		proxy: {
+			'/api': 'http://localhost:8787',
+			'/hf-proxy': 'http://localhost:8787',
+		},
+	},
 });
 
 const wasmAssets = {
@@ -209,35 +200,11 @@ function copyDecoderAssets(distDir: string) {
 
 /** Serve the committed bundles unchanged, including dynamically loaded codecs. */
 function wasmAssetsPlugin(): Plugin {
-	let base = '/';
 	return {
 		name: 'wasm-assets',
-		enforce: 'pre',
-		configResolved(config) {
-			base = normalizeBasePath(config.base);
-			if (config.command === 'serve') {
-				config.server.proxy = {
-					...config.server.proxy,
-					...Object.fromEntries(
-						['api', 'hf-proxy'].map((route) => [
-							base + route,
-							{
-								target: 'http://localhost:8788',
-								rewrite: (requestPath: string) => '/' + requestPath.slice(base.length),
-							},
-						]),
-					),
-				};
-			}
-		},
-		renderChunk(code) {
-			// External DSP imports bypass Vite's normal base-path rewriting.
-			return { code: code.replace(/(["'])\/wasm\//g, (_match: string, quote: string) => `${quote}${base}wasm/`), map: null };
-		},
 		configureServer(server) {
 			server.middlewares.use((request, response, next) => {
-				let pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
-				if (pathname.startsWith(base)) pathname = '/' + pathname.slice(base.length);
+				const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
 				const match = /^\/wasm\/(dsp|mbelib|rtl433|nrsc5)\/([^/]+)$/.exec(pathname);
 				if (!match) return next();
 				const module = match[1] as keyof typeof wasmAssets;
