@@ -28,6 +28,8 @@ import type { Rtl433Status, Rtl433Protocol } from '@/worker/decoders/types';
 import { DEFAULT_FFT_SIZE, DEFAULT_SPECTRUM_RANGE } from '@/display/spectrum-range';
 import type { IqRecording, IqReplayProgress } from '@/radio/iq-replay/types';
 import { createRemoteIqState } from '@/remote/iq/state';
+import { DEFAULT_REMOTE_PLAYBACK_LIMIT_MS } from '@/audio/playback/types';
+import type { PlaybackBufferLimit } from '@/audio/playback/types';
 
 export function createAppData() {
 	return {
@@ -84,13 +86,7 @@ export function createAppData() {
 		deviceInfoCollapsed: true,
 		hoverFreqText: '',
 		dspStats: null as DspStats | null,
-		audioGapCount: 0,
-		audioGapMs: 0,
-		audioTargetMs: 20,
-		audioPlaybackRate: 1,
-		audioDroppedFrames: 0,
-		audioPlaybackEngine: 'scheduled',
-		queuedAudioSched: '0',
+		...createAudioPlaybackState(),
 		showStats: false,
 		showStatsDetails: false,
 		radioAdvanced: false,
@@ -127,6 +123,21 @@ export function createAppData() {
 			optionA: null as VfoConflictOption,
 			optionB: null as VfoConflictSubsetOption,
 		},
+	};
+}
+
+function createAudioPlaybackState() {
+	return {
+		audioGapCount: 0,
+		audioGapMs: 0,
+		audioTargetMs: 20,
+		audioPlaybackRate: 1,
+		audioDroppedFrames: 0,
+		remoteAudioBufferMs: DEFAULT_REMOTE_PLAYBACK_LIMIT_MS as PlaybackBufferLimit,
+		remotePacketGapMs: null as number | null,
+		audioArrivalGapMs: null as number | null,
+		audioPlaybackEngine: 'scheduled',
+		queuedAudioSched: '0',
 	};
 }
 

@@ -94,7 +94,6 @@ import {
 	_mixAndEmitRemoteAudio,
 	_reinitRemoteClientWorkers,
 	initRemoteClient,
-	feedRemoteAudioChunk,
 } from '@/worker/streams/remote-clients';
 import { startRxStream } from '@/worker/streams/rx-stream';
 import type { VfoParams, VfoState, PerfCounters, RxStreamOpts, RemoteClientState, DeviceOpenOpts } from './types';
@@ -227,8 +226,6 @@ export class Backend {
 	_remoteHostRtl433Cb?: HostCallback<Parameters<Rtl433Callback>>;
 	_remoteHostSquelchCb?: HostCallback<[boolean[]]>;
 	_remoteClientCb?: ((data: ArrayBufferView) => void) | null;
-	_remoteClientAudioCb?: AudioCallback;
-	_remoteClientWhisperCb?: WhisperCallback | null;
 
 	constructor() {}
 
@@ -328,7 +325,6 @@ export class Backend {
 	_mixAndEmitRemoteAudio = _mixAndEmitRemoteAudio.bind(this);
 	_reinitRemoteClientWorkers = _reinitRemoteClientWorkers.bind(this);
 	initRemoteClient = initRemoteClient.bind(this);
-	feedRemoteAudioChunk = feedRemoteAudioChunk.bind(this);
 
 	async startRxStream(
 		opts: RxStreamOpts,

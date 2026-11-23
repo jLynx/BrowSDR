@@ -50,7 +50,6 @@ import { GSCDecoder } from '@/worker/decoders/golay';
 import { FlexDecoder } from '@/worker/decoders/flex/decoder';
 import type { Backend } from '@/worker/runtime/backend';
 import { AUDIO_QUEUE_CAPACITY, appendPcm, mixLength } from './audio-queue';
-import { downmix, unpackAudio } from '@/audio/pcm';
 import { forwardIqMessage } from '@/remote/iq/host';
 export { initRemoteClient } from '@/remote/iq/client';
 export { configureRemoteStream } from '@/remote/iq/host';
@@ -591,21 +590,6 @@ export function _reinitRemoteClientWorkers(this: Backend): void {
 			state.audioQueues[i] = { queue: new Float32Array(AUDIO_QUEUE_CAPACITY), len: 0 };
 		}
 	}
-}
-
-export function feedRemoteAudioChunk(this: Backend, chunk: ArrayBuffer | Float32Array): Promise<void> {
-	if (this._remoteClientAudioCb) {
-		const { samples: floats, channels } = unpackAudio(chunk);
-		this._remoteClientAudioCb(floats, channels);
-
-		// Feed whisper for local transcription on remote clients.
-		// The audio arrives pre-mixed from the host, so attribute it to VFO 0.
-		if (this._whisperEnabled && this._remoteClientWhisperCb && this.vfoParams && this.vfoParams[0]) {
-			this._remoteClientWhisperCb(0, this.vfoParams[0].freq, downmix(floats, channels));
-		}
-	}
-
-	return Promise.resolve();
 }
 
 function forwardAdsb(

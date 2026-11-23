@@ -1,5 +1,6 @@
 import { isRecord } from '@/platform/data';
 import { packAudio } from '@/audio/pcm';
+import { playRemoteAudio, recordRemotePacketArrival } from '@/app/audio/remote';
 import type { HostStats } from '@/worker/runtime/callbacks.types';
 import type { ReceiverCommand, StatusMessage } from '@/remote/types';
 import type { AppInstance } from '@/app/core/receiver.types';
@@ -206,13 +207,9 @@ export const remoteMethods = {
 			if (fftData.length > 0) this.drawSpectrum(fftData);
 		};
 		this._webrtc.onAudioChunk = (chunk) => {
-			if (this.running && this.backend) {
-				if (receiveRemoteIq(this, chunk)) return;
-				// chunk arrives as ArrayBuffer (serialization:'raw').
-				// Use .slice() with byteOffset/byteLength to handle typed-array views.
-				const buf = chunk;
-				Promise.resolve(this.backend.feedRemoteAudioChunk(Comlink.transfer(buf, [buf]))).catch((error: unknown) => console.error(error));
-			}
+			if (!this.running || !this.backend) return;
+			recordRemotePacketArrival(this);
+			if (!receiveRemoteIq(this, chunk)) playRemoteAudio(this, chunk);
 		};
 
 		try {
