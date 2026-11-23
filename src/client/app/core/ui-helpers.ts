@@ -1,3 +1,4 @@
+import { appPath } from '@/platform/urls';
 import type { AppInstance } from '@/app/core/receiver.types';
 import { VFO_COLORS } from './constants';
 import { focusSpectrumFrequency } from '@/app/display/zoom';
@@ -156,7 +157,7 @@ export const uiHelperMethods = {
 			ms.addEventListener('sourceopen', () => {
 				const sb = ms.addSourceBuffer('audio/mpeg');
 				ms.duration = Infinity;
-				fetch('/30-seconds-of-silence.mp3')
+				fetch(appPath('30-seconds-of-silence.mp3'))
 					.then((r) => r.arrayBuffer())
 					.then((mp3Data) => {
 						this._silentMp3Data = mp3Data;
@@ -181,7 +182,7 @@ export const uiHelperMethods = {
 			});
 		} else {
 			// Fallback for browsers without MSE (e.g. iOS Safari): plain MP3 loop
-			el.src = '/30-seconds-of-silence.mp3';
+			el.src = appPath('30-seconds-of-silence.mp3');
 			el.loop = true;
 		}
 		return el;

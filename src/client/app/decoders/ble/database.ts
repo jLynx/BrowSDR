@@ -1,3 +1,4 @@
+import { appPath } from '@/platform/urls';
 import { isRecord } from '@/platform/data';
 import { DATABASES_BASE } from '@/platform/databases';
 import { parseMacVendors } from './vendor-records';
@@ -35,7 +36,7 @@ async function verifiedDatabase(manifestResponse: Response | undefined, response
 
 async function loadDatabase(): Promise<MacVendorDatabase | undefined> {
 	const remote = new URL(`${DATABASES_BASE}${namespace}`, location.href).href;
-	const bundled = new URL(`/${namespace}`, location.href).href;
+	const bundled = new URL(appPath(namespace), location.href).href;
 	let cache: Cache | undefined;
 	try {
 		cache = await caches.open('browsdr-ble-vendors-v1');
