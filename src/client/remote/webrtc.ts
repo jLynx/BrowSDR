@@ -12,11 +12,13 @@ import type { DataConnection } from 'peerjs';
 import { isReceiverCommand } from './validation';
 import { isRecord } from '@/platform/data';
 import { errorMessage } from '@/platform/errors';
+import { BandwidthMonitor } from './bandwidth';
 
 /** Prefix prepended to all PeerJS IDs (hidden from users / share links). */
 export const PEER_ID_PREFIX = 'browsdr-';
 
 export class WebRTCHandler {
+	readonly bandwidth = new BandwidthMonitor(this);
 	isHost: boolean;
 	peer: Peer | null;
 
@@ -484,6 +486,7 @@ export class WebRTCHandler {
 	}
 
 	close(): void {
+		this.bandwidth.close();
 		this.iqRates.clear();
 		if (this.isHost) {
 			for (const [, client] of this.clients) {

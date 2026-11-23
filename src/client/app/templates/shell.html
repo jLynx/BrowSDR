@@ -60,6 +60,7 @@
 						<p class="rtk-caption">{{ remoteIqSummary }}</p>
 					</template>
 					<IqReplayPanel v-if="isDevelopment" />
+					<RemoteBandwidth v-if="remoteMode !== 'none'" />
 					<UiPanel label="Device info" class="radio-advanced device-info" v-if="connected && remoteMode !== 'client' && info.device" v-model:collapsed="deviceInfoCollapsed">
 						<UiFormRow v-if="info.device.manufacturer" label="Manufacturer"><small>{{ info.device.manufacturer }}</small></UiFormRow>
 						<UiFormRow v-if="info.device.product" label="Product"><small>{{ info.device.product }}</small></UiFormRow>

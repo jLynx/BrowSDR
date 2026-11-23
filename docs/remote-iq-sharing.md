@@ -58,6 +58,16 @@ filters or additional enabled decoders can increase the slice rate.
 
 ## Latency and limits
 
+The **Source** panel shows live sharing upload and download, updated every
+second. On a host, these are totals across all connected clients and SDRs;
+on a client, they cover all received SDRs. Both decoding modes are measured,
+including IQ or audio, waterfall, control messages and browser-reported WebRTC
+transport overhead. These are measured bytes transferred, rather than requested
+IQ capacity or machine-wide internet usage. The separate IQ payload estimate
+describes the configured slices and excludes waterfall and network overhead.
+New connections briefly show **Measuring…** while counters establish a baseline;
+unsupported browser statistics show **Unavailable**.
+
 IQ packets contain at most 3000 complex samples and cover at most 20 ms of
 signal. WebRTC transmission and client audio buffering add latency. Network
 queues are bounded; when the connection or client cannot keep up, packets are

@@ -42,6 +42,9 @@ export class ReceiverTransport {
 		private transport: WebRTCHandler,
 		private onClose: () => void,
 	) {}
+	get bandwidth() {
+		return this.transport.bandwidth;
+	}
 	receiveHostCommand(clientId: string, command: ReceiverCommand): void {
 		(this.onCommand as CommandCallbackHost | null)?.(clientId, command);
 	}
