@@ -7,6 +7,7 @@ import { sidebandOffsetHz } from '@/worker/decoders/ssb';
 import { updateContrast } from './contrast';
 import { submitDiscovery, drawDiscovery } from '@/app/discovery/bridge';
 import { formatFrequencyLabel } from '@/display/frequency-format';
+import { mountSpectrumKeyboard } from './keyboard';
 
 export const canvasMethods = {
 	initCanvas(this: AppInstance) {
@@ -282,6 +283,7 @@ export function mountCanvas(this: AppInstance) {
 
 	attachCanvasEvents(this.$refs.fft);
 	attachCanvasEvents(this.$refs.waterfall);
+	const cleanupKeyboard = mountSpectrumKeyboard(this);
 
 	// Resize FFT canvas when browser window is resized
 	let resizeTimer: ReturnType<typeof setTimeout>;
@@ -293,6 +295,7 @@ export function mountCanvas(this: AppInstance) {
 	};
 	window.addEventListener('resize', resize);
 	this._canvasCleanup = () => {
+		cleanupKeyboard();
 		clearTimeout(resizeTimer);
 		window.removeEventListener('resize', resize);
 		document.body.removeEventListener('click', resumeAudio);
