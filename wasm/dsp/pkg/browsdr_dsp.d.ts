@@ -66,6 +66,11 @@ export class DspProcessor {
      */
     set_bandwidth(bandwidth: number): void;
     /**
+     * Update the NCO frequency offset.
+     * Already translated IQ contains wanted carriers at DC, not receiver LO leakage.
+     */
+    set_dc_block_enabled(enabled: boolean): void;
+    /**
      * Override the FM deviation reference used for output normalization.
      *
      * By default, `set_bandwidth` sets the deviation reference to `bandwidth/2`,
@@ -189,6 +194,7 @@ export interface InitOutput {
     readonly dspprocessor_reset: (a: number) => void;
     readonly dspprocessor_set_audio_filters: (a: number, b: number, c: number) => void;
     readonly dspprocessor_set_bandwidth: (a: number, b: number) => void;
+    readonly dspprocessor_set_dc_block_enabled: (a: number, b: number) => void;
     readonly dspprocessor_set_fm_deviation: (a: number, b: number) => void;
     readonly dspprocessor_set_if_sample_rate: (a: number, b: number) => void;
     readonly dspprocessor_set_shift: (a: number, b: number, c: number) => void;

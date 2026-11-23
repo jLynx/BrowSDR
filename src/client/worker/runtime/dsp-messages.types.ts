@@ -10,6 +10,7 @@ import type { VfoParams } from './types';
 import type { RDSMessage, RdsStatus, Rtl433Message } from '@/worker/decoders/types';
 import type { DSDStatus } from '@/worker/decoders/dsd/types';
 import type { PagerProtocol } from '@/worker/decoders/charsets';
+import type { SliceRequest } from '@/remote/iq/types';
 
 export interface SharedBandOutput {
 	centerBin: number;
@@ -19,6 +20,7 @@ export interface SharedBandOutput {
 
 export type DspOutput =
 	| DspAudio
+	| { type: 'iq_slice'; packets: ArrayBuffer[]; index: number; revision: number; chunkId: number; dspTime: number }
 	| HdMessage
 	| Rtl433Message
 	| AdsbMessage
@@ -62,14 +64,25 @@ export type DspInput =
 			chunkId: number;
 			inputSamples: number;
 	  }
-	| { type: 'init'; sampleRate: number; centerFreq: number; params: VfoParams; sabs?: SharedArrayBuffer[] }
+	| {
+			type: 'init';
+			sampleRate: number;
+			centerFreq: number;
+			params: VfoParams;
+			sabs?: SharedArrayBuffer[];
+			extractOnly?: boolean;
+			preserveDc?: boolean;
+	  }
 	| { type: 'configure'; centerFreq: number; params: VfoParams }
 	| {
 			type: 'process';
+			discontinuity?: boolean;
+			slice?: SliceRequest;
 			sampleRate?: number;
 			centerFreq?: number;
 			params: VfoParams;
 			floatIq?: boolean;
+			preserveDc?: boolean;
 			iqFormat?: 'int8' | 'int16' | 'float32';
 			useSab?: boolean;
 			sabIndex?: number;

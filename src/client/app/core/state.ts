@@ -27,6 +27,7 @@ import type { CapabilityIssue } from '@/platform/types';
 import type { Rtl433Status, Rtl433Protocol } from '@/worker/decoders/types';
 import { DEFAULT_FFT_SIZE, DEFAULT_SPECTRUM_RANGE } from '@/display/spectrum-range';
 import type { IqRecording, IqReplayProgress } from '@/radio/iq-replay/types';
+import { createRemoteIqState } from '@/remote/iq/state';
 
 export function createAppData() {
 	return {
@@ -37,6 +38,7 @@ export function createAppData() {
 		running: false,
 		isOnline: navigator.onLine,
 		remoteMode: 'none' as 'none' | 'host' | 'client',
+		...createRemoteIqState(),
 		remoteStatus: '',
 		remoteLink: '',
 		copyLinkSuccess: false,

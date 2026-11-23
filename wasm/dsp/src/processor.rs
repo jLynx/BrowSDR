@@ -79,6 +79,7 @@ pub struct DspProcessor {
     dc_avg_i: f32,
     dc_avg_q: f32,
     dc_alpha: f32,
+    dc_block_enabled: bool,
 
     // NCO output buffers (reused to avoid per-call allocation)
     nco_buf_i: Vec<f32>,
@@ -189,6 +190,7 @@ impl DspProcessor {
             dc_avg_i: 0.0,
             dc_avg_q: 0.0,
             dc_alpha,
+            dc_block_enabled: true,
             nco_buf_i: Vec::with_capacity(262144),
             nco_buf_q: Vec::with_capacity(262144),
             scratch_i: Vec::with_capacity(8192),
@@ -236,6 +238,13 @@ impl DspProcessor {
         }
 
         PolyphaseResamplerF32::new(interp, decim, &taps)
+    }
+
+    /// Already translated IQ contains wanted carriers at DC, not receiver LO leakage.
+    pub fn set_dc_block_enabled(&mut self, enabled: bool) {
+        self.dc_block_enabled = enabled;
+        self.dc_avg_i = 0.0;
+        self.dc_avg_q = 0.0;
     }
 
     /// Update the NCO frequency offset.
@@ -491,10 +500,12 @@ impl DspProcessor {
             let mut q_val = sample(i * 2 + 1);
 
             // DC Blocker (matches SDR++ genDCBlockRate)
-            dc_i = dc_i * alpha + i_val * (1.0 - alpha);
-            dc_q = dc_q * alpha + q_val * (1.0 - alpha);
-            i_val -= dc_i;
-            q_val -= dc_q;
+            if self.dc_block_enabled {
+                dc_i = dc_i * alpha + i_val * (1.0 - alpha);
+                dc_q = dc_q * alpha + q_val * (1.0 - alpha);
+                i_val -= dc_i;
+                q_val -= dc_q;
+            }
 
             // Standard complex multiply: (i + jq) * (pr + j*pi)
             self.nco_buf_i[i] = i_val * pr - q_val * pi;
@@ -712,10 +723,12 @@ impl DspProcessor {
             let mut q_val = sample(i * 2 + 1);
 
             // DC Blocker
-            dc_i = dc_i * alpha + i_val * (1.0 - alpha);
-            dc_q = dc_q * alpha + q_val * (1.0 - alpha);
-            i_val -= dc_i;
-            q_val -= dc_q;
+            if self.dc_block_enabled {
+                dc_i = dc_i * alpha + i_val * (1.0 - alpha);
+                dc_q = dc_q * alpha + q_val * (1.0 - alpha);
+                i_val -= dc_i;
+                q_val -= dc_q;
+            }
 
             self.nco_buf_i[i] = i_val * pr - q_val * pi;
             self.nco_buf_q[i] = i_val * pi + q_val * pr;
@@ -791,6 +804,25 @@ impl DspProcessor {
 #[cfg(test)]
 mod float_input_tests {
     use super::*;
+
+    #[test]
+    fn translated_iq_preserves_a_wanted_carrier_at_dc() {
+        let input = vec![0.25f32; 100000];
+        let mut filtered = DspProcessor::new(50000.0, 0.0, 50000.0);
+        let mut preserved = DspProcessor::new(50000.0, 0.0, 50000.0);
+        preserved.set_dc_block_enabled(false);
+        for chunk in input.chunks(2000) {
+            filtered.process_iq_only_f32_ptr(chunk.as_ptr(), chunk.len());
+            preserved.process_iq_only_f32_ptr(chunk.as_ptr(), chunk.len());
+        }
+        assert!(filtered.scratch_audio.last().unwrap().abs() < 0.001);
+        assert!((preserved.scratch_audio.last().unwrap() - 0.25).abs() < 0.001);
+        preserved.set_dc_block_enabled(true);
+        for chunk in input.chunks(2000) {
+            preserved.process_iq_only_f32_ptr(chunk.as_ptr(), chunk.len());
+        }
+        assert!(preserved.scratch_audio.last().unwrap().abs() < 0.001);
+    }
 
     #[test]
     fn hd_radio_resampling_retains_the_exact_half_hz_rate() {

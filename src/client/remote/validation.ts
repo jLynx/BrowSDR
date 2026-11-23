@@ -18,6 +18,8 @@ export function isReceiverCommand(value: unknown): value is ReceiverCommand {
 }
 
 const validators: Record<string, (value: Record<string, unknown>) => boolean> = {
+	streamCapabilities: (value) => value.iqSlices === true,
+	clientStream: (value) => ['audio', 'iq'].includes(String(value.stream)) && (value.bits === 8 || value.bits === 16),
 	resetRemoteVfos: (_value: Record<string, unknown>) => true,
 	addRemoteVfo: (_value: Record<string, unknown>) => true,
 	removeRemoteVfo: (value: Record<string, unknown>) => validIndex(value.index),
@@ -47,7 +49,10 @@ const validators: Record<string, (value: Record<string, unknown>) => boolean> = 
 				primitiveMap<boolean>(item.locks, 'boolean') &&
 				validCapabilities(item.capabilities),
 		),
-	vfoUpdate: (value: Record<string, unknown>) => validIndex(value.index) && validVfoParams(value.params),
+	vfoUpdate: (value: Record<string, unknown>) =>
+		validIndex(value.index) &&
+		validVfoParams(value.params) &&
+		(value.revision === undefined || (validIndex(value.revision) && Number(value.revision) <= 0xffffffff)),
 	dspStats: (value) => validDspStats(value.stats),
 	ble: (value: Record<string, unknown>) => validIndex(value.vfoIndex) && numbers(value, ['freq']) && validBleMessage(value.msg),
 	ais: (value: Record<string, unknown>) => validIndex(value.vfoIndex) && numbers(value, ['freq']) && validAisMessage(value.msg),

@@ -24,6 +24,8 @@ import type {
 	HostStats,
 } from '@/worker/runtime/callbacks.types';
 import { setRemoteHostHdRadioCallback } from '@/worker/decoders/hd-radio/routing';
+import { configureRemoteStream, setRemoteHostIqCallback } from '@/remote/iq/host';
+import { setRemoteIqEnabled, setRemoteIqVfoParams, feedRemoteIqChunk } from '@/remote/iq/client';
 import { hdAudioChanged } from '@/worker/decoders/hd-radio/types';
 import type { DspAudio } from '@/worker/runtime/dsp-messages.types';
 import type { IqDispatcher } from '@/worker/streams/iq-dispatch';
@@ -200,6 +202,10 @@ export class Backend {
 
 	// Remote client state
 	_remoteHostCb?: SamplesCallback;
+	_remoteHostIqCb?: (clientId: string, packet: ArrayBuffer) => void;
+	_remoteIqEnabled = false;
+	_remoteIqRevisions: number[] = [];
+	_remoteIqSequences = new Map<number, number>();
 	_remoteHostFftCb?: SamplesCallback;
 	_remoteHostAudioCb?: HostCallback<Parameters<AudioCallback>>;
 	_remoteHostStatsCb?: HostCallback<[HostStats]>;
@@ -286,6 +292,11 @@ export class Backend {
 
 	// Remote client methods (imported from remote-clients.ts)
 	setRemoteHostCallback = setRemoteHostCallback.bind(this);
+	configureRemoteStream = configureRemoteStream.bind(this);
+	setRemoteHostIqCallback = setRemoteHostIqCallback.bind(this);
+	setRemoteIqEnabled = setRemoteIqEnabled.bind(this);
+	setRemoteIqVfoParams = setRemoteIqVfoParams.bind(this);
+	feedRemoteIqChunk = feedRemoteIqChunk.bind(this);
 	setRemoteHostFftCallback = setRemoteHostFftCallback.bind(this);
 	setRemoteHostAudioCallback = setRemoteHostAudioCallback.bind(this);
 	setRemoteHostStatsCallback = setRemoteHostStatsCallback.bind(this);
@@ -476,6 +487,8 @@ export class Backend {
 		}
 
 		this.vfoParams.splice(index, 1);
+		this._remoteIqRevisions.splice(index, 1);
+		this._remoteIqSequences.clear();
 		this.dspWorkers!.splice(index, 1);
 		this.vfoStates!.splice(index, 1);
 	}
@@ -514,6 +527,7 @@ export class Backend {
 
 		if (this._remoteClients) {
 			for (const rc of this._remoteClients.values()) {
+				if (rc.stream === 'iq') continue;
 				if (rc.workers && rc.params) {
 					for (let i = 0; i < rc.workers.length; i++) {
 						if (rc.workers[i]) {
@@ -569,6 +583,8 @@ export class Backend {
 	}
 
 	private disposeDsp(): void {
+		this._remoteIqSequences.clear();
+		this._remoteIqRevisions = [];
 		this._replayPending = undefined;
 		this._iqDispatcher?.dispose();
 		this._iqDispatcher = undefined;

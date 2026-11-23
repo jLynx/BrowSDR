@@ -60,6 +60,9 @@ export class ReceiverTransport {
 	sendAudioChunkTo(clientId: string, chunk: ArrayBuffer | ArrayBufferView) {
 		this.transport.sendAudioChunkTo(clientId, packReceiverChunk(this.receiverId, chunk));
 	}
+	sendIqChunkTo(clientId: string, chunk: ArrayBuffer, bytesPerSecond: number, streamKey = '0') {
+		this.transport.sendIqChunkTo(clientId, packReceiverChunk(this.receiverId, chunk), bytesPerSecond, `${this.receiverId}:${streamKey}`);
+	}
 	kickClient(clientId: string) {
 		this.transport.kickClient(clientId);
 	}

@@ -50,6 +50,15 @@
 					<UiFormRow class="info-row" v-if="connected && remoteMode !== 'client'">
 						<small>{{ info.boardName }}</small>
 					</UiFormRow>
+					<template v-if="remoteMode === 'client' && remoteIqSupported">
+						<UiFormRow label="Decode on" :input-id="receiverId + '-remote-decoding'">
+							<UiSelect :id="receiverId + '-remote-decoding'" v-model="remoteDecoding" @change="applyRemoteDecoding">
+								<option value="client">This device (IQ)</option>
+								<option value="host">Host (audio)</option>
+								</UiSelect>
+						</UiFormRow>
+						<p class="rtk-caption">{{ remoteIqSummary }}</p>
+					</template>
 					<IqReplayPanel v-if="isDevelopment" />
 					<UiPanel label="Device info" class="radio-advanced device-info" v-if="connected && remoteMode !== 'client' && info.device" v-model:collapsed="deviceInfoCollapsed">
 						<UiFormRow v-if="info.device.manufacturer" label="Manufacturer"><small>{{ info.device.manufacturer }}</small></UiFormRow>

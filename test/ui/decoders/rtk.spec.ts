@@ -49,12 +49,41 @@ async function setup() {
 	await wrapper.setData({
 		running: true,
 		connected: true,
-		backend: { setVfoParams: vi.fn(), addVfo: vi.fn(), setFrequency: vi.fn() },
+		backend: { setVfoParams: vi.fn(), setRemoteIqVfoParams: vi.fn(), addVfo: vi.fn(), setFrequency: vi.fn() },
 		vfos: [{ ...makeDefaultVfo(923.118), enabled: false }],
 	});
 }
 
 describe('live RTK receiver tools', () => {
+	it('enables RTK controls and automatic tracking VFOs for client IQ reception', async () => {
+		await setup();
+		await wrapper.setData({ remoteMode: 'client', remoteIqActive: false });
+		wrapper.vm.rtk.panelOpen = true;
+		await nextTick();
+		const decode = wrapper.get<HTMLInputElement>('[aria-label="RTK decoding for VFO 1"]');
+		expect(decode.element.disabled).toBe(true);
+		await wrapper.setData({ remoteIqActive: true });
+		expect(decode.element.disabled).toBe(false);
+		await decode.setValue(true);
+		const packet = message();
+		wrapper.vm._onRtkMessage(0, packet.freq, packet);
+		await nextTick();
+		expect(wrapper.text()).toContain('Corrections received');
+		expect(wrapper.text()).not.toContain('Local SDR required');
+		wrapper.vm.vfos[0].rtkProfile = 'scan';
+		packet.status.scan = { startMHz: 915, endMHz: 928, frequencyMHz: 923.118, channel: 1, channels: 265, pass: 1, remainingSeconds: 300 };
+		packet.stations[0].discovery = {
+			profile: 'rtk1',
+			frequencyMHz: 923.118,
+			frequenciesMHz: [923.118],
+			hoppingObserved: false,
+			verifiedFrames: 1,
+		};
+		wrapper.vm._onRtkMessage(0, packet.freq, packet);
+		await flushPromises();
+		expect(wrapper.vm.vfos).toHaveLength(2);
+		expect(wrapper.vm.vfos[1].rtkFollowSource).toBeTruthy();
+	});
 	it('discovers a received range, keeps mixed and beacon-only bases, and follows a selected identity', async () => {
 		await setup();
 		wrapper.vm.radio.centerFreq = 923.118;

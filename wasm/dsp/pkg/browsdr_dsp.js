@@ -156,6 +156,14 @@ export class DspProcessor {
         wasm.dspprocessor_set_bandwidth(this.__wbg_ptr, bandwidth);
     }
     /**
+     * Update the NCO frequency offset.
+     * Already translated IQ contains wanted carriers at DC, not receiver LO leakage.
+     * @param {boolean} enabled
+     */
+    set_dc_block_enabled(enabled) {
+        wasm.dspprocessor_set_dc_block_enabled(this.__wbg_ptr, enabled);
+    }
+    /**
      * Override the FM deviation reference used for output normalization.
      *
      * By default, `set_bandwidth` sets the deviation reference to `bandwidth/2`,
