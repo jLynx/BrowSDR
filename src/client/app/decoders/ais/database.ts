@@ -1,3 +1,4 @@
+import { appPath } from '@/platform/urls';
 import { isRecord } from '@/platform/data';
 import { DATABASES_BASE } from '@/platform/databases';
 
@@ -29,7 +30,7 @@ export async function loadMids(): Promise<Record<string, string> | undefined> {
 	} catch {
 		/* Browser storage can be unavailable. */
 	}
-	for (const url of [remote, new URL('/maritime-db/mids.json', location.href).href]) {
+	for (const url of [remote, new URL(appPath('maritime-db/mids.json'), location.href).href]) {
 		try {
 			const response = await fetch(url, { signal: AbortSignal.timeout(8000), cache: 'no-cache' });
 			if (!response.ok) continue;
