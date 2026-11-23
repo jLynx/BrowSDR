@@ -1,3 +1,4 @@
+import { backendPath } from '@/platform/urls';
 import type { WhisperWorkerScope, BenchmarkMessage, WorkerInMessage, TranscriptionOptions, BenchmarkResult } from './types';
 import { errorMessage } from '@/platform/errors';
 /**
@@ -58,7 +59,7 @@ async function loadModel(model: string, device?: 'wasm' | 'webgpu'): Promise<voi
 		const hostname = workerSelf.location.hostname;
 		const isLocalDev = hostname === 'localhost' || hostname === '127.0.0.1';
 		if (!isLocalDev) {
-			env.remoteHost = `${workerSelf.location.origin}/hf-proxy`;
+			env.remoteHost = new URL(backendPath('hf-proxy'), workerSelf.location.origin).href;
 		}
 
 		// English-only models (.en) reject language/task parameters
