@@ -1,7 +1,7 @@
 import { markRaw } from 'vue';
 import workletUrl from '@/audio/playback/processor?worker&url';
 import type { AppInstance } from '@/app/core/receiver.types';
-import { LOCAL_PLAYBACK_LIMIT_MS } from '@/audio/playback/types';
+import { DEFAULT_REMOTE_PLAYBACK_LIMIT_MS, LOCAL_PLAYBACK_LIMIT_MS } from '@/audio/playback/types';
 import type { PlaybackMessage, PlaybackStats } from '@/audio/playback/types';
 
 export const workletMethods = {
@@ -35,17 +35,12 @@ export const workletMethods = {
 		this._audioWorkletReady = ready;
 		return ready;
 	},
-	applyRemoteAudioBuffer(this: AppInstance) {
-		const message: PlaybackMessage = { type: 'setLimit', maxBufferMs: this.remoteAudioBufferMs };
-		this._audioWorklet?.port.postMessage(message);
-		this.saveSetting();
-	},
 	_resetAudioPlayback(this: AppInstance, clearCounters = false) {
 		this.nextPlayTime = 0;
 		this.audioRingPos = 0;
 		this._audioPlaybackPaused = true;
 		const message: PlaybackMessage = { type: 'reset', clearCounters };
-		if (clearCounters) message.maxBufferMs = this.remoteMode === 'client' ? this.remoteAudioBufferMs : LOCAL_PLAYBACK_LIMIT_MS;
+		if (clearCounters) message.maxBufferMs = this.remoteMode === 'client' ? DEFAULT_REMOTE_PLAYBACK_LIMIT_MS : LOCAL_PLAYBACK_LIMIT_MS;
 		this._audioWorklet?.port.postMessage(message);
 		this.queuedAudioSched = '0';
 		if (clearCounters) {

@@ -56,15 +56,7 @@
 								<option value="host">Host (audio)</option>
 								</UiSelect>
 						</UiFormRow>
-						<p class="rtk-caption">{{ remoteIqSummary }}</p>
 					</template>
-					<UiFormRow v-if="remoteMode === 'client' && audioPlaybackEngine === 'worklet'" label="Audio buffer limit" :input-id="receiverId + '-remote-audio-buffer'">
-						<UiSelect :id="receiverId + '-remote-audio-buffer'" v-model.number="remoteAudioBufferMs" @change="applyRemoteAudioBuffer" title="Maximum remote playback reserve. Higher limits can reduce gaps when packets arrive late, at the cost of more audio delay.">
-							<option :value="100">100 ms</option>
-							<option :value="250">250 ms</option>
-							<option :value="500">500 ms</option>
-						</UiSelect>
-					</UiFormRow>
 					<IqReplayPanel v-if="isDevelopment" />
 					<UiPanel label="Device info" class="radio-advanced device-info" v-if="connected && remoteMode !== 'client' && info.device" v-model:collapsed="deviceInfoCollapsed">
 						<UiFormRow v-if="info.device.manufacturer" label="Manufacturer"><small>{{ info.device.manufacturer }}</small></UiFormRow>

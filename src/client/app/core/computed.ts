@@ -3,12 +3,8 @@ import type { BookmarkEntry } from '@/app/workspace/types';
 import type { AppInstance } from '@/app/core/receiver.types';
 import { BOOKMARK_CATEGORIES, DISCORD_INVITE_URL } from './constants';
 import { frequencyView } from '@/display/frequency-view';
-import { remoteIqSummary } from '@/app/workspace/remote-iq';
 
 export const computedProperties = {
-	remoteIqSummary(this: AppInstance) {
-		return remoteIqSummary(this);
-	},
 	discordInviteUrl() {
 		return DISCORD_INVITE_URL;
 	},

@@ -140,7 +140,6 @@ export interface ReceiverMethods {
 	playAudio(samples: Float32Array | Record<number, number>, channels?: 1 | 2): void;
 	_scheduleAudioChunk(floats: Float32Array, channels?: 1 | 2): void;
 	_prepareAudioWorklet(): Promise<void>;
-	applyRemoteAudioBuffer(): void;
 	_resetAudioPlayback(clearCounters?: boolean): void;
 	_disposeAudioWorklet(): void;
 	clearInactiveSoloAudio(): void;

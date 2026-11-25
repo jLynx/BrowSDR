@@ -398,8 +398,8 @@ describe('receiver uses the shared UI', () => {
 		await wrapper.setData({ remoteMode: 'client' });
 		expect(wrapper.find('select[aria-label="Receive Mode"]').exists()).toBe(false);
 	});
-	it('changes the remote playback limit through the source panel', async () => {
-		const storage = new Map<string, string>();
+	it('uses automatic remote buffering despite a previously saved lower limit', async () => {
+		const storage = new Map([['SDRSetting', JSON.stringify({ remoteAudioBufferMs: 100 })]]);
 		vi.stubGlobal('localStorage', {
 			getItem: (key: string) => storage.get(key) ?? null,
 			setItem: (key: string, value: string) => storage.set(key, value),
@@ -408,17 +408,17 @@ describe('receiver uses the shared UI', () => {
 		expect(wrapper.find('#test-receiver-remote-audio-buffer').exists()).toBe(false);
 		await wrapper.setData({ remoteMode: 'client', audioPlaybackEngine: 'worklet' });
 		const app = wrapper.vm as unknown as AppInstance;
-		vi.spyOn(wrapper.vm, 'saveSetting').mockImplementation(() => settingsMethods.saveSetting.call(app));
+		settingsMethods.loadSetting.call(app);
+		expect(wrapper.find('#test-receiver-remote-audio-buffer').exists()).toBe(false);
 		const postMessage = vi.fn();
 		app._audioWorklet = { port: { postMessage } } as unknown as AudioWorkletNode;
-		const select = wrapper.get<HTMLSelectElement>('#test-receiver-remote-audio-buffer');
-		expect(select.element.value).toBe('500');
-		await select.setValue('250');
-		expect(postMessage).toHaveBeenCalledWith({ type: 'setLimit', maxBufferMs: 250 });
-		wrapper.unmount();
-		wrapper = mount(ReceiverView);
-		settingsMethods.loadSetting.call(wrapper.vm as unknown as AppInstance);
-		expect(wrapper.vm.remoteAudioBufferMs).toBe(250);
+		app._resetAudioPlayback(true);
+		expect(postMessage).toHaveBeenLastCalledWith({ type: 'reset', clearCounters: true, maxBufferMs: 500 });
+		settingsMethods.saveSetting.call(app);
+		expect(JSON.parse(storage.get('SDRSetting') ?? '{}')).not.toHaveProperty('remoteAudioBufferMs');
+		await wrapper.setData({ remoteMode: 'none' });
+		app._resetAudioPlayback(true);
+		expect(postMessage).toHaveBeenLastCalledWith({ type: 'reset', clearCounters: true, maxBufferMs: 100 });
 	});
 	it('updates numeric gain switches and keeps client locks read-only', async () => {
 		wrapper = mount(ReceiverView, { attachTo: document.body });

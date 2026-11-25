@@ -61,7 +61,6 @@ describe('audio worklet ownership', () => {
 	it('measures remote arrivals and sends host PCM straight to the worklet with transcription intact', async () => {
 		const { app, nodes } = receiver();
 		app.remoteMode = 'client';
-		app.remoteAudioBufferMs = 500;
 		app.vfos[0].freq = 106.2;
 		app.whisper = { active: false, status: 'ready' };
 		app._feedWhisperVfo = vi.fn((_, __, samples) => expect(samples.byteLength).toBeGreaterThan(0));

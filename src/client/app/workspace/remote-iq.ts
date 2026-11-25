@@ -1,7 +1,7 @@
 import type { AppInstance } from '@/app/core/receiver.types';
 import type { ReceiverCommand } from '@/remote/types';
 import type { VfoParams } from '@/worker/runtime/types';
-import { planIqSlice, needsSlice } from '@/remote/iq/plan';
+import { planIqSlice } from '@/remote/iq/plan';
 import * as Comlink from 'comlink';
 import { isIqPacket, unpackIqPacket } from '@/remote/iq/packet';
 import { REMOTE_IQ_BITS } from '@/remote/iq/types';
@@ -67,23 +67,4 @@ export function handleIqCommand(app: AppInstance, command: ReceiverCommand, clie
 		return true;
 	}
 	return false;
-}
-
-export function remoteIqSummary(app: AppInstance): string {
-	if (!app.remoteIqActive) return 'Audio and decoded messages from the host.';
-	let rate = 0;
-	let fullBand = false;
-	let missing = false;
-	for (const vfo of app.vfos) {
-		const plan = planIqSlice(vfo, app.radio.sampleRate, app.radio.centerFreq);
-		if (plan) {
-			rate += plan.sampleRate;
-			fullBand ||= plan.fullBand;
-		} else if (needsSlice(vfo)) missing = true;
-	}
-	return (
-		`8-bit IQ payload: approximately ${((rate * REMOTE_IQ_BITS * 2) / 1e6).toFixed(2)} Mbps, plus waterfall and network overhead.` +
-		(fullBand ? ' RTK scanning, Auto or hopping requires the full capture.' : '') +
-		(missing ? ' Some VFOs need more bandwidth or are outside the capture.' : '')
-	);
 }

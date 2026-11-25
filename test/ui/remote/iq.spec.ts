@@ -36,7 +36,6 @@ describe('remote decoding controls', () => {
 		app.handleRemoteCommand({ type: 'streamCapabilities', iqSlices: true });
 		await flushPromises();
 		expect(app.remoteIqActive).toBe(true);
-		expect(wrapper.text()).toContain('8-bit IQ payload: approximately 4.00 Mbps');
 		expect(transport.sendCommand).toHaveBeenCalledWith({ type: 'clientStream', stream: 'iq', bits: 8 });
 		expect(wrapper.find('#test-receiver-remote-iq-bits').exists()).toBe(false);
 		expect(app.gains['IQ Precision']).toBe(1);
@@ -47,7 +46,6 @@ describe('remote decoding controls', () => {
 		expect(transport.sendCommand).toHaveBeenCalledWith({ type: 'clientStream', stream: 'audio', bits: 8 });
 		expect(app.gains['IQ Precision']).toBe(1);
 		expect(wrapper.find('#test-receiver-remote-iq-bits').exists()).toBe(false);
-		expect(wrapper.text()).toContain('Audio and decoded messages from the host');
 	});
 	it('preserves the RF revision for volume/squelch, changes it on retune, and allocates client VFOs', async () => {
 		const { app, backend, transport } = await receiver();

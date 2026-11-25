@@ -28,8 +28,6 @@ import type { Rtl433Status, Rtl433Protocol } from '@/worker/decoders/types';
 import { DEFAULT_FFT_SIZE, DEFAULT_SPECTRUM_RANGE } from '@/display/spectrum-range';
 import type { IqRecording, IqReplayProgress } from '@/radio/iq-replay/types';
 import { createRemoteIqState } from '@/remote/iq/state';
-import { DEFAULT_REMOTE_PLAYBACK_LIMIT_MS } from '@/audio/playback/types';
-import type { PlaybackBufferLimit } from '@/audio/playback/types';
 
 export function createAppData() {
 	return {
@@ -133,7 +131,6 @@ function createAudioPlaybackState() {
 		audioTargetMs: 20,
 		audioPlaybackRate: 1,
 		audioDroppedFrames: 0,
-		remoteAudioBufferMs: DEFAULT_REMOTE_PLAYBACK_LIMIT_MS as PlaybackBufferLimit,
 		remotePacketGapMs: null as number | null,
 		audioArrivalGapMs: null as number | null,
 		audioPlaybackEngine: 'scheduled',
