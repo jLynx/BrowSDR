@@ -2,6 +2,7 @@ import type { Env, IceServerEntry } from './types';
 import { isRecord } from '../client/platform/data';
 import { updateMaritimeDatabase } from './maritime-db/update';
 import { updateDatabase } from './aircraft-db/update';
+import { hostedRequest, hostedRedirect } from './hosting';
 /**
  * BrowSDR - Cloudflare Worker
  *
@@ -23,6 +24,10 @@ export default {
 			);
 	},
 	async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
+		const originalRequest = request;
+		const routed = hostedRequest(request, env.BASE_PATH);
+		if (routed instanceof Response) return routed;
+		request = routed;
 		const url = new URL(request.url);
 
 		// Cross-origin isolation headers (required for SharedArrayBuffer)
@@ -97,6 +102,7 @@ export default {
 		// Serve static assets with cross-origin isolation headers
 		const response = await env.ASSETS.fetch(request);
 		const newResponse = new Response(response.body, response);
+		hostedRedirect(newResponse, originalRequest, env.BASE_PATH);
 		newResponse.headers.set('Cross-Origin-Opener-Policy', 'same-origin');
 		newResponse.headers.set('Cross-Origin-Embedder-Policy', 'require-corp');
 		return newResponse;

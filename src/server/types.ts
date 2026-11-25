@@ -1,4 +1,5 @@
 export interface Env {
+	BASE_PATH?: string;
 	DATABASES: R2Bucket;
 	EXPRESS_TURN_URL: string;
 	EXPRESS_TURN_USER: string;

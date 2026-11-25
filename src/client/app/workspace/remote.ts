@@ -1,3 +1,4 @@
+import { appPath, backendPath } from '@/platform/urls';
 import { isRecord } from '@/platform/data';
 import { packAudio } from '@/audio/pcm';
 import { playRemoteAudio, recordRemotePacketArrival } from '@/app/audio/remote';
@@ -51,7 +52,7 @@ export const remoteMethods = {
 				const origin = window.location.origin;
 				const shortId = status.id.replace(PEER_ID_PREFIX, '');
 				localStorage.setItem('browsdr-share-code', shortId);
-				this.remoteLink = `${origin}/?connect=${shortId}`;
+				this.remoteLink = `${origin}${appPath()}?connect=${shortId}`;
 				console.log('[WebRTC] Link completely generated:', this.remoteLink);
 			} else if (status.status === 'client-connected') {
 				const clientId = status.clientId;
@@ -155,7 +156,7 @@ export const remoteMethods = {
 							}
 							localStorage.setItem('browsdr-device-id', deviceId);
 						}
-						fetch('/api/geo')
+						fetch(backendPath('api/geo'))
 							.then((r: Response) => r.json())
 							.then((data: unknown) => {
 								if (this._webrtc)
