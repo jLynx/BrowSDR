@@ -31,9 +31,10 @@ export async function installHostIqCallback(app: AppInstance): Promise<void> {
 export const remoteIqMethods = {
 	async applyRemoteDecoding(this: AppInstance): Promise<void> {
 		if (this.remoteMode !== 'client' || !this.remoteIqSupported) return;
+		const changed = this.remoteIqActive !== (this.remoteDecoding === 'client');
 		this.remoteIqActive = this.remoteDecoding === 'client';
 		await this.backend.setRemoteIqEnabled(this.remoteIqActive);
-		this._resetAudioPlayback();
+		this._resetAudioPlayback(changed);
 		this._webrtc?.sendCommand({ type: 'clientStream', stream: this.remoteIqActive ? 'iq' : 'audio', bits: REMOTE_IQ_BITS });
 		for (let index = 0; index < this.vfos.length; index++) this.updateBackendVfoParams(index);
 	},

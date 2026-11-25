@@ -6,6 +6,7 @@ import { isRecord, restoreFields, primitiveMap } from '@/platform/data';
 import { validContrastRange } from '@/display/contrast';
 import { isValidDisplayFrequencyMhz, minimumDisplayFrequencyMhz } from '@/radio/frequency-shift';
 import { formatFrequencyMhz } from '@/display/frequency-format';
+import { PLAYBACK_BUFFER_LIMITS } from '@/audio/playback/types';
 
 export const settingsMethods = {
 	saveSetting(this: AppInstance) {
@@ -14,6 +15,7 @@ export const settingsMethods = {
 			spectrumRangeVersion: SPECTRUM_RANGE_VERSION,
 			radio: this.radio,
 			display: this.display,
+			remoteAudioBufferMs: this.remoteAudioBufferMs,
 			gains: Object.fromEntries(Object.entries(this.gains || {}).filter(([name]) => name !== 'Receive Mode')),
 			gainDeviceType: this.gainDeviceType,
 			locks: this.locks,
@@ -46,6 +48,8 @@ export const settingsMethods = {
 					}
 				}
 				restoreDisplaySettings.call(this, setting);
+				this.remoteAudioBufferMs =
+					PLAYBACK_BUFFER_LIMITS.find((limit) => limit === setting.remoteAudioBufferMs) ?? this.remoteAudioBufferMs;
 				if (typeof setting.gainDeviceType === 'string') this.gainDeviceType = setting.gainDeviceType;
 				if (primitiveMap<number>(setting.gains, 'number')) {
 					Object.assign(this.gains, setting.gains);

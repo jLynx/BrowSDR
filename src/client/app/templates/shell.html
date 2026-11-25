@@ -59,6 +59,13 @@
 						</UiFormRow>
 						<p class="rtk-caption">{{ remoteIqSummary }}</p>
 					</template>
+					<UiFormRow v-if="remoteMode === 'client' && audioPlaybackEngine === 'worklet'" label="Audio buffer limit" :input-id="receiverId + '-remote-audio-buffer'">
+						<UiSelect :id="receiverId + '-remote-audio-buffer'" v-model.number="remoteAudioBufferMs" @change="applyRemoteAudioBuffer" title="Maximum remote playback reserve. Higher limits can reduce gaps when packets arrive late, at the cost of more audio delay.">
+							<option :value="100">100 ms</option>
+							<option :value="250">250 ms</option>
+							<option :value="500">500 ms</option>
+						</UiSelect>
+					</UiFormRow>
 					<IqReplayPanel v-if="isDevelopment" />
 					<RemoteBandwidth v-if="remoteMode !== 'none'" />
 					<UiPanel label="Device info" class="radio-advanced device-info" v-if="connected && remoteMode !== 'client' && info.device" v-model:collapsed="deviceInfoCollapsed">
@@ -324,6 +331,7 @@
 					<div v-if="dspStats.usbLinkBits !== undefined" title="Wire sample width and USB read size. Packed 12-bit preserves the ADC bits while reducing USB traffic; IQ Precision independently selects retained sample precision.">USB link: {{ dspStats.usbLinkBits }}-bit | {{ ((dspStats.usbTransferBytes || 0) / 1024).toFixed(0) }}KiB transfers</div>
 					<div v-if="dspStats.sourceGapCount && dspStats.sourceLastGapArrivalMs !== undefined" title="Completion interval and preceding synchronous processing duration when the latest source-counter gap was observed. Correlation does not prove cause.">Last source gap: {{ dspStats.sourceLastGapArrivalMs.toFixed(2) }}ms arrival / {{ (dspStats.sourceLastGapPreviousServiceMs || 0).toFixed(2) }}ms prior service</div>
 					<div v-if="audioPlaybackEngine === 'worklet' && dspStats.usbDiagnosticMode !== 1" title="Smooth rate correction is limited to ±0.5% to control gradual buffer drift. Discarded PCM frames count separately from source/IQ losses.">Playback rate: {{ (audioPlaybackRate * 100).toFixed(2) }}% | PCM discarded: {{ audioDroppedFrames }} frames</div>
+					<div v-if="remoteMode === 'client'" title="Longest interval between received audio or IQ messages, including browser callback delays. The PCM interval measures arrivals at the audio worklet. Both are measured since reception started or the decode mode changed.">Max arrival gaps: WebRTC {{ remotePacketGapMs === null ? '—' : remotePacketGapMs.toFixed(0) + ' ms' }}<template v-if="audioPlaybackEngine === 'worklet'"> | PCM {{ audioArrivalGapMs === null ? '—' : audioArrivalGapMs.toFixed(0) + ' ms' }}</template></div>
 					<div v-if="dspStats.channelization && dspStats.channelization.bands">Shared: {{ dspStats.channelization.vfos }} VFOs / {{ dspStats.channelization.bands }} bands @ {{ (dspStats.channelization.sampleRate / 1e6).toFixed(2) }} MSPS</div>
 					<div v-if="dspStats.channelization && dspStats.channelization.bands">{{ remoteMode === 'client' ? 'Host channelizer' : 'Channelizer' }}: {{ (dspStats.channelAvgMs || 0).toFixed(2) }}ms avg / {{ (dspStats.channelMaxMs || 0).toFixed(2) }}ms max | {{ (dspStats.channelCpuMs || 0).toFixed(0) }}ms CPU/s</div>
 					</div>

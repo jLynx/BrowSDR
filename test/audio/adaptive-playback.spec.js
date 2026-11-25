@@ -4,8 +4,9 @@ import { AdaptivePlaybackBuffer } from '@/audio/playback/buffer';
 const block = (frames = 128) => [new Float32Array(frames), new Float32Array(frames)];
 const pcm = (frames) => new Float32Array(frames).fill(0.25);
 
-function simulate(seconds, packetFrames = 240, deliveryRate = 48000, arrivalDelay = () => 0) {
+function simulate(seconds, packetFrames = 240, deliveryRate = 48000, arrivalDelay = () => 0, limitMs = 100) {
 	const queue = new AdaptivePlaybackBuffer();
+	queue.setLimit(limitMs);
 	const output = block();
 	let packet = 0;
 	for (let frame = 0; frame < seconds * 48000; frame += 128) {
@@ -55,6 +56,40 @@ describe('adaptive audio playback', () => {
 		expect(delayed.targetMs).toBeLessThanOrEqual(100);
 		expect(delayed.gapCount).toBeLessThan(4);
 	});
+	it('adapts to repeated 448ms delays with the larger remote limit', () => {
+		// Hold packets for part of each cycle, then deliver them together in order.
+		const delay = (packet) => {
+			const elapsedMs = (packet * 8) % 1600;
+			return elapsedMs >= 800 && elapsedMs < 1248 ? (1248 - elapsedMs) / 1000 : 0;
+		};
+		const local = simulate(30, 384, 48000, delay);
+		const remote = simulate(30, 384, 48000, delay, 500);
+		expect(local.gapCount).toBeGreaterThan(10);
+		expect(remote.gapCount).toBeLessThanOrEqual(2);
+		expect(remote.gapMs).toBeLessThan(local.gapMs / 5);
+		expect(remote.droppedFrames).toBeLessThan(local.droppedFrames);
+		expect(remote.maxArrivalGapMs).toBeGreaterThanOrEqual(448);
+		expect(remote.targetMs).toBeGreaterThan(400);
+		expect(simulate(60, 384, 48000, () => 0, 500).targetMs).toBeLessThan(20);
+		const recovered = simulate(60, 384, 48000, (packet) => (packet < 200 ? delay(packet) : 0), 500);
+		expect(recovered.gapCount).toBe(1);
+		expect(recovered.queueMs).toBeLessThan(375);
+	});
+	it('keeps the newest queued audio when reducing the limit during playback', () => {
+		const queue = new AdaptivePlaybackBuffer();
+		queue.setLimit(500);
+		queue.push(
+			Float32Array.from({ length: 12000 }, (_, frame) => frame),
+			1,
+			0,
+		);
+		queue.render(block(), 48000);
+		queue.setLimit(100);
+		expect(queue.stats()).toMatchObject({ queueMs: 100, droppedFrames: 0 });
+		const output = block();
+		queue.render(output, 48000);
+		expect(output[0][0]).toBe(7200);
+	});
 	it('counts actual starvation silence once and excludes intentional reset', () => {
 		const queue = new AdaptivePlaybackBuffer();
 		queue.push(pcm(1200), 1, 0);
@@ -70,6 +105,7 @@ describe('adaptive audio playback', () => {
 		expect(queue.stats().gapMs).toBeLessThan(21);
 		queue.reset(true);
 		expect(queue.stats().gapCount).toBe(0);
+		expect(queue.stats().maxArrivalGapMs).toBeNull();
 	});
 	it('discards only whole oldest frames at the 100ms storage limit', () => {
 		const queue = new AdaptivePlaybackBuffer();
