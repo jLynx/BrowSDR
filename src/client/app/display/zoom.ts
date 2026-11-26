@@ -11,6 +11,16 @@ export function focusSpectrumFrequency(receiver: AppInstance, frequencyMHz: numb
 	receiver.applyZoomToEngine();
 }
 
+/** Zoom around a position in the visible span (0 = left, 1 = right). */
+export function zoomSpectrum(receiver: AppInstance, direction: -1 | 1, anchor: number): void {
+	const bounds = frequencyView(receiver.radio, receiver.view);
+	const newScale = Math.max(1, Math.min(100, bounds.zoomScale * (1 + direction * 0.1)));
+	const target = bounds.zoomOffset + anchor / bounds.zoomScale;
+	receiver.view.zoomScale = newScale;
+	receiver.view.zoomOffset = Math.max(0, Math.min(1 - 1 / newScale, target - anchor / newScale));
+	receiver.applyZoomToEngine();
+}
+
 export const zoomMethods = {
 	toggleDisplayLock(this: AppInstance) {
 		this.view.locked = !this.view.locked;
@@ -18,30 +28,7 @@ export const zoomMethods = {
 	},
 	handleWheelZoom(this: AppInstance, e: WheelEvent, rect: DOMRect) {
 		e.preventDefault();
-
-		const zoomSensitivity = 0.1;
-		const zoomDir = e.deltaY < 0 ? 1 : -1;
-		const newScale = Math.max(1.0, Math.min(100.0, this.view.zoomScale * (1 + zoomDir * zoomSensitivity)));
-
-		// Calculate where the mouse is relative to the current view
-		const mouseX = e.clientX - rect.left;
-		const p = mouseX / rect.width;
-
-		// Calculate the absolute normalized coordinate of the mouse
-		const absNormTarget = this.view.zoomOffset + p / this.view.zoomScale;
-
-		// Calculate new offset to keep the absolute target under the mouse
-		let newOffset = absNormTarget - p / newScale;
-
-		// Clamp offset
-		const maxOffset = 1.0 - 1.0 / newScale;
-		if (newOffset < 0) newOffset = 0;
-		if (newOffset > maxOffset) newOffset = maxOffset;
-
-		this.view.zoomScale = newScale;
-		this.view.zoomOffset = newOffset;
-
-		this.applyZoomToEngine();
+		if (rect.width > 0) zoomSpectrum(this, e.deltaY < 0 ? 1 : -1, (e.clientX - rect.left) / rect.width);
 	},
 	applyZoomToEngine(this: AppInstance) {
 		const bounds = frequencyView(this.radio, this.view);

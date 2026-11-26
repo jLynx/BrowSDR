@@ -462,6 +462,9 @@ body {
 }
 
 .sidebar-footer {
+	display: flex;
+	align-items: center;
+	gap: 8px;
 	padding: 8px 12px;
 	border-top: 1px solid var(--border);
 	flex-shrink: 0;
@@ -471,12 +474,15 @@ body {
 	display: flex;
 	align-items: center;
 	gap: 8px;
-	width: 100%;
+	width: auto;
 	padding: 6px 8px;
 	font-size: 13px;
 	color: var(--text-muted);
 	border-radius: 6px;
 	justify-content: flex-start;
+}
+.sidebar-shortcuts-btn {
+	margin-left: auto;
 }
 
 .sidebar-about-btn:hover {

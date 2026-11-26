@@ -16,6 +16,7 @@ import VfoPanel from '@/app/radio/vfo-panel';
 import RxLevel from '@/app/radio/rx-level';
 import GainReset from '@/app/radio/gain-settings';
 import ContrastControls from '@/app/display/contrast-controls';
+import KeyboardShortcuts from '@/app/display/shortcuts';
 import * as components from '@/ui';
 import { createAppData } from '@/app/core/state';
 import { computedProperties } from '@/app/core/computed';
@@ -53,6 +54,7 @@ export const ReceiverView = defineComponent({
 		RxLevel,
 		GainReset,
 		ContrastControls,
+		KeyboardShortcuts,
 		AdsbPanel,
 		AisPanel,
 		RadiosondePanel,

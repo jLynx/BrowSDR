@@ -201,6 +201,45 @@ canvas {
 	display: block;
 }
 
+.workspace canvas:focus-visible {
+	outline: 2px solid var(--accent);
+	outline-offset: -2px;
+}
+.bookmark-dialog.keyboard-shortcuts-dialog {
+	width: calc(100vw - 32px);
+	max-width: 460px;
+	max-height: calc(100dvh - 32px);
+	display: flex;
+	flex-direction: column;
+}
+.keyboard-shortcuts-dialog .bookmark-dialog-body {
+	overflow-y: auto;
+}
+.keyboard-shortcuts-list {
+	display: grid;
+	grid-template-columns: auto 1fr;
+	gap: 16px;
+	align-items: start;
+	font-size: 13px;
+	line-height: 1.5;
+}
+.keyboard-shortcuts-list dt {
+	white-space: nowrap;
+}
+.keyboard-shortcuts-list dd {
+	margin: 0;
+}
+.keyboard-shortcuts-list kbd {
+	display: inline-block;
+	min-width: 24px;
+	padding: 0 4px;
+	border: 1px solid var(--border);
+	border-radius: 4px;
+	background: var(--bg-dark);
+	font-family: 'Roboto Mono', monospace;
+	text-align: center;
+}
+
 .freq-axis {
 	position: absolute;
 	bottom: 0;

@@ -19,6 +19,7 @@ import VfoPanel from './radio/vfo-panel';
 import RxLevel from './radio/rx-level';
 import GainReset from './radio/gain-settings';
 import ContrastControls from './display/contrast-controls';
+import KeyboardShortcuts from './display/shortcuts';
 import { watchContrast } from './display/contrast';
 import { createWorkspace } from './workspace/workspace';
 import * as Comlink from 'comlink';
@@ -72,6 +73,7 @@ const Receiver = {
 		RxLevel,
 		GainReset,
 		ContrastControls,
+		KeyboardShortcuts,
 		AdsbPanel,
 		AisPanel,
 		RadiosondePanel,
