@@ -42,6 +42,8 @@ export type DspStats = PerfReport & {
 	whisperEnabled?: boolean;
 };
 export type RemoteCommand =
+	| { type: 'streamCapabilities'; iqSlices: true }
+	| { type: 'clientStream'; stream: 'audio' | 'iq'; bits: 8 | 16 }
 	| {
 			type: 'sync';
 			capabilities?: DeviceCapabilities | null;
@@ -53,7 +55,7 @@ export type RemoteCommand =
 	| { type: 'clientInfo'; country?: string; deviceId?: string }
 	| { type: 'dspStats'; stats: DspStats }
 	| { type: 'clientDisplay'; sharedChannelization: boolean }
-	| { type: 'vfoUpdate'; index: number; params: VfoParams }
+	| { type: 'vfoUpdate'; index: number; params: VfoParams; revision?: number }
 	| { type: 'resetRemoteVfos' }
 	| { type: 'addRemoteVfo' }
 	| { type: 'removeRemoteVfo'; index: number }

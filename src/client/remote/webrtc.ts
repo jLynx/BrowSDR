@@ -13,11 +13,13 @@ import type { DataConnection } from 'peerjs';
 import { isReceiverCommand } from './validation';
 import { isRecord } from '@/platform/data';
 import { errorMessage } from '@/platform/errors';
+import { BandwidthMonitor } from './bandwidth';
 
 /** Prefix prepended to all PeerJS IDs (hidden from users / share links). */
 export const PEER_ID_PREFIX = 'browsdr-';
 
 export class WebRTCHandler {
+	readonly bandwidth = new BandwidthMonitor(this);
 	isHost: boolean;
 	peer: Peer | null;
 
@@ -39,6 +41,7 @@ export class WebRTCHandler {
 	onCommand: CommandCallbackHost | CommandCallbackClient | null;
 	onFftChunk: ChunkCallback | null;
 	onAudioChunk: ChunkCallback | null;
+	private iqRates = new Map<string, Map<string, { rate: number; time: number }>>();
 
 	constructor(isHost: boolean, remoteId: string | null = null, preferredHostId: string | null = null) {
 		this.isHost = isHost;
@@ -263,6 +266,7 @@ export class WebRTCHandler {
 		const client = this.clients.get(clientId);
 		if (!client) return;
 		this.clients.delete(clientId);
+		this.iqRates.delete(clientId);
 		if (client.cmd)
 			try {
 				client.cmd.close();
@@ -453,6 +457,25 @@ export class WebRTCHandler {
 		Promise.resolve(client.audio.send(this._toArrayBuffer(chunk))).catch((error: unknown) => console.error(error));
 	}
 
+	/** IQ shares the binary stream connection, with short bounded queues instead of audio's fixed byte limit. */
+	sendIqChunkTo(clientId: string, chunk: ArrayBuffer, bytesPerSecond: number, streamKey = '0'): void {
+		const client = this.clients.get(clientId);
+		if (!client?.audio?.open) return;
+		const rates = this.iqRates.get(clientId) ?? new Map<string, { rate: number; time: number }>();
+		this.iqRates.set(clientId, rates);
+		const now = performance.now();
+		rates.set(streamKey, { rate: bytesPerSecond, time: now });
+		let total = 0;
+		for (const [key, item] of rates) {
+			if (now - item.time > 1000) rates.delete(key);
+			else total += item.rate;
+		}
+		const budget = Math.min(4 * 1024 * 1024, Math.max(16384, total * 0.2));
+		const queued = 'bufferSize' in client.audio ? client.audio.bufferSize : 0;
+		if ((client.audio.dataChannel?.bufferedAmount ?? 0) + chunk.byteLength > budget || (typeof queued === 'number' && queued > 0)) return;
+		Promise.resolve(client.audio.send(chunk)).catch((error: unknown) => console.error(error));
+	}
+
 	// -- Client management (host) --
 
 	kickClient(clientId: string): void {
@@ -464,6 +487,8 @@ export class WebRTCHandler {
 	}
 
 	close(): void {
+		this.bandwidth.close();
+		this.iqRates.clear();
 		if (this.isHost) {
 			for (const [, client] of this.clients) {
 				if (client.cmd)

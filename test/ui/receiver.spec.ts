@@ -398,6 +398,28 @@ describe('receiver uses the shared UI', () => {
 		await wrapper.setData({ remoteMode: 'client' });
 		expect(wrapper.find('select[aria-label="Receive Mode"]').exists()).toBe(false);
 	});
+	it('uses automatic remote buffering despite a previously saved lower limit', async () => {
+		const storage = new Map([['SDRSetting', JSON.stringify({ remoteAudioBufferMs: 100 })]]);
+		vi.stubGlobal('localStorage', {
+			getItem: (key: string) => storage.get(key) ?? null,
+			setItem: (key: string, value: string) => storage.set(key, value),
+		});
+		wrapper = mount(ReceiverView);
+		expect(wrapper.find('#test-receiver-remote-audio-buffer').exists()).toBe(false);
+		await wrapper.setData({ remoteMode: 'client', audioPlaybackEngine: 'worklet' });
+		const app = wrapper.vm as unknown as AppInstance;
+		settingsMethods.loadSetting.call(app);
+		expect(wrapper.find('#test-receiver-remote-audio-buffer').exists()).toBe(false);
+		const postMessage = vi.fn();
+		app._audioWorklet = { port: { postMessage } } as unknown as AudioWorkletNode;
+		app._resetAudioPlayback(true);
+		expect(postMessage).toHaveBeenLastCalledWith({ type: 'reset', clearCounters: true, maxBufferMs: 500 });
+		settingsMethods.saveSetting.call(app);
+		expect(JSON.parse(storage.get('SDRSetting') ?? '{}')).not.toHaveProperty('remoteAudioBufferMs');
+		await wrapper.setData({ remoteMode: 'none' });
+		app._resetAudioPlayback(true);
+		expect(postMessage).toHaveBeenLastCalledWith({ type: 'reset', clearCounters: true, maxBufferMs: 100 });
+	});
 	it('updates numeric gain switches and keeps client locks read-only', async () => {
 		wrapper = mount(ReceiverView, { attachTo: document.body });
 		await wrapper.setData({

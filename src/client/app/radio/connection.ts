@@ -413,26 +413,21 @@ export const connectionMethods = {
 			});
 		}
 
-		// Add additional VFOs beyond the first (which is created by default in the worker).
-		// In client mode, notify the host via WebRTC instead of calling the mock backend.
-		if (this.remoteMode === 'client' && this._receiverTransport) this._webrtc?.sendCommand({ type: 'resetRemoteVfos' });
-		for (let i = 1; i < this.vfos.length; i++) {
-			if (this.remoteMode === 'client' && this._webrtc) {
-				this._webrtc?.sendCommand({ type: 'addRemoteVfo' });
-			} else {
-				await this.backend.addVfo();
-			}
-		}
-
-		// Starting reception preserves the user's saved mute states.
-		this.toggleVfoCheckbox(0);
-
-		// Send all VFO params to worker (or host in client mode)
-		for (let i = 0; i < this.vfos.length; i++) {
-			this.updateBackendVfoParams(i);
-		}
+		await initializeStreamVfos(this);
 	},
 };
+
+/** Allocate matching host/client slots after the stream creates its default VFO. */
+async function initializeStreamVfos(receiver: AppInstance) {
+	if (receiver.remoteMode === 'client') receiver._webrtc?.sendCommand({ type: 'resetRemoteVfos' });
+	for (let i = 1; i < receiver.vfos.length; i++) {
+		if (receiver.remoteMode === 'client') receiver._webrtc?.sendCommand({ type: 'addRemoteVfo' });
+		await receiver.backend.addVfo();
+	}
+	receiver.toggleVfoCheckbox(0);
+	for (let i = 0; i < receiver.vfos.length; i++) receiver.updateBackendVfoParams(i);
+	if (receiver.remoteIqSupported) await receiver.applyRemoteDecoding();
+}
 
 function restoreStartupTuning(receiver: AppInstance, requested: { centerFreq: number; frequencyShift: number }, error: unknown) {
 	const previous = receiver._confirmedTuning;
@@ -478,7 +473,7 @@ function startReceiverStatsPolling(this: AppInstance, tuning: { centerFreq: numb
 				// Remote clients receive squelch state via WebRTC 'squelchState'
 				// commands (see remote.ts). Skip local polling so the host-provided
 				// data isn't overwritten with stale all-false values from the mock backend.
-				if (this.remoteMode === 'client') return;
+				if (this.remoteMode === 'client' && !this.remoteIqActive) return;
 				const stats = await this.backend.getDspStats();
 				if (!this.running) return;
 				this.dspStats = stats;

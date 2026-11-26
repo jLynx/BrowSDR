@@ -169,6 +169,9 @@ export interface RxStreamOpts {
 }
 
 export interface RemoteClientState {
+	stream?: 'audio' | 'iq';
+	revisions?: number[];
+	iqSequences?: number[];
 	perf?: { audioCalls: number; audioSamplesOut: number; dspTimeSum: number; dspTimeMax: number; msgsSent: number };
 	channelization?: { bands: number; vfos: number; sampleRate: number };
 	sharedChannelization?: boolean;

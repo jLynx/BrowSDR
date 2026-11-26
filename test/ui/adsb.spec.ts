@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { remoteMethods } from '@/app/workspace/remote';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { nextTick, type ComponentPublicInstance } from 'vue';
 import { makeDefaultVfo } from '@/app/core/constants';
@@ -225,12 +226,14 @@ describe('ADS-B receiver controls and aircraft map', () => {
 	it('serializes the decoder flag for remote VFO updates', () => {
 		const sendCommand = vi.fn();
 		const app = {
-			backend: {},
+			...createAppData(),
+			backend: { setRemoteIqVfoParams: vi.fn() },
 			running: true,
 			vfos: [{ ...makeDefaultVfo(1090), adsb: true }],
 			remoteMode: 'client',
 			_webrtc: { sendCommand },
 			isFreqInBandwidth: () => true,
+			sendRemoteVfo: remoteMethods.sendRemoteVfo,
 		} as unknown as AppInstance;
 		vfoMethods.updateBackendVfoParams.call(app, 0);
 		expect(sendCommand).toHaveBeenCalledWith(

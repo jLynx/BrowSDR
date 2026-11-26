@@ -30,6 +30,7 @@ import type { PagerProtocol } from '@/worker/decoders/charsets';
 import type { DSDStatus } from '@/worker/decoders/dsd/types';
 import type { ReceiverCommand } from '@/remote/types';
 import type { IqRecording } from '@/radio/iq-replay/types';
+import type { VfoParams } from '@/worker/runtime/types';
 
 export interface ReceiverInternals {
 	receiverId: string;
@@ -55,6 +56,7 @@ export interface ReceiverInternals {
 	_audioWorklet?: AudioWorkletNode | null;
 	_audioWorkletReady?: Promise<void> | null;
 	_audioPlaybackPaused?: boolean;
+	_lastRemotePacketAt?: number;
 	renderSize: number;
 	_fftCtx: CanvasRenderingContext2D;
 	_waterfallEngine: (Waterfall | WaterfallGL | HighResolutionWaterfall) & { destroy?: () => void };
@@ -259,6 +261,8 @@ export interface ReceiverMethods {
 	connectToRemoteId(id: string): Promise<void>;
 	removeRecentRemoteId(id: string): void;
 	handleRemoteCommand(clientIdOrCmd: string | ReceiverCommand, cmdOrUndefined?: ReceiverCommand): void;
+	applyRemoteDecoding(): Promise<void>;
+	sendRemoteVfo(index: number, params: VfoParams): void;
 	kickRemoteClient(clientId: string): void;
 	remoteClientDuration(connectedAt: number): string;
 	autoGainSupported(): boolean;

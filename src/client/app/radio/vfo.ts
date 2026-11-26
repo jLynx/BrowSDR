@@ -125,10 +125,8 @@ export const vfoMethods = {
 			};
 
 			if (this.remoteMode === 'client' && this._webrtc) {
-				// In client mode the local backend has no real DSP (mock hackrf).
-				// Send the VFO params to the host over the cmd channel so the host
-				// can configure the correct indexed remote VFO worker.
-				this._webrtc.sendCommand({ type: 'vfoUpdate', index, params });
+				// Keep the client decoder and the host's matching stream slot in sync.
+				this.sendRemoteVfo(index, params);
 			} else {
 				Promise.resolve(this.backend.setVfoParams(index, params)).catch((error: unknown) => console.error(error));
 			}
@@ -353,6 +351,10 @@ export const vfoMethods = {
 		if (this.backend && this.running) {
 			if (this.remoteMode === 'client' && this._webrtc) {
 				this._webrtc.sendCommand({ type: 'removeRemoteVfo', index });
+				await this.backend.removeVfo(index);
+				this.remoteIqKeys = [];
+				this.remoteIqRevisions = [];
+				this.updateAllBackendVfoParams();
 			} else {
 				await this.backend.removeVfo(index);
 			}
@@ -369,6 +371,7 @@ async function appendVfo(receiver: AppInstance, vfo: ReturnType<typeof makeDefau
 	if (receiver.backend && receiver.running) {
 		if (receiver.remoteMode === 'client' && receiver._webrtc) {
 			receiver._webrtc.sendCommand({ type: 'addRemoteVfo' });
+			await receiver.backend.addVfo();
 		} else {
 			try {
 				await receiver.backend.addVfo();

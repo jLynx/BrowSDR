@@ -1,7 +1,8 @@
 import { markRaw } from 'vue';
 import workletUrl from '@/audio/playback/processor?worker&url';
 import type { AppInstance } from '@/app/core/receiver.types';
-import type { PlaybackStats } from '@/audio/playback/types';
+import { DEFAULT_REMOTE_PLAYBACK_LIMIT_MS, LOCAL_PLAYBACK_LIMIT_MS } from '@/audio/playback/types';
+import type { PlaybackMessage, PlaybackStats } from '@/audio/playback/types';
 
 export const workletMethods = {
 	_prepareAudioWorklet(this: AppInstance): Promise<void> {
@@ -22,6 +23,7 @@ export const workletMethods = {
 					this.audioGapCount = stats.gapCount;
 					this.audioGapMs = stats.gapMs;
 					this.audioDroppedFrames = stats.droppedFrames;
+					this.audioArrivalGapMs = stats.maxArrivalGapMs;
 				};
 				node.connect(this.gainNode);
 				this._audioWorklet = markRaw(node);
@@ -37,12 +39,16 @@ export const workletMethods = {
 		this.nextPlayTime = 0;
 		this.audioRingPos = 0;
 		this._audioPlaybackPaused = true;
-		this._audioWorklet?.port.postMessage({ type: 'reset', clearCounters });
+		const message: PlaybackMessage = { type: 'reset', clearCounters };
+		if (clearCounters) message.maxBufferMs = this.remoteMode === 'client' ? DEFAULT_REMOTE_PLAYBACK_LIMIT_MS : LOCAL_PLAYBACK_LIMIT_MS;
+		this._audioWorklet?.port.postMessage(message);
 		this.queuedAudioSched = '0';
 		if (clearCounters) {
 			this.audioGapCount = this.audioGapMs = this.audioDroppedFrames = 0;
 			this.audioTargetMs = 20;
 			this.audioPlaybackRate = 1;
+			this.remotePacketGapMs = this.audioArrivalGapMs = null;
+			this._lastRemotePacketAt = undefined;
 		}
 	},
 	_disposeAudioWorklet(this: AppInstance) {

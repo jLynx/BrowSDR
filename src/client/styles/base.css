@@ -161,6 +161,23 @@ body {
 	flex-shrink: 0;
 }
 
+.remote-bandwidth {
+	margin-top: 8px;
+}
+
+.remote-bandwidth-value {
+	margin-left: auto;
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	white-space: nowrap;
+}
+
+.remote-bandwidth-caption {
+	margin: 0 0 8px;
+	font-size: 11px;
+	color: var(--text-muted);
+}
+
 .remote-host {
 	border-color: #ffaa44;
 }

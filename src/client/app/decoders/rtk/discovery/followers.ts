@@ -20,7 +20,14 @@ export function trackingVfo(receiver: AppInstance, source: string, profile: RtkP
 
 /** Serialize allocations while the scout continues receiving; identities survive hop visits. */
 export function discoverFollowers(receiver: AppInstance, vfo: DiscoveryVfo, stations: RtkStation[]): void {
-	if (!receiver.running || receiver.remoteMode === 'client' || vfo.rtkProfile !== 'scan' || !vfo.rtk || vfo.rtkAutoTrack === false) return;
+	if (
+		!receiver.running ||
+		(receiver.remoteMode === 'client' && !receiver.remoteIqActive) ||
+		vfo.rtkProfile !== 'scan' ||
+		!vfo.rtk ||
+		vfo.rtkAutoTrack === false
+	)
+		return;
 	let state = receivers.get(receiver);
 	if (!state) {
 		state = { queue: Promise.resolve(), scouts: new WeakMap() };
@@ -45,7 +52,7 @@ export function discoverFollowers(receiver: AppInstance, vfo: DiscoveryVfo, stat
 			.then(async () => {
 				if (
 					!receiver.running ||
-					receiver.remoteMode === 'client' ||
+					(receiver.remoteMode === 'client' && !receiver.remoteIqActive) ||
 					!receiver.vfos.includes(vfo) ||
 					!vfo.rtk ||
 					vfo.rtkProfile !== 'scan' ||
