@@ -57,7 +57,7 @@ function tuneVfoStep(receiver: AppInstance, direction: -1 | 1): void {
 	}
 	const previous = vfo.freq;
 	receiver.validateAndApplyVfoFreq(receiver.activeVfoIndex, frequency);
-	if (vfo.freq !== previous && (vfo.freq < receiver.minFreq || vfo.freq > receiver.maxFreq)) {
+	if (vfo.freq !== previous && receiver.view.zoomScale > 1) {
 		const position = ((vfo.freq - receiver.radio.centerFreq) * 1e6) / receiver.radio.sampleRate + 0.5;
 		receiver.view.zoomOffset = position - 0.5 / receiver.view.zoomScale;
 		receiver.applyZoomToEngine();

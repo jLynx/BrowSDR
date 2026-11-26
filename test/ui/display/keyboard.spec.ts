@@ -137,18 +137,43 @@ describe('spectrum keyboard navigation', () => {
 		expect(app.view.zoomScale).toBe(1);
 		expect(app.view.zoomOffset).toBe(0);
 	});
-	it('keeps the tuned frequency visible when stepping beyond a zoomed view', async () => {
+	it.each([4, 100])('keeps every tuning step centred at %sx zoom, including steps inside the view', async (zoomScale) => {
 		const app = receiver();
-		app.view.zoomScale = 100;
-		app.view.zoomOffset = 0.495;
-		await key(document, 'ArrowRight');
-		await key(document, 'ArrowRight');
-		expect(app.vfos[0].freq).toBe(100.2);
-		expect(app.minFreq).toBeLessThan(app.vfos[0].freq);
-		expect(app.maxFreq).toBeGreaterThan(app.vfos[0].freq);
-		expect(app.view.zoomScale).toBe(100);
+		app.view.zoomScale = zoomScale;
+		app.view.zoomOffset = 0.5 - 0.5 / zoomScale;
+		const other = makeDefaultVfo(99);
+		app.vfos.push(other);
+		const otherSettings = { ...other };
+		for (const direction of ['ArrowRight', 'ArrowRight', 'ArrowLeft', 'ArrowLeft']) {
+			await key(document, direction);
+			expect((app.minFreq + app.maxFreq) / 2).toBeCloseTo(app.vfos[0].freq, 8);
+			expect(app.view.zoomScale).toBe(zoomScale);
+		}
+		expect(app.vfos[1]).toEqual(otherSettings);
 		expect(app.radio.centerFreq).toBe(100);
 	});
+	it.each([
+		{ key: 'ArrowLeft', start: 90.2, edge: 90, viewCentre: 92.5, offset: 0 },
+		{ key: 'ArrowRight', start: 109.8, edge: 110, viewCentre: 107.5, offset: 0.75 },
+	])(
+		'clamps the view at the captured band edge when using $key, retuning only beyond it',
+		async ({ key: direction, start, edge, viewCentre, offset }) => {
+			const app = receiver();
+			app.vfos[0].freq = start;
+			app.view.zoomOffset = offset;
+			for (let i = 0; i < 2; i++) {
+				await key(document, direction);
+				expect(app.view.zoomOffset).toBe(offset);
+				expect((app.minFreq + app.maxFreq) / 2).toBe(viewCentre);
+				expect(app.radio.centerFreq).toBe(100);
+				expect(app.view.zoomScale).toBe(4);
+			}
+			expect(app.vfos[0].freq).toBe(edge);
+			await key(document, direction);
+			expect(app.radio.centerFreq).toBe(app.vfos[0].freq);
+			expect(app.radio.centerFreq).not.toBe(100);
+		},
+	);
 	it('preserves mouse-centred wheel zoom through the shared zoom action', () => {
 		const app = receiver();
 		const canvas = app.$refs.fft;

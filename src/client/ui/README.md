@@ -118,6 +118,9 @@ Receiver spectrum and waterfall canvases retain an inset keyboard focus outline.
 Shortcuts work across the selected receiver without requiring canvas focus:
 left/right tune the active VFO by its Snap Interval, up/down zoom, and brackets
 cycle individual bookmarks: `[` for previous and `]` for next.
+While zoomed in, each left/right step centres the view on the active VFO, clamped
+to the captured band edges. Centring preserves the zoom level and uses the
+existing receiver retuning rules when tuning beyond the captured bandwidth.
 Inputs, menus and modal dialogs retain their own keyboard handling. The
 **Shortcuts** button beside **About** opens the shared `UiDialog` shell with a key
 reference, Escape dismissal and focus restoration. Navigation logic belongs to
