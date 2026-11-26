@@ -316,19 +316,6 @@ describe('remote RDS delivery', () => {
 		expect(queue.length).toBe(AUDIO_QUEUE_CAPACITY);
 		expect(state.audioQueues[0].len).toBeLessThan(12000);
 	});
-	it('forwards remote transcription only when enabled', async () => {
-		const backend = makeBackend();
-		backend._remoteClientAudioCb = vi.fn();
-		backend._remoteClientWhisperCb = vi.fn();
-		backend.vfoParams = [params];
-		const samples = new Float32Array(4800);
-		await backend.feedRemoteAudioChunk(samples);
-		expect(backend._remoteClientWhisperCb).not.toHaveBeenCalled();
-		backend._whisperEnabled = true;
-		await backend.feedRemoteAudioChunk(samples);
-		expect(backend._remoteClientWhisperCb).toHaveBeenCalledWith(0, params.freq, samples);
-		expect(backend._remoteClientAudioCb).toHaveBeenCalledTimes(2);
-	});
 	it('isolates only one remote client speaker mix without disabling its VFOs', async () => {
 		const backend = makeBackend();
 		const audio = vi.fn();

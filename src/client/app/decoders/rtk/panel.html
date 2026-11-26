@@ -10,7 +10,7 @@
 				v-model="vfo.rtk"
 				label="Decode"
 				:input-label="'RTK decoding for VFO ' + (receiver.activeVfoIndex + 1)"
-				:disabled="receiver.remoteMode === 'client'"
+				:disabled="receiver.remoteMode === 'client' && !receiver.remoteIqActive"
 				@change="update"
 			/>
 		</template>

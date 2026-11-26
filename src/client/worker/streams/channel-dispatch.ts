@@ -1,10 +1,13 @@
 import { sampleIqFormat } from '@/radio/iq/format';
 import type { IqSamples } from '@/radio/iq/types';
-import type { ChannelState } from './types';
+import type { ChannelState, ChannelPlan } from './types';
 import type { DspOutput } from '@/worker/runtime/dsp-messages.types';
 import { planSharedBands } from './channel-plan';
 import type { VfoParams, PerfCounters } from '@/worker/runtime/types';
 import type { Backend } from '@/worker/runtime/backend';
+import { planIqSlice } from '@/remote/iq/plan';
+import type { SliceRequest } from '@/remote/iq/types';
+import { REMOTE_IQ_BITS } from '@/remote/iq/types';
 
 export function dispatchIqChunk(
 	backend: Backend,
@@ -30,17 +33,7 @@ export function dispatchIqChunk(
 		vfos: plan.bands.reduce((count, band) => count + band.vfos.length, 0),
 		sampleRate: plan.sampleRate,
 	};
-	for (const client of backend._remoteClients?.values() ?? []) {
-		const workers = new Set(client.workers);
-		const bands = plan.bands
-			.map((band) => band.vfos.filter((index) => workers.has(targets[index].worker)))
-			.filter((indices) => indices.length);
-		client.channelization = {
-			bands: bands.length,
-			vfos: bands.reduce((count, indices) => count + indices.length, 0),
-			sampleRate: plan.sampleRate,
-		};
-	}
+	updateRemoteChannelStats(backend, plan, targets);
 	if (plan.bands.length) {
 		ensureChannelWorker(backend, channel, perf);
 		if (channel.pending < sampleRate * 0.1) {
@@ -73,10 +66,11 @@ export function dispatchIqChunk(
 		perf.droppedChunks += ready.length;
 		return;
 	}
-	for (const { worker, params } of ready) {
+	for (const { worker, params, slice } of ready) {
 		if (useSab) {
 			backend._iqDispatcher!.send(worker, {
 				type: 'process',
+				slice,
 				params: params,
 				sampleRate,
 				centerFreq: backend._centerFreq ?? centerFreq,
@@ -92,6 +86,7 @@ export function dispatchIqChunk(
 				worker,
 				{
 					type: 'process',
+					slice,
 					params: params,
 					sampleRate,
 					centerFreq: backend._centerFreq ?? centerFreq,
@@ -104,6 +99,20 @@ export function dispatchIqChunk(
 				[cloneBuf],
 			);
 		}
+	}
+}
+
+function updateRemoteChannelStats(backend: Backend, plan: ChannelPlan, targets: ReturnType<typeof collectTargets>): void {
+	for (const client of backend._remoteClients?.values() ?? []) {
+		const workers = new Set(client.workers);
+		const bands = plan.bands
+			.map((band) => band.vfos.filter((index) => workers.has(targets[index].worker)))
+			.filter((indices) => indices.length);
+		client.channelization = {
+			bands: bands.length,
+			vfos: bands.reduce((count, indices) => count + indices.length, 0),
+			sampleRate: plan.sampleRate,
+		};
 	}
 }
 
@@ -174,16 +183,28 @@ export function ensureChannelWorker(backend: Backend, channel: ChannelState, per
 }
 
 function collectTargets(backend: Backend) {
-	const targets = backend.dspWorkers!.map((worker, index) => ({
-		worker,
-		params: backend.vfoParams![index],
-		shared: backend._sharedChannelization,
-	}));
+	const targets: Array<{ worker: Worker; params: VfoParams; shared: boolean; slice?: SliceRequest }> = backend.dspWorkers!.map(
+		(worker, index) => ({
+			worker,
+			params: backend.vfoParams![index],
+			shared: backend._sharedChannelization,
+		}),
+	);
 	for (const client of backend._remoteClients?.values() ?? []) {
 		for (let index = 0; index < client.workers.length; index++) {
 			const worker = client.workers[index];
 			const params = client.params[index];
-			if (worker && params) targets.push({ worker, params, shared: client.sharedChannelization === true });
+			if (!worker || !params) continue;
+			if (client.stream === 'iq') {
+				const plan = planIqSlice(params, backend._sampleRate!, backend._centerFreq!);
+				if (plan)
+					targets.push({
+						worker,
+						params,
+						shared: false,
+						slice: { ...plan, index, revision: client.revisions?.[index] ?? 0, bits: REMOTE_IQ_BITS },
+					});
+			} else targets.push({ worker, params, shared: client.sharedChannelization === true });
 		}
 	}
 	return targets;

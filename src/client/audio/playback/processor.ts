@@ -9,8 +9,12 @@ class RadioPlaybackProcessor extends AudioWorkletProcessor {
 		super();
 		this.port.onmessage = (event: MessageEvent<PlaybackMessage>) => {
 			const message = event.data;
-			if (message.type === 'reset') this.queue.reset(message.clearCounters);
-			else this.queue.push(message.samples, message.channels, currentTime);
+			if (message.type === 'pcm') {
+				this.queue.push(message.samples, message.channels, currentTime);
+			} else {
+				if (message.type === 'reset') this.queue.reset(message.clearCounters);
+				if (message.maxBufferMs !== undefined) this.queue.setLimit(message.maxBufferMs);
+			}
 		};
 	}
 

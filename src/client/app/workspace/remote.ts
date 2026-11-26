@@ -1,16 +1,19 @@
 import { appPath, backendPath } from '@/platform/urls';
 import { isRecord } from '@/platform/data';
 import { packAudio } from '@/audio/pcm';
+import { playRemoteAudio, recordRemotePacketArrival } from '@/app/audio/remote';
 import type { HostStats } from '@/worker/runtime/callbacks.types';
 import type { ReceiverCommand, StatusMessage } from '@/remote/types';
 import type { AppInstance } from '@/app/core/receiver.types';
 import * as Comlink from 'comlink';
 import { WebRTCHandler, PEER_ID_PREFIX } from '@/remote/webrtc';
+import { remoteIqMethods, handleIqCommand, resetRemoteIqSession, receiveRemoteIq, installHostIqCallback } from './remote-iq';
 
 /** Pager-decoder command types dispatched together (POCSAG + GSC). */
 const PAGER_COMMANDS = new Set<ReceiverCommand['type']>(['pocsag', 'pocsag_status', 'gsc', 'gsc_status', 'flex', 'flex_status']);
 
 export const remoteMethods = {
+	...remoteIqMethods,
 	applySharedChannelization(this: AppInstance) {
 		if (this.remoteMode === 'client') {
 			this._webrtc?.sendCommand({ type: 'clientDisplay', sharedChannelization: this.display.sharedChannelization });
@@ -72,6 +75,7 @@ export const remoteMethods = {
 					locks: this.locks,
 					capabilities: this.deviceCapabilities,
 				});
+				this._webrtc?.sendCommandTo(clientId, { type: 'streamCapabilities', iqSlices: true });
 			} else if (status.status === 'client-disconnected') {
 				const clientId = status.clientId;
 				this.remoteClients = this.remoteClients.filter((c) => c.id !== clientId);
@@ -105,6 +109,7 @@ export const remoteMethods = {
 		if (this.workspace && !this._receiverTransport) return this.workspace.connectRemote(hostId);
 		this._initAudioCtx(); // create AudioContext within user gesture before any await
 		this.remoteMode = 'client';
+		resetRemoteIqSession(this);
 		this.dspStats = null;
 		this.remoteStatus = 'Connecting...';
 		this.showMsg('Connecting to remote host...');
@@ -203,12 +208,9 @@ export const remoteMethods = {
 			if (fftData.length > 0) this.drawSpectrum(fftData);
 		};
 		this._webrtc.onAudioChunk = (chunk) => {
-			if (this.running && this.backend) {
-				// chunk arrives as ArrayBuffer (serialization:'raw').
-				// Use .slice() with byteOffset/byteLength to handle typed-array views.
-				const buf = chunk;
-				Promise.resolve(this.backend.feedRemoteAudioChunk(Comlink.transfer(buf, [buf]))).catch((error: unknown) => console.error(error));
-			}
+			if (!this.running || !this.backend) return;
+			recordRemotePacketArrival(this);
+			if (!receiveRemoteIq(this, chunk)) playRemoteAudio(this, chunk);
 		};
 
 		try {
@@ -260,6 +262,7 @@ export const remoteMethods = {
 			cmd = cmdOrUndefined;
 		}
 
+		if (handleIqCommand(this, cmd, clientId)) return;
 		if (handlePacketTelemetry.call(this, cmd)) return;
 		if (PAGER_COMMANDS.has(cmd.type)) {
 			handlePagerCommand.call(
@@ -334,6 +337,7 @@ export const remoteMethods = {
 };
 
 async function installHostStreamCallbacks(this: AppInstance) {
+	await installHostIqCallback(this);
 	const WF_REMOTE_BINS = 2048;
 	const WF_DB_MIN = -120.0; // uint8 0 ↔ -120 dBfs, 1 dB per LSB
 	await this.backend.setRemoteHostFftCallback(
@@ -473,7 +477,7 @@ function handleClientInfo(this: AppInstance, cmd: Extract<ReceiverCommand, { typ
 }
 
 function handleDspStats(this: AppInstance, cmd: Extract<ReceiverCommand, { type: 'dspStats' }>, _clientId: string | null) {
-	if (this.remoteMode === 'client' && cmd.stats && typeof cmd.stats === 'object') this.dspStats = cmd.stats;
+	if (this.remoteMode === 'client' && !this.remoteIqActive && cmd.stats && typeof cmd.stats === 'object') this.dspStats = cmd.stats;
 }
 
 function handleClientDisplay(this: AppInstance, cmd: Extract<ReceiverCommand, { type: 'clientDisplay' }>, clientId: string | null) {
@@ -487,7 +491,7 @@ function handleClientDisplay(this: AppInstance, cmd: Extract<ReceiverCommand, { 
 function handleVfoUpdate(this: AppInstance, cmd: Extract<ReceiverCommand, { type: 'vfoUpdate' }>, clientId: string | null) {
 	if (this.remoteMode === 'host' && clientId) {
 		this.backend
-			.setRemoteVfoParams(clientId, cmd.index, cmd.params)
+			.setRemoteVfoParams(clientId, cmd.index, cmd.params, cmd.revision)
 			.then((accepted) => {
 				if (accepted && cmd.index === 0) {
 					const rc = this.remoteClients.find((c) => c.id === clientId);

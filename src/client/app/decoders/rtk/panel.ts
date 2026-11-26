@@ -44,7 +44,7 @@ export default defineComponent({
 			receptionState({
 				running: receiver.running,
 				enabled: !!vfo.value?.rtk,
-				local: receiver.remoteMode !== 'client',
+				local: receiver.remoteMode !== 'client' || receiver.remoteIqActive,
 				inBand: scanning.value || (!!vfo.value && receiver.isFreqInBandwidth(vfo.value.freq)),
 				status: status.value,
 				station: station.value,

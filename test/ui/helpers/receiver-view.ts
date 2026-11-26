@@ -39,6 +39,7 @@ import { vfoMethods } from '@/app/radio/vfo';
 import { connectionMethods } from '@/app/radio/connection';
 import { remoteMethods } from '@/app/workspace/remote';
 import HeaderTools from '@/app/workspace/receiver-tools';
+import RemoteBandwidth from '@/app/workspace/remote-bandwidth';
 import DiscoveryPanel from '@/app/discovery/panel';
 import IqCapturePanel from '@/app/recording/panel';
 import IqReplayLoader from '@/app/replay/loader';
@@ -62,6 +63,7 @@ export const ReceiverView = defineComponent({
 		AcarsPanel,
 		AprsPanel,
 		HeaderTools,
+		RemoteBandwidth,
 		DiscoveryPanel,
 		IqCapturePanel,
 		IqReplayLoader,

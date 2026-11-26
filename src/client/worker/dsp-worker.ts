@@ -1,5 +1,4 @@
 import { HdRadioStream } from './decoders/hd-radio/stream';
-import { HD_IQ_RATE } from './decoders/hd-radio/types';
 import { BleStream } from './decoders/ble/stream';
 import { AisStream } from './decoders/ais';
 import { RadiosondeStream } from './decoders/radiosonde';
@@ -9,18 +8,16 @@ import { AprsStream } from './decoders/aprs';
 import { SharedBandPool } from './streams/shared-band-pool';
 import { errorMessage } from '@/platform/errors';
 import init, {
-	DspProcessor,
+	DspProcessor as RawDspProcessor,
 	SharedChannelizer,
 	set_panic_hook,
 	alloc_iq_buffer,
 	alloc_float_buffer,
-	normalize_i16_to_f32,
 } from '/wasm/dsp/browsdr_dsp.js';
 import { RationalResampler } from './streams/dsp-pipeline';
 import { sidebandOffsetHz } from './decoders/ssb';
 import { measureSquelch, demodulateAnalogAudio } from './streams/analog-demod';
 import { DSDStream } from './decoders/dsd/dsd-stream';
-import { DSD_IF_RATE } from '@/worker/decoders/dsd/constants';
 import type { DSDStatus } from './decoders/dsd/types';
 import { RDSDecoder } from './decoders/rds';
 import type { RdsStatus } from './decoders/types';
@@ -31,6 +28,14 @@ import type { InitOutput } from '/wasm/dsp/browsdr_dsp.js';
 import type { DspInput } from './runtime/dsp-messages.types';
 import type { VfoParams } from './runtime/types';
 import { PagerLegs } from './streams/pager-legs';
+import { IqSliceExtractor, emitIqSlice } from '@/remote/iq/extractor';
+import { IF_RATES, AUDIO_RATE } from './runtime/constants';
+import { needsSlice as needsVfoInput } from '@/remote/iq/plan';
+import { createInputProcessor } from './streams/input/processor';
+import { copyInputPayload } from './streams/input/payload';
+
+const inputDsp = createInputProcessor(RawDspProcessor);
+const { Processor: DspProcessor } = inputDsp;
 
 if (import.meta.env.DEV) {
 	for (const level of ['log', 'warn', 'error'] as const) {
@@ -45,7 +50,7 @@ if (import.meta.env.DEV) {
 // --- Worker State ---
 let wasmInitPromise: Promise<void> | null = null;
 let _wasm: InitOutput;
-let ddc: DspProcessor;
+let ddc: RawDspProcessor;
 let vfoState: {
 	dcAvg: number;
 	carrierAgcGain: number;
@@ -65,7 +70,7 @@ let vfoState: {
 };
 let sharedIqPtr = 0;
 let sharedSabViews: Int8Array[] | null = null;
-let rdsDdc: DspProcessor | null = null;
+let rdsDdc: RawDspProcessor | null = null;
 let rdsPrevPhase = 0;
 let rdsDecoder: InstanceType<typeof RDSDecoder> | null = null;
 /**
@@ -93,26 +98,14 @@ let rtk: RtkStream;
 let ble: BleStream;
 let acars: AcarsStream;
 let aprs: AprsStream;
-
-const IF_RATES: Record<string, number> = {
-	nfm: 50000,
-	wfm: 250000,
-	hdradio: HD_IQ_RATE,
-	am: 15000,
-	usb: 24000,
-	lsb: 24000,
-	dsb: 24000,
-	cw: 3000,
-	raw: 48000,
-	dsd: DSD_IF_RATE,
-};
-const AUDIO_RATE = 48000;
+let sliceExtractor: IqSliceExtractor;
 
 async function startup(): Promise<void> {
 	if (!wasmInitPromise) {
 		wasmInitPromise = init()
 			.then((w) => {
 				_wasm = w;
+				sliceExtractor = new IqSliceExtractor(RawDspProcessor, w.memory);
 				hdRadio = new HdRadioStream(DspProcessor, _wasm.memory, (message) => self.postMessage(message));
 				rtl433 = new Rtl433Stream(DspProcessor, _wasm.memory, (message) => self.postMessage(message));
 				adsb = new AdsbStream(DspProcessor, _wasm.memory, (message) => self.postMessage(message));
@@ -491,7 +484,18 @@ function handleDspChannelize(msg: Extract<DspInput, { type: 'channelize' }>) {
 }
 
 function handleDspInit(msg: Extract<DspInput, { type: 'init' }>) {
+	inputDsp.setPreserveDc(msg.preserveDc === true);
+	sliceExtractor.reset();
+	if (msg.extractOnly) {
+		sharedSabViews = msg.sabs ? msg.sabs.map((s) => new Int8Array(s)) : null;
+		self.postMessage({ type: 'init_done' });
+		return;
+	}
 	for (const decoder of [hdRadio, rtl433, adsb, ais, radiosonde, rtk, ble, acars, aprs]) decoder.reset();
+	rdsDdc?.free();
+	rdsDdc = null;
+	rdsDecoder = null;
+	pagerLegs?.freeAll();
 	inputIsFloat = false;
 	inputUsesBandCenter = false;
 	dsdStatus.reset();
@@ -528,6 +532,23 @@ function handleDspConfigure(msg: Extract<DspInput, { type: 'configure' }>) {
 	self.postMessage({ type: 'config_done' });
 }
 function handleDspProcess(msg: Extract<DspInput, { type: 'process' }>) {
+	if (msg.slice) {
+		inputIsFloat = isFloatInput(msg);
+		if (copyInputPayload(msg, _wasm.memory, sharedIqPtr, sharedFloatPtr, sharedSabViews))
+			emitIqSlice(sliceExtractor, msg, inputIsFloat ? sharedFloatPtr : sharedIqPtr, inputIsFloat, (message, transfer = []) =>
+				self.postMessage(message, { transfer }),
+			);
+		else self.postMessage({ type: 'processed', chunkId: msg.chunkId });
+		return;
+	}
+	if (inputDsp.setPreserveDc(msg.preserveDc === true) || msg.discontinuity)
+		handleDspInit({
+			type: 'init',
+			sampleRate: msg.sampleRate!,
+			centerFreq: msg.centerFreq!,
+			params: msg.params,
+			preserveDc: msg.preserveDc,
+		});
 	if (!ddc || !vfoState) {
 		console.log('DSP Worker: ddc/vfoState unavailable');
 		self.postMessage({ type: 'processed', chunkId: msg.chunkId });
@@ -536,11 +557,11 @@ function handleDspProcess(msg: Extract<DspInput, { type: 'process' }>) {
 
 	configureInputRate(msg);
 	configureInputParams(msg.params);
-	inputIsFloat = msg.floatIq === true || msg.iqFormat === 'int16' || msg.iqFormat === 'float32';
+	inputIsFloat = isFloatInput(msg);
 	inputUsesBandCenter = msg.floatIq === true;
 	configurePacketDecoders(msg.params, inputCenterFreq);
 	// Audio mute does not stop independent RDS or pager decoding.
-	if (!needsVfoInput(msg.params) || !copyInputPayload(msg)) {
+	if (!needsVfoInput(msg.params) || !copyInputPayload(msg, _wasm.memory, sharedIqPtr, sharedFloatPtr, sharedSabViews)) {
 		self.postMessage({ type: 'processed', chunkId: msg.chunkId });
 		return;
 	}
@@ -624,46 +645,12 @@ function configureInputParams(params: VfoParams): void {
 	if (JSON.stringify(params) !== configuredParams) configureDDC(params, inputCenterFreq);
 }
 
-function copyInputPayload(msg: Extract<DspInput, { type: 'process' }>): boolean {
-	// Copy payload into WASM memory
-	const wasmMemView = new Int8Array(_wasm.memory.buffer);
-
-	if (msg.useSab && sharedSabViews && msg.sabIndex !== undefined) {
-		// Zero-copy grab from SAB ring!
-		wasmMemView.set(
-			sharedSabViews[msg.sabIndex].subarray(0, msg.chunkLen * (msg.iqFormat === 'float32' ? 4 : msg.iqFormat === 'int16' ? 2 : 1)),
-			msg.iqFormat === 'float32' ? sharedFloatPtr : sharedIqPtr,
-		);
-	} else if (msg.chunk) {
-		if (msg.floatIq || msg.iqFormat === 'float32') {
-			// Pooled buffers can be larger than the valid band payload.
-			new Float32Array(_wasm.memory.buffer, sharedFloatPtr, msg.chunkLen).set(new Float32Array(msg.chunk, 0, msg.chunkLen));
-		} else {
-			wasmMemView.set(new Int8Array(msg.chunk, 0, msg.chunkLen * (msg.iqFormat === 'int16' ? 2 : 1)), sharedIqPtr);
-		}
-	} else {
-		return false; // Invalid chunk
-	}
-
-	if (msg.iqFormat === 'int16') normalize_i16_to_f32(sharedIqPtr, sharedFloatPtr, msg.chunkLen);
-	return true;
-}
-
 function decodeDigitalAudio(iq: Float32Array, squelched: boolean, count: number) {
 	return dsdStream?.process(iq, squelched) ?? new Float32Array(count);
 }
 
-function needsVfoInput(params: VfoParams): boolean {
-	return (
-		params.enabled ||
-		params.mode === 'hdradio' ||
-		params.pocsag ||
-		params.gsc === true ||
-		params.flex === true ||
-		(params.rds && params.mode === 'wfm') ||
-		params.rtl433 === true ||
-		[params.adsb, params.ais, params.radiosonde, params.rtk, params.ble, params.acars, params.aprs].some((enabled) => enabled === true)
-	);
+function isFloatInput(msg: Extract<DspInput, { type: 'process' }>): boolean {
+	return msg.floatIq === true || msg.iqFormat === 'int16' || msg.iqFormat === 'float32';
 }
 
 function configurePacketDecoders(params: VfoParams, center: number): void {

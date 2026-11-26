@@ -48,10 +48,12 @@ import { AUDIO_RATE } from '@/worker/runtime/constants';
 import { POCSAGDecoder } from '@/worker/decoders/pocsag';
 import { GSCDecoder } from '@/worker/decoders/golay';
 import { FlexDecoder } from '@/worker/decoders/flex/decoder';
-import { ensureWasmInitialized, init } from '@/worker/runtime/wasm-init';
 import type { Backend } from '@/worker/runtime/backend';
 import { AUDIO_QUEUE_CAPACITY, appendPcm, mixLength } from './audio-queue';
-import { downmix, unpackAudio } from '@/audio/pcm';
+import { forwardIqMessage } from '@/remote/iq/host';
+export { initRemoteClient } from '@/remote/iq/client';
+export { configureRemoteStream } from '@/remote/iq/host';
+export { setRemoteHostIqCallback } from '@/remote/iq/host';
 
 // ── Remote-client VFO management (multi-client) ──────────────────────────
 // Each connected client has its own independent set of VFOs. For each one
@@ -201,6 +203,7 @@ function bindRemoteWorker(backend: Backend, clientId: string, state: RemoteClien
 		const index = state.workers.indexOf(worker);
 		if (index === -1) return;
 		const msg = e.data;
+		if (forwardIqMessage(backend, clientId, state, index, msg)) return;
 		if (forwardPacketMessage(backend, clientId, state, index, msg)) return;
 		if (msg.type === 'rtl433_event' || msg.type === 'rtl433_status') {
 			const params = state.params[index];
@@ -254,12 +257,13 @@ function handleRemoteWorkerAudio(state: RemoteClientState, msg: DspAudio, backen
 	}
 }
 
-export function setRemoteVfoParams(this: Backend, clientId: string, index: number, params: VfoParams): Promise<boolean> {
+export function setRemoteVfoParams(this: Backend, clientId: string, index: number, params: VfoParams, revision = 0): Promise<boolean> {
 	const state = this._remoteClients?.get(clientId);
 	if (!state || !Number.isSafeInteger(index) || index < 0 || index >= state.workers.length) return Promise.resolve(false);
 	const wasEnabled = state.params[index] && state.params[index].enabled;
 	const changed = hdAudioChanged(state.params[index] ?? {}, params);
 	state.params[index] = params;
+	(state.revisions ??= [])[index] = revision;
 
 	if (state.audioQueues[index] && (!params.enabled || (params.enabled && !wasEnabled) || changed)) {
 		state.audioQueues[index].len = 0;
@@ -271,6 +275,7 @@ export function setRemoteVfoParams(this: Backend, clientId: string, index: numbe
 		bindRemoteWorker(this, clientId, state, worker);
 		worker.postMessage({
 			type: 'init',
+			extractOnly: state.stream === 'iq',
 			sampleRate: this._sampleRate,
 			centerFreq: this._centerFreq,
 			params: params,
@@ -278,7 +283,7 @@ export function setRemoteVfoParams(this: Backend, clientId: string, index: numbe
 		});
 		state.workers[index] = worker;
 		state.audioQueues[index] = { queue: new Float32Array(AUDIO_QUEUE_CAPACITY), len: 0 };
-	} else {
+	} else if (state.stream !== 'iq') {
 		state.workers[index].postMessage({
 			type: 'configure',
 			params: params,
@@ -312,6 +317,8 @@ export function removeRemoteVfo(this: Backend, clientId: string, index: number):
 	}
 	state.workers.splice(index, 1);
 	state.params.splice(index, 1);
+	state.revisions?.splice(index, 1);
+	state.iqSequences?.splice(index, 1);
 	state.audioQueues.splice(index, 1);
 	state.pocsagDecoders.splice(index, 1);
 	if (state.gscDecoders) state.gscDecoders.splice(index, 1);
@@ -573,6 +580,7 @@ export function _reinitRemoteClientWorkers(this: Backend): void {
 			bindRemoteWorker(this, clientId, state, worker);
 			worker.postMessage({
 				type: 'init',
+				extractOnly: state.stream === 'iq',
 				sampleRate: this._sampleRate,
 				centerFreq: this._centerFreq,
 				params: params,
@@ -582,49 +590,6 @@ export function _reinitRemoteClientWorkers(this: Backend): void {
 			state.audioQueues[i] = { queue: new Float32Array(AUDIO_QUEUE_CAPACITY), len: 0 };
 		}
 	}
-}
-
-export async function initRemoteClient(this: Backend): Promise<void> {
-	await ensureWasmInitialized();
-	this.wasm = await init();
-	// Create a stub SdrDevice for the remote client — it receives IQ data
-	// via WebRTC rather than USB, so all hardware methods are no-ops.
-
-	this.device = {
-		deviceType: 'remote',
-		sampleRates: [2000000, 4000000, 8000000, 10000000, 16000000, 20000000],
-		gainControls: [],
-		sampleFormat: 'int8',
-		open: () => Promise.resolve(),
-		close: () => Promise.resolve(),
-		getInfo: () => Promise.resolve({ name: 'Remote SDR' }),
-		setSampleRate: () => Promise.resolve(),
-		setFrequency: () => Promise.resolve(),
-		setGain: () => Promise.resolve(),
-		startRx: (cb) => {
-			this._remoteClientCb = cb;
-			return Promise.resolve();
-		},
-		stopRx: () => {
-			this._remoteClientCb = null;
-			return Promise.resolve();
-		},
-	};
-}
-
-export function feedRemoteAudioChunk(this: Backend, chunk: ArrayBuffer | Float32Array): Promise<void> {
-	if (this._remoteClientAudioCb) {
-		const { samples: floats, channels } = unpackAudio(chunk);
-		this._remoteClientAudioCb(floats, channels);
-
-		// Feed whisper for local transcription on remote clients.
-		// The audio arrives pre-mixed from the host, so attribute it to VFO 0.
-		if (this._whisperEnabled && this._remoteClientWhisperCb && this.vfoParams && this.vfoParams[0]) {
-			this._remoteClientWhisperCb(0, this.vfoParams[0].freq, downmix(floats, channels));
-		}
-	}
-
-	return Promise.resolve();
 }
 
 function forwardAdsb(

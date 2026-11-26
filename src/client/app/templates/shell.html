@@ -45,11 +45,18 @@
 						</template>
 						<UiButton style="width: 100%;" v-else @click="disconnect">{{ remoteMode === 'client' ? 'Disconnect Remote' : 'Disconnect' }}</UiButton>
 						<UiButton variant="secondary" style="width: 100%;" v-if="connected && remoteMode !== 'client'" @click="connect">+ Add SDR</UiButton>
-						<UiButton variant="secondary" style="width: 100%;" v-if="remoteMode === 'host'" @click="workspace.stopSharing()">Stop Sharing</UiButton>
 					</UiFormRow>
 					<UiFormRow class="info-row" v-if="connected && remoteMode !== 'client'">
 						<small>{{ info.boardName }}</small>
 					</UiFormRow>
+					<template v-if="remoteMode === 'client' && remoteIqSupported">
+						<UiFormRow label="Decode on" :input-id="receiverId + '-remote-decoding'">
+							<UiSelect :id="receiverId + '-remote-decoding'" v-model="remoteDecoding" @change="applyRemoteDecoding">
+								<option value="client">This device (IQ)</option>
+								<option value="host">Host (audio)</option>
+								</UiSelect>
+						</UiFormRow>
+					</template>
 					<IqReplayPanel v-if="isDevelopment" />
 					<UiPanel label="Device info" class="radio-advanced device-info" v-if="connected && remoteMode !== 'client' && info.device" v-model:collapsed="deviceInfoCollapsed">
 						<UiFormRow v-if="info.device.manufacturer" label="Manufacturer"><small>{{ info.device.manufacturer }}</small></UiFormRow>
@@ -87,7 +94,9 @@
 							Manage Clients
 							<span v-if="remoteClients.length" class="client-count-badge">{{ remoteClients.length }}</span>
 						</UiButton>
+						<UiButton variant="secondary" class="btn-full" @click="workspace.stopSharing()">Stop Sharing</UiButton>
 					</UiFormRow>
+					<RemoteBandwidth v-if="remoteMode !== 'none'" />
 				</UiPanel>
 
 				<UiPanel label="Radio" :disabled="!connected" v-model:collapsed="collapsedPanels['radio']">
@@ -315,6 +324,7 @@
 					<div v-if="dspStats.usbLinkBits !== undefined" title="Wire sample width and USB read size. Packed 12-bit preserves the ADC bits while reducing USB traffic; IQ Precision independently selects retained sample precision.">USB link: {{ dspStats.usbLinkBits }}-bit | {{ ((dspStats.usbTransferBytes || 0) / 1024).toFixed(0) }}KiB transfers</div>
 					<div v-if="dspStats.sourceGapCount && dspStats.sourceLastGapArrivalMs !== undefined" title="Completion interval and preceding synchronous processing duration when the latest source-counter gap was observed. Correlation does not prove cause.">Last source gap: {{ dspStats.sourceLastGapArrivalMs.toFixed(2) }}ms arrival / {{ (dspStats.sourceLastGapPreviousServiceMs || 0).toFixed(2) }}ms prior service</div>
 					<div v-if="audioPlaybackEngine === 'worklet' && dspStats.usbDiagnosticMode !== 1" title="Smooth rate correction is limited to ±0.5% to control gradual buffer drift. Discarded PCM frames count separately from source/IQ losses.">Playback rate: {{ (audioPlaybackRate * 100).toFixed(2) }}% | PCM discarded: {{ audioDroppedFrames }} frames</div>
+					<div v-if="remoteMode === 'client'" title="Longest interval between received audio or IQ messages, including browser callback delays. The PCM interval measures arrivals at the audio worklet. Both are measured since reception started or the decode mode changed.">Max arrival gaps: WebRTC {{ remotePacketGapMs === null ? '—' : remotePacketGapMs.toFixed(0) + ' ms' }}<template v-if="audioPlaybackEngine === 'worklet'"> | PCM {{ audioArrivalGapMs === null ? '—' : audioArrivalGapMs.toFixed(0) + ' ms' }}</template></div>
 					<div v-if="dspStats.channelization && dspStats.channelization.bands">Shared: {{ dspStats.channelization.vfos }} VFOs / {{ dspStats.channelization.bands }} bands @ {{ (dspStats.channelization.sampleRate / 1e6).toFixed(2) }} MSPS</div>
 					<div v-if="dspStats.channelization && dspStats.channelization.bands">{{ remoteMode === 'client' ? 'Host channelizer' : 'Channelizer' }}: {{ (dspStats.channelAvgMs || 0).toFixed(2) }}ms avg / {{ (dspStats.channelMaxMs || 0).toFixed(2) }}ms max | {{ (dspStats.channelCpuMs || 0).toFixed(0) }}ms CPU/s</div>
 					</div>

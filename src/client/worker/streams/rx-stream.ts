@@ -74,8 +74,6 @@ export async function startRxStream(
 	if (_streamStarting) return;
 	_streamStarting = true;
 	const generation = (backend._streamGeneration = (backend._streamGeneration ?? 0) + 1);
-	backend._remoteClientAudioCb = audioCallback; // Save reference for when chunk arrives
-	backend._remoteClientWhisperCb = whisperCallback; // Save for remote client transcription
 	try {
 		const { device } = backend;
 		if (!device) throw new Error('No device connected');

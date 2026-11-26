@@ -83,19 +83,6 @@ describe('stereo PCM delivery', () => {
 		new DataView(packet).setUint32(4, 99, true);
 		expect(() => unpackAudio(packet)).toThrow('Invalid stereo audio packet');
 	});
-	it('delivers remote stereo to playback and downmixes for transcription', async () => {
-		const backend = new Backend();
-		backend._remoteClientAudioCb = vi.fn();
-		backend._remoteClientWhisperCb = vi.fn();
-		backend._whisperEnabled = true;
-		backend.vfoParams = [{ freq: 95 }];
-		const pcm = interleave(2400, 0.2, 0.6);
-		await backend.feedRemoteAudioChunk(packAudio(pcm, 2));
-		expect(backend._remoteClientAudioCb).toHaveBeenCalledWith(pcm, 2);
-		const mono = backend._remoteClientWhisperCb.mock.calls[0][2];
-		expect(mono.length).toBe(2400);
-		expect(mono[0]).toBeCloseTo(0.4);
-	});
 	it('mixes remote mono and stereo without swapping channels', () => {
 		const backend = new Backend();
 		const state = backend._getOrCreateClientState('client');

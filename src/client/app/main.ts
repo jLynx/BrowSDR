@@ -49,6 +49,7 @@ import AdsbPanel from './decoders/adsb/panel';
 import { adsbMethods } from './decoders/adsb';
 import { rtl433Methods } from './decoders/rtl433';
 import HeaderTools from './workspace/receiver-tools';
+import RemoteBandwidth from './workspace/remote-bandwidth';
 import DiscoveryPanel from './discovery/panel';
 import IqCapturePanel from './recording/panel';
 import IqReplayLoader from './replay/loader';
@@ -81,6 +82,7 @@ const Receiver = {
 		AcarsPanel,
 		AprsPanel,
 		HeaderTools,
+		RemoteBandwidth,
 		DiscoveryPanel,
 		IqCapturePanel,
 		IqReplayLoader,

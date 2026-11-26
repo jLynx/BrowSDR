@@ -72,7 +72,7 @@ export function collectStations(receiver: AppInstance, now: number): RtkStationE
 				reception: receptionState({
 					running: receiver.running,
 					enabled: true,
-					local: receiver.remoteMode !== 'client',
+					local: receiver.remoteMode !== 'client' || receiver.remoteIqActive,
 					inBand: receiver.isFreqInBandwidth(frequency),
 					status: receiver.rtk.status[index] ?? undefined,
 					station,
